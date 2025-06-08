@@ -4,6 +4,8 @@
 #include "vector.hh"
 #include "hashmap.hh"
 
+#include <stdio.h>
+
 // -[ Source location ]-
 
 struct SourceLocation {
@@ -153,3 +155,4 @@ struct ParseContext {
 
 b32 parse(ParseContext *ctx, Slice<Token> tokens, AstRef *root);
 
+b32 generate_c_code(FILE *out, Slice<AstNode> nodes, AstRef mod);

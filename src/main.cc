@@ -195,6 +195,10 @@ int main() {
 
   print_ast(stdout, nodes.slice(), root);
 
+  FILE *out = fopen("main.c", "w");
+  generate_c_code(out, nodes.slice(), root);
+  fclose(out);
+
   printf("Done!\n");
 
   return 0; 
