@@ -1,6 +1,8 @@
 #include "blu.hh"
 
-void StringInterner::init(Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator) {
+void StringInterner::init(
+  Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator
+) {
   storage = storage_allocator;
   map.init(map_allocator);
   list.init(list_allocator);
@@ -23,8 +25,8 @@ StrKey StringInterner::add(Str s) {
   char *intern = storage.alloc<char>(s.len);
   memcpy(intern, s.str, s.len);
 
-  Str owns{ intern, s.len };
-  StrKey key{ cast<u32>(list.len) };
+  Str owns{intern, s.len};
+  StrKey key{cast<u32>(list.len)};
 
   bucket->key = owns;
   bucket->val = key;
@@ -33,4 +35,3 @@ StrKey StringInterner::add(Str s) {
 
   return key;
 }
-

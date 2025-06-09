@@ -20,7 +20,7 @@ char const *read_file(char const *filename, usize *len) {
   fseek(f, 0, SEEK_END);
 
   u32 size   = ftell(f);
-  char *data = Cast(char* ,malloc(size+1));
+  char *data = Cast(char *, malloc(size + 1));
   if (!data) {
     return nullptr;
   }
@@ -41,19 +41,10 @@ char const *read_file(char const *filename, usize *len) {
 }
 
 char const *token_string[] = {
-  "colon      ",
-  "semicolon  ",
-  "equals     ",
-  "minus      ",
-  "literal_int",
-  "brace_open ",
-  "brace_close",
-  "paren_open ",
-  "paren_close",
-  "keyword_fn ",
-  "keyword_return",
-  "identifier ",
-  "<illegal>  ",
+  "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus",
+  "less-than",  "less-equal-than", "comma",     "literal_int", "brace_open", "brace_close",
+  "paren_open", "paren_close",     "fn",        "return",      "if",         "else",
+  "identifier", "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -70,28 +61,31 @@ void print_tokens(FILE *out, Token *tokens, usize count) {
 
     fprintf(
       out,
-      "%s [%4d:%4d] = \"%.*s\"\n",
-      token_kind_string(tok.kind),
+      "[%4d:%4d] %s = \"%.*s\"\n",
       tok.span.start.line,
       tok.span.start.col,
+      token_kind_string(tok.kind),
       Cast(int, tok.span.len()),
       tok.span.start.p
     );
   }
 }
 
-void pad(FILE *out, u32 depth) {
-  fprintf(out, "%*s", 2 * depth, "");
-}
+void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 char const *ast_string[] = {
   "module",
+  "param",
   "function",
   "scope",
   "identifier",
   "literal-int",
   "declaration",
   "assign",
+  "call",
+  "if-else",
+  "binary-op",
+  "unary-op",
   "return",
   "illegal",
 };
@@ -104,6 +98,21 @@ char const *ast_kind_string(AstKind kind) {
   return ast_string[kind];
 }
 
+char const *binary_op_string[] = {
+  "- (Sub)",
+  "+ (Add)",
+  "<= (LessEqual)",
+  "illegal",
+};
+
+char const *binary_op_kind_string(BinaryOpKind kind) {
+  if (kind >= BinaryOpKind_max) {
+    return binary_op_string[BinaryOpKind_max];
+  }
+
+  return binary_op_string[kind];
+}
+
 void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   AstNode n = ast[idx];
 
@@ -112,30 +121,32 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
 
   switch (n.kind) {
   case Ast_module: {
-    for EachIndex(i, n.module.items.len) {
-      print_ast(out, ast, n.module.items[i], depth + 1);
-    }
+    ForEachIndex(i, n.module.items.len) { print_ast(out, ast, n.module.items[i], depth + 1); }
+  } break;
+  case Ast_param: {
+    print_ast(out, ast, n.param.name, depth + 1);
+    print_ast(out, ast, n.param.type, depth + 1);
   } break;
   case Ast_function: {
-    print_ast(out, ast, n.function.name, depth+1);
-    print_ast(out, ast, n.function.return_type, depth+1);
-    print_ast(out, ast, n.function.body, depth+1);
+    print_ast(out, ast, n.function.name, depth + 1);
+    print_ast(out, ast, n.function.return_type, depth + 1);
+    print_ast(out, ast, n.function.body, depth + 1);
   } break;
   case Ast_assign: {
-    print_ast(out, ast, n.assign.lhs, depth+1);
-    print_ast(out, ast, n.assign.value, depth+1);
+    print_ast(out, ast, n.assign.lhs, depth + 1);
+    print_ast(out, ast, n.assign.value, depth + 1);
   } break;
   case Ast_return: {
-    print_ast(out, ast, n.ret.value, depth+1);
+    print_ast(out, ast, n.ret.value, depth + 1);
   } break;
   case Ast_scope: {
-    for EachIndex(i, n.scope.statements.len) {
-      print_ast(out, ast, n.scope.statements[i], depth+1);
+    ForEachIndex(i, n.scope.statements.len) {
+      print_ast(out, ast, n.scope.statements[i], depth + 1);
     }
   } break;
   case Ast_identifier: {
     Str identifier = n.span.str();
-    pad(out, depth+1);
+    pad(out, depth + 1);
     fprintf(out, " '%.*s'\n", identifier.len, identifier.str);
   } break;
   case Ast_declaration: {
@@ -145,18 +156,41 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   } break;
   case Ast_literal_int: {
     Str literal = n.span.str();
-    pad(out, depth+1);
+    pad(out, depth + 1);
     fprintf(out, " '%.*s'\n", literal.len, literal.str);
   } break;
-  case Ast_kind_max: {} break;
+  case Ast_call: {
+    print_ast(out, ast, n.call.f, depth + 1);
+    ForEachIndex(i, n.call.arguments.len) { print_ast(out, ast, n.call.arguments[i], depth + 1); }
+  } break;
+  case Ast_if_else: {
+    print_ast(out, ast, n.if_else.cond, depth + 1);
+    print_ast(out, ast, n.if_else.then, depth + 1);
+    if (n.if_else.otherwise != nil) {
+
+      print_ast(out, ast, n.if_else.otherwise, depth + 1);
+    }
+  } break;
+  case Ast_binary_op: {
+    pad(out, depth + 1);
+    fprintf(out, "op: %s\n", binary_op_kind_string(n.binary_op.kind));
+    print_ast(out, ast, n.binary_op.lhs, depth + 1);
+    print_ast(out, ast, n.binary_op.rhs, depth + 1);
+  } break;
+  case Ast_unary_op: {
+    print_ast(out, ast, n.unary_op.value, depth + 1);
+  } break;
+
+  case Ast_kind_max: {
+  } break;
   }
 }
 
-int main() { 
-  Allocator stdlib_alloc{ stdlib_alloc_fn, nullptr };
+int main() {
+  Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
 
-  usize source_len = 0;
-  char const *source = read_file("test.blu", &source_len);
+  usize source_len   = 0;
+  char const *source = read_file("fib.blu", &source_len);
   if (source == nullptr) {
     printf("Could not find source\n");
     return 1;
@@ -195,11 +229,11 @@ int main() {
 
   print_ast(stdout, nodes.slice(), root);
 
-  FILE *out = fopen("main.c", "w");
-  generate_c_code(out, nodes.slice(), root);
-  fclose(out);
+  // FILE *out = fopen("main.c", "w");
+  generate_c_code(stdout, nodes.slice(), root);
+  // fclose(out);
 
   printf("Done!\n");
 
-  return 0; 
+  return 0;
 }

@@ -25,12 +25,15 @@ typedef uint32_t b32;
 
 // ---
 
-#define Cat_aux(a,b) a##b
-#define Cat(a,b) Cat_aux(a,b)
+#define Cat_aux(a, b) a##b
+#define Cat(a, b) Cat_aux(a, b)
 
 // ---
 
-#define Try(e) if (!(e)) { return false; }
+#define Try(e)                                                                                     \
+  if (!(e)) {                                                                                      \
+    return false;                                                                                  \
+  }
 
 // ---
 
@@ -38,15 +41,13 @@ typedef uint32_t b32;
 
 // ---
 
-template<typename T>
-constexpr void swap(T &a, T &b) {
+template<typename T> constexpr void swap(T &a, T &b) {
   T tmp = a;
-  a = b;
-  b = tmp;
+  a     = b;
+  b     = tmp;
 }
 
-template<typename T>
-constexpr T min(T a, T b) {
+template<typename T> constexpr T min(T a, T b) {
   if (a < b) {
     return a;
   }
@@ -54,8 +55,7 @@ constexpr T min(T a, T b) {
   return b;
 }
 
-template<typename T>
-constexpr T max(T a, T b) {
+template<typename T> constexpr T max(T a, T b) {
   if (a > b) {
     return a;
   }
@@ -63,31 +63,25 @@ constexpr T max(T a, T b) {
   return b;
 }
 
-template<typename T, typename U>
-constexpr T cast(U &&x) {
-  return (T)x;
-}
+template<typename T, typename U> constexpr T cast(U &&x) { return (T)x; }
 
 #define Is_null(p) ((p) == nullptr)
 
 #define Align_of(x) _Alignof(x)
 
-#define KiB(x) (Cast(u64,x) << 10)
-#define MiB(x) (Cast(u64,x) << 20)
-#define GiB(x) (Cast(u64,x) << 30)
+#define KiB(x) (Cast(u64, x) << 10)
+#define MiB(x) (Cast(u64, x) << 20)
+#define GiB(x) (Cast(u64, x) << 30)
 
 #define Cast(T, x) ((T)(x))
 
 #define Round_up_to_power_of_two(x, p) (((x) + ((p)-1)) & (~((p)-1)))
 
-template<typename T>
-constexpr b32 is_zero_or_power_of_two(T x) {
-  return ((((x)-1) & (x)) == 0);
-}
+template<typename T> constexpr b32 is_zero_or_power_of_two(T x) { return ((((x)-1) & (x)) == 0); }
 
-#define Ptr_forward_align(p,a) Cast(void*, Round_up_to_power_of_two(Cast(u64, p), Cast(u64,a)))
-#define Ptr_offset(p,d)        Cast(void*, Cast(u8*,p)+d)
-#define Ptr_diff(a,b)          (Cast(u8*,a) - Cast(u8*,b))
+#define Ptr_forward_align(p, a) Cast(void *, Round_up_to_power_of_two(Cast(u64, p), Cast(u64, a)))
+#define Ptr_offset(p, d) Cast(void *, Cast(u8 *, p) + d)
+#define Ptr_diff(a, b) (Cast(u8 *, a) - Cast(u8 *, b))
 
 #ifdef TTLD_DEBUG
 #define Debug_assert(cond) assert(cond)
@@ -95,14 +89,14 @@ constexpr b32 is_zero_or_power_of_two(T x) {
 #define Debug_assert(cond) Cast(void, cond)
 #endif
 
-#define Panic()       abort()
+#define Panic() abort()
 #define Unreachable() Panic()
-#define Todo()        Panic()
+#define Todo() Panic()
 #define Unimplemented assert(!"Unimplemented");
 
 // ---
 
-#define EachIndex(i, count) (u64 i = 0; i < (count); i += 1)
+#define ForEachIndex(i, count) for (usize i = 0; i < (count); i += 1)
 
 // ---
 
@@ -112,34 +106,32 @@ struct Str {
   u32 _pad;
 };
 
-#define Str_make(s) { s, .len = sizeof(s)-1, }
+#define Str_make(s)                                                                                \
+  { s, .len = sizeof(s) - 1, }
 
-ttld_inline
-b32 str_eq(Str a, Str b) {
-  b32 is_same_len = a.len == b.len;
+ttld_inline b32 str_eq(Str a, Str b) {
+  b32 is_same_len     = a.len == b.len;
   b32 is_same_content = memcmp(a.str, b.str, a.len) == 0;
   return is_same_len && is_same_content;
 }
 
-template<typename T>
-struct Slice {
+template<typename T> struct Slice {
   T *data;
   usize len;
 
-  T &operator[](usize idx) {
-    return data[idx];
-  }
+  T &operator[](usize idx) { return data[idx]; }
 };
 
 // @os
 
-namespace ttld::os {
+namespace ttld::os
+{
 u32 page_size();
 
 void *mem_reserve(u64 size);
-b32   mem_commit(void *p, u64 size);
-void  mem_release(void *p, u64 size);
-}
+b32 mem_commit(void *p, u64 size);
+void mem_release(void *p, u64 size);
+} // namespace ttld::os
 
 // @allocator
 
@@ -153,18 +145,16 @@ struct Allocator {
   AllocatorFunction fn;
   void *ctx;
 
-  ttld_inline void *raw_alloc(usize byte_size, u32 align=default_align);
-  ttld_inline void *raw_realloc(void *p, usize byte_size, usize new_byte_size, u32 align=default_align);
+  ttld_inline void *raw_alloc(usize byte_size, u32 align = default_align);
+  ttld_inline void *
+  raw_realloc(void *p, usize byte_size, usize new_byte_size, u32 align = default_align);
   ttld_inline void raw_free(void *p, usize byte_size);
 
-  template<typename T>
-  T *alloc(usize count = 1);
+  template<typename T> T *alloc(usize count = 1);
 
-  template<typename T>
-  T *realloc(T *p, usize old_count, usize new_count);
+  template<typename T> T *realloc(T *p, usize old_count, usize new_count);
 
-  template<typename T>
-  void free(T *p, usize count);
+  template<typename T> void free(T *p, usize count);
 };
 
 void *Allocator::raw_alloc(usize byte_size, u32 align) {
@@ -175,24 +165,17 @@ void *Allocator::raw_realloc(void *p, usize byte_size, usize new_byte_size, u32 
   return fn(ctx, p, byte_size, new_byte_size, align);
 }
 
-void Allocator::raw_free(void *p, usize byte_size) {
-  fn(ctx, p, byte_size, 0, 0);
+void Allocator::raw_free(void *p, usize byte_size) { fn(ctx, p, byte_size, 0, 0); }
+
+template<typename T> T *Allocator::alloc(usize count) {
+  return Cast(T *, raw_alloc(count * sizeof(T), Align_of(T)));
 }
 
-template<typename T>
-T *Allocator::alloc(usize count) {
-  return Cast(T*, raw_alloc(count * sizeof(T), Align_of(T)));
+template<typename T> T *Allocator::realloc(T *p, usize count, usize new_count) {
+  return Cast(T *, raw_realloc(p, count * sizeof(T), new_count * sizeof(T), Align_of(T)));
 }
 
-template<typename T>
-T *Allocator::realloc(T *p, usize count, usize new_count) {
-  return Cast(T*, raw_realloc(p, count * sizeof(T), new_count * sizeof(T), Align_of(T)));
-}
-
-template<typename T>
-void Allocator::free(T *p, usize count) {
-  raw_free(p, count * sizeof(T));
-}
+template<typename T> void Allocator::free(T *p, usize count) { raw_free(p, count * sizeof(T)); }
 
 // @arena
 
@@ -200,7 +183,7 @@ struct Arena;
 
 struct ArenaSnapshot {
   Arena *owner;
-  void  *at;
+  void *at;
 };
 
 struct Arena {
@@ -214,21 +197,15 @@ struct Arena {
 
   Allocator as_allocator();
 
-  template<typename T>
-  T *alloc(usize count=1);
+  template<typename T> T *alloc(usize count = 1);
 
   ttld_inline ArenaSnapshot take_snapshot();
   void restore(ArenaSnapshot snapshot);
 };
 
-ttld_inline
-ArenaSnapshot Arena::take_snapshot() {
-  return { .owner = this, .at = at };
-}
+ttld_inline ArenaSnapshot Arena::take_snapshot() { return {.owner = this, .at = at}; }
 
-ttld_inline
-void Arena::restore(ArenaSnapshot snapshot) {
+ttld_inline void Arena::restore(ArenaSnapshot snapshot) {
   Debug_assert(this == snapshot.owner);
   at = snapshot.at;
 }
-

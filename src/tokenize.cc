@@ -23,7 +23,7 @@ void Tokenizer::step() {
   }
 
   current_location.p += 1;
-  at += 1;
+  at                 += 1;
 }
 
 b32 is_whitespace(char c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
@@ -42,9 +42,9 @@ void Tokenizer::init(char const *source, char const *end) {
   this->at  = source;
   this->end = end;
 
-  current_location.line   = 1;
-  current_location.col    = 1;
-  current_location.p = source;
+  current_location.line = 1;
+  current_location.col  = 1;
+  current_location.p    = source;
 }
 
 #define Set_out_token(Kind)                                                                        \
@@ -54,15 +54,16 @@ void Tokenizer::init(char const *source, char const *end) {
     tok->span.end   = current_location;                                                            \
   }
 
-#define Return_single_character_token(Kind)                                                        \
+#define Return_token(Kind)                                                                         \
   {                                                                                                \
-    step();                                                                                        \
     Set_out_token(Kind);                                                                           \
     return TokResult_ok;                                                                           \
   }
 
-#define Return_if_keyword(String, Kind) \
-  if (memcmp(String, start.p, current_location.p - start.p) == 0) { Set_out_token(Kind); return TokResult_ok; } 
+#define Return_if_keyword(String, Kind)                                                            \
+  if (memcmp(String, start.p, current_location.p - start.p) == 0) {                                \
+    Return_token(Kind);                                                                            \
+  }
 
 TokenizerResult Tokenizer::next(Token *tok) {
   skip_whitespace();
@@ -71,59 +72,65 @@ TokenizerResult Tokenizer::next(Token *tok) {
     return TokResult_end;
   }
 
-  char c = *at;
-
+  char c               = *at;
   SourceLocation start = current_location;
+
+  step();
 
   // clang-format off
   switch (c) {
-  case ':': Return_single_character_token(Tok_colon);
-  case ';': Return_single_character_token(Tok_semicolon);
-  case '=': Return_single_character_token(Tok_equals);
-  case '{': Return_single_character_token(Tok_brace_open);
-  case '}': Return_single_character_token(Tok_brace_close);
-  case '(': Return_single_character_token(Tok_paren_open);
-  case ')': Return_single_character_token(Tok_paren_close);
+  case ';': Return_token(Tok_semicolon);
+  case ':': Return_token(Tok_colon);
+  case '=': Return_token(Tok_equals);
+  case '{': Return_token(Tok_brace_open);
+  case '}': Return_token(Tok_brace_close);
+  case '(': Return_token(Tok_paren_open);
+  case ')': Return_token(Tok_paren_close);
+  case '+': Return_token(Tok_plus);
   }
   // clang-format on
 
-  if (c == '-') {
-    if (at + 1 == end || (!is_numeric(*(at+1)))) {
-      Return_single_character_token(Tok_minus);
+  if (c == '<') {
+    if (*at == '=') {
+      step();
+      Return_token(Tok_less_equal_than);
     }
 
-    step();
-    c = *at;
+    Return_token(Tok_less_than);
+  }
 
-    // `c` is now set to the character after the minus, and the next character is numeric. We will
-    // fall into the literal int parsing branch below and include the minus as part of the literal.
+  if (c == '-') {
+    if (is_at_end()) {
+      Return_token(Tok_minus);
+    }
+
+    if (*at == '>') {
+      step();
+      Return_token(Tok_arrow);
+    }
+
+    Return_token(Tok_minus);
   }
 
   if (is_numeric(c)) {
-    step();
-
     while (!is_at_end() && is_numeric(*at)) {
       step();
     }
 
-    Set_out_token(Tok_literal_int);
-
-    return TokResult_ok;
+    Return_token(Tok_literal_int);
   }
 
   if (is_identifier_start(c)) {
-    step();
-
     while (!is_at_end() && is_identifier_rest(*at)) {
       step();
     }
 
     Return_if_keyword("fn", Tok_keyword_fn);
     Return_if_keyword("return", Tok_keyword_return);
+    Return_if_keyword("if", Tok_keyword_if);
+    Return_if_keyword("else", Tok_keyword_else);
 
-    Set_out_token(Tok_identifier);
-
-    return TokResult_ok;
+    Return_token(Tok_identifier);
   }
 
   return TokResult_unrecognized_token;
@@ -148,4 +155,3 @@ b32 tokenize(char const *source, usize len, Vector<Token> *tokens) {
 
   return res == TokResult_end;
 }
-

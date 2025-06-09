@@ -8,14 +8,19 @@ struct Parser {
   Allocator ref_allocator;
   usize idx;
 
-  void init(StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens);
+  void init(
+    StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
+  );
 
   b32 parse_module(AstRef *out);
 
   b32 parse_item(AstRef *out);
+  b32 parse_parameter(AstRef *out);
   b32 parse_item_function(AstRef *out);
 
   b32 parse_type(AstRef *out);
+
+  b32 parse_scope(AstRef *out);
 
   b32 parse_statement(AstRef *out);
   b32 parse_statement_return(AstRef *out);
@@ -23,20 +28,26 @@ struct Parser {
   b32 parse_literal_int(AstRef *out);
   b32 parse_identifier(AstRef *out);
 
-  b32 parse_expression(AstRef *out);
+  b32 parse_expression(AstRef *out, BinaryOpKind prev_op = BinaryOpKind_max);
+  b32 parse_base_expression(AstRef *out);
+  b32 parse_if_else_expression(AstRef *out);
+  b32 parse_call(AstRef *out);
 
-  b32 expect_token(TokenKind expected_kind, Token *out=nullptr);
-  b32 next(Token *out);
+  b32 expect_token(TokenKind expected_kind, Token *out = nullptr);
+  b32 next(Token *out = nullptr);
   b32 peek(Token *out);
+  b32 peek2(Token *out);
   AstRef add_node(AstNode node);
 
   b32 is_at_end() { return idx == tokens.len; }
 };
 
-void Parser::init(StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens) {
-  this->strings = strings;
-  this->nodes = nodes;
-  this->tokens = tokens;
+void Parser::init(
+  StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
+) {
+  this->strings       = strings;
+  this->nodes         = nodes;
+  this->tokens        = tokens;
   this->ref_allocator = ref_allocator;
 
   idx = 0;
@@ -53,7 +64,9 @@ b32 Parser::next(Token *out) {
     return false;
   }
 
-  *out = tokens[idx];
+  if (out != nullptr) {
+    *out = tokens[idx];
+  }
   idx += 1;
 
   return true;
@@ -69,6 +82,16 @@ b32 Parser::peek(Token *out) {
   return true;
 }
 
+b32 Parser::peek2(Token *out) {
+  if (idx + 1 >= tokens.len) {
+    return false;
+  }
+
+  *out = tokens[idx + 1];
+
+  return true;
+}
+
 b32 Parser::parse_module(AstRef *out) {
   Vector<AstRef> items;
   items.init(ref_allocator);
@@ -80,7 +103,7 @@ b32 Parser::parse_module(AstRef *out) {
   }
 
   AstNode n;
-  n.kind = Ast_module;
+  n.kind         = Ast_module;
   n.module.items = items.move();
 
   AstRef mod = add_node(n);
@@ -90,17 +113,59 @@ b32 Parser::parse_module(AstRef *out) {
   return true;
 }
 
-b32 Parser::parse_item(AstRef *out) {
-  return parse_item_function(out);
-}
+b32 Parser::parse_item(AstRef *out) { return parse_item_function(out); }
 
-b32 Parser::parse_item_function(AstRef *out) {
-  Try(expect_token(Tok_keyword_fn));
-
+b32 Parser::parse_parameter(AstRef *out) {
   AstRef name_ref;
   Try(parse_identifier(&name_ref));
 
+  Try(expect_token(Tok_colon));
+
+  AstRef type_ref;
+  Try(parse_type(&type_ref));
+
+  AstNode n;
+  n.kind       = Ast_param;
+  n.param.name = name_ref;
+  n.param.type = type_ref;
+
+  *out = add_node(n);
+
+  return true;
+}
+
+b32 Parser::parse_item_function(AstRef *out) {
+  AstRef name_ref;
+  Try(parse_identifier(&name_ref));
+
+  Try(expect_token(Tok_colon));
+  Try(expect_token(Tok_colon));
+
   Try(expect_token(Tok_paren_open));
+
+  Vector<AstRef> params;
+  params.init(ref_allocator);
+
+  while (!is_at_end()) {
+    Token tok;
+    Try(peek(&tok));
+    if (tok.kind == Tok_paren_close) {
+      break;
+    }
+
+    AstRef param_ref;
+    Try(parse_parameter(&param_ref));
+
+    params.push(param_ref);
+
+    Try(peek(&tok));
+    if (tok.kind != Tok_comma) {
+      break;
+    }
+
+    Try(next(&tok));
+  }
+
   Try(expect_token(Tok_paren_close));
 
   Try(expect_token(Tok_colon));
@@ -108,10 +173,28 @@ b32 Parser::parse_item_function(AstRef *out) {
   AstRef return_type_ref;
   Try(parse_type(&return_type_ref));
 
-  Try(expect_token(Tok_brace_open));
+  Try(expect_token(Tok_arrow));
 
+  AstRef body_ref;
+  Try(parse_scope(&body_ref));
+
+  AstNode n;
+  n.kind                 = Ast_function;
+  n.function.params      = params.move();
+  n.function.name        = name_ref;
+  n.function.return_type = return_type_ref;
+  n.function.body        = body_ref;
+
+  *out = add_node(n);
+
+  return true;
+}
+
+b32 Parser::parse_scope(AstRef *out) {
   Vector<AstRef> scope;
   scope.init(ref_allocator);
+
+  Try(expect_token(Tok_brace_open));
 
   while (!is_at_end()) {
     Token tok;
@@ -127,21 +210,38 @@ b32 Parser::parse_item_function(AstRef *out) {
 
   Try(expect_token(Tok_brace_close));
 
-  AstNode body;
-  body.kind = Ast_scope;
-  body.scope.statements = scope.move();
+  AstNode n;
+  n.kind             = Ast_scope;
+  n.scope.statements = scope.move();
 
-  AstRef body_ref = add_node(body);
+  *out = add_node(n);
 
-  AstNode node;
-  node.kind = Ast_function;
-  node.function.name = name_ref;
-  node.function.return_type = return_type_ref;
-  node.function.body = body_ref;
+  return true;
+}
 
-  AstRef function_ref = add_node(node);
+b32 Parser::parse_declaration(AstRef *out) {
+  AstRef identifier;
+  Try(parse_identifier(&identifier));
 
-  *out = function_ref;
+  Try(expect_token(Tok_colon));
+
+  AstRef type;
+  Try(parse_type(&type));
+
+  Try(expect_token(Tok_equals));
+
+  AstRef initial_value;
+  Try(parse_expression(&initial_value));
+
+  Try(expect_token(Tok_semicolon));
+
+  AstNode n;
+  n.kind                      = Ast_declaration;
+  n.declaration.name          = identifier;
+  n.declaration.type          = type;
+  n.declaration.initial_value = initial_value;
+
+  *out = add_node(n);
 
   return true;
 }
@@ -154,54 +254,43 @@ b32 Parser::parse_statement(AstRef *out) {
     return parse_statement_return(out);
   }
 
-  AstRef identifier_ref;
-  Try(parse_identifier(&identifier_ref));
+  if (tok.kind == Tok_keyword_if) {
+    return parse_if_else_expression(out);
+  }
 
-  Try(peek(&tok));
+  if (tok.kind == Tok_identifier) {
+    Token tok2;
+    if (peek2(&tok2) && tok2.kind == Tok_colon) {
+      return parse_declaration(out);
+    }
+  }
 
-  if (tok.kind == Tok_colon) {
-    next(&tok);
+  AstRef expr;
+  Try(parse_expression(&expr));
 
-    AstRef type_ref;
-    Try(parse_type(&type_ref));
+  if (peek(&tok) && tok.kind == Tok_equals) {
+    next();
 
-    Try(expect_token(Tok_equals));
-
-    AstRef initial_value_ref;
-    Try(parse_expression(&initial_value_ref));
+    AstRef value;
+    Try(parse_expression(&value));
 
     Try(expect_token(Tok_semicolon));
 
     AstNode n;
-    n.kind = Ast_declaration;
-    n.declaration.name = identifier_ref;
-    n.declaration.type = type_ref;
-    n.declaration.initial_value = initial_value_ref;
+    n.kind         = Ast_assign;
+    n.assign.lhs   = expr;
+    n.assign.value = value;
 
     *out = add_node(n);
 
     return true;
   }
 
-  if (tok.kind == Tok_equals) {
-    next(&tok);
+  Try(expect_token(Tok_semicolon));
 
-    AstRef value_ref;
-    Try(parse_expression(&value_ref));
+  *out = expr;
 
-    Try(expect_token(Tok_semicolon));
-
-    AstNode n;
-    n.kind = Ast_assign;
-    n.assign.lhs = identifier_ref;
-    n.assign.value = value_ref;
-
-    *out = add_node(n);
-
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 b32 Parser::parse_statement_return(AstRef *out) {
@@ -212,7 +301,7 @@ b32 Parser::parse_statement_return(AstRef *out) {
   Try(expect_token(Tok_semicolon));
 
   AstNode n;
-  n.kind = Ast_return;
+  n.kind      = Ast_return;
   n.ret.value = value_ref;
 
   *out = add_node(n);
@@ -227,8 +316,8 @@ b32 Parser::parse_identifier(AstRef *out) {
   StrKey key = strings->add(tok.str());
 
   AstNode identifier;
-  identifier.span = tok.span;
-  identifier.kind = Ast_identifier;
+  identifier.span           = tok.span;
+  identifier.kind           = Ast_identifier;
   identifier.identifier.key = key;
 
   *out = add_node(identifier);
@@ -236,9 +325,7 @@ b32 Parser::parse_identifier(AstRef *out) {
   return true;
 }
 
-b32 Parser::parse_type(AstRef *out) {
-  return parse_identifier(out);
-}
+b32 Parser::parse_type(AstRef *out) { return parse_identifier(out); }
 
 b32 Parser::parse_literal_int(AstRef *out) {
   Token tok;
@@ -256,15 +343,199 @@ b32 Parser::parse_literal_int(AstRef *out) {
 enum Precedence : u32 {
   Left,
   Right,
-  Ambiguous,
 };
 
-Precedence determine_precedence() {
-  return Ambiguous;
+Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
+  if (lhs == LessEqual) {
+    return Right;
+  }
+
+  if (rhs == LessEqual) {
+    return Left;
+  }
+
+  return Left;
 }
 
-b32 Parser::parse_expression(AstRef *out) {
-  return parse_literal_int(out);
+b32 Parser::parse_base_expression(AstRef *out) {
+  Token tok;
+  Try(peek(&tok));
+
+  if (tok.kind == Tok_paren_open) {
+    next();
+
+    Try(parse_base_expression(out));
+
+    Try(expect_token(Tok_paren_close));
+
+    return true;
+  }
+
+  if (tok.kind == Tok_keyword_if) {
+    return parse_if_else_expression(out);
+  }
+
+  if (tok.kind == Tok_minus) {
+    next();
+
+    AstRef value;
+    Try(parse_expression(&value));
+
+    AstNode n;
+    n.kind           = Ast_unary_op;
+    n.unary_op.kind  = Negate;
+    n.unary_op.value = value;
+
+    *out = add_node(n);
+
+    return true;
+  }
+
+  if (tok.kind == Tok_identifier) {
+    return parse_identifier(out);
+  }
+
+  if (tok.kind == Tok_literal_int) {
+    return parse_literal_int(out);
+  }
+
+  return false;
+}
+
+b32 Parser::parse_expression(AstRef *out, BinaryOpKind prev_op) {
+  AstRef lhs;
+  Try(parse_base_expression(&lhs));
+
+  while (!is_at_end()) {
+    Token tok;
+    if (!peek(&tok) || tok.kind != Tok_paren_open) {
+      break;
+    }
+
+    next();
+
+    Vector<AstRef> arguments;
+    arguments.init(ref_allocator);
+
+    while (!is_at_end()) {
+      Token tok;
+      Try(peek(&tok));
+
+      if (tok.kind == Tok_paren_close) {
+        break;
+      }
+
+      AstRef arg;
+      Try(parse_expression(&arg));
+      arguments.push(arg);
+
+      Try(peek(&tok));
+      if (tok.kind != Tok_comma) {
+        break;
+      }
+
+      next();
+    }
+
+    Try(expect_token(Tok_paren_close));
+
+    AstNode n;
+    n.kind           = Ast_call;
+    n.call.f         = lhs;
+    n.call.arguments = arguments;
+
+    lhs = add_node(n);
+  }
+
+  while (true) {
+    Token tok;
+    Try(peek(&tok));
+
+    BinaryOpKind op = BinaryOpKind_max;
+    switch (tok.kind) {
+    case Tok_minus:
+      op = Sub;
+      break;
+    case Tok_plus:
+      op = Add;
+      break;
+    case Tok_less_equal_than:
+      op = LessEqual;
+      break;
+    default: {
+      *out = lhs;
+      return true;
+    }
+    }
+
+    Precedence precedence = Right;
+    if (prev_op != BinaryOpKind_max) {
+      precedence = determine_precedence(prev_op, op);
+    }
+
+    if (precedence == Left) {
+      *out = lhs;
+      return true;
+    }
+
+    next();
+
+    AstRef rhs;
+    Try(parse_expression(&rhs, op));
+
+    AstNode n;
+    n.kind           = Ast_binary_op;
+    n.binary_op.kind = op;
+    n.binary_op.lhs  = lhs;
+    n.binary_op.rhs  = rhs;
+
+    AstRef binop = add_node(n);
+
+    lhs = binop;
+  }
+
+  *out = lhs;
+
+  return true;
+}
+
+b32 Parser::parse_if_else_expression(AstRef *out) {
+  Try(expect_token(Tok_keyword_if));
+
+  AstRef cond;
+  Try(parse_expression(&cond));
+
+  AstRef then;
+  Try(parse_scope(&then));
+
+  Token tok;
+  Try(peek(&tok));
+  if (tok.kind != Tok_keyword_else) {
+    AstNode n;
+    n.kind              = Ast_if_else;
+    n.if_else.cond      = cond;
+    n.if_else.then      = then;
+    n.if_else.otherwise = nil;
+
+    *out = add_node(n);
+
+    return true;
+  }
+
+  Try(next(&tok));
+
+  AstRef otherwise;
+  Try(parse_scope(&otherwise));
+
+  AstNode n;
+  n.kind              = Ast_if_else;
+  n.if_else.cond      = cond;
+  n.if_else.then      = then;
+  n.if_else.otherwise = otherwise;
+
+  *out = add_node(n);
+
+  return true;
 }
 
 b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
@@ -287,4 +558,3 @@ b32 parse(ParseContext *ctx, Slice<Token> tokens, AstRef *root) {
   parser.init(ctx->strings, ctx->ref_allocator, ctx->nodes, tokens);
   return parser.parse_module(root);
 }
-

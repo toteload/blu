@@ -9,8 +9,8 @@
 // -[ Source location ]-
 
 struct SourceLocation {
-  u32 line     = 0;
-  u32 col      = 0;
+  u32 line      = 0;
+  u32 col       = 0;
   char const *p = nullptr;
 };
 
@@ -19,7 +19,7 @@ struct SourceSpan {
   SourceLocation end;
 
   usize len() { return end.p - start.p; }
-  Str str() { return { start.p, cast<u32>(len()) }; }
+  Str str() { return {start.p, cast<u32>(len())}; }
 };
 
 // -[ String interner ]-
@@ -31,10 +31,7 @@ struct StrKey {
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-ttld_inline
-u32 str_hash(Str s) {
-  return XXH32(s.str, s.len, 0);
-}
+ttld_inline u32 str_hash(Str s) { return XXH32(s.str, s.len, 0); }
 
 struct StringInterner {
   Allocator storage;
@@ -52,9 +49,16 @@ struct StringInterner {
 
 enum TokenKind : u32 {
   Tok_colon,
+  Tok_arrow,
   Tok_semicolon,
   Tok_equals,
   Tok_minus,
+  Tok_plus,
+
+  Tok_less_than,
+  Tok_less_equal_than,
+
+  Tok_comma,
 
   Tok_literal_int,
 
@@ -65,6 +69,8 @@ enum TokenKind : u32 {
 
   Tok_keyword_fn,
   Tok_keyword_return,
+  Tok_keyword_if,
+  Tok_keyword_else,
 
   Tok_identifier,
 
@@ -75,7 +81,7 @@ struct Token {
   TokenKind kind;
   SourceSpan span;
 
-  Str str() { return Str{ span.start.p, cast<u32>(span.len()) }; }
+  Str str() { return Str{span.start.p, cast<u32>(span.len())}; }
 };
 
 enum TokenizerResult : u32 {
@@ -88,9 +94,25 @@ b32 tokenize(char const *source, usize len, Vector<Token> *tokens);
 
 // -[ AST ]-
 
+enum BinaryOpKind : u32 {
+  Sub,
+  Add,
+
+  LessEqual,
+
+  BinaryOpKind_max,
+};
+
+enum UnaryOpKind : u32 {
+  Negate,
+
+  UnaryOpKind_max,
+};
+
 enum AstKind : u32 {
   Ast_module,
 
+  Ast_param,
   Ast_function,
 
   Ast_scope,
@@ -100,6 +122,11 @@ enum AstKind : u32 {
   Ast_declaration,
   Ast_assign,
 
+  Ast_call,
+  Ast_if_else,
+  Ast_binary_op,
+  Ast_unary_op,
+
   Ast_return,
 
   Ast_kind_max,
@@ -107,16 +134,24 @@ enum AstKind : u32 {
 
 using AstRef = u32;
 
+constexpr AstRef nil = UINT32_MAX;
+
 struct AstNode {
   AstKind kind;
   SourceSpan span;
 
   union {
     struct {
+      Vector<AstRef> params;
       AstRef name;
       AstRef return_type;
       AstRef body;
     } function;
+
+    struct {
+      AstRef name;
+      AstRef type;
+    } param;
 
     struct {
       AstRef name;
@@ -128,6 +163,28 @@ struct AstNode {
       AstRef lhs;
       AstRef value;
     } assign;
+
+    struct {
+      AstRef f;
+      Vector<AstRef> arguments;
+    } call;
+
+    struct {
+      AstRef cond;
+      AstRef then;
+      AstRef otherwise;
+    } if_else;
+
+    struct {
+      BinaryOpKind kind;
+      AstRef lhs;
+      AstRef rhs;
+    } binary_op;
+
+    struct {
+      UnaryOpKind kind;
+      AstRef value;
+    } unary_op;
 
     struct {
       AstRef value;
