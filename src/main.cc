@@ -44,7 +44,7 @@ char const *token_string[] = {
   "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus",
   "less-than",  "less-equal-than", "comma",     "literal_int", "brace_open", "brace_close",
   "paren_open", "paren_close",     "fn",        "return",      "if",         "else",
-  "identifier", "<illegal>",
+  "while",      "identifier",      "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -82,6 +82,7 @@ char const *ast_string[] = {
   "literal-int",
   "declaration",
   "assign",
+  "while",
   "call",
   "if-else",
   "binary-op",
@@ -123,6 +124,10 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   case Ast_module: {
     ForEachIndex(i, n.module.items.len) { print_ast(out, ast, n.module.items[i], depth + 1); }
   } break;
+  case Ast_while: {
+    print_ast(out, ast, n._while.cond, depth + 1);
+    print_ast(out, ast, n._while.body, depth + 1);
+  } break;
   case Ast_param: {
     print_ast(out, ast, n.param.name, depth + 1);
     print_ast(out, ast, n.param.type, depth + 1);
@@ -147,7 +152,7 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   case Ast_identifier: {
     Str identifier = n.span.str();
     pad(out, depth + 1);
-    fprintf(out, " '%.*s'\n", identifier.len, identifier.str);
+    fprintf(out, " '%.*s'\n", cast<i32>(identifier.len), identifier.str);
   } break;
   case Ast_declaration: {
     print_ast(out, ast, n.declaration.name, depth + 1);
@@ -157,7 +162,7 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   case Ast_literal_int: {
     Str literal = n.span.str();
     pad(out, depth + 1);
-    fprintf(out, " '%.*s'\n", literal.len, literal.str);
+    fprintf(out, " '%.*s'\n", cast<i32>(literal.len), literal.str);
   } break;
   case Ast_call: {
     print_ast(out, ast, n.call.f, depth + 1);
@@ -188,12 +193,26 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
 void display_message(FILE *out, Message *msg) {
   char const *severity = "unknown";
   switch (msg->severity) {
-    case Error: severity = "error"; break;
-    case Warning: severity = "warning"; break;
-    case Info: severity = "info"; break;
+  case Error:
+    severity = "error";
+    break;
+  case Warning:
+    severity = "warning";
+    break;
+  case Info:
+    severity = "info";
+    break;
   };
 
-  fprintf(out, "[%d:%d] %s: %.*s\n", msg->span.start.line, msg->span.start.col, severity, msg->message.len, msg->message.str);
+  fprintf(
+    out,
+    "[%d:%d] %s: %.*s\n",
+    msg->span.start.line,
+    msg->span.start.col,
+    severity,
+    cast<i32>(msg->message.len),
+    msg->message.str
+  );
 }
 
 int main() {
@@ -239,6 +258,7 @@ int main() {
   nodes.init(stdlib_alloc);
 
   ParseContext parse_context{
+    &compiler_context,
     &strings,
     stdlib_alloc,
     &nodes,
@@ -248,6 +268,10 @@ int main() {
   ok = parse(&parse_context, tokens.slice(), &root);
   if (!ok) {
     printf("Encountered error during parsing.\n");
+    ForEachIndex(i, compiler_context.messages.len) {
+      Message *msg = &compiler_context.messages[i];
+      display_message(stdout, msg);
+    }
     return 1;
   }
 

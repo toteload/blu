@@ -23,6 +23,7 @@ struct CGenerator {
   void output_function_signature(AstRef ref);
   void output_function_declaration(AstRef ref);
   void output_function_definition(AstRef ref);
+  void output_while(AstRef ref);
   void output_statement(AstRef ref);
   void output_expression(AstRef ref);
   void output_literal_int(AstRef ref);
@@ -36,7 +37,7 @@ struct CGenerator {
 
 void CGenerator::output_span(AstRef ref) {
   Str s = nodes[ref].span.str();
-  fprintf(out, "%.*s", s.len, s.str);
+  fprintf(out, "%.*s", cast<i32>(s.len), s.str);
 }
 
 void CGenerator::output_type(AstRef ref) { output_span(ref); }
@@ -146,6 +147,13 @@ void CGenerator::output_unary_op(AstRef ref) {}
 
 void CGenerator::output_statement(AstRef ref) {
   AstNode n = nodes[ref];
+
+  if (n.kind == Ast_while) {
+    fprintf(out, "while ");
+    output_expression(n._while.cond);
+    output_scope(n._while.body);
+    return;
+  }
 
   if (n.kind == Ast_return) {
     fprintf(out, "return ");

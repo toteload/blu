@@ -103,6 +103,7 @@ enum TokenKind : u32 {
   Tok_keyword_return,
   Tok_keyword_if,
   Tok_keyword_else,
+  Tok_keyword_while,
 
   Tok_identifier,
 
@@ -153,6 +154,8 @@ enum AstKind : u32 {
   Ast_literal_int,
   Ast_declaration,
   Ast_assign,
+
+  Ast_while,
 
   Ast_call,
   Ast_if_else,
@@ -227,6 +230,11 @@ struct AstNode {
     } identifier;
 
     struct {
+      AstRef cond;
+      AstRef body;
+    } _while;
+
+    struct {
       Vector<AstRef> statements;
     } scope;
 
@@ -237,6 +245,7 @@ struct AstNode {
 };
 
 struct ParseContext {
+  CompilerContext *compiler_context;
   StringInterner *strings;
   Allocator ref_allocator;
   Vector<AstNode> *nodes;

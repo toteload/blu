@@ -63,7 +63,7 @@ void Tokenizer::init(CompilerContext *ctx, char const *source, char const *end) 
   }
 
 #define Return_if_keyword(String, Kind)                                                            \
-  if (memcmp(String, start.p, current_location.p - start.p) == 0) {                                \
+  if (str_eq(Str_make(String), {start.p, cast<u32>(current_location.p - start.p)})) {              \
     Return_token(Kind);                                                                            \
   }
 
@@ -131,6 +131,7 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_if_keyword("return", Tok_keyword_return);
     Return_if_keyword("if", Tok_keyword_if);
     Return_if_keyword("else", Tok_keyword_else);
+    Return_if_keyword("while", Tok_keyword_while);
 
     Return_token(Tok_identifier);
   }

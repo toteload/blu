@@ -110,12 +110,11 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 struct Str {
   char const *str;
-  u32 len;
-  u32 _pad;
+  usize len;
 };
 
 #define Str_make(s)                                                                                \
-  { s, .len = sizeof(s) - 1, }
+  { s, (sizeof(s) - 1), }
 
 ttld_inline b32 str_eq(Str a, Str b) {
   b32 is_same_len     = a.len == b.len;

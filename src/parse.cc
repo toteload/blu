@@ -1,6 +1,7 @@
 #include "blu.hh"
 
 struct Parser {
+  CompilerContext *ctx;
   StringInterner *strings;
   Vector<AstNode> *nodes;
   Slice<Token> tokens;
@@ -9,6 +10,7 @@ struct Parser {
   usize idx;
 
   void init(
+    CompilerContext *ctx,
     StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
   );
 
@@ -28,6 +30,8 @@ struct Parser {
   b32 parse_literal_int(AstRef *out);
   b32 parse_identifier(AstRef *out);
 
+  b32 parse_while(AstRef *out);
+
   b32 parse_expression(AstRef *out, BinaryOpKind prev_op = BinaryOpKind_max);
   b32 parse_base_expression(AstRef *out);
   b32 parse_if_else_expression(AstRef *out);
@@ -42,9 +46,10 @@ struct Parser {
   b32 is_at_end() { return idx == tokens.len; }
 };
 
-void Parser::init(
+void Parser::init(CompilerContext *ctx, 
   StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
 ) {
+  this->ctx = ctx;
   this->strings       = strings;
   this->nodes         = nodes;
   this->tokens        = tokens;
@@ -250,6 +255,10 @@ b32 Parser::parse_statement(AstRef *out) {
   Token tok;
   Try(peek(&tok));
 
+  if (tok.kind == Tok_keyword_while) {
+    return parse_while(out);
+  }
+
   if (tok.kind == Tok_keyword_return) {
     return parse_statement_return(out);
   }
@@ -344,6 +353,26 @@ enum Precedence : u32 {
   Left,
   Right,
 };
+
+b32 Parser::parse_while(AstRef *out) {
+  Token tok;
+  Try(expect_token(Tok_keyword_while, &tok));
+
+  AstRef cond;
+  Try(parse_expression(&cond));
+
+  AstRef body;
+  Try(parse_scope(&body));
+
+  AstNode n;
+  n.kind        = Ast_while;
+  n._while.cond = cond;
+  n._while.body = body;
+
+  *out = add_node(n);
+
+  return true;
+}
 
 Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
   if (lhs == LessEqual) {
@@ -543,6 +572,8 @@ b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
+    Str msg = ctx->arena->push_format_string("Expected token %d, but got %d\n", expected_kind, tok.kind);
+    ctx->messages.push({tok.span, Error, msg});
     return false;
   }
 
@@ -555,6 +586,6 @@ b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
 
 b32 parse(ParseContext *ctx, Slice<Token> tokens, AstRef *root) {
   Parser parser;
-  parser.init(ctx->strings, ctx->ref_allocator, ctx->nodes, tokens);
+  parser.init(ctx->compiler_context, ctx->strings, ctx->ref_allocator, ctx->nodes, tokens);
   return parser.parse_module(root);
 }
