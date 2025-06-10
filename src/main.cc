@@ -41,7 +41,7 @@ char const *read_file(char const *filename, usize *len) {
 }
 
 char const *token_string[] = {
-  "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus",
+  "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus", "star", "slash", "modulo",
   "not", "cmp-eq", "cmp-ne", "cmp-gt", "cmp-ge",
   "cmp-lt",  "cmp-le", "comma",     "literal_int", "brace_open", "brace_close",
   "paren_open", "paren_close",     "fn",        "return",      "if",         "else",
@@ -105,6 +105,9 @@ char const *ast_kind_string(AstKind kind) {
 char const *binary_op_string[] = {
   "- (Sub)",
   "+ (Add)",
+  "* (Mul)",
+  "/ (Div)",
+  "% (Mod)",
   "== (CmpEq)",
   "!= (CmpNe)",
   "> (CmpGt)",

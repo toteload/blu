@@ -86,6 +86,9 @@ enum TokenKind : u32 {
   Tok_equals,
   Tok_minus,
   Tok_plus,
+  Tok_star,
+  Tok_slash,
+  Tok_modulo,
 
   Tok_not,
   Tok_cmp_eq,
@@ -137,6 +140,9 @@ b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> 
 enum BinaryOpKind : u32 {
   Sub,
   Add,
+  Mul,
+  Div,
+  Mod,
 
   CmpEq,
   CmpNe,
@@ -150,6 +156,7 @@ enum BinaryOpKind : u32 {
 
 enum UnaryOpKind : u32 {
   Negate,
+  Not,
 
   UnaryOpKind_max,
 };

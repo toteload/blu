@@ -88,6 +88,9 @@ TokenizerResult Tokenizer::next(Token *tok) {
   case '(': Return_token(Tok_paren_open);
   case ')': Return_token(Tok_paren_close);
   case '+': Return_token(Tok_plus);
+  case '*': Return_token(Tok_star);
+  case '/': Return_token(Tok_slash);
+  case '%': Return_token(Tok_modulo);
   }
   // clang-format on
 
@@ -119,12 +122,12 @@ TokenizerResult Tokenizer::next(Token *tok) {
   }
 
   if (c == '!') {
-    if (*at == '=') {
-      step();
-      Return_token(Tok_cmp_ne);
+    if (*at != '=') {
+      Return_token(Tok_not);
     }
 
-    Return_token(Tok_not);
+    step();
+    Return_token(Tok_cmp_ne);
   }
 
   if (c == '-') {

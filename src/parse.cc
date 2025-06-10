@@ -438,6 +438,22 @@ b32 Parser::parse_base_expression(AstRef *out) {
     return parse_if_else_expression(out);
   }
 
+  if (tok.kind == Tok_not) {
+    next();
+
+    AstRef value;
+    Try(parse_expression(&value));
+
+    AstNode n;
+    n.kind           = Ast_unary_op;
+    n.unary_op.kind  = Not;
+    n.unary_op.value = value;
+
+    *out = add_node(n);
+
+    return true;
+  }
+
   if (tok.kind == Tok_minus) {
     next();
 
@@ -519,6 +535,9 @@ b32 Parser::parse_expression(AstRef *out, BinaryOpKind prev_op) {
     switch (tok.kind) {
     case Tok_minus:  op = Sub; break;
     case Tok_plus:   op = Add; break;
+    case Tok_star:   op = Mul; break;
+    case Tok_slash:  op = Div; break;
+    case Tok_modulo: op = Mod; break;
     case Tok_cmp_eq: op = CmpEq; break;
     case Tok_cmp_ne: op = CmpNe; break;
     case Tok_cmp_gt: op = CmpGt; break;
