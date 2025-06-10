@@ -18,6 +18,17 @@ struct SourceSpan {
   SourceLocation start;
   SourceLocation end;
 
+  static SourceSpan from_single_location(SourceLocation loc) {
+    return {
+      loc,
+      {
+        loc.line,
+        loc.col + 1,
+        loc.p + 1,
+      }
+    };
+  }
+
   usize len() { return end.p - start.p; }
   Str str() { return {start.p, cast<u32>(len())}; }
 };
@@ -43,6 +54,27 @@ struct StringInterner {
 
   StrKey add(Str s);
   Str get(StrKey key) { return list[key.idx]; }
+};
+
+// -[ Compiler message ]-
+
+enum MessageSeverity : u32 {
+  Error,
+  Warning,
+  Info,
+};
+
+struct Message {
+  SourceSpan span;
+  MessageSeverity severity;
+  Str message;
+};
+
+// -[ Compiler context ]-
+
+struct CompilerContext {
+  Arena *arena;
+  Vector<Message> messages;
 };
 
 // -[ Token ]-
@@ -90,7 +122,7 @@ enum TokenizerResult : u32 {
   TokResult_unrecognized_token,
 };
 
-b32 tokenize(char const *source, usize len, Vector<Token> *tokens);
+b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> *tokens);
 
 // -[ AST ]-
 
@@ -211,5 +243,7 @@ struct ParseContext {
 };
 
 b32 parse(ParseContext *ctx, Slice<Token> tokens, AstRef *root);
+
+// -[ C code generation ]-
 
 b32 generate_c_code(FILE *out, Slice<AstNode> nodes, AstRef mod);

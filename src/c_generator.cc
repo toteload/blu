@@ -124,19 +124,25 @@ void CGenerator::output_binary_op(AstRef ref) {
   output_expression(nodes[ref].binary_op.lhs);
 
   switch (nodes[ref].binary_op.kind) {
-    case Sub: fprintf(out, " - "); break;
-    case Add: fprintf(out, " + "); break;
-    case LessEqual: fprintf(out, " <= "); break;
-    default: fprintf(out, " ??? "); break;
+  case Sub:
+    fprintf(out, " - ");
+    break;
+  case Add:
+    fprintf(out, " + ");
+    break;
+  case LessEqual:
+    fprintf(out, " <= ");
+    break;
+  default:
+    fprintf(out, " ??? ");
+    break;
   }
 
   output_expression(nodes[ref].binary_op.rhs);
   fprintf(out, ")");
 }
 
-void CGenerator::output_unary_op(AstRef ref) {
-
-}
+void CGenerator::output_unary_op(AstRef ref) {}
 
 void CGenerator::output_statement(AstRef ref) {
   AstNode n = nodes[ref];
@@ -176,9 +182,7 @@ void CGenerator::output_function_definition(AstRef ref) {
 
 void CGenerator::output_module(AstRef ref) {
   AstNode n = nodes[ref];
-  ForEachIndex(i, n.module.items.len) {
-    output_function_declaration(n.module.items[i]);
-  }
+  ForEachIndex(i, n.module.items.len) { output_function_declaration(n.module.items[i]); }
 
   ForEachIndex(i, n.module.items.len) { output_function_definition(n.module.items[i]); }
 }

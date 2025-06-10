@@ -1,12 +1,13 @@
 #include "blu.hh"
 
 struct Tokenizer {
+  CompilerContext *ctx;
   char const *at;
   char const *end;
 
   SourceLocation current_location;
 
-  void init(char const *source, char const *end);
+  void init(CompilerContext *ctx, char const *source, char const *end);
   TokenizerResult next(Token *tok);
 
   void step();
@@ -38,7 +39,8 @@ void Tokenizer::skip_whitespace() {
   }
 }
 
-void Tokenizer::init(char const *source, char const *end) {
+void Tokenizer::init(CompilerContext *ctx, char const *source, char const *end) {
+  this->ctx = ctx;
   this->at  = source;
   this->end = end;
 
@@ -133,13 +135,16 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_identifier);
   }
 
+  Str msg = ctx->arena->push_format_string("Unrecognized character '%c'\n", c);
+  ctx->messages.push({SourceSpan::from_single_location(start), Error, msg});
+
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(char const *source, usize len, Vector<Token> *tokens) {
+b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> *tokens) {
   Tokenizer tokenizer;
 
-  tokenizer.init(source, source + len);
+  tokenizer.init(ctx, source, source + len);
 
   TokenizerResult res;
   while (true) {

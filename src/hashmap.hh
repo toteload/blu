@@ -115,8 +115,8 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
   Bucket<K, V> *_buckets =
     cast<Bucket<K, V> *>(alloc.raw_realloc(buckets, current_size, new_size, 8));
 
-  u32 *old_meta = cast<u32 *>(Ptr_offset(_buckets, cap * sizeof(Bucket<K, V>)));
-  u32 *meta     = cast<u32 *>(Ptr_offset(_buckets, size * sizeof(Bucket<K, V>)));
+  u32 *old_meta = cast<u32 *>(ptr_offset(_buckets, cap * sizeof(Bucket<K, V>)));
+  u32 *meta     = cast<u32 *>(ptr_offset(_buckets, size * sizeof(Bucket<K, V>)));
 
   memmove(meta, old_meta, cap * sizeof(u32));
   memset(meta + cap, 0, cap * sizeof(u32));

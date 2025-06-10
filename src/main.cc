@@ -167,7 +167,6 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
     print_ast(out, ast, n.if_else.cond, depth + 1);
     print_ast(out, ast, n.if_else.then, depth + 1);
     if (n.if_else.otherwise != nil) {
-
       print_ast(out, ast, n.if_else.otherwise, depth + 1);
     }
   } break;
@@ -186,6 +185,17 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
   }
 }
 
+void display_message(FILE *out, Message *msg) {
+  char const *severity = "unknown";
+  switch (msg->severity) {
+    case Error: severity = "error"; break;
+    case Warning: severity = "warning"; break;
+    case Info: severity = "info"; break;
+  };
+
+  fprintf(out, "[%d:%d] %s: %.*s\n", msg->span.start.line, msg->span.start.col, severity, msg->message.len, msg->message.str);
+}
+
 int main() {
   Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
 
@@ -196,13 +206,27 @@ int main() {
     return 1;
   }
 
+  Arena arena;
+  arena.init(MiB(32));
+
+  Vector<Message> messages;
+  messages.init(stdlib_alloc);
+
+  CompilerContext compiler_context;
+  compiler_context.arena    = &arena;
+  compiler_context.messages = messages.move();
+
   Vector<Token> tokens;
   tokens.init(stdlib_alloc);
 
   b32 ok;
-  ok = tokenize(source, source_len, &tokens);
+  ok = tokenize(&compiler_context, source, source_len, &tokens);
   if (!ok) {
     printf("Encountered error during tokenizing.\n");
+    ForEachIndex(i, compiler_context.messages.len) {
+      Message *msg = &compiler_context.messages[i];
+      display_message(stdout, msg);
+    }
     return 1;
   }
 

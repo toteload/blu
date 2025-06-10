@@ -20,6 +20,7 @@ typedef int64_t i64;
 typedef uint64_t u64;
 
 typedef uintptr_t usize;
+typedef intptr_t isize;
 
 typedef uint32_t b32;
 
@@ -75,13 +76,20 @@ template<typename T, typename U> constexpr T cast(U &&x) { return (T)x; }
 
 #define Cast(T, x) ((T)(x))
 
-#define Round_up_to_power_of_two(x, p) (((x) + ((p)-1)) & (~((p)-1)))
-
+template<typename T> constexpr T round_up_to_power_of_two(T x, T p) {
+  return (x + (p - 1)) & (~(p - 1));
+}
 template<typename T> constexpr b32 is_zero_or_power_of_two(T x) { return ((((x)-1) & (x)) == 0); }
 
-#define Ptr_forward_align(p, a) Cast(void *, Round_up_to_power_of_two(Cast(u64, p), Cast(u64, a)))
-#define Ptr_offset(p, d) Cast(void *, Cast(u8 *, p) + d)
-#define Ptr_diff(a, b) (Cast(u8 *, a) - Cast(u8 *, b))
+template<typename T> constexpr void *ptr_forward_align(T *p, u32 align) {
+  return cast<void *>(round_up_to_power_of_two(cast<usize>(p), cast<usize>(align)));
+}
+
+template<typename T, typename U> isize ptr_diff(T *a, U *b) {
+  return cast<u8 *>(a) - cast<u8 *>(b);
+}
+
+template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 *>(p) + d; }
 
 #ifdef TTLD_DEBUG
 #define Debug_assert(cond) assert(cond)
@@ -128,9 +136,9 @@ namespace ttld::os
 {
 u32 page_size();
 
-void *mem_reserve(u64 size);
-b32 mem_commit(void *p, u64 size);
-void mem_release(void *p, u64 size);
+void *mem_reserve(usize size);
+b32 mem_commit(void *p, usize size);
+void mem_release(void *p, usize size);
 } // namespace ttld::os
 
 // @allocator
@@ -197,7 +205,12 @@ struct Arena {
 
   Allocator as_allocator();
 
-  template<typename T> T *alloc(usize count = 1);
+  void *raw_alloc(usize byte_size, u32 align);
+  template<typename T> T *alloc(usize count = 1) {
+    return cast<T *>(raw_alloc(count * sizeof(T), Align_of(T)));
+  }
+
+  Str push_format_string(char const *format, ...);
 
   ttld_inline ArenaSnapshot take_snapshot();
   void restore(ArenaSnapshot snapshot);
