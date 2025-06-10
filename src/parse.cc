@@ -180,8 +180,6 @@ b32 Parser::parse_item_function(AstRef *out) {
   AstRef return_type_ref;
   Try(parse_type(&return_type_ref));
 
-  Try(expect_token(Tok_arrow));
-
   AstRef body_ref;
   Try(parse_scope(&body_ref));
 
