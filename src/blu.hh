@@ -104,6 +104,8 @@ enum TokenKind : u32 {
   Tok_keyword_if,
   Tok_keyword_else,
   Tok_keyword_while,
+  Tok_keyword_break,
+  Tok_keyword_continue,
 
   Tok_identifier,
 
@@ -156,6 +158,8 @@ enum AstKind : u32 {
   Ast_assign,
 
   Ast_while,
+  Ast_break,
+  Ast_continue,
 
   Ast_call,
   Ast_if_else,

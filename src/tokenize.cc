@@ -132,6 +132,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_if_keyword("if", Tok_keyword_if);
     Return_if_keyword("else", Tok_keyword_else);
     Return_if_keyword("while", Tok_keyword_while);
+    Return_if_keyword("break", Tok_keyword_break);
+    Return_if_keyword("continue", Tok_keyword_continue);
 
     Return_token(Tok_identifier);
   }

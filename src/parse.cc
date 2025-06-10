@@ -24,6 +24,8 @@ struct Parser {
 
   b32 parse_scope(AstRef *out);
 
+  b32 parse_break(AstRef *out);
+  b32 parse_continue(AstRef *out);
   b32 parse_statement(AstRef *out);
   b32 parse_statement_return(AstRef *out);
   b32 parse_declaration(AstRef *out);
@@ -251,9 +253,43 @@ b32 Parser::parse_declaration(AstRef *out) {
   return true;
 }
 
+b32 Parser::parse_break(AstRef *out) {
+  Token tok;
+  Try(expect_token(Tok_keyword_break, &tok));
+  Try(expect_token(Tok_semicolon));
+
+  AstNode n;
+  n.kind = Ast_break;
+
+  *out = add_node(n);
+
+  return true;
+}
+
+b32 Parser::parse_continue(AstRef *out) {
+  Token tok;
+  Try(expect_token(Tok_keyword_continue, &tok));
+  Try(expect_token(Tok_semicolon));
+
+  AstNode n;
+  n.kind = Ast_continue;
+
+  *out = add_node(n);
+
+  return true;
+}
+
 b32 Parser::parse_statement(AstRef *out) {
   Token tok;
   Try(peek(&tok));
+
+  if (tok.kind == Tok_keyword_break) {
+    return parse_break(out);
+  }
+
+  if (tok.kind == Tok_keyword_continue) {
+    return parse_continue(out);
+  }
 
   if (tok.kind == Tok_keyword_while) {
     return parse_while(out);

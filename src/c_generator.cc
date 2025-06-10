@@ -1,7 +1,7 @@
 #include "blu.hh"
 #include <stdio.h>
 
-char const *preamble = "#include <stdio.h>\n"
+char const *preamble = "#include <stdint.h>\n"
                        "typedef int8_t i8;\n"
                        "typedef uint8_t u8;\n"
                        "typedef int16_t i16;\n"
@@ -9,7 +9,7 @@ char const *preamble = "#include <stdio.h>\n"
                        "typedef int32_t i32;\n"
                        "typedef uint32_t u32;\n"
                        "typedef int64_t i64;\n"
-                       "typedef uint64_t i64;\n"
+                       "typedef uint64_t u64;\n"
                        "typedef float f32;\n"
                        "typedef double f64;\n\n";
 
@@ -23,6 +23,8 @@ struct CGenerator {
   void output_function_signature(AstRef ref);
   void output_function_declaration(AstRef ref);
   void output_function_definition(AstRef ref);
+  void output_break(AstRef ref);
+  void output_continue(AstRef ref);
   void output_while(AstRef ref);
   void output_statement(AstRef ref);
   void output_expression(AstRef ref);
@@ -57,6 +59,9 @@ void CGenerator::output_function_declaration(AstRef ref) {
 }
 
 void CGenerator::output_literal_int(AstRef ref) { output_span(ref); }
+
+void CGenerator::output_break(AstRef ref) { fprintf(out, "break"); }
+void CGenerator::output_continue(AstRef ref) { fprintf(out, "continue"); }
 
 void CGenerator::output_scope(AstRef ref) {
   fprintf(out, "{\n");
@@ -147,6 +152,18 @@ void CGenerator::output_unary_op(AstRef ref) {}
 
 void CGenerator::output_statement(AstRef ref) {
   AstNode n = nodes[ref];
+
+  if (n.kind == Ast_break) {
+    output_break(ref);
+    fprintf(out, ";\n");
+    return;
+  }
+
+  if (n.kind == Ast_continue) {
+    output_continue(ref);
+    fprintf(out, ";\n");
+    return;
+  };
 
   if (n.kind == Ast_while) {
     fprintf(out, "while ");

@@ -44,7 +44,7 @@ char const *token_string[] = {
   "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus",
   "less-than",  "less-equal-than", "comma",     "literal_int", "brace_open", "brace_close",
   "paren_open", "paren_close",     "fn",        "return",      "if",         "else",
-  "while",      "identifier",      "<illegal>",
+  "while", "break", "continue",      "identifier",      "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -83,6 +83,8 @@ char const *ast_string[] = {
   "declaration",
   "assign",
   "while",
+  "break",
+  "continue",
   "call",
   "if-else",
   "binary-op",
@@ -185,8 +187,7 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
     print_ast(out, ast, n.unary_op.value, depth + 1);
   } break;
 
-  case Ast_kind_max: {
-  } break;
+  default: break;
   }
 }
 
