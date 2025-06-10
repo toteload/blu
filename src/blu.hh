@@ -87,8 +87,13 @@ enum TokenKind : u32 {
   Tok_minus,
   Tok_plus,
 
-  Tok_less_than,
-  Tok_less_equal_than,
+  Tok_not,
+  Tok_cmp_eq,
+  Tok_cmp_ne,
+  Tok_cmp_gt,
+  Tok_cmp_ge,
+  Tok_cmp_lt,
+  Tok_cmp_le,
 
   Tok_comma,
 
@@ -133,7 +138,12 @@ enum BinaryOpKind : u32 {
   Sub,
   Add,
 
-  LessEqual,
+  CmpEq,
+  CmpNe,
+  CmpGt,
+  CmpGe,
+  CmpLt,
+  CmpLe,
 
   BinaryOpKind_max,
 };

@@ -129,20 +129,21 @@ void CGenerator::output_binary_op(AstRef ref) {
   fprintf(out, "(");
   output_expression(nodes[ref].binary_op.lhs);
 
+  // clang-format off
   switch (nodes[ref].binary_op.kind) {
-  case Sub:
-    fprintf(out, " - ");
-    break;
-  case Add:
-    fprintf(out, " + ");
-    break;
-  case LessEqual:
-    fprintf(out, " <= ");
-    break;
+  case Sub:   fprintf(out, " - "); break;
+  case Add:   fprintf(out, " + "); break;
+  case CmpEq: fprintf(out, " == "); break;
+  case CmpNe: fprintf(out, " != "); break;
+  case CmpGt: fprintf(out, " > "); break;
+  case CmpGe: fprintf(out, " >= "); break;
+  case CmpLt: fprintf(out, " < "); break;
+  case CmpLe: fprintf(out, " <= "); break;
   default:
     fprintf(out, " ??? ");
     break;
   }
+  // clang-format on
 
   output_expression(nodes[ref].binary_op.rhs);
   fprintf(out, ")");

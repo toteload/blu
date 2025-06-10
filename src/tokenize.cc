@@ -83,7 +83,6 @@ TokenizerResult Tokenizer::next(Token *tok) {
   switch (c) {
   case ';': Return_token(Tok_semicolon);
   case ':': Return_token(Tok_colon);
-  case '=': Return_token(Tok_equals);
   case '{': Return_token(Tok_brace_open);
   case '}': Return_token(Tok_brace_close);
   case '(': Return_token(Tok_paren_open);
@@ -92,13 +91,40 @@ TokenizerResult Tokenizer::next(Token *tok) {
   }
   // clang-format on
 
+  if (c == '=') {
+    if (*at == '=') {
+      step();
+      Return_token(Tok_cmp_eq);
+    }
+
+    Return_token(Tok_equals);
+  }
+
   if (c == '<') {
     if (*at == '=') {
       step();
-      Return_token(Tok_less_equal_than);
+      Return_token(Tok_cmp_le);
     }
 
-    Return_token(Tok_less_than);
+    Return_token(Tok_cmp_lt);
+  }
+
+  if (c == '>') {
+    if (*at == '=') {
+      step();
+      Return_token(Tok_cmp_ge);
+    }
+
+    Return_token(Tok_cmp_gt);
+  }
+
+  if (c == '!') {
+    if (*at == '=') {
+      step();
+      Return_token(Tok_cmp_ne);
+    }
+
+    Return_token(Tok_not);
   }
 
   if (c == '-') {

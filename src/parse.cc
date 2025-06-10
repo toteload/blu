@@ -411,11 +411,11 @@ b32 Parser::parse_while(AstRef *out) {
 }
 
 Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
-  if (lhs == LessEqual) {
+  if (lhs == CmpLe) {
     return Right;
   }
 
-  if (rhs == LessEqual) {
+  if (rhs == CmpLe) {
     return Left;
   }
 
@@ -517,21 +517,22 @@ b32 Parser::parse_expression(AstRef *out, BinaryOpKind prev_op) {
     Try(peek(&tok));
 
     BinaryOpKind op = BinaryOpKind_max;
+    // clang-format off
     switch (tok.kind) {
-    case Tok_minus:
-      op = Sub;
-      break;
-    case Tok_plus:
-      op = Add;
-      break;
-    case Tok_less_equal_than:
-      op = LessEqual;
-      break;
+    case Tok_minus:  op = Sub; break;
+    case Tok_plus:   op = Add; break;
+    case Tok_cmp_eq: op = CmpEq; break;
+    case Tok_cmp_ne: op = CmpNe; break;
+    case Tok_cmp_gt: op = CmpGt; break;
+    case Tok_cmp_ge: op = CmpGe; break;
+    case Tok_cmp_lt: op = CmpLt; break;
+    case Tok_cmp_le: op = CmpLe; break;
     default: {
       *out = lhs;
       return true;
     }
     }
+    // clang-format on
 
     Precedence precedence = Right;
     if (prev_op != BinaryOpKind_max) {
