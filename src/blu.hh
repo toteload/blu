@@ -84,13 +84,21 @@ enum TokenKind : u32 {
   Tok_arrow,
   Tok_semicolon,
   Tok_equals,
+
   Tok_minus,
   Tok_plus,
   Tok_star,
   Tok_slash,
-  Tok_modulo,
+  Tok_percent,
 
-  Tok_not,
+  Tok_exclamation,
+  Tok_ampersand,
+  Tok_bar,
+  Tok_caret,
+  Tok_tilde,
+  Tok_left_shift,
+  Tok_right_shift,
+
   Tok_cmp_eq,
   Tok_cmp_ne,
   Tok_cmp_gt,
@@ -115,6 +123,9 @@ enum TokenKind : u32 {
   Tok_keyword_break,
   Tok_keyword_continue,
 
+  Tok_keyword_and,
+  Tok_keyword_or,
+
   Tok_identifier,
 
   Tok_kind_max,
@@ -138,18 +149,29 @@ b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> 
 // -[ AST ]-
 
 enum BinaryOpKind : u32 {
-  Sub,
-  Add,
   Mul,
   Div,
   Mod,
 
-  CmpEq,
-  CmpNe,
-  CmpGt,
-  CmpGe,
-  CmpLt,
-  CmpLe,
+  Sub,
+  Add,
+
+  Bit_shift_left,
+  Bit_shift_right,
+
+  Bit_and,
+  Bit_or,
+  Bit_xor,
+
+  Cmp_equal,
+  Cmp_not_equal,
+  Cmp_greater_than,
+  Cmp_greater_equal,
+  Cmp_less_than,
+  Cmp_less_equal,
+
+  Logical_and,
+  Logical_or,
 
   BinaryOpKind_max,
 };

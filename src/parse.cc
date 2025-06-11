@@ -11,7 +11,10 @@ struct Parser {
 
   void init(
     CompilerContext *ctx,
-    StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
+    StringInterner *strings,
+    Allocator ref_allocator,
+    Vector<AstNode> *nodes,
+    Slice<Token> tokens
   );
 
   b32 parse_module(AstRef *out);
@@ -48,10 +51,14 @@ struct Parser {
   b32 is_at_end() { return idx == tokens.len; }
 };
 
-void Parser::init(CompilerContext *ctx, 
-  StringInterner *strings, Allocator ref_allocator, Vector<AstNode> *nodes, Slice<Token> tokens
+void Parser::init(
+  CompilerContext *ctx,
+  StringInterner *strings,
+  Allocator ref_allocator,
+  Vector<AstNode> *nodes,
+  Slice<Token> tokens
 ) {
-  this->ctx = ctx;
+  this->ctx           = ctx;
   this->strings       = strings;
   this->nodes         = nodes;
   this->tokens        = tokens;
@@ -408,16 +415,26 @@ b32 Parser::parse_while(AstRef *out) {
   return true;
 }
 
-Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
-  if (lhs == CmpLe) {
-    return Right;
-  }
+// clang-format off
+static constexpr u8 binop_precedence_group[BinaryOpKind_max] = {
+  0, 0, 0,
+  1, 1,
+  2, 2, 3,
+  3, 3,
+  4, 4, 4, 4, 4, 4,
+  5, 5,
+};
+// clang-format on
 
-  if (rhs == CmpLe) {
+Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
+  u8 left_group  = binop_precedence_group[lhs];
+  u8 right_group = binop_precedence_group[rhs];
+
+  if (left_group == right_group || lhs < rhs) {
     return Left;
   }
 
-  return Left;
+  return Right;
 }
 
 b32 Parser::parse_base_expression(AstRef *out) {
@@ -438,7 +455,7 @@ b32 Parser::parse_base_expression(AstRef *out) {
     return parse_if_else_expression(out);
   }
 
-  if (tok.kind == Tok_not) {
+  if (tok.kind == Tok_exclamation) {
     next();
 
     AstRef value;
@@ -537,13 +554,20 @@ b32 Parser::parse_expression(AstRef *out, BinaryOpKind prev_op) {
     case Tok_plus:   op = Add; break;
     case Tok_star:   op = Mul; break;
     case Tok_slash:  op = Div; break;
-    case Tok_modulo: op = Mod; break;
-    case Tok_cmp_eq: op = CmpEq; break;
-    case Tok_cmp_ne: op = CmpNe; break;
-    case Tok_cmp_gt: op = CmpGt; break;
-    case Tok_cmp_ge: op = CmpGe; break;
-    case Tok_cmp_lt: op = CmpLt; break;
-    case Tok_cmp_le: op = CmpLe; break;
+    case Tok_percent: op = Mod; break;
+    case Tok_cmp_eq: op = Cmp_equal; break;
+    case Tok_cmp_ne: op = Cmp_not_equal; break;
+    case Tok_cmp_gt: op = Cmp_greater_than; break;
+    case Tok_cmp_ge: op = Cmp_greater_equal; break;
+    case Tok_cmp_lt: op = Cmp_less_than; break;
+    case Tok_cmp_le: op = Cmp_less_equal; break;
+    case Tok_keyword_and: op = Logical_and; break;
+    case Tok_keyword_or: op = Logical_or; break;
+    case Tok_ampersand: op = Bit_and; break;
+    case Tok_bar: op = Bit_or; break;
+    case Tok_caret: op = Bit_xor; break;
+    case Tok_left_shift: op = Bit_shift_left; break;
+    case Tok_right_shift: op = Bit_shift_right; break;
     default: {
       *out = lhs;
       return true;
@@ -626,7 +650,8 @@ b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
-    Str msg = ctx->arena->push_format_string("Expected token %d, but got %d\n", expected_kind, tok.kind);
+    Str msg =
+      ctx->arena->push_format_string("Expected token %d, but got %d\n", expected_kind, tok.kind);
     ctx->messages.push({tok.span, Error, msg});
     return false;
   }

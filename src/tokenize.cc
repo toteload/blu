@@ -90,7 +90,11 @@ TokenizerResult Tokenizer::next(Token *tok) {
   case '+': Return_token(Tok_plus);
   case '*': Return_token(Tok_star);
   case '/': Return_token(Tok_slash);
-  case '%': Return_token(Tok_modulo);
+  case '%': Return_token(Tok_percent);
+  case '&': Return_token(Tok_ampersand);
+  case '|': Return_token(Tok_bar);
+  case '^': Return_token(Tok_caret);
+  case '~': Return_token(Tok_tilde);
   }
   // clang-format on
 
@@ -109,6 +113,11 @@ TokenizerResult Tokenizer::next(Token *tok) {
       Return_token(Tok_cmp_le);
     }
 
+    if (*at == '<') {
+      step();
+      Return_token(Tok_left_shift);
+    }
+
     Return_token(Tok_cmp_lt);
   }
 
@@ -118,16 +127,21 @@ TokenizerResult Tokenizer::next(Token *tok) {
       Return_token(Tok_cmp_ge);
     }
 
+    if (*at == '>') {
+      step();
+      Return_token(Tok_right_shift);
+    }
+
     Return_token(Tok_cmp_gt);
   }
 
   if (c == '!') {
-    if (*at != '=') {
-      Return_token(Tok_not);
+    if (*at == '=') {
+      step();
+      Return_token(Tok_cmp_ne);
     }
 
-    step();
-    Return_token(Tok_cmp_ne);
+    Return_token(Tok_exclamation);
   }
 
   if (c == '-') {
@@ -163,6 +177,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_if_keyword("while", Tok_keyword_while);
     Return_if_keyword("break", Tok_keyword_break);
     Return_if_keyword("continue", Tok_keyword_continue);
+    Return_if_keyword("and", Tok_keyword_and);
+    Return_if_keyword("or", Tok_keyword_or);
 
     Return_token(Tok_identifier);
   }

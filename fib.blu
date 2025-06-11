@@ -9,8 +9,8 @@ fib :: (n: i32): i32 {
 main :: (): i32 { 
   i : i32 = 0;
 
-  while !0 {
-    if i == 10 {
+  while 1 {
+    if i + 2 * 3 == 10 and 1 {
       break;
     }
 

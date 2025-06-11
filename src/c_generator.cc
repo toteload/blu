@@ -133,12 +133,22 @@ void CGenerator::output_binary_op(AstRef ref) {
   switch (nodes[ref].binary_op.kind) {
   case Sub:   fprintf(out, " - "); break;
   case Add:   fprintf(out, " + "); break;
-  case CmpEq: fprintf(out, " == "); break;
-  case CmpNe: fprintf(out, " != "); break;
-  case CmpGt: fprintf(out, " > "); break;
-  case CmpGe: fprintf(out, " >= "); break;
-  case CmpLt: fprintf(out, " < "); break;
-  case CmpLe: fprintf(out, " <= "); break;
+  case Mul:   fprintf(out, " * "); break;
+  case Div:   fprintf(out, " / "); break;
+  case Mod:   fprintf(out, " %% "); break;
+  case Cmp_equal: fprintf(out, " == "); break;
+  case Cmp_not_equal: fprintf(out, " != "); break;
+  case Cmp_greater_than: fprintf(out, " > "); break;
+  case Cmp_greater_equal: fprintf(out, " >= "); break;
+  case Cmp_less_than: fprintf(out, " < "); break;
+  case Cmp_less_equal: fprintf(out, " <= "); break;
+  case Logical_and: fprintf(out, " && "); break;
+  case Logical_or: fprintf(out, " || "); break;
+  case Bit_and: fprintf(out, " & "); break;
+  case Bit_or: fprintf(out, " | "); break;
+  case Bit_xor: fprintf(out, " ^ "); break;
+  case Bit_shift_left: fprintf(out, " << "); break;
+  case Bit_shift_right: fprintf(out, " >> "); break;
   default:
     fprintf(out, " ??? ");
     break;

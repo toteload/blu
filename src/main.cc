@@ -41,11 +41,13 @@ char const *read_file(char const *filename, usize *len) {
 }
 
 char const *token_string[] = {
-  "colon",      "arrow",           "semicolon", "equals",      "minus",      "plus", "star", "slash", "modulo",
-  "not", "cmp-eq", "cmp-ne", "cmp-gt", "cmp-ge",
-  "cmp-lt",  "cmp-le", "comma",     "literal_int", "brace_open", "brace_close",
-  "paren_open", "paren_close",     "fn",        "return",      "if",         "else",
-  "while", "break", "continue",      "identifier",      "<illegal>",
+  "colon",      "arrow",       "semicolon",  "equals",      "minus",     "plus",
+  "star",       "slash",       "percent",    "exclamation", "ampersand", "bar",
+  "caret",      "tilde",       "left-shift", "right-shift", "cmp-eq",    "cmp-ne",
+  "cmp-gt",     "cmp-ge",      "cmp-lt",     "cmp-le",      "comma",     "literal_int",
+  "brace_open", "brace_close", "paren_open", "paren_close", "fn",        "return",
+  "if",         "else",        "while",      "break",       "continue",  "and",
+  "or",         "identifier",  "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -103,17 +105,9 @@ char const *ast_kind_string(AstKind kind) {
 }
 
 char const *binary_op_string[] = {
-  "- (Sub)",
-  "+ (Add)",
-  "* (Mul)",
-  "/ (Div)",
-  "% (Mod)",
-  "== (CmpEq)",
-  "!= (CmpNe)",
-  "> (CmpGt)",
-  ">= (CmpGe)",
-  "< (CmpLt)",
-  "<= (CmpLe)",
+  "* (Mul)",   "/ (Div)",     "% (Mod)",    "- (Sub)",     "+ (Add)",           "<<",
+  ">>",        "& (Bit_and)", "| (Bit_or)", "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
+  "> (CmpGt)", ">= (CmpGe)",  "< (CmpLt)",  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
   "illegal",
 };
 
@@ -196,7 +190,8 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
     print_ast(out, ast, n.unary_op.value, depth + 1);
   } break;
 
-  default: break;
+  default:
+    break;
   }
 }
 
