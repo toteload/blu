@@ -3,13 +3,13 @@
 #if 0
 b32 find_type();
 
-void visit_module(CompilerContext *ctx, AstRef ref) {
+void visit_module(CompilerContext *ctx, AstNode * ref) {
   ForEachIndex(i, nodes[ref].module.items.len) {
     visit(ctx, nodes[ref].module.items[i]);
   }
 }
 
-void visit_function(CompilerContext *ctx, AstRef ref) {
+void visit_function(CompilerContext *ctx, AstNode * ref) {
   ForEachIndex(i, nodes[ref].function.params.len) {
     visit(ctx, nodes[ref].function.params[i]);
   }
@@ -19,30 +19,30 @@ void visit_function(CompilerContext *ctx, AstRef ref) {
   visit(ctx, nodes[ref].function.body);
 }
 
-void visit_param(CompilerContext *ctx, AstRef ref) {
+void visit_param(CompilerContext *ctx, AstNode * ref) {
   find_type(ctx, ctx->ast[ref].param.type);
 }
 
-void visit_scope(CompilerContext *ctx, AstRef ref) {
+void visit_scope(CompilerContext *ctx, AstNode * ref) {
   ForEachIndex(i, nodes[ref].scope.statements.len) {
     visit(ctx, nodes[ref].scope.statements[i]);
   }
 }
 
-void visit_identifier(CompilerContext *ctx, AstRef ref) {}
-void visit_literal_int(CompilerContext *ctx, AstRef ref) {}
-void visit_declaration(CompilerContext *ctx, AstRef ref) {}
-void visit_assign(CompilerContext *ctx, AstRef ref) {}
-void visit_while(CompilerContext *ctx, AstRef ref) {}
-void visit_break(CompilerContext *ctx, AstRef ref) {}
-void visit_continue(CompilerContext *ctx, AstRef ref) {}
-void visit_call(CompilerContext *ctx, AstRef ref) {}
-void visit_if_else(CompilerContext *ctx, AstRef ref) {}
-void visit_binary_op(CompilerContext *ctx, AstRef ref) {}
-void visit_unary_op(CompilerContext *ctx, AstRef ref) {}
-void visit_return(CompilerContext *ctx, AstRef ref) {}
+void visit_identifier(CompilerContext *ctx, AstNode * ref) {}
+void visit_literal_int(CompilerContext *ctx, AstNode * ref) {}
+void visit_declaration(CompilerContext *ctx, AstNode * ref) {}
+void visit_assign(CompilerContext *ctx, AstNode * ref) {}
+void visit_while(CompilerContext *ctx, AstNode * ref) {}
+void visit_break(CompilerContext *ctx, AstNode * ref) {}
+void visit_continue(CompilerContext *ctx, AstNode * ref) {}
+void visit_call(CompilerContext *ctx, AstNode * ref) {}
+void visit_if_else(CompilerContext *ctx, AstNode * ref) {}
+void visit_binary_op(CompilerContext *ctx, AstNode * ref) {}
+void visit_unary_op(CompilerContext *ctx, AstNode * ref) {}
+void visit_return(CompilerContext *ctx, AstNode * ref) {}
 
-void visit(CompilerContext *ctx, AstRef root) {
+void visit(CompilerContext *ctx, AstNode * root) {
   AstNode n = nodes[root];
 
   // clang-format off
@@ -110,32 +110,31 @@ Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function) {
 
   b32 has_param_type_error = false;
 
-  ForEachIndex(i, function->function.params.len) {
-    AstNode *param = function->function.params[i];
+  ForEachAstNode(param, function->function.params) {
     Type *t = infer_ast_type(ctx, env, param);
     if (!t) {
       has_param_type_error = true;
       break;
     }
 
-    t->next = param_types;
+    t->next     = param_types;
     param_types = t;
   }
 
   if (!return_type || has_param_type_error) {
     return nullptr;
-  } 
+  }
 
   Type *function_type = ctx->types.add(Type::make_function(return_type, param_types));
 
   return function_type;
 }
 
-b32 infer_types(CompilerContext *ctx, AstRef mod) {
+b32 infer_types(CompilerContext *ctx, AstNode *mod) {
   // - Add all items to environment.
   // - For each item, infer the types inside it.
 
-  #if 0
+#if 0
   Env *mod_environment = ctx->environments.alloc(ctx->global_environment);
 
   b32 has_function_type_error = false;
@@ -156,7 +155,7 @@ b32 infer_types(CompilerContext *ctx, AstRef mod) {
 
     Unreachable();
   }
-  #endif
+#endif
 
   return true;
 }

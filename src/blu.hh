@@ -204,66 +204,60 @@ enum AstKind : u32 {
   Ast_kind_max,
 };
 
-struct AstNode;
-
-using AstRef = AstNode *;
-
-constexpr AstRef nil = nullptr;
-
 struct AstNode {
   AstKind kind;
   SourceSpan span;
-  Type *type = nullptr;
+  Type *type    = nullptr;
   AstNode *next = nullptr;
 
   union {
     struct {
-      Vector<AstRef> params;
-      AstRef name;
-      AstRef return_type;
-      AstRef body;
+      AstNode *params;
+      AstNode *name;
+      AstNode *return_type;
+      AstNode *body;
     } function;
 
     struct {
-      AstRef name;
-      AstRef type;
+      AstNode *name;
+      AstNode *type;
     } param;
 
     struct {
-      AstRef name;
-      AstRef type;
-      AstRef initial_value;
+      AstNode *name;
+      AstNode *type;
+      AstNode *initial_value;
     } declaration;
 
     struct {
-      AstRef lhs;
-      AstRef value;
+      AstNode *lhs;
+      AstNode *value;
     } assign;
 
     struct {
-      AstRef f;
-      Vector<AstRef> arguments;
-    } call;
-
-    struct {
-      AstRef cond;
-      AstRef then;
-      AstRef otherwise;
+      AstNode *cond;
+      AstNode *then;
+      AstNode *otherwise;
     } if_else;
 
     struct {
+      AstNode *f;
+      AstNode *args;
+    } call;
+
+    struct {
       BinaryOpKind kind;
-      AstRef lhs;
-      AstRef rhs;
+      AstNode *lhs;
+      AstNode *rhs;
     } binary_op;
 
     struct {
       UnaryOpKind kind;
-      AstRef value;
+      AstNode *value;
     } unary_op;
 
     struct {
-      AstRef value;
+      AstNode *value;
     } ret;
 
     struct {
@@ -271,19 +265,21 @@ struct AstNode {
     } identifier;
 
     struct {
-      AstRef cond;
-      AstRef body;
+      AstNode *cond;
+      AstNode *body;
     } _while;
 
     struct {
-      Vector<AstRef> statements;
+      AstNode *statements;
     } scope;
 
     struct {
-      Vector<AstRef> items;
+      AstNode *items;
     } module;
   };
 };
+
+#define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
 b32 parse(CompilerContext *ctx);
 
@@ -332,9 +328,9 @@ struct Type {
 
   static Type make_function(Type *return_type, Type *params) {
     Type t;
-    t.kind = Function;
+    t.kind                 = Function;
     t.function.return_type = return_type;
-    t.function.params = params;
+    t.function.params      = params;
     return t;
   }
 };
@@ -346,17 +342,17 @@ struct TypeInterner {
   HashMap<Type, Type *, type_eq, type_hash> map;
   ObjectPool<Type> pool;
 
-  void init(Allocator map_allocator, Allocator pool_allocator);
+  void init(Arena *arena, Allocator map_allocator, Allocator pool_allocator);
   void deinit();
 
   Type *add(Type type);
 };
 
-b32 infer_types(CompilerContext *ctx, AstRef root);
+b32 infer_types(CompilerContext *ctx, AstNode *root);
 
 // -[ C code generation ]-
 
-b32 generate_c_code(FILE *out, AstRef mod);
+b32 generate_c_code(FILE *out, AstNode *mod);
 
 // -[ ]-
 
@@ -453,5 +449,5 @@ struct CompilerContext {
   EnvManager environments;
 
   Env *global_environment;
-  AstRef root;
+  AstNode *root;
 };

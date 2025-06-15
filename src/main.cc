@@ -119,7 +119,7 @@ char const *binary_op_kind_string(BinaryOpKind kind) {
   return binary_op_string[kind];
 }
 
-void print_ast(FILE *out, AstRef ref, u32 depth = 0) {
+void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
   AstNode n = *ref;
 
   pad(out, depth);
@@ -127,7 +127,7 @@ void print_ast(FILE *out, AstRef ref, u32 depth = 0) {
 
   switch (n.kind) {
   case Ast_module: {
-    ForEachIndex(i, n.module.items.len) { print_ast(out, n.module.items[i], depth + 1); }
+    ForEachAstNode(item, n.module.items) { print_ast(out, item, depth + 1); }
   } break;
   case Ast_while: {
     print_ast(out, n._while.cond, depth + 1);
@@ -150,7 +150,7 @@ void print_ast(FILE *out, AstRef ref, u32 depth = 0) {
     print_ast(out, n.ret.value, depth + 1);
   } break;
   case Ast_scope: {
-    ForEachIndex(i, n.scope.statements.len) { print_ast(out, n.scope.statements[i], depth + 1); }
+    ForEachAstNode(statement, n.scope.statements) { print_ast(out, statement, depth + 1); }
   } break;
   case Ast_identifier: {
     Str identifier = n.span.str();
@@ -169,12 +169,12 @@ void print_ast(FILE *out, AstRef ref, u32 depth = 0) {
   } break;
   case Ast_call: {
     print_ast(out, n.call.f, depth + 1);
-    ForEachIndex(i, n.call.arguments.len) { print_ast(out, n.call.arguments[i], depth + 1); }
+    ForEachAstNode(arg, n.call.args) { print_ast(out, arg, depth + 1); }
   } break;
   case Ast_if_else: {
     print_ast(out, n.if_else.cond, depth + 1);
     print_ast(out, n.if_else.then, depth + 1);
-    if (n.if_else.otherwise != nil) {
+    if (n.if_else.otherwise != nullptr) {
       print_ast(out, n.if_else.otherwise, depth + 1);
     }
   } break;
@@ -259,7 +259,7 @@ int main() {
   compiler_context.messages.init(stdlib_alloc);
   compiler_context.ref_allocator = stdlib_alloc;
   compiler_context.strings.init(stdlib_alloc, stdlib_alloc, stdlib_alloc);
-  compiler_context.types.init(stdlib_alloc, stdlib_alloc);
+  compiler_context.types.init(&compiler_context.arena, stdlib_alloc, stdlib_alloc);
   compiler_context.tokens.init(stdlib_alloc);
   compiler_context.nodes.init(stdlib_alloc);
   compiler_context.environments.init(stdlib_alloc, stdlib_alloc);

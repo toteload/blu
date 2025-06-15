@@ -85,8 +85,8 @@ u32 type_hash(void *context, Type x) {
   return hash;
 }
 
-void TypeInterner::init(Allocator map_allocator, Allocator pool_allocator) {
-  map.init(map_allocator);
+void TypeInterner::init(Arena *arena, Allocator map_allocator, Allocator pool_allocator) {
+  map.init(map_allocator, arena);
   pool.init(pool_allocator);
 }
 
