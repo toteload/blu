@@ -183,13 +183,13 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_identifier);
   }
 
-  Str msg = ctx->arena->push_format_string("Unrecognized character '%c'\n", c);
+  Str msg = ctx->arena.push_format_string("Unrecognized character '%c'\n", c);
   ctx->messages.push({SourceSpan::from_single_location(start), Error, msg});
 
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> *tokens) {
+b32 tokenize(CompilerContext *ctx, char const *source, usize len) {
   Tokenizer tokenizer;
 
   tokenizer.init(ctx, source, source + len);
@@ -203,7 +203,7 @@ b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> 
       break;
     }
 
-    tokens->push(tok);
+    ctx->tokens.push(tok);
   }
 
   return res == TokResult_end;

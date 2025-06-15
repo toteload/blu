@@ -5,9 +5,9 @@ constexpr u32 max_search_depth = 32;
 constexpr u32 index_not_found  = UINT32_MAX;
 constexpr f32 max_load_factor  = 0.8f;
 
-template<typename K> using HashFn = u32(K key);
+template<typename K> using HashFn = u32(void *context, K key);
 
-template<typename K> using KeyCmpFn = b32(K a, K b);
+template<typename K> using KeyCmpFn = b32(void *context, K a, K b);
 
 template<typename K, typename V> struct Bucket {
   K key;
@@ -20,8 +20,9 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
   u32 mask;
   u32 *meta;
   Bucket<K, V> *buckets;
+  void *context;
 
-  void init(Allocator alloc, u32 size = min_map_size);
+  void init(Allocator alloc, void *context = nullptr, u32 size = min_map_size);
   void deinit();
 
   void insert(K key, V val);
@@ -62,10 +63,11 @@ ttld_inline b32 is_stale(u32 x) { return (x & mask_is_stale) == mask_is_stale; }
 ttld_inline u32 fingerprint32(u32 hash) { return hash & mask_fingerprint; }
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
-void HashMap<K, V, cmp_key, hash_key>::init(Allocator alloc, u32 size) {
+void HashMap<K, V, cmp_key, hash_key>::init(Allocator alloc, void *context, u32 size) {
   Debug_assert(size != 0 && is_zero_or_power_of_two(size));
 
-  this->alloc = alloc;
+  this->alloc   = alloc;
+  this->context = context;
 
   size = max<u32>(4, size);
 
@@ -139,7 +141,7 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
 
     Bucket<K, V> bi = _buckets[i];
 
-    u32 hash  = hash_key(bi.key);
+    u32 hash  = hash_key(context, bi.key);
     u32 start = hash & nmask;
 
     u32 idx = index_not_found;
@@ -171,7 +173,7 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
     }
 
     while (true) {
-      u32 hash  = hash_key(bi.key);
+      u32 hash  = hash_key(context, bi.key);
       u32 start = hash & nmask;
 
       ForEachIndex(k, max_search_depth) {
@@ -216,7 +218,7 @@ HashMap<K, V, cmp_key, hash_key>::insert_key_and_get_bucket(K key, b32 *was_occu
     grow_and_rehash(size);
   }
 
-  u32 hash = hash_key(key);
+  u32 hash = hash_key(context, key);
   u32 idx  = get_insert_index(hash, key);
 
   while (idx == index_not_found) {
@@ -265,7 +267,7 @@ Bucket<K, V> *HashMap<K, V, cmp_key, hash_key>::get_bucket(K key) {
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
 u32 HashMap<K, V, cmp_key, hash_key>::get_occupied_index(K key) {
-  u32 hash        = hash_key(key);
+  u32 hash        = hash_key(context, key);
   u32 fingerprint = fingerprint32(hash);
   u32 start       = hash & mask;
 
@@ -277,7 +279,7 @@ u32 HashMap<K, V, cmp_key, hash_key>::get_occupied_index(K key) {
     }
 
     if (is_occupied(meta[idx]) && fingerprint32(meta[idx]) == fingerprint) {
-      if (cmp_key(key, buckets[idx].key)) {
+      if (cmp_key(context, key, buckets[idx].key)) {
         return idx;
       }
     }
@@ -305,7 +307,7 @@ u32 HashMap<K, V, cmp_key, hash_key>::get_insert_index(u32 hash, K key) {
     }
 
     if (is_occupied(meta[idx]) && fingerprint32(meta[idx]) == fingerprint) {
-      if (cmp_key(key, buckets[idx].key)) {
+      if (cmp_key(context, key, buckets[idx].key)) {
         return idx;
       }
     }

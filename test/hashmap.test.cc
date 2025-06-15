@@ -12,12 +12,12 @@ void *stdlib_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_si
 }
 
 ttld_inline
-b32 cmp_i32(i32 a, i32 b) {
+b32 cmp_i32(void *context, i32 a, i32 b) {
   return a == b;
 }
 
 ttld_inline
-u32 hash_i32(i32 x) {
+u32 hash_i32(void *context, i32 x) {
   return x;
 }
 

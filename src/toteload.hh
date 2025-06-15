@@ -221,3 +221,73 @@ ttld_inline void Arena::restore(ArenaSnapshot snapshot) {
   Debug_assert(this == snapshot.owner);
   at = snapshot.at;
 }
+
+// -[ Object pool ]-
+
+template<typename T> struct ObjectPool {
+  union Item {
+    T item;
+    Item *next;
+  };
+
+  struct Block {
+    Block *next = nullptr;
+    u32 count;
+    Item items[0];
+  };
+
+  Allocator backing;
+  Block *blocks  = nullptr;
+  Item *freelist = nullptr;
+
+  void init(Allocator allocator) { backing = allocator; }
+  void deinit();
+
+  void grow(u32 count);
+
+  T *alloc() {
+    if (freelist == nullptr) {
+      grow(KiB(2));
+    }
+
+    Item *p  = freelist;
+    freelist = freelist->next;
+    return &p->item;
+  }
+
+  void dealloc(T *p) {
+    Item *item = cast<Item *>(p);
+    item->next = freelist;
+    freelist   = item;
+  }
+};
+
+template<typename T> void ObjectPool<T>::deinit() {
+  Block<T> *at = blocks;
+
+  while (at != nullptr) {
+    at = at->next;
+
+    backing.dealloc(/* TODO */);
+  }
+
+  blocks   = nullptr;
+  freelist = nullptr;
+}
+
+template<typename T> void ObjectPool<T>::grow(u32 count) {
+  Block *t =
+    cast<Block *>(backing.raw_alloc(sizeof(Block) + count * sizeof(Item), Align_of(Block)));
+
+  t->next  = blocks;
+  t->count = count;
+
+  for (usize i = 0; i < count - 1; i++) {
+    t->items[i].next = &t->items[i + 1];
+  }
+
+  t->items[count - 1].next = freelist;
+
+  blocks   = t;
+  freelist = &t->items[0];
+}

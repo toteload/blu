@@ -6,6 +6,9 @@
 
 #include <stdio.h>
 
+struct CompilerContext;
+struct Type;
+
 // -[ Source location ]-
 
 struct SourceLocation {
@@ -39,14 +42,12 @@ struct StrKey {
   u32 idx;
 };
 
-#define XXH_INLINE_ALL
-#include "xxhash.h"
-
-ttld_inline u32 str_hash(Str s) { return XXH32(s.str, s.len, 0); }
+ttld_inline b32 str_eq_with_context(void *context, Str a, Str b) { return str_eq(a, b); }
+u32 str_hash(void *context, Str s);
 
 struct StringInterner {
   Allocator storage;
-  HashMap<Str, StrKey, str_eq, str_hash> map;
+  HashMap<Str, StrKey, str_eq_with_context, str_hash> map;
   Vector<Str> list;
 
   void init(Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator);
@@ -68,13 +69,6 @@ struct Message {
   SourceSpan span;
   MessageSeverity severity;
   Str message;
-};
-
-// -[ Compiler context ]-
-
-struct CompilerContext {
-  Arena *arena;
-  Vector<Message> messages;
 };
 
 // -[ Token ]-
@@ -144,7 +138,7 @@ enum TokenizerResult : u32 {
   TokResult_unrecognized_token,
 };
 
-b32 tokenize(CompilerContext *ctx, char const *source, usize len, Vector<Token> *tokens);
+b32 tokenize(CompilerContext *ctx, char const *source, usize len);
 
 // -[ AST ]-
 
@@ -210,13 +204,17 @@ enum AstKind : u32 {
   Ast_kind_max,
 };
 
-using AstRef = u32;
+struct AstNode;
 
-constexpr AstRef nil = UINT32_MAX;
+using AstRef = AstNode *;
+
+constexpr AstRef nil = nullptr;
 
 struct AstNode {
   AstKind kind;
   SourceSpan span;
+  Type *type = nullptr;
+  AstNode *next = nullptr;
 
   union {
     struct {
@@ -287,15 +285,173 @@ struct AstNode {
   };
 };
 
-struct ParseContext {
-  CompilerContext *compiler_context;
-  StringInterner *strings;
-  Allocator ref_allocator;
-  Vector<AstNode> *nodes;
+b32 parse(CompilerContext *ctx);
+
+// -[ Types ]-
+
+enum TypeKind : u16 {
+  Integer,
+  Boolean,
+  Function,
 };
 
-b32 parse(ParseContext *ctx, Slice<Token> tokens, AstRef *root);
+enum Signedness : u8 {
+  Signed,
+  Unsigned,
+};
+
+struct Type {
+  Type *next;
+  TypeKind kind;
+
+  union {
+    struct {
+      Signedness signedness;
+      u16 bitwidth;
+    } integer;
+    struct {
+      Type *base_type;
+    } pointer;
+    struct {
+      Type *return_type;
+      Type *params;
+    } function;
+  };
+
+  static Type make_bool() { return {nullptr, Boolean}; }
+  static Type make_integer(Signedness s, u16 width) {
+    return {
+      nullptr,
+      Integer,
+      {{
+        s,
+        width,
+      }},
+    };
+  }
+
+  static Type make_function(Type *return_type, Type *params) {
+    Type t;
+    t.kind = Function;
+    t.function.return_type = return_type;
+    t.function.params = params;
+    return t;
+  }
+};
+
+b32 type_eq(void *context, Type a, Type b);
+u32 type_hash(void *context, Type x);
+
+struct TypeInterner {
+  HashMap<Type, Type *, type_eq, type_hash> map;
+  ObjectPool<Type> pool;
+
+  void init(Allocator map_allocator, Allocator pool_allocator);
+  void deinit();
+
+  Type *add(Type type);
+};
+
+b32 infer_types(CompilerContext *ctx, AstRef root);
 
 // -[ C code generation ]-
 
-b32 generate_c_code(FILE *out, Slice<AstNode> nodes, AstRef mod);
+b32 generate_c_code(FILE *out, AstRef mod);
+
+// -[ ]-
+
+enum ValueKind : u8 {
+  Value_type,
+  Value_ast,
+};
+
+struct Value {
+  ValueKind kind;
+
+  union {
+    Type *type;
+    AstNode *ast;
+  };
+
+  static Value make_type(Type *type) {
+    return {
+      Value_type,
+      {
+        type,
+      },
+    };
+  }
+};
+
+// -[ Environment ]-
+
+ttld_inline b32 str_key_eq(void *context, StrKey a, StrKey b) { return a.idx == b.idx; }
+ttld_inline u32 str_key_hash(void *context, StrKey x) { return x.idx; }
+
+struct Env {
+  Env *parent;
+  HashMap<StrKey, Value, str_key_eq, str_key_hash> map;
+
+  void init(Allocator allocator) { map.init(allocator); }
+
+  void deinit();
+
+  void insert(StrKey identifier, Value val) { map.insert(identifier, val); }
+
+  Value *lookup(StrKey identifier) {
+    Value *p = map.get_ptr(identifier);
+    if (p) {
+      return p;
+    }
+
+    if (!parent) {
+      return nullptr;
+    }
+
+    return parent->lookup(identifier);
+  }
+};
+
+struct EnvManager {
+  ObjectPool<Env> pool;
+  Allocator env_allocator;
+
+  void init(Allocator pool_allocator, Allocator env_allocator) {
+    this->env_allocator = env_allocator;
+
+    pool.init(pool_allocator);
+  }
+
+  void deinit();
+
+  Env *alloc(Env *parent = nullptr) {
+    Env *env = pool.alloc();
+    env->init(env_allocator);
+    return env;
+  }
+
+  void dealloc(Env *env) {
+    env->deinit();
+    pool.dealloc(env);
+  }
+};
+
+// -[ Compiler context ]-
+
+struct CompilerContext {
+  Arena arena;
+  Vector<Message> messages;
+
+  Allocator ref_allocator;
+
+  StringInterner strings;
+  TypeInterner types;
+
+  Vector<Token> tokens;
+  ObjectPool<AstNode> nodes;
+
+  EnvManager environments;
+
+  Env *global_environment;
+  AstRef root;
+};

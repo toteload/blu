@@ -58,8 +58,8 @@ char const *token_kind_string(u32 kind) {
   return token_string[kind];
 }
 
-void print_tokens(FILE *out, Token *tokens, usize count) {
-  for (usize i = 0; i < count; i++) {
+void print_tokens(FILE *out, Slice<Token> tokens) {
+  for (usize i = 0; i < tokens.len; i++) {
     Token tok = tokens[i];
 
     fprintf(
@@ -119,40 +119,38 @@ char const *binary_op_kind_string(BinaryOpKind kind) {
   return binary_op_string[kind];
 }
 
-void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
-  AstNode n = ast[idx];
+void print_ast(FILE *out, AstRef ref, u32 depth = 0) {
+  AstNode n = *ref;
 
   pad(out, depth);
   fprintf(out, "%s\n", ast_kind_string(n.kind));
 
   switch (n.kind) {
   case Ast_module: {
-    ForEachIndex(i, n.module.items.len) { print_ast(out, ast, n.module.items[i], depth + 1); }
+    ForEachIndex(i, n.module.items.len) { print_ast(out, n.module.items[i], depth + 1); }
   } break;
   case Ast_while: {
-    print_ast(out, ast, n._while.cond, depth + 1);
-    print_ast(out, ast, n._while.body, depth + 1);
+    print_ast(out, n._while.cond, depth + 1);
+    print_ast(out, n._while.body, depth + 1);
   } break;
   case Ast_param: {
-    print_ast(out, ast, n.param.name, depth + 1);
-    print_ast(out, ast, n.param.type, depth + 1);
+    print_ast(out, n.param.name, depth + 1);
+    print_ast(out, n.param.type, depth + 1);
   } break;
   case Ast_function: {
-    print_ast(out, ast, n.function.name, depth + 1);
-    print_ast(out, ast, n.function.return_type, depth + 1);
-    print_ast(out, ast, n.function.body, depth + 1);
+    print_ast(out, n.function.name, depth + 1);
+    print_ast(out, n.function.return_type, depth + 1);
+    print_ast(out, n.function.body, depth + 1);
   } break;
   case Ast_assign: {
-    print_ast(out, ast, n.assign.lhs, depth + 1);
-    print_ast(out, ast, n.assign.value, depth + 1);
+    print_ast(out, n.assign.lhs, depth + 1);
+    print_ast(out, n.assign.value, depth + 1);
   } break;
   case Ast_return: {
-    print_ast(out, ast, n.ret.value, depth + 1);
+    print_ast(out, n.ret.value, depth + 1);
   } break;
   case Ast_scope: {
-    ForEachIndex(i, n.scope.statements.len) {
-      print_ast(out, ast, n.scope.statements[i], depth + 1);
-    }
+    ForEachIndex(i, n.scope.statements.len) { print_ast(out, n.scope.statements[i], depth + 1); }
   } break;
   case Ast_identifier: {
     Str identifier = n.span.str();
@@ -160,9 +158,9 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
     fprintf(out, " '%.*s'\n", cast<i32>(identifier.len), identifier.str);
   } break;
   case Ast_declaration: {
-    print_ast(out, ast, n.declaration.name, depth + 1);
-    print_ast(out, ast, n.declaration.type, depth + 1);
-    print_ast(out, ast, n.declaration.initial_value, depth + 1);
+    print_ast(out, n.declaration.name, depth + 1);
+    print_ast(out, n.declaration.type, depth + 1);
+    print_ast(out, n.declaration.initial_value, depth + 1);
   } break;
   case Ast_literal_int: {
     Str literal = n.span.str();
@@ -170,24 +168,24 @@ void print_ast(FILE *out, Slice<AstNode> ast, AstRef idx, u32 depth = 0) {
     fprintf(out, " '%.*s'\n", cast<i32>(literal.len), literal.str);
   } break;
   case Ast_call: {
-    print_ast(out, ast, n.call.f, depth + 1);
-    ForEachIndex(i, n.call.arguments.len) { print_ast(out, ast, n.call.arguments[i], depth + 1); }
+    print_ast(out, n.call.f, depth + 1);
+    ForEachIndex(i, n.call.arguments.len) { print_ast(out, n.call.arguments[i], depth + 1); }
   } break;
   case Ast_if_else: {
-    print_ast(out, ast, n.if_else.cond, depth + 1);
-    print_ast(out, ast, n.if_else.then, depth + 1);
+    print_ast(out, n.if_else.cond, depth + 1);
+    print_ast(out, n.if_else.then, depth + 1);
     if (n.if_else.otherwise != nil) {
-      print_ast(out, ast, n.if_else.otherwise, depth + 1);
+      print_ast(out, n.if_else.otherwise, depth + 1);
     }
   } break;
   case Ast_binary_op: {
     pad(out, depth + 1);
     fprintf(out, "op: %s\n", binary_op_kind_string(n.binary_op.kind));
-    print_ast(out, ast, n.binary_op.lhs, depth + 1);
-    print_ast(out, ast, n.binary_op.rhs, depth + 1);
+    print_ast(out, n.binary_op.lhs, depth + 1);
+    print_ast(out, n.binary_op.rhs, depth + 1);
   } break;
   case Ast_unary_op: {
-    print_ast(out, ast, n.unary_op.value, depth + 1);
+    print_ast(out, n.unary_op.value, depth + 1);
   } break;
 
   default:
@@ -220,6 +218,32 @@ void display_message(FILE *out, Message *msg) {
   );
 }
 
+void populate_global_environment(CompilerContext *ctx) {
+#define Add_type(Identifier, T)                                                                    \
+  {                                                                                                \
+    ctx->global_environment->insert(                                                               \
+      ctx->strings.add(Str_make(Identifier)),                                                      \
+      Value::make_type(ctx->types.add(T))                                                          \
+    );                                                                                             \
+  }
+
+  // clang-format off
+  Add_type("i8",  Type::make_integer(Signed,  8));
+  Add_type("i16", Type::make_integer(Signed, 16));
+  Add_type("i32", Type::make_integer(Signed, 32));
+  Add_type("i64", Type::make_integer(Signed, 64));
+
+  Add_type("u8",  Type::make_integer(Unsigned,  8));
+  Add_type("u16", Type::make_integer(Unsigned, 16));
+  Add_type("u32", Type::make_integer(Unsigned, 32));
+  Add_type("u64", Type::make_integer(Unsigned, 64));
+
+  Add_type("bool", Type::make_bool());
+  // clang-format on
+
+#undef Add_type
+}
+
 int main() {
   Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
 
@@ -230,21 +254,21 @@ int main() {
     return 1;
   }
 
-  Arena arena;
-  arena.init(MiB(32));
-
-  Vector<Message> messages;
-  messages.init(stdlib_alloc);
-
   CompilerContext compiler_context;
-  compiler_context.arena    = &arena;
-  compiler_context.messages = messages.move();
+  compiler_context.arena.init(MiB(32));
+  compiler_context.messages.init(stdlib_alloc);
+  compiler_context.ref_allocator = stdlib_alloc;
+  compiler_context.strings.init(stdlib_alloc, stdlib_alloc, stdlib_alloc);
+  compiler_context.types.init(stdlib_alloc, stdlib_alloc);
+  compiler_context.tokens.init(stdlib_alloc);
+  compiler_context.nodes.init(stdlib_alloc);
+  compiler_context.environments.init(stdlib_alloc, stdlib_alloc);
+  compiler_context.global_environment = compiler_context.environments.alloc();
 
-  Vector<Token> tokens;
-  tokens.init(stdlib_alloc);
+  populate_global_environment(&compiler_context);
 
   b32 ok;
-  ok = tokenize(&compiler_context, source, source_len, &tokens);
+  ok = tokenize(&compiler_context, source, source_len);
   if (!ok) {
     printf("Encountered error during tokenizing.\n");
     ForEachIndex(i, compiler_context.messages.len) {
@@ -254,23 +278,9 @@ int main() {
     return 1;
   }
 
-  print_tokens(stdout, tokens.data, tokens.len);
+  print_tokens(stdout, compiler_context.tokens.slice());
 
-  StringInterner strings;
-  strings.init(stdlib_alloc, stdlib_alloc, stdlib_alloc);
-
-  Vector<AstNode> nodes;
-  nodes.init(stdlib_alloc);
-
-  ParseContext parse_context{
-    &compiler_context,
-    &strings,
-    stdlib_alloc,
-    &nodes,
-  };
-
-  AstRef root;
-  ok = parse(&parse_context, tokens.slice(), &root);
+  ok = parse(&compiler_context);
   if (!ok) {
     printf("Encountered error during parsing.\n");
     ForEachIndex(i, compiler_context.messages.len) {
@@ -280,10 +290,16 @@ int main() {
     return 1;
   }
 
-  print_ast(stdout, nodes.slice(), root);
+  print_ast(stdout, compiler_context.root);
+
+  ok = infer_types(&compiler_context, compiler_context.root);
+  if (!ok) {
+    printf("Encountered error during type inference\n");
+    return 1;
+  }
 
   // FILE *out = fopen("main.c", "w");
-  generate_c_code(stdout, nodes.slice(), root);
+  generate_c_code(stdout, compiler_context.root);
   // fclose(out);
 
   printf("Done!\n");

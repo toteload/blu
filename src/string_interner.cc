@@ -1,5 +1,10 @@
 #include "blu.hh"
 
+#define XXH_INLINE_ALL
+#include "xxhash.h"
+
+u32 str_hash(void *context, Str s) { return XXH32(s.str, s.len, 0); }
+
 void StringInterner::init(
   Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator
 ) {

@@ -80,3 +80,4 @@ Str Arena::push_format_string(char const *format, ...) {
   va_end(vl);
   return { s, cast<u32>(len), };
 }
+

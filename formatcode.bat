@@ -8,4 +8,5 @@ clang-format -i src\tokenize.cc
 clang-format -i src\parse.cc
 clang-format -i src\main.cc
 clang-format -i src\string_interner.cc
+clang-format -i src\types.cc
 clang-format -i src\c_generator.cc
