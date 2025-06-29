@@ -9,17 +9,18 @@ struct Parser {
 
   b32 parse_module(AstNode **out);
 
-  b32 parse_item(AstNode **out);
+  b32 parse_top_level(AstNode **out);
+
   b32 parse_parameter(AstNode **out);
-  b32 parse_item_function(AstNode **out);
+  b32 parse_function(AstNode **out);
 
   b32 parse_type(AstNode **out);
 
   b32 parse_scope(AstNode **out);
 
+  b32 parse_statement(AstNode **out);
   b32 parse_break(AstNode **out);
   b32 parse_continue(AstNode **out);
-  b32 parse_statement(AstNode **out);
   b32 parse_statement_return(AstNode **out);
   b32 parse_declaration(AstNode **out);
   b32 parse_literal_int(AstNode **out);
@@ -40,6 +41,8 @@ struct Parser {
   AstNode *alloc_node() { return ctx->nodes.alloc(); }
 
   b32 is_at_end() { return idx == ctx->tokens.len; }
+
+  void add_unexpected_token_message(Token token);
 };
 
 void Parser::init(CompilerContext *ctx) {
@@ -90,7 +93,7 @@ b32 Parser::parse_module(AstNode **out) {
 
   while (!is_at_end()) {
     AstNode *item;
-    Try(parse_item(&item));
+    Try(parse_top_level(&item));
 
     if (!items) {
       items = item;
@@ -109,7 +112,7 @@ b32 Parser::parse_module(AstNode **out) {
   return true;
 }
 
-b32 Parser::parse_item(AstNode **out) { return parse_item_function(out); }
+b32 Parser::parse_top_level(AstNode **out) { return parse_declaration(out); }
 
 b32 Parser::parse_parameter(AstNode **out) {
   AstNode *n = alloc_node();
@@ -131,15 +134,10 @@ b32 Parser::parse_parameter(AstNode **out) {
   return true;
 }
 
-b32 Parser::parse_item_function(AstNode **out) {
+b32 Parser::parse_function(AstNode **out) {
   AstNode *n = alloc_node();
 
-  AstNode *name;
-  Try(parse_identifier(&name));
-
-  Try(expect_token(Tok_colon));
-  Try(expect_token(Tok_colon));
-
+  Try(expect_token(Tok_keyword_fn));
   Try(expect_token(Tok_paren_open));
 
   AstNode *params     = nullptr;
@@ -183,7 +181,6 @@ b32 Parser::parse_item_function(AstNode **out) {
 
   n->kind                 = Ast_function;
   n->function.params      = params;
-  n->function.name        = name;
   n->function.return_type = return_type;
   n->function.body        = body;
 
@@ -237,20 +234,42 @@ b32 Parser::parse_declaration(AstNode **out) {
 
   Try(expect_token(Tok_colon));
 
-  AstNode *type;
-  Try(parse_type(&type));
+  b32 is_const          = false;
+  b32 has_explicit_type = true;
 
-  Try(expect_token(Tok_equals));
+  Token tok;
+  Try(peek(&tok));
+  if (tok.kind == Tok_colon) {
+    is_const          = true;
+    has_explicit_type = false;
+  } else if (tok.kind == Tok_equals) {
+    has_explicit_type = false;
+  }
 
-  AstNode *initial_value;
-  Try(parse_expression(&initial_value));
+  AstNode *type = nullptr;
+  if (has_explicit_type) {
+    Try(parse_type(&type));
+
+    Try(next(&tok));
+
+    if (tok.kind != Tok_equals && tok.kind != Tok_colon) {
+      add_unexpected_token_message(tok);
+      return false;
+    }
+  } else {
+    next();
+  }
+
+  AstNode *value;
+  Try(parse_expression(&value));
 
   Try(expect_token(Tok_semicolon));
 
-  n->kind                      = Ast_declaration;
-  n->declaration.name          = identifier;
-  n->declaration.type          = type;
-  n->declaration.initial_value = initial_value;
+  n->kind                 = Ast_declaration;
+  n->declaration.is_const = is_const;
+  n->declaration.name     = identifier;
+  n->declaration.type     = type;
+  n->declaration.value    = value;
 
   *out = n;
 
@@ -354,8 +373,8 @@ b32 Parser::parse_statement_return(AstNode **out) {
   Try(parse_expression(&value_ref));
   Try(expect_token(Tok_semicolon));
 
-  n->kind      = Ast_return;
-  n->ret.value = value_ref;
+  n->kind          = Ast_return;
+  n->_return.value = value_ref;
 
   *out = n;
 
@@ -469,6 +488,10 @@ b32 Parser::parse_base_expression(AstNode **out) {
 
   if (tok.kind == Tok_literal_int) {
     return parse_literal_int(out);
+  }
+
+  if (tok.kind == Tok_keyword_fn) {
+    return parse_function(out);
   }
 
   if (is_unary_op_token(tok.kind)) {
@@ -658,14 +681,17 @@ b32 Parser::parse_if_else_expression(AstNode **out) {
   return true;
 }
 
+void Parser::add_unexpected_token_message(Token token) {
+  Str msg = ctx->arena.push_format_string("Unexpected token encountered %d\n", token.kind);
+  ctx->messages.push({token.span, Error, msg});
+}
+
 b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Token tok;
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
-    Str msg =
-      ctx->arena.push_format_string("Expected token %d, but got %d\n", expected_kind, tok.kind);
-    ctx->messages.push({tok.span, Error, msg});
+    add_unexpected_token_message(tok);
     return false;
   }
 

@@ -1,6 +1,6 @@
 @echo off
 
-set options=-Wall -Werror -g -gcodeview -c -std=c++17 -D_CRT_SECURE_NO_WARNINGS -Iext
+set options=-Wall -Werror -g -gcodeview -c -std=c++17 -D_CRT_SECURE_NO_WARNINGS -DTTLD_DEBUG -Iext
 
 clang++ %options% -o tokenize.o src\tokenize.cc
 clang++ %options% -o parse.o src\parse.cc

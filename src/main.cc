@@ -120,9 +120,14 @@ char const *binary_op_kind_string(BinaryOpKind kind) {
 }
 
 void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
-  AstNode n = *ref;
-
   pad(out, depth);
+
+  if (!ref) {
+    fprintf(out, "NULL\n");
+    return;
+  }
+
+  AstNode n = *ref;
   fprintf(out, "%s\n", ast_kind_string(n.kind));
 
   switch (n.kind) {
@@ -138,8 +143,8 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n.param.type, depth + 1);
   } break;
   case Ast_function: {
-    print_ast(out, n.function.name, depth + 1);
     print_ast(out, n.function.return_type, depth + 1);
+    ForEachAstNode(param, n.function.params) { print_ast(out, param, depth + 1); }
     print_ast(out, n.function.body, depth + 1);
   } break;
   case Ast_assign: {
@@ -147,7 +152,7 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n.assign.value, depth + 1);
   } break;
   case Ast_return: {
-    print_ast(out, n.ret.value, depth + 1);
+    print_ast(out, n._return.value, depth + 1);
   } break;
   case Ast_scope: {
     ForEachAstNode(statement, n.scope.statements) { print_ast(out, statement, depth + 1); }
@@ -160,7 +165,7 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
   case Ast_declaration: {
     print_ast(out, n.declaration.name, depth + 1);
     print_ast(out, n.declaration.type, depth + 1);
-    print_ast(out, n.declaration.initial_value, depth + 1);
+    print_ast(out, n.declaration.value, depth + 1);
   } break;
   case Ast_literal_int: {
     Str literal = n.span.str();
@@ -221,10 +226,13 @@ void display_message(FILE *out, Message *msg) {
 void populate_global_environment(CompilerContext *ctx) {
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
-    ctx->global_environment->insert(                                                               \
-      ctx->strings.add(Str_make(Identifier)),                                                      \
-      Value::make_type(ctx->types.add(T))                                                          \
-    );                                                                                             \
+    auto _id   = ctx->strings.add(Str_make(Identifier));                                           \
+    auto _node = ctx->nodes.alloc();                                                               \
+    _node->kind =Ast_identifier;                                                                         \
+    _node->identifier.key = _id;                                                                   \
+    auto _tmp             = T;                                                                     \
+    _node->type           = ctx->types.add(&_tmp);                                                 \
+    ctx->global_environment->insert(_id, _node);                                                    \
   }
 
   // clang-format off
@@ -239,6 +247,7 @@ void populate_global_environment(CompilerContext *ctx) {
   Add_type("u64", Type::make_integer(Unsigned, 64));
 
   Add_type("bool", Type::make_bool());
+  Add_type("void", Type::make_void());
   // clang-format on
 
 #undef Add_type

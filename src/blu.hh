@@ -213,7 +213,6 @@ struct AstNode {
   union {
     struct {
       AstNode *params;
-      AstNode *name;
       AstNode *return_type;
       AstNode *body;
     } function;
@@ -224,9 +223,10 @@ struct AstNode {
     } param;
 
     struct {
+      b32 is_const;
       AstNode *name;
       AstNode *type;
-      AstNode *initial_value;
+      AstNode *value;
     } declaration;
 
     struct {
@@ -258,7 +258,7 @@ struct AstNode {
 
     struct {
       AstNode *value;
-    } ret;
+    } _return;
 
     struct {
       StrKey key;
@@ -286,9 +286,12 @@ b32 parse(CompilerContext *ctx);
 // -[ Types ]-
 
 enum TypeKind : u16 {
-  Integer,
-  Boolean,
-  Function,
+  Type_IntegerConstant,
+  Type_Integer,
+  Type_Boolean,
+  Type_Function,
+  Type_Void,
+  Type_Never,
 };
 
 enum Signedness : u8 {
@@ -297,7 +300,6 @@ enum Signedness : u8 {
 };
 
 struct Type {
-  Type *next;
   TypeKind kind;
 
   union {
@@ -309,43 +311,61 @@ struct Type {
       Type *base_type;
     } pointer;
     struct {
+      u32 param_count;
       Type *return_type;
-      Type *params;
+      Type *params[0];
     } function;
   };
 
-  static Type make_bool() { return {nullptr, Boolean}; }
+  u32 byte_size() {
+    switch (kind) {
+    case Type_Integer:
+    case Type_IntegerConstant:
+    case Type_Void:
+    case Type_Never:
+    case Type_Boolean:
+      return sizeof(*this);
+    case Type_Function: {
+      return sizeof(*this) + function.param_count * sizeof(Type *);
+    } break;
+    }
+  }
+
+  bool is_integer_or_integer_constant() {
+    return kind == Type_Integer || kind == Type_IntegerConstant;
+  }
+  static Type make_void() { return {Type_Void}; }
+  static Type make_bool() { return {Type_Boolean}; }
+  static Type make_never() { return {Type_Never}; }
   static Type make_integer(Signedness s, u16 width) {
     return {
-      nullptr,
-      Integer,
+      Type_Integer,
       {{
         s,
         width,
       }},
     };
   }
-
-  static Type make_function(Type *return_type, Type *params) {
-    Type t;
-    t.kind                 = Function;
-    t.function.return_type = return_type;
-    t.function.params      = params;
-    return t;
-  }
+  static Type make_integer_constant() { return {Type_IntegerConstant}; }
 };
 
-b32 type_eq(void *context, Type a, Type b);
-u32 type_hash(void *context, Type x);
+b32 type_eq(void *context, Type *a, Type *b);
+u32 type_hash(void *context, Type *x);
 
 struct TypeInterner {
-  HashMap<Type, Type *, type_eq, type_hash> map;
-  ObjectPool<Type> pool;
+  Allocator storage;
+  HashMap<Type *, Type *, type_eq, type_hash> map;
 
-  void init(Arena *arena, Allocator map_allocator, Allocator pool_allocator);
+  // Often used and always available
+  Type *_bool;
+  Type *_i32;
+  Type *_integer_constant;
+  Type *_void;
+
+  void init(Arena *arena, Allocator storage_allocator, Allocator map_allocator);
   void deinit();
 
-  Type *add(Type type);
+  Type *add(Type *type);
 };
 
 b32 infer_types(CompilerContext *ctx, AstNode *root);
@@ -370,12 +390,17 @@ struct Value {
   };
 
   static Value make_type(Type *type) {
-    return {
-      Value_type,
-      {
-        type,
-      },
-    };
+    Value val;
+    val.kind = Value_type;
+    val.type = type;
+    return val;
+  }
+
+  static Value make_ast(AstNode *ast) {
+    Value val;
+    val.kind = Value_ast;
+    val.ast  = ast;
+    return val;
   }
 };
 
@@ -386,25 +411,31 @@ ttld_inline u32 str_key_hash(void *context, StrKey x) { return x.idx; }
 
 struct Env {
   Env *parent;
-  HashMap<StrKey, Value, str_key_eq, str_key_hash> map;
+  HashMap<StrKey, AstNode *, str_key_eq, str_key_hash> map;
 
-  void init(Allocator allocator) { map.init(allocator); }
+  void init(Allocator allocator, Env *parent = nullptr) {
+    map.init(allocator);
+    this->parent = parent;
+  }
 
-  void deinit();
+  void deinit() {
+    parent = nullptr;
+    map.deinit();
+  }
 
-  void insert(StrKey identifier, Value val) { map.insert(identifier, val); }
+  void insert(StrKey identifier, AstNode *val) { map.insert(identifier, val); }
 
-  Value *lookup(StrKey identifier) {
-    Value *p = map.get_ptr(identifier);
+  AstNode *lookup(StrKey identifier) {
+    AstNode **p = map.get_ptr(identifier);
     if (p) {
-      return p;
+      return *p;
     }
 
-    if (!parent) {
-      return nullptr;
+    if (parent) {
+      return parent->lookup(identifier);
     }
 
-    return parent->lookup(identifier);
+    return nullptr;
   }
 };
 
@@ -422,7 +453,7 @@ struct EnvManager {
 
   Env *alloc(Env *parent = nullptr) {
     Env *env = pool.alloc();
-    env->init(env_allocator);
+    env->init(env_allocator, parent);
     return env;
   }
 

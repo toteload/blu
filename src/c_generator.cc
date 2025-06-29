@@ -47,8 +47,6 @@ void CGenerator::output_identifier(AstNode *n) { output_span(n); }
 
 void CGenerator::output_function_signature(AstNode *n) {
   output_type(n->function.return_type);
-  fprintf(out, " ");
-  output_identifier(n->function.name);
   fprintf(out, "()");
 }
 
@@ -180,7 +178,7 @@ void CGenerator::output_statement(AstNode *n) {
 
   if (n->kind == Ast_return) {
     fprintf(out, "return ");
-    output_expression(n->ret.value);
+    output_expression(n->_return.value);
     fprintf(out, ";\n");
     return;
   }
@@ -190,7 +188,7 @@ void CGenerator::output_statement(AstNode *n) {
     fprintf(out, " ");
     output_identifier(n->declaration.name);
     fprintf(out, " = ");
-    output_expression(n->declaration.initial_value);
+    output_expression(n->declaration.value);
     fprintf(out, ";\n");
     return;
   }

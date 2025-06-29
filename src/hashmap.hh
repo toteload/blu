@@ -36,7 +36,7 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
   }
 
   V get(K key) { return *get_ptr(key); }
-  b32 has(K key) { return get(key) != nullptr; }
+  b32 has(K key) { return get_bucket(key) != nullptr; }
 
   Bucket<K, V> *insert_key_and_get_bucket(K key, b32 *was_occupied);
   Bucket<K, V> *remove_key(K key);
