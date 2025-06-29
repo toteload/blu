@@ -4,13 +4,11 @@ Type *infer_ast_type(CompilerContext *ctx, Env *env, AstNode *type);
 Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function);
 Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression);
 
-void infer_types_in_statement(CompilerContext *ctx, Env *env, AstNode *statement);
-
 Type *infer_ast_type(CompilerContext *ctx, Env *env, AstNode *type) {
   Debug_assert(type->kind == Ast_identifier);
 
   StrKey idkey = type->identifier.key;
-  AstNode *v   = env->lookup(idkey);
+  Value *v     = env->lookup(idkey);
 
   if (!v) {
     Str identifier = ctx->strings.get(idkey);
@@ -25,6 +23,18 @@ Type *infer_ast_type(CompilerContext *ctx, Env *env, AstNode *type) {
   }
 
   return v->type;
+}
+
+b32 are_types_coercibly_equal(Type *a, Type *b) {
+  if (a == b) {
+    return true;
+  }
+
+  if ((a->kind == Type_Integer && b->kind == Type_IntegerConstant) || (a->kind == Type_IntegerConstant && b->kind == Type_Integer)) {
+    return true;
+  }
+
+  return false;
 }
 
 Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs, Type *rhs) {
@@ -70,13 +80,61 @@ Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs,
   }
 }
 
-Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression) {
+Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
   Type *res = nullptr;
 
-  switch (expression->kind) {
+  switch (e->kind) {
+  case Ast_declaration: {
+    res = ctx->types._void;
+
+    auto const &decl = e->declaration;
+
+    Type *declared_type = infer_ast_type(ctx, env, decl.type);
+    Type *v             = infer_expression_type(ctx, env, decl.value);
+
+    Debug_assert(are_types_coercibly_equal(declared_type, v));
+
+    env->insert(decl.name->identifier.key, Value::make_local(e, v));
+
+  } break;
+  case Ast_assign: {
+    Type *type = infer_expression_type(ctx, env, e->assign.value);
+    Debug_assert(type);
+  } break;
+  case Ast_continue:
+  case Ast_break: {
+    res = ctx->types._never;
+  } break;
+  case Ast_return: {
+    res = ctx->types._never;
+
+    if (!e->_return.value) {
+      break;
+    }
+
+    Type *type = infer_expression_type(ctx, env, e->_return.value);
+    Debug_assert(type);
+  } break;
+  case Ast_while: {
+    res = ctx->types._void;
+
+    Type *cond = infer_expression_type(ctx, env, e->_while.cond);
+    Type *body = infer_expression_type(ctx, env, e->_while.body);
+
+    Debug_assert(cond);
+    Debug_assert(body);
+  } break;
+  case Ast_scope: {
+    auto expressions = e->scope.expressions;
+    ForEachAstNode(e, expressions) { infer_expression_type(ctx, env, e); }
+
+    // TODO: a scope can return a value
+
+    res = ctx->types._never;
+  } break;
   case Ast_identifier: {
-    auto idkey = expression->identifier.key;
-    AstNode *p = env->lookup(idkey);
+    auto idkey = e->identifier.key;
+    Value *p   = env->lookup(idkey);
 
     if (!p) {
       Str identifier = ctx->strings.get(idkey);
@@ -85,7 +143,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression)
         identifier.len,
         identifier.str
       );
-      ctx->messages.push({expression->span, Error, msg});
+      ctx->messages.push({e->span, Error, msg});
       break;
     }
 
@@ -95,15 +153,15 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression)
     res = ctx->types._integer_constant;
   } break;
   case Ast_if_else: {
-    Type *cond = infer_expression_type(ctx, env, expression->if_else.cond);
+    Type *cond = infer_expression_type(ctx, env, e->if_else.cond);
     if (cond->kind != Type_Boolean) {
       Str msg = ctx->arena.push_format_string("Condition in if-expression is not of type 'bool'.");
-      ctx->messages.push({expression->if_else.cond->span, Error, msg});
+      ctx->messages.push({e->if_else.cond->span, Error, msg});
     }
 
-    Type *then = infer_expression_type(ctx, env, expression->if_else.then);
-    if (expression->if_else.otherwise) {
-      Type *otherwise = infer_expression_type(ctx, env, expression->if_else.otherwise);
+    Type *then = infer_expression_type(ctx, env, e->if_else.then);
+    if (e->if_else.otherwise) {
+      Type *otherwise = infer_expression_type(ctx, env, e->if_else.otherwise);
 
       if (then != otherwise) {
         // oopsie, the if and else branch have different types.
@@ -114,84 +172,61 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression)
         break;
       }
 
+      res = then;
+
       break;
     }
 
     // We only have an if-branch, then the return type of the branch should be void.
     if (then->kind != Type_Void) {
       Str msg = ctx->arena.push_format_string("If-expression should return type 'void'.");
-      ctx->messages.push({expression->if_else.then->span, Error, msg});
+      ctx->messages.push({e->if_else.then->span, Error, msg});
     }
 
-    Todo();
+    res = then;
   } break;
   case Ast_call: {
-    Type *callee = infer_expression_type(ctx, env, expression->call.f);
+    Type *callee = infer_expression_type(ctx, env, e->call.f);
     Debug_assert(callee->kind == Type_Function);
 
-    ForEachAstNode(arg, expression->call.args) { infer_expression_type(ctx, env, arg); }
+    u32 param_count = callee->function.param_count;
 
-    Todo();
+    u32 i = 0;
+    ForEachAstNode(arg, e->call.args) {
+      if (i == param_count) {
+        // More arguments provided than the function takes parameters.
+        break;
+      }
+
+      Type *arg_type = infer_expression_type(ctx, env, arg);
+      Debug_assert(are_types_coercibly_equal(callee->function.params[i], arg_type));
+      i += 1;
+    }
+
+    u32 arg_count = i;
+
+    Debug_assert(param_count == arg_count);
+
+    res = callee->function.return_type;
   } break;
   case Ast_binary_op: {
-    Type *lhs = infer_expression_type(ctx, env, expression->binary_op.lhs);
-    Type *rhs = infer_expression_type(ctx, env, expression->binary_op.rhs);
+    Type *lhs = infer_expression_type(ctx, env, e->binary_op.lhs);
+    Type *rhs = infer_expression_type(ctx, env, e->binary_op.rhs);
 
     Debug_assert(lhs && rhs);
 
-    res = determine_binary_op_type(ctx, expression->binary_op.kind, lhs, rhs);
+    res = determine_binary_op_type(ctx, e->binary_op.kind, lhs, rhs);
   } break;
   case Ast_unary_op: {
-    res = infer_expression_type(ctx, env, expression->unary_op.value);
-  } break;
-  case Ast_scope: {
-    ForEachAstNode(statement, expression->scope.statements) {
-      infer_types_in_statement(ctx, env, statement);
-    }
-
-    Todo();
+    res = infer_expression_type(ctx, env, e->unary_op.value);
   } break;
   default:
     Unreachable();
   }
 
-  expression->type = res;
+  e->type = res;
 
   return res;
-}
-
-void infer_types_in_statement(CompilerContext *ctx, Env *env, AstNode *statement) {
-  switch (statement->kind) {
-  case Ast_assign: {
-    Type *type = infer_expression_type(ctx, env, statement->assign.value);
-    Debug_assert(type);
-  } break;
-  case Ast_return: {
-    if (!statement->_return.value) {
-      break;
-    }
-
-    Type *type = infer_expression_type(ctx, env, statement->_return.value);
-    Debug_assert(type);
-  } break;
-  case Ast_while: {
-    infer_expression_type(ctx, env, statement->_while.cond);
-    infer_expression_type(ctx, env, statement->_while.body);
-  } break;
-  case Ast_declaration: {
-    Debug_assert(statement->declaration.type);
-
-    Type *type = infer_ast_type(ctx, env, statement->declaration.type);
-    Debug_assert(type);
-
-    statement->type = type;
-
-    StrKey name = statement->declaration.name->identifier.key;
-    env->insert(name, statement);
-  } break;
-  default:
-    infer_expression_type(ctx, env, statement);
-  }
 }
 
 Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function) {
@@ -220,8 +255,9 @@ Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function) {
 
     param->type = t;
 
-    function_type->function.params[i]  = t;
-    i                                 += 1;
+    function_type->function.params[i] = t;
+
+    i += 1;
   }
 
   if (!return_type || has_param_type_error) {
@@ -235,17 +271,18 @@ Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function) {
 
 // Assumes that the AstNode `function` already has an associated type defined.
 void infer_types_in_function(CompilerContext *ctx, Env *env, AstNode *function) {
-  Debug_assert(function->kind == Ast_scope);
+  Debug_assert(function->kind == Ast_function);
 
   Env *param_env = ctx->environments.alloc(env);
 
   ForEachAstNode(param, function->function.params) {
-    param_env->insert(param->param.name->identifier.key, param);
+    Type *param_type = infer_ast_type(ctx, env, param->param.type);
+    param_env->insert(param->param.name->identifier.key, Value::make_param(param, param_type));
   }
 
-  ForEachAstNode(statement, function->scope.statements) {
-    infer_types_in_statement(ctx, param_env, statement);
-  }
+  Type *t = infer_expression_type(ctx, param_env, function->function.body);
+
+  Debug_assert(t);
 
   ctx->environments.dealloc(param_env);
 }
@@ -264,11 +301,9 @@ b32 infer_types(CompilerContext *ctx, AstNode *mod) {
     Type *type = infer_function_type(ctx, mod_environment, value);
     assert(type);
 
-    value->type = type;
-
     Debug_assert(item->declaration.name->kind == Ast_identifier);
 
-    mod_environment->insert(item->declaration.name->identifier.key, item->declaration.value);
+    mod_environment->insert(item->declaration.name->identifier.key, Value::make_local(item, type));
   }
 
   ForEachAstNode(item, mod->module.items) {

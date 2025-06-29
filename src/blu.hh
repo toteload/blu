@@ -146,8 +146,6 @@ b32 tokenize(CompilerContext *ctx, char const *source, usize len);
 // -[ AST ]-
 
 enum BinaryOpKind : u32 {
-  Assign,
-
   Mul,
   Div,
   Mod,
@@ -171,6 +169,8 @@ enum BinaryOpKind : u32 {
 
   Logical_and,
   Logical_or,
+
+  Assign,
 
   BinaryOpKind_max,
 };
@@ -275,7 +275,7 @@ struct AstNode {
     } _while;
 
     struct {
-      AstNode *statements;
+      AstNode *expressions;
     } scope;
 
     struct {
@@ -287,6 +287,8 @@ struct AstNode {
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
 b32 parse(CompilerContext *ctx);
+
+void debug_ast_node(AstNode *n);
 
 // -[ Types ]-
 
@@ -366,6 +368,7 @@ struct TypeInterner {
   Type *_i32;
   Type *_integer_constant;
   Type *_void;
+  Type *_never;
 
   void init(Arena *arena, Allocator storage_allocator, Allocator map_allocator);
   void deinit();
@@ -383,7 +386,11 @@ b32 generate_c_code(FILE *out, AstNode *mod);
 
 enum ValueKind : u8 {
   Value_type,
-  Value_ast,
+
+  Value_param,
+  Value_local,
+
+  Value_builtin,
 };
 
 struct Value {
@@ -391,7 +398,20 @@ struct Value {
 
   union {
     Type *type;
-    AstNode *ast;
+
+    struct {
+      Type *type;
+      AstNode *ast;
+    } param;
+
+    struct {
+      Type *type;
+      AstNode *ast;
+    } local;
+
+    struct {
+      Type *type;
+    } builtin;
   };
 
   static Value make_type(Type *type) {
@@ -401,13 +421,35 @@ struct Value {
     return val;
   }
 
-  static Value make_ast(AstNode *ast) {
+  static Value make_param(AstNode *ast, Type *type) {
     Value val;
-    val.kind = Value_ast;
-    val.ast  = ast;
+    val.kind       = Value_param;
+    val.param.ast  = ast;
+    val.param.type = type;
+    return val;
+  }
+
+  static Value make_local(AstNode *ast, Type *type) {
+    Value val;
+    val.kind       = Value_local;
+    val.param.ast  = ast;
+    val.param.type = type;
+    return val;
+  }
+
+  static Value make_builtin(Type *type) {
+    Value val;
+    val.kind         = Value_builtin;
+    val.builtin.type = type;
     return val;
   }
 };
+
+// This makes sure that no matter variant Value is, you can always access the type of the value
+// through the type field.
+// This may not be a good idea :)
+static_assert(offsetof(Value, type) == offsetof(Value, param.type));
+static_assert(offsetof(Value, type) == offsetof(Value, local.type));
 
 // -[ Environment ]-
 
@@ -416,7 +458,7 @@ ttld_inline u32 str_key_hash(void *context, StrKey x) { return x.idx; }
 
 struct Env {
   Env *parent;
-  HashMap<StrKey, AstNode *, str_key_eq, str_key_hash> map;
+  HashMap<StrKey, Value, str_key_eq, str_key_hash> map;
 
   void init(Allocator allocator, Env *parent = nullptr) {
     map.init(allocator);
@@ -428,12 +470,12 @@ struct Env {
     map.deinit();
   }
 
-  void insert(StrKey identifier, AstNode *val) { map.insert(identifier, val); }
+  void insert(StrKey identifier, Value val) { map.insert(identifier, val); }
 
-  AstNode *lookup(StrKey identifier) {
-    AstNode **p = map.get_ptr(identifier);
+  Value *lookup(StrKey identifier) {
+    Value *p = map.get_ptr(identifier);
     if (p) {
-      return *p;
+      return p;
     }
 
     if (parent) {
@@ -488,10 +530,6 @@ struct CompilerContext {
   AstNode *root;
 };
 
-#define Push_message(Messages, Msg)                                                                \
-  {                                                                                                \
-    Message _tmp = Msg;                                                                            \
-    _tmp.file    = __FILE__;                                                                       \
-    _tmp.line    = __LINE__;                                                                       \
-    (Messages).push(_tmp);                                                                         \
-  }
+// clang-format off
+#define Push_message(Messages, Msg) { Message _tmp = Msg; _tmp.file = __FILE__; _tmp.line = __LINE__; (Messages).push(_tmp); }
+// clang-format on

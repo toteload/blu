@@ -193,8 +193,8 @@ b32 Parser::parse_scope(AstNode **out) {
 
   Try(expect_token(Tok_brace_open));
 
-  AstNode *statements = nullptr;
-  AstNode *tail       = nullptr;
+  AstNode *expressions = nullptr;
+  AstNode *tail        = nullptr;
 
   while (!is_at_end()) {
     Token tok;
@@ -206,8 +206,8 @@ b32 Parser::parse_scope(AstNode **out) {
     AstNode *x;
     Try(parse_expression(&x));
 
-    if (!statements) {
-      statements = x;
+    if (!expressions) {
+      expressions = x;
     } else {
       tail->next = x;
     }
@@ -217,8 +217,8 @@ b32 Parser::parse_scope(AstNode **out) {
 
   Try(expect_token(Tok_brace_close));
 
-  n->kind             = Ast_scope;
-  n->scope.statements = statements;
+  n->kind              = Ast_scope;
+  n->scope.expressions = expressions;
 
   *out = n;
 
@@ -411,13 +411,13 @@ b32 Parser::parse_while(AstNode **out) {
 
 // clang-format off
 static constexpr u8 binop_precedence_group[BinaryOpKind_max] = {
-   5,
   10, 10, 10,
   20, 20,
   30, 30,
   40, 40, 40,
   50, 50, 50, 50, 50, 50,
   60, 60,
+  70,
 };
 // clang-format on
 
@@ -585,7 +585,6 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
 
     // clang-format off
     switch (tok.kind) {
-    case Tok_equals:      op = Assign;            break;
     case Tok_minus:       op = Sub;               break;
     case Tok_plus:        op = Add;               break;
     case Tok_star:        op = Mul;               break;
@@ -604,6 +603,7 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
     case Tok_caret:       op = Bit_xor;           break;
     case Tok_left_shift:  op = Bit_shift_left;    break;
     case Tok_right_shift: op = Bit_shift_right;   break;
+    case Tok_equals:      op = Assign;            break;
 
     default: { *out = lhs; return true; }
     }

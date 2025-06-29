@@ -52,6 +52,7 @@ u32 push_type_data(Arena *arena, Type *x) {
   switch (x->kind) {
   case Type_Void:
   case Type_IntegerConstant:
+  case Type_Never:
   case Type_Boolean:
     break;
   case Type_Integer: {
@@ -63,8 +64,6 @@ u32 push_type_data(Arena *arena, Type *x) {
     Push_data(x->function.param_count);
     ForEachIndex(i, x->function.param_count) { push_type_data(arena, x->function.params[i]); }
   } break;
-  default:
-    Unreachable();
   }
 
   return size;
@@ -99,6 +98,7 @@ void TypeInterner::init(Arena *arena, Allocator storage_allocator, Allocator map
   Add_type(_i32, Type::make_integer(Signed, 32));
   Add_type(_integer_constant, Type::make_integer_constant());
   Add_type(_void, Type::make_void());
+  Add_type(_never, Type::make_never());
 
 #undef Add_type
 }

@@ -62,7 +62,7 @@ void CGenerator::output_continue(AstNode *n) { fprintf(out, "continue"); }
 
 void CGenerator::output_scope(AstNode *n) {
   fprintf(out, "{\n");
-  ForEachAstNode(statement, n->scope.statements) { output_statement(statement); }
+  ForEachAstNode(e, n->scope.expressions) { output_statement(e); }
   fprintf(out, "}\n");
 }
 

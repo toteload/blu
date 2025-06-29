@@ -105,26 +105,10 @@ char const *ast_kind_string(AstKind kind) {
 }
 
 char const *binary_op_string[] = {
-  "(Assign)",
-  "* (Mul)",
-  "/ (Div)",
-  "% (Mod)",
-  "- (Sub)",
-  "+ (Add)",
-  "<<",
-  ">>",
-  "& (Bit_and)",
-  "| (Bit_or)",
-  "^ (Bit_xor)",
-  "== (CmpEq)",
-  "!= (CmpNe)",
-  "> (CmpGt)",
-  ">= (CmpGe)",
-  "< (CmpLt)",
-  "<= (CmpLe)",
-  "and (Logical_and)",
-  "or (Logical_or)",
-  "illegal",
+  "* (Mul)",   "/ (Div)",     "% (Mod)",    "- (Sub)",     "+ (Add)",           "<<",
+  ">>",        "& (Bit_and)", "| (Bit_or)", "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
+  "> (CmpGt)", ">= (CmpGe)",  "< (CmpLt)",  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
+  "(Assign)",  "illegal",
 };
 
 char const *binary_op_kind_string(BinaryOpKind kind) {
@@ -171,7 +155,7 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n._return.value, depth + 1);
   } break;
   case Ast_scope: {
-    ForEachAstNode(statement, n.scope.statements) { print_ast(out, statement, depth + 1); }
+    ForEachAstNode(e, n.scope.expressions) { print_ast(out, e, depth + 1); }
   } break;
   case Ast_identifier: {
     Str identifier = n.span.str();
@@ -245,13 +229,10 @@ void display_message(FILE *out, Message *msg) {
 void populate_global_environment(CompilerContext *ctx) {
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
-    auto _id              = ctx->strings.add(Str_make(Identifier));                                \
-    auto _node            = ctx->nodes.alloc();                                                    \
-    _node->kind           = Ast_identifier;                                                        \
-    _node->identifier.key = _id;                                                                   \
-    auto _tmp             = T;                                                                     \
-    _node->type           = ctx->types.add(&_tmp);                                                 \
-    ctx->global_environment->insert(_id, _node);                                                   \
+    auto _id  = ctx->strings.add(Str_make(Identifier));                                            \
+    auto _tmp = T;                                                                                 \
+    auto _t   = ctx->types.add(&_tmp);                                                             \
+    ctx->global_environment->insert(_id, Value::make_type(_t));                                    \
   }
 
   // clang-format off
@@ -268,6 +249,11 @@ void populate_global_environment(CompilerContext *ctx) {
   Add_type("bool", Type::make_bool());
   Add_type("void", Type::make_void());
   // clang-format on
+
+  {
+    auto id = ctx->strings.add(Str_make("true"));
+    ctx->global_environment->insert(id, Value::make_builtin(ctx->types._bool));
+  }
 
 #undef Add_type
 }
