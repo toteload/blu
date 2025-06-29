@@ -69,6 +69,9 @@ struct Message {
   SourceSpan span;
   MessageSeverity severity;
   Str message;
+
+  char const *file;
+  u32 line;
 };
 
 // -[ Token ]-
@@ -143,6 +146,8 @@ b32 tokenize(CompilerContext *ctx, char const *source, usize len);
 // -[ AST ]-
 
 enum BinaryOpKind : u32 {
+  Assign,
+
   Mul,
   Div,
   Mod,
@@ -482,3 +487,11 @@ struct CompilerContext {
   Env *global_environment;
   AstNode *root;
 };
+
+#define Push_message(Messages, Msg)                                                                \
+  {                                                                                                \
+    Message _tmp = Msg;                                                                            \
+    _tmp.file    = __FILE__;                                                                       \
+    _tmp.line    = __LINE__;                                                                       \
+    (Messages).push(_tmp);                                                                         \
+  }

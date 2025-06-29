@@ -76,7 +76,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression)
   switch (expression->kind) {
   case Ast_identifier: {
     auto idkey = expression->identifier.key;
-    AstNode *p   = env->lookup(idkey);
+    AstNode *p = env->lookup(idkey);
 
     if (!p) {
       Str identifier = ctx->strings.get(idkey);

@@ -18,10 +18,9 @@ struct Parser {
 
   b32 parse_scope(AstNode **out);
 
-  b32 parse_statement(AstNode **out);
   b32 parse_break(AstNode **out);
   b32 parse_continue(AstNode **out);
-  b32 parse_statement_return(AstNode **out);
+  b32 parse_return(AstNode **out);
   b32 parse_declaration(AstNode **out);
   b32 parse_literal_int(AstNode **out);
   b32 parse_identifier(AstNode **out);
@@ -30,7 +29,7 @@ struct Parser {
 
   b32 parse_expression(AstNode **out, BinaryOpKind prev_op = BinaryOpKind_max);
   b32 parse_base_expression(AstNode **out);
-  b32 parse_if_else_expression(AstNode **out);
+  b32 parse_if_else(AstNode **out);
   b32 parse_call(AstNode **out);
 
   b32 expect_token(TokenKind expected_kind, Token *out = nullptr);
@@ -205,7 +204,7 @@ b32 Parser::parse_scope(AstNode **out) {
     }
 
     AstNode *x;
-    Try(parse_statement(&x));
+    Try(parse_expression(&x));
 
     if (!statements) {
       statements = x;
@@ -263,8 +262,6 @@ b32 Parser::parse_declaration(AstNode **out) {
   AstNode *value;
   Try(parse_expression(&value));
 
-  Try(expect_token(Tok_semicolon));
-
   n->kind                 = Ast_declaration;
   n->declaration.is_const = is_const;
   n->declaration.name     = identifier;
@@ -283,7 +280,6 @@ b32 Parser::parse_break(AstNode **out) {
 
   Token tok;
   Try(expect_token(Tok_keyword_break, &tok));
-  Try(expect_token(Tok_semicolon));
 
   *out = n;
 
@@ -297,43 +293,16 @@ b32 Parser::parse_continue(AstNode **out) {
 
   Token tok;
   Try(expect_token(Tok_keyword_continue, &tok));
-  Try(expect_token(Tok_semicolon));
 
   *out = n;
 
   return true;
 }
 
+#if 0
 b32 Parser::parse_statement(AstNode **out) {
   Token tok;
   Try(peek(&tok));
-
-  if (tok.kind == Tok_keyword_break) {
-    return parse_break(out);
-  }
-
-  if (tok.kind == Tok_keyword_continue) {
-    return parse_continue(out);
-  }
-
-  if (tok.kind == Tok_keyword_while) {
-    return parse_while(out);
-  }
-
-  if (tok.kind == Tok_keyword_return) {
-    return parse_statement_return(out);
-  }
-
-  if (tok.kind == Tok_keyword_if) {
-    return parse_if_else_expression(out);
-  }
-
-  if (tok.kind == Tok_identifier) {
-    Token tok2;
-    if (peek2(&tok2) && tok2.kind == Tok_colon) {
-      return parse_declaration(out);
-    }
-  }
 
   AstNode *expr;
   Try(parse_expression(&expr));
@@ -363,15 +332,15 @@ b32 Parser::parse_statement(AstNode **out) {
 
   return true;
 }
+#endif
 
-b32 Parser::parse_statement_return(AstNode **out) {
+b32 Parser::parse_return(AstNode **out) {
   AstNode *n = alloc_node();
 
   Try(expect_token(Tok_keyword_return));
 
   AstNode *value_ref;
   Try(parse_expression(&value_ref));
-  Try(expect_token(Tok_semicolon));
 
   n->kind          = Ast_return;
   n->_return.value = value_ref;
@@ -442,12 +411,13 @@ b32 Parser::parse_while(AstNode **out) {
 
 // clang-format off
 static constexpr u8 binop_precedence_group[BinaryOpKind_max] = {
-  0, 0, 0,
-  1, 1,
-  2, 2, 3,
-  3, 3,
-  4, 4, 4, 4, 4, 4,
-  5, 5,
+   5,
+  10, 10, 10,
+  20, 20,
+  30, 30,
+  40, 40, 40,
+  50, 50, 50, 50, 50, 50,
+  60, 60,
 };
 // clang-format on
 
@@ -478,11 +448,32 @@ b32 Parser::parse_base_expression(AstNode **out) {
     return true;
   }
 
+  if (tok.kind == Tok_keyword_break) {
+    return parse_break(out);
+  }
+
+  if (tok.kind == Tok_keyword_continue) {
+    return parse_continue(out);
+  }
+
+  if (tok.kind == Tok_keyword_while) {
+    return parse_while(out);
+  }
+
+  if (tok.kind == Tok_keyword_return) {
+    return parse_return(out);
+  }
+
   if (tok.kind == Tok_keyword_if) {
-    return parse_if_else_expression(out);
+    return parse_if_else(out);
   }
 
   if (tok.kind == Tok_identifier) {
+    Token tok2;
+    if (peek2(&tok2) && tok2.kind == Tok_colon) {
+      return parse_declaration(out);
+    }
+
     return parse_identifier(out);
   }
 
@@ -508,6 +499,7 @@ b32 Parser::parse_base_expression(AstNode **out) {
     switch (tok.kind) {
     case Tok_exclamation: op = Not;    break;
     case Tok_minus:       op = Negate; break;
+
     default: { Unreachable(); } break;
     }
     // clang-format on
@@ -583,34 +575,37 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
 
   while (true) {
     Token tok;
-    Try(peek(&tok));
+    b32 has_peeked = peek(&tok);
+    if (!has_peeked) {
+      *out = lhs;
+      return true;
+    }
 
     BinaryOpKind op = BinaryOpKind_max;
 
     // clang-format off
     switch (tok.kind) {
-    case Tok_minus:       op = Sub; break;
-    case Tok_plus:        op = Add; break;
-    case Tok_star:        op = Mul; break;
-    case Tok_slash:       op = Div; break;
-    case Tok_percent:     op = Mod; break;
-    case Tok_cmp_eq:      op = Cmp_equal; break;
-    case Tok_cmp_ne:      op = Cmp_not_equal; break;
-    case Tok_cmp_gt:      op = Cmp_greater_than; break;
+    case Tok_equals:      op = Assign;            break;
+    case Tok_minus:       op = Sub;               break;
+    case Tok_plus:        op = Add;               break;
+    case Tok_star:        op = Mul;               break;
+    case Tok_slash:       op = Div;               break;
+    case Tok_percent:     op = Mod;               break;
+    case Tok_cmp_eq:      op = Cmp_equal;         break;
+    case Tok_cmp_ne:      op = Cmp_not_equal;     break;
+    case Tok_cmp_gt:      op = Cmp_greater_than;  break;
     case Tok_cmp_ge:      op = Cmp_greater_equal; break;
-    case Tok_cmp_lt:      op = Cmp_less_than; break;
-    case Tok_cmp_le:      op = Cmp_less_equal; break;
-    case Tok_keyword_and: op = Logical_and; break;
-    case Tok_keyword_or:  op = Logical_or; break;
-    case Tok_ampersand:   op = Bit_and; break;
-    case Tok_bar:         op = Bit_or; break;
-    case Tok_caret:       op = Bit_xor; break;
-    case Tok_left_shift:  op = Bit_shift_left; break;
-    case Tok_right_shift: op = Bit_shift_right; break;
-    default: {
-      *out = lhs;
-      return true;
-    }
+    case Tok_cmp_lt:      op = Cmp_less_than;     break;
+    case Tok_cmp_le:      op = Cmp_less_equal;    break;
+    case Tok_keyword_and: op = Logical_and;       break;
+    case Tok_keyword_or:  op = Logical_or;        break;
+    case Tok_ampersand:   op = Bit_and;           break;
+    case Tok_bar:         op = Bit_or;            break;
+    case Tok_caret:       op = Bit_xor;           break;
+    case Tok_left_shift:  op = Bit_shift_left;    break;
+    case Tok_right_shift: op = Bit_shift_right;   break;
+
+    default: { *out = lhs; return true; }
     }
     // clang-format on
 
@@ -631,10 +626,16 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
     AstNode *rhs;
     Try(parse_expression(&rhs, op));
 
-    n->kind           = Ast_binary_op;
-    n->binary_op.kind = op;
-    n->binary_op.lhs  = lhs;
-    n->binary_op.rhs  = rhs;
+    if (op == Assign) {
+      n->kind         = Ast_assign;
+      n->assign.lhs   = lhs;
+      n->assign.value = rhs;
+    } else {
+      n->kind           = Ast_binary_op;
+      n->binary_op.kind = op;
+      n->binary_op.lhs  = lhs;
+      n->binary_op.rhs  = rhs;
+    }
 
     lhs = n;
   }
@@ -644,7 +645,7 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
   return true;
 }
 
-b32 Parser::parse_if_else_expression(AstNode **out) {
+b32 Parser::parse_if_else(AstNode **out) {
   AstNode *n = alloc_node();
 
   Try(expect_token(Tok_keyword_if));
@@ -682,8 +683,9 @@ b32 Parser::parse_if_else_expression(AstNode **out) {
 }
 
 void Parser::add_unexpected_token_message(Token token) {
-  Str msg = ctx->arena.push_format_string("Unexpected token encountered %d\n", token.kind);
-  ctx->messages.push({token.span, Error, msg});
+  Str s       = ctx->arena.push_format_string("Unexpected token encountered %d\n", token.kind);
+  Message msg = {token.span, Error, s};
+  Push_message(ctx->messages, msg);
 }
 
 b32 Parser::expect_token(TokenKind expected_kind, Token *out) {

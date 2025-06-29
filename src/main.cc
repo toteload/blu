@@ -105,9 +105,25 @@ char const *ast_kind_string(AstKind kind) {
 }
 
 char const *binary_op_string[] = {
-  "* (Mul)",   "/ (Div)",     "% (Mod)",    "- (Sub)",     "+ (Add)",           "<<",
-  ">>",        "& (Bit_and)", "| (Bit_or)", "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
-  "> (CmpGt)", ">= (CmpGe)",  "< (CmpLt)",  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
+  "(Assign)",
+  "* (Mul)",
+  "/ (Div)",
+  "% (Mod)",
+  "- (Sub)",
+  "+ (Add)",
+  "<<",
+  ">>",
+  "& (Bit_and)",
+  "| (Bit_or)",
+  "^ (Bit_xor)",
+  "== (CmpEq)",
+  "!= (CmpNe)",
+  "> (CmpGt)",
+  ">= (CmpGe)",
+  "< (CmpLt)",
+  "<= (CmpLe)",
+  "and (Logical_and)",
+  "or (Logical_or)",
   "illegal",
 };
 
@@ -214,7 +230,10 @@ void display_message(FILE *out, Message *msg) {
 
   fprintf(
     out,
+    "[%s:%d]\n"
     "[%d:%d] %s: %.*s\n",
+    msg->file,
+    msg->line,
     msg->span.start.line,
     msg->span.start.col,
     severity,
@@ -226,13 +245,13 @@ void display_message(FILE *out, Message *msg) {
 void populate_global_environment(CompilerContext *ctx) {
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
-    auto _id   = ctx->strings.add(Str_make(Identifier));                                           \
-    auto _node = ctx->nodes.alloc();                                                               \
-    _node->kind =Ast_identifier;                                                                         \
+    auto _id              = ctx->strings.add(Str_make(Identifier));                                \
+    auto _node            = ctx->nodes.alloc();                                                    \
+    _node->kind           = Ast_identifier;                                                        \
     _node->identifier.key = _id;                                                                   \
     auto _tmp             = T;                                                                     \
     _node->type           = ctx->types.add(&_tmp);                                                 \
-    ctx->global_environment->insert(_id, _node);                                                    \
+    ctx->global_environment->insert(_id, _node);                                                   \
   }
 
   // clang-format off
