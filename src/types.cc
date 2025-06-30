@@ -186,7 +186,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
     res = then;
   } break;
   case Ast_call: {
-    Type *callee = infer_expression_type(ctx, env, e->call.f);
+    Type *callee = infer_expression_type(ctx, env, e->call.callee);
     Debug_assert(callee->kind == Type_Function);
 
     u32 param_count = callee->function.param_count;

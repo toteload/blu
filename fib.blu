@@ -1,13 +1,14 @@
 fib :: fn(n: i32): i32 {
   if n <= 1 {
-    return 1
+    1
   } else {
-    return fib(n-1) + fib(n-2)
+    fib(n-1) + fib(n-2)
   }
 }
 
-main :: fn(): i32 { 
-  i : i32 = 0
+main :: fn(): i32 {
+  i : i32 = 1
+  j : i32 = -(*i).*
 
   while true {
     if i + 2 * 3 == 10 and true {

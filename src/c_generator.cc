@@ -105,7 +105,7 @@ void CGenerator::output_expression(AstNode *n) {
 }
 
 void CGenerator::output_call(AstNode *n) {
-  output_expression(n->call.f);
+  output_expression(n->call.callee);
   fprintf(out, "(");
 
   if (n->call.args) {

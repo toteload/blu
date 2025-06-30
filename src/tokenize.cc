@@ -81,6 +81,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
 
   // clang-format off
   switch (c) {
+  case ',': Return_token(Tok_comma);
+  case '.': Return_token(Tok_dot);
   case ';': Return_token(Tok_semicolon);
   case ':': Return_token(Tok_colon);
   case '{': Return_token(Tok_brace_open);

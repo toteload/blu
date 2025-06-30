@@ -104,6 +104,7 @@ enum TokenKind : u32 {
   Tok_cmp_le,
 
   Tok_comma,
+  Tok_dot,
 
   Tok_literal_int,
 
@@ -178,6 +179,7 @@ enum BinaryOpKind : u32 {
 enum UnaryOpKind : u32 {
   Negate,
   Not,
+  AddressOf,
 
   UnaryOpKind_max,
 };
@@ -203,6 +205,9 @@ enum AstKind : u32 {
   Ast_if_else,
   Ast_binary_op,
   Ast_unary_op,
+
+  Ast_type_pointer,
+  Ast_deref,
 
   Ast_return,
 
@@ -246,7 +251,7 @@ struct AstNode {
     } if_else;
 
     struct {
-      AstNode *f;
+      AstNode *callee;
       AstNode *args;
     } call;
 
@@ -281,6 +286,14 @@ struct AstNode {
     struct {
       AstNode *items;
     } module;
+
+    struct {
+      AstNode *base;
+    } pointer;
+
+    struct {
+      AstNode *value;
+    } deref;
   };
 };
 
@@ -299,6 +312,7 @@ enum TypeKind : u16 {
   Type_Function,
   Type_Void,
   Type_Never,
+  Type_Pointer,
 };
 
 enum Signedness : u8 {
@@ -330,6 +344,7 @@ struct Type {
     case Type_IntegerConstant:
     case Type_Void:
     case Type_Never:
+    case Type_Pointer:
     case Type_Boolean:
       return sizeof(*this);
     case Type_Function: {
@@ -341,6 +356,7 @@ struct Type {
   bool is_integer_or_integer_constant() {
     return kind == Type_Integer || kind == Type_IntegerConstant;
   }
+
   static Type make_void() { return {Type_Void}; }
   static Type make_bool() { return {Type_Boolean}; }
   static Type make_never() { return {Type_Never}; }

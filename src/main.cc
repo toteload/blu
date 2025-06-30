@@ -41,13 +41,13 @@ char const *read_file(char const *filename, usize *len) {
 }
 
 char const *token_string[] = {
-  "colon",      "arrow",       "semicolon",  "equals",      "minus",     "plus",
-  "star",       "slash",       "percent",    "exclamation", "ampersand", "bar",
-  "caret",      "tilde",       "left-shift", "right-shift", "cmp-eq",    "cmp-ne",
-  "cmp-gt",     "cmp-ge",      "cmp-lt",     "cmp-le",      "comma",     "literal_int",
-  "brace_open", "brace_close", "paren_open", "paren_close", "fn",        "return",
-  "if",         "else",        "while",      "break",       "continue",  "and",
-  "or",         "identifier",  "<illegal>",
+  "colon",       "arrow",      "semicolon",   "equals",      "minus",       "plus",
+  "star",        "slash",      "percent",     "exclamation", "ampersand",   "bar",
+  "caret",       "tilde",      "left-shift",  "right-shift", "cmp-eq",      "cmp-ne",
+  "cmp-gt",      "cmp-ge",     "cmp-lt",      "cmp-le",      "comma",       "dot",
+  "literal_int", "brace_open", "brace_close", "paren_open",  "paren_close", "fn",
+  "return",      "if",         "else",        "while",       "break",       "continue",
+  "and",         "or",         "identifier",  "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -77,23 +77,9 @@ void print_tokens(FILE *out, Slice<Token> tokens) {
 void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 char const *ast_string[] = {
-  "module",
-  "param",
-  "function",
-  "scope",
-  "identifier",
-  "literal-int",
-  "declaration",
-  "assign",
-  "while",
-  "break",
-  "continue",
-  "call",
-  "if-else",
-  "binary-op",
-  "unary-op",
-  "return",
-  "illegal",
+  "module",   "param",        "function", "scope",    "identifier", "literal-int", "declaration",
+  "assign",   "while",        "break",    "continue", "call",       "if-else",     "binary-op",
+  "unary-op", "type_pointer", "deref",    "return",   "illegal",
 };
 
 char const *ast_kind_string(AstKind kind) {
@@ -173,7 +159,7 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     fprintf(out, " '%.*s'\n", cast<i32>(literal.len), literal.str);
   } break;
   case Ast_call: {
-    print_ast(out, n.call.f, depth + 1);
+    print_ast(out, n.call.callee, depth + 1);
     ForEachAstNode(arg, n.call.args) { print_ast(out, arg, depth + 1); }
   } break;
   case Ast_if_else: {
@@ -190,7 +176,12 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n.binary_op.rhs, depth + 1);
   } break;
   case Ast_unary_op: {
+    pad(out, depth + 1);
+    fprintf(out, "op: %d\n", n.unary_op.kind);
     print_ast(out, n.unary_op.value, depth + 1);
+  } break;
+  case Ast_deref: {
+    print_ast(out, n.deref.value, depth+1);
   } break;
 
   default:
