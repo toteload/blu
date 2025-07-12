@@ -126,6 +126,8 @@ enum TokenKind : u32 {
 
   Tok_identifier,
 
+  Tok_builtin_run,
+
   Tok_kind_max,
 };
 
@@ -338,6 +340,10 @@ struct Type {
     } function;
   };
 
+  b32 is_sized_type() {
+    return kind != Type_Void && kind != Type_Never;
+  }
+
   u32 byte_size() {
     switch (kind) {
     case Type_Integer:
@@ -396,7 +402,7 @@ b32 infer_types(CompilerContext *ctx, AstNode *root);
 
 // -[ C code generation ]-
 
-b32 generate_c_code(FILE *out, AstNode *mod);
+b32 generate_c_code(CompilerContext *ctx, FILE *out, AstNode *mod);
 
 // -[ ]-
 

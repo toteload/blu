@@ -47,7 +47,7 @@ char const *token_string[] = {
   "cmp-gt",      "cmp-ge",     "cmp-lt",      "cmp-le",      "comma",       "dot",
   "literal_int", "brace_open", "brace_close", "paren_open",  "paren_close", "fn",
   "return",      "if",         "else",        "while",       "break",       "continue",
-  "and",         "or",         "identifier",  "<illegal>",
+  "and",         "or",         "identifier",  "#run", "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -181,7 +181,7 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n.unary_op.value, depth + 1);
   } break;
   case Ast_deref: {
-    print_ast(out, n.deref.value, depth+1);
+    print_ast(out, n.deref.value, depth + 1);
   } break;
 
   default:
@@ -303,9 +303,9 @@ int main() {
     return 1;
   }
 
-  // FILE *out = fopen("main.c", "w");
-  generate_c_code(stdout, compiler_context.root);
-  // fclose(out);
+  FILE *out = fopen("fib.c", "w");
+  generate_c_code(&compiler_context, out, compiler_context.root);
+  fclose(out);
 
   printf("Done!\n");
 

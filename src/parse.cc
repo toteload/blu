@@ -645,16 +645,15 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
     AstNode *rhs;
     Try(parse_expression(&rhs, op));
 
-    if (op < BinaryOpKind_max) {
+    if (op == Assign) {
+      n->kind         = Ast_assign;
+      n->assign.lhs   = lhs;
+      n->assign.value = rhs;
+    } else {
       n->kind           = Ast_binary_op;
       n->binary_op.kind = cast<BinaryOpKind>(op);
       n->binary_op.lhs  = lhs;
       n->binary_op.rhs  = rhs;
-    } else {
-      Debug_assert(op == Assign);
-      n->kind         = Ast_assign;
-      n->assign.lhs   = lhs;
-      n->assign.value = rhs;
     }
 
     lhs = n;

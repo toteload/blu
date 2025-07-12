@@ -62,7 +62,7 @@ void Tokenizer::init(CompilerContext *ctx, char const *source, char const *end) 
     return TokResult_ok;                                                                           \
   }
 
-#define Return_if_keyword(String, Kind)                                                            \
+#define Return_if_match(String, Kind)                                                            \
   if (str_eq(Str_make(String), {start.p, cast<u32>(current_location.p - start.p)})) {              \
     Return_token(Kind);                                                                            \
   }
@@ -167,20 +167,22 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_literal_int);
   }
 
-  if (is_identifier_start(c)) {
+  if (is_identifier_start(c) || c == '#') {
     while (!is_at_end() && is_identifier_rest(*at)) {
       step();
     }
 
-    Return_if_keyword("fn", Tok_keyword_fn);
-    Return_if_keyword("return", Tok_keyword_return);
-    Return_if_keyword("if", Tok_keyword_if);
-    Return_if_keyword("else", Tok_keyword_else);
-    Return_if_keyword("while", Tok_keyword_while);
-    Return_if_keyword("break", Tok_keyword_break);
-    Return_if_keyword("continue", Tok_keyword_continue);
-    Return_if_keyword("and", Tok_keyword_and);
-    Return_if_keyword("or", Tok_keyword_or);
+    Return_if_match("fn", Tok_keyword_fn);
+    Return_if_match("return", Tok_keyword_return);
+    Return_if_match("if", Tok_keyword_if);
+    Return_if_match("else", Tok_keyword_else);
+    Return_if_match("while", Tok_keyword_while);
+    Return_if_match("break", Tok_keyword_break);
+    Return_if_match("continue", Tok_keyword_continue);
+    Return_if_match("and", Tok_keyword_and);
+    Return_if_match("or", Tok_keyword_or);
+
+    Return_if_match("#run", Tok_builtin_run);
 
     Return_token(Tok_identifier);
   }

@@ -37,6 +37,20 @@ b32 are_types_coercibly_equal(Type *a, Type *b) {
   return false;
 }
 
+Type *get_coerced_type(CompilerContext *ctx, Type *a, Type *b) {
+  if (a->kind == Type_Integer && b->kind == Type_IntegerConstant) {
+    return a;
+  }
+
+  if (b->kind == Type_Integer && a->kind == Type_IntegerConstant) {
+    return b;
+  }
+
+  Todo();
+
+  return nullptr;
+}
+
 Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs, Type *rhs) {
   switch (op) {
   case Add:
@@ -96,6 +110,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
 
     env->insert(decl.name->identifier.key, Value::make_local(e, v));
 
+    res = get_coerced_type(ctx, declared_type, v);
   } break;
   case Ast_assign: {
     Type *type = infer_expression_type(ctx, env, e->assign.value);
@@ -125,12 +140,17 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
     Debug_assert(body);
   } break;
   case Ast_scope: {
+    Type *scope_type = ctx->types._void;
     auto expressions = e->scope.expressions;
-    ForEachAstNode(e, expressions) { infer_expression_type(ctx, env, e); }
+    ForEachAstNode(e, expressions) {
+        infer_expression_type(ctx, env, e);
 
-    // TODO: a scope can return a value
+        if (!e->next) {
+          scope_type = e->type;
+        }
+      }
 
-    res = ctx->types._never;
+    res = scope_type;
   } break;
   case Ast_identifier: {
     auto idkey = e->identifier.key;
@@ -163,7 +183,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
     if (e->if_else.otherwise) {
       Type *otherwise = infer_expression_type(ctx, env, e->if_else.otherwise);
 
-      if (then != otherwise) {
+      if (!are_types_coercibly_equal(then, otherwise)) {
         // oopsie, the if and else branch have different types.
         // This is not always a problem.
         // For example, if one of the branches returns an integer constant and the other an
@@ -172,7 +192,12 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
         break;
       }
 
-      res = then;
+      Type *final_type = get_coerced_type(ctx, then, otherwise);
+
+      e->if_else.then->type = final_type;
+      e->if_else.otherwise->type = final_type;
+
+      res = final_type;
 
       break;
     }
@@ -266,10 +291,11 @@ Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function) {
 
   Type *intern_type = ctx->types.add(function_type);
 
+  function->type = intern_type;
+
   return intern_type;
 }
 
-// Assumes that the AstNode `function` already has an associated type defined.
 void infer_types_in_function(CompilerContext *ctx, Env *env, AstNode *function) {
   Debug_assert(function->kind == Ast_function);
 
@@ -299,9 +325,11 @@ b32 infer_types(CompilerContext *ctx, AstNode *mod) {
     Debug_assert(value->kind == Ast_function);
 
     Type *type = infer_function_type(ctx, mod_environment, value);
-    assert(type);
 
+    Debug_assert(type);
     Debug_assert(item->declaration.name->kind == Ast_identifier);
+
+    item->type = type;
 
     mod_environment->insert(item->declaration.name->identifier.key, Value::make_local(item, type));
   }
