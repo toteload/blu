@@ -70,8 +70,8 @@ struct Message {
   MessageSeverity severity;
   Str message;
 
-  char const *file;
-  u32 line;
+  char const *file = nullptr;
+  u32 line         = 0;
 };
 
 // -[ Token ]-
@@ -81,13 +81,12 @@ enum TokenKind : u32 {
   Tok_arrow,
   Tok_semicolon,
   Tok_equals,
-
   Tok_minus,
   Tok_plus,
   Tok_star,
   Tok_slash,
   Tok_percent,
-
+  Tok_plus_equals,
   Tok_exclamation,
   Tok_ampersand,
   Tok_bar,
@@ -95,24 +94,21 @@ enum TokenKind : u32 {
   Tok_tilde,
   Tok_left_shift,
   Tok_right_shift,
-
   Tok_cmp_eq,
   Tok_cmp_ne,
   Tok_cmp_gt,
   Tok_cmp_ge,
   Tok_cmp_lt,
   Tok_cmp_le,
-
   Tok_comma,
   Tok_dot,
-
   Tok_literal_int,
-
   Tok_brace_open,
   Tok_brace_close,
   Tok_paren_open,
   Tok_paren_close,
-
+  Tok_bracket_open,
+  Tok_bracket_close,
   Tok_keyword_fn,
   Tok_keyword_return,
   Tok_keyword_if,
@@ -120,14 +116,12 @@ enum TokenKind : u32 {
   Tok_keyword_while,
   Tok_keyword_break,
   Tok_keyword_continue,
-
   Tok_keyword_and,
   Tok_keyword_or,
-
+  Tok_keyword_for,
+  Tok_keyword_in,
   Tok_identifier,
-
   Tok_builtin_run,
-
   Tok_kind_max,
 };
 
@@ -175,6 +169,8 @@ enum BinaryOpKind : u32 {
 
   Assign,
 
+  AddAssign,
+
   BinaryOpKind_max,
 };
 
@@ -197,11 +193,13 @@ enum AstKind : u32 {
   Ast_identifier,
   Ast_literal_int,
   Ast_declaration,
+
   Ast_assign,
 
   Ast_while,
   Ast_break,
   Ast_continue,
+  Ast_for,
 
   Ast_call,
   Ast_if_else,
@@ -209,6 +207,7 @@ enum AstKind : u32 {
   Ast_unary_op,
 
   Ast_type_pointer,
+  Ast_type_slice,
   Ast_deref,
 
   Ast_return,
@@ -282,6 +281,12 @@ struct AstNode {
     } _while;
 
     struct {
+      AstNode *item;
+      AstNode *iterable;
+      AstNode *body;
+    } _for;
+
+    struct {
       AstNode *expressions;
     } scope;
 
@@ -292,6 +297,10 @@ struct AstNode {
     struct {
       AstNode *base;
     } pointer;
+
+    struct {
+      AstNode *base;
+    } slice;
 
     struct {
       AstNode *value;
@@ -315,6 +324,7 @@ enum TypeKind : u16 {
   Type_Void,
   Type_Never,
   Type_Pointer,
+  Type_slice,
 };
 
 enum Signedness : u8 {
@@ -334,15 +344,16 @@ struct Type {
       Type *base_type;
     } pointer;
     struct {
+      Type *base_type;
+    } slice;
+    struct {
       u32 param_count;
       Type *return_type;
       Type *params[0];
     } function;
   };
 
-  b32 is_sized_type() {
-    return kind != Type_Void && kind != Type_Never;
-  }
+  b32 is_sized_type() { return kind != Type_Void && kind != Type_Never; }
 
   u32 byte_size() {
     switch (kind) {
@@ -351,6 +362,7 @@ struct Type {
     case Type_Void:
     case Type_Never:
     case Type_Pointer:
+    case Type_slice:
     case Type_Boolean:
       return sizeof(*this);
     case Type_Function: {
@@ -363,9 +375,16 @@ struct Type {
     return kind == Type_Integer || kind == Type_IntegerConstant;
   }
 
-  static Type make_void() { return {Type_Void}; }
-  static Type make_bool() { return {Type_Boolean}; }
-  static Type make_never() { return {Type_Never}; }
+  static Type make_slice(Type *base) {
+    Type t;
+    t.kind            = Type_slice;
+    t.slice.base_type = base;
+    return t;
+  }
+  static Type make_void() { return {Type_Void, {}}; }
+  static Type make_bool() { return {Type_Boolean, {}}; }
+  static Type make_never() { return {Type_Never, {}}; }
+  static Type make_integer_constant() { return {Type_IntegerConstant, {}}; }
   static Type make_integer(Signedness s, u16 width) {
     return {
       Type_Integer,
@@ -375,7 +394,6 @@ struct Type {
       }},
     };
   }
-  static Type make_integer_constant() { return {Type_IntegerConstant}; }
 };
 
 b32 type_eq(void *context, Type *a, Type *b);
@@ -412,6 +430,8 @@ enum ValueKind : u8 {
   Value_param,
   Value_local,
 
+  Value_iter_item,
+
   Value_builtin,
 };
 
@@ -434,6 +454,11 @@ struct Value {
     struct {
       Type *type;
     } builtin;
+
+    struct {
+      Type *type;
+      AstNode *ast;
+    } iter_item;
   };
 
   static Value make_type(Type *type) {
@@ -463,6 +488,14 @@ struct Value {
     Value val;
     val.kind         = Value_builtin;
     val.builtin.type = type;
+    return val;
+  }
+
+  static Value make_iter_item(Type *type, AstNode *n) {
+    Value val;
+    val.kind = Value_iter_item;
+    val.iter_item.type = type;
+    val.iter_item.ast = n;
     return val;
   }
 };

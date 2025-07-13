@@ -1,4 +1,4 @@
-fib :: fn(n: i32): i32 {
+fib :: fn(n: i32) i32 {
   if n <= 1 {
     1
   } else {
@@ -6,7 +6,25 @@ fib :: fn(n: i32): i32 {
   }
 }
 
-main :: fn(): i32 {
+sum :: fn(xs: []i32) i32 {
+  s : i32 = 0
+  for x in xs {
+    s += x
+  }
+  s
+}
+
+count :: fn(needle: i32, haystack: []i32) i64 {
+  s : i64 = 0
+  for x in haystack {
+    if x == needle {
+      s += 1
+    }
+  }
+  s
+}
+
+main :: fn() i32 {
   i : i32 = 1
 
   while true {
@@ -19,5 +37,5 @@ main :: fn(): i32 {
     continue
   }
 
-  return fib(10)
+  fib(10)
 }

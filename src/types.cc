@@ -5,7 +5,20 @@ Type *infer_function_type(CompilerContext *ctx, Env *env, AstNode *function);
 Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *expression);
 
 Type *infer_ast_type(CompilerContext *ctx, Env *env, AstNode *type) {
-  Debug_assert(type->kind == Ast_identifier);
+  Debug_assert(
+    type->kind == Ast_identifier || type->kind == Ast_type_pointer || type->kind == Ast_type_slice
+  );
+
+  if (type->kind == Ast_type_pointer) {
+    Todo();
+  }
+
+  if (type->kind == Ast_type_slice) {
+    Type *base      = infer_ast_type(ctx, env, type->slice.base);
+    Type slice_type = Type::make_slice(base);
+
+    return ctx->types.add(&slice_type);
+  }
 
   StrKey idkey = type->identifier.key;
   Value *v     = env->lookup(idkey);
@@ -87,6 +100,12 @@ Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs,
     }
     Todo();
   } break;
+  case AddAssign: {
+    Type *t = get_coerced_type(ctx, lhs, rhs);
+      // TODO: make sure types are valid
+    return ctx->types._void;
+  } break;
+
   // All cases should be handled
   default:
     Unreachable();
@@ -139,16 +158,32 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
     Debug_assert(cond);
     Debug_assert(body);
   } break;
+  case Ast_for: {
+    res = ctx->types._void;
+
+    Type *iterable_type = infer_expression_type(ctx, env, e->_for.iterable);
+
+    Debug_assert(iterable_type->kind == Type_slice);
+
+    Type *base_type = iterable_type->slice.base_type;
+
+    e->_for.item->type = base_type;
+
+    Env *for_env = ctx->environments.alloc(env);
+    for_env->insert(e->_for.item->identifier.key, Value::make_iter_item(base_type, e->_for.item));
+
+    infer_expression_type(ctx, for_env, e->_for.body);
+  } break;
   case Ast_scope: {
     Type *scope_type = ctx->types._void;
     auto expressions = e->scope.expressions;
     ForEachAstNode(e, expressions) {
-        infer_expression_type(ctx, env, e);
+      infer_expression_type(ctx, env, e);
 
-        if (!e->next) {
-          scope_type = e->type;
-        }
+      if (!e->next) {
+        scope_type = e->type;
       }
+    }
 
     res = scope_type;
   } break;
@@ -194,7 +229,7 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
 
       Type *final_type = get_coerced_type(ctx, then, otherwise);
 
-      e->if_else.then->type = final_type;
+      e->if_else.then->type      = final_type;
       e->if_else.otherwise->type = final_type;
 
       res = final_type;

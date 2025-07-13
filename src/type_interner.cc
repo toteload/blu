@@ -17,6 +17,9 @@ b32 type_eq(void *context, Type *a, Type *b) {
   case Type_Pointer: {
     return type_eq(context, a->pointer.base_type, b->pointer.base_type);
   }
+  case Type_slice: {
+    return type_eq(context, a->slice.base_type, b->slice.base_type);
+  }
   case Type_Function: {
     if (!type_eq(context, a->function.return_type, b->function.return_type)) {
       return false;
@@ -64,6 +67,9 @@ u32 push_type_data(Arena *arena, Type *x) {
   } break;
   case Type_Pointer: {
     push_type_data(arena, x->pointer.base_type);
+  } break;
+  case Type_slice: {
+    push_type_data(arena, x->slice.base_type);
   } break;
   case Type_Function: {
     push_type_data(arena, x->function.return_type);

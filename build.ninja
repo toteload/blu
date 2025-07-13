@@ -1,0 +1,29 @@
+builddir = .ninja
+outdir = out
+
+rule compile_cpp_debug
+  command = clang++ -MD -MF $out.d -Wall -Wextra -g -gcodeview $
+      -fansi-escape-codes -fcolor-diagnostics -march=native $
+      -std=c++17 -D_CRT_SECURE_NO_WARNINGS -DTTLD_DEBUG $
+      -Wno-unused-parameter $cflags -c $in -o $out
+  depfile = $out.d
+
+rule build_binary
+  command = clang++ -g $in -o $out
+
+build $outdir\main.o: compile_cpp_debug src\main.cc
+build $outdir\toteload.o: compile_cpp_debug src\toteload.cc
+build $outdir\tokenize.o: compile_cpp_debug src\tokenize.cc
+build $outdir\parse.o: compile_cpp_debug src\parse.cc
+build $outdir\string_interner.o: compile_cpp_debug src\string_interner.cc
+  cflags = -Iext
+build $outdir\types.o: compile_cpp_debug src\types.cc
+build $outdir\c_generator.o: compile_cpp_debug src\c_generator.cc
+
+build $outdir\type_interner.o: compile_cpp_debug src\type_interner.cc
+  cflags = -Iext
+
+build $outdir\blu.exe: build_binary $outdir\main.o $outdir\tokenize.o $
+    $outdir\parse.o $outdir\string_interner.o $
+    $outdir\types.o $outdir\c_generator.o $
+    $outdir\type_interner.o $outdir\toteload.o

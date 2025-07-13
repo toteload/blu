@@ -49,20 +49,15 @@ void Tokenizer::init(CompilerContext *ctx, char const *source, char const *end) 
   current_location.p    = source;
 }
 
-#define Set_out_token(Kind)                                                                        \
+#define Return_token(Kind)                                                                         \
   {                                                                                                \
     tok->kind       = Kind;                                                                        \
     tok->span.start = start;                                                                       \
     tok->span.end   = current_location;                                                            \
-  }
-
-#define Return_token(Kind)                                                                         \
-  {                                                                                                \
-    Set_out_token(Kind);                                                                           \
     return TokResult_ok;                                                                           \
   }
 
-#define Return_if_match(String, Kind)                                                            \
+#define Return_if_match(String, Kind)                                                              \
   if (str_eq(Str_make(String), {start.p, cast<u32>(current_location.p - start.p)})) {              \
     Return_token(Kind);                                                                            \
   }
@@ -89,7 +84,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
   case '}': Return_token(Tok_brace_close);
   case '(': Return_token(Tok_paren_open);
   case ')': Return_token(Tok_paren_close);
-  case '+': Return_token(Tok_plus);
+  case '[': Return_token(Tok_bracket_open);
+  case ']': Return_token(Tok_bracket_close);
   case '*': Return_token(Tok_star);
   case '/': Return_token(Tok_slash);
   case '%': Return_token(Tok_percent);
@@ -107,6 +103,15 @@ TokenizerResult Tokenizer::next(Token *tok) {
     }
 
     Return_token(Tok_equals);
+  }
+
+  if (c == '+') {
+    if (*at == '=') {
+      step();
+      Return_token(Tok_plus_equals);
+    }
+
+    Return_token(Tok_plus);
   }
 
   if (c == '<') {
@@ -181,6 +186,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_if_match("continue", Tok_keyword_continue);
     Return_if_match("and", Tok_keyword_and);
     Return_if_match("or", Tok_keyword_or);
+    Return_if_match("for", Tok_keyword_for);
+    Return_if_match("in", Tok_keyword_in);
 
     Return_if_match("#run", Tok_builtin_run);
 

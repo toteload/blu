@@ -110,7 +110,7 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 struct Str {
   char const *str = nullptr;
-  usize len = 0;
+  usize len       = 0;
 
   bool is_ok() { return str && len; }
 };

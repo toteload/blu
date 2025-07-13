@@ -3,9 +3,9 @@
 #include <stdarg.h>
 
 char const *preamble = "#include <stdint.h>\n"
-  "#define true 1\n"
-  "#define false 0\n"
-  "typedef uint32_t b32;\n"
+                       "#define true 1\n"
+                       "#define false 0\n"
+                       "typedef uint32_t b32;\n"
                        "typedef int8_t i8;\n"
                        "typedef uint8_t u8;\n"
                        "typedef int16_t i16;\n"
@@ -15,7 +15,9 @@ char const *preamble = "#include <stdint.h>\n"
                        "typedef int64_t i64;\n"
                        "typedef uint64_t u64;\n"
                        "typedef float f32;\n"
-                       "typedef double f64;\n\n";
+                       "typedef double f64;\n\n"
+                       "typedef struct slice { void *data; i64 len; } slice;\n"
+                       "\n";
 
 struct CFileWriter {
   FILE *out;
@@ -38,10 +40,10 @@ template<typename Writer> struct CGenerator {
 
   Str gensym() {
     u32 nums = 4;
-    char *s = ctx->arena.alloc<char>(nums+2);
-    snprintf(s, nums+2, "a%04d", sym_id);
+    char *s  = ctx->arena.alloc<char>(nums + 2);
+    snprintf(s, nums + 2, "a%04d", sym_id);
     sym_id += 1;
-    return { s, nums+1 };
+    return {s, nums + 1};
   }
 
   void output_str(Str s);
@@ -56,7 +58,7 @@ template<typename Writer> struct CGenerator {
 
   void output_param(AstNode *n);
 
-  void output_expression(AstNode *n, Str dst = {nullptr, 0});
+  void output_expression(AstNode *n, b32 is_terminal = false, Str dst = {nullptr, 0});
 
   void output_span(AstNode *n);
   void output_identifier(AstNode *n);
@@ -80,21 +82,26 @@ template<typename Writer> void CGenerator<Writer>::output_span(AstNode *n) {
   print("%.*s", cast<i32>(s.len), s.str);
 }
 
-template<typename Writer> void CGenerator<Writer>::output_type(Type *t) { 
+template<typename Writer> void CGenerator<Writer>::output_type(Type *t) {
   switch (t->kind) {
-    case Type_Void: print("void"); break;
-    case Type_Integer: {
-      if (t->integer.signedness == Unsigned) {
-        print("u");
-      } else {
-        print("i");
-      }
+  case Type_slice: {
+    print("slice");
+  } break;
+  case Type_Void:
+    print("void");
+    break;
+  case Type_Integer: {
+    if (t->integer.signedness == Unsigned) {
+      print("u");
+    } else {
+      print("i");
+    }
 
-      print("%d", t->integer.bitwidth);
-    } break;
-    default:
-      Todo();
-  } 
+    print("%d", t->integer.bitwidth);
+  } break;
+  default:
+    Todo();
+  }
 }
 
 template<typename Writer> void CGenerator<Writer>::output_identifier(AstNode *n) { output_span(n); }
@@ -148,10 +155,12 @@ void CGenerator<Writer>::output_function_definition(Str name, AstNode *n) {
     output_variable_declaration(sym, n->type->function.return_type);
   }
 
-  output_expression(n->function.body, sym);
+  output_expression(n->function.body, true, sym);
 
   if (should_output_return) {
-    print("return "); output_str(sym); print(";\n");
+    print("return ");
+    output_str(sym);
+    print(";\n");
   }
   print("}\n");
 }
@@ -172,11 +181,11 @@ template<typename Writer> void CGenerator<Writer>::output_if_else(AstNode *n, St
   print("if (");
   output_expression(n->if_else.cond);
   print(") {\n");
-  output_expression(n->if_else.then, sym);
+  output_expression(n->if_else.then, true, sym);
 
   if (n->if_else.otherwise != nullptr) {
     print("} else {\n");
-    output_expression(n->if_else.otherwise, sym);
+    output_expression(n->if_else.otherwise, true, sym);
   }
 
   print("}\n");
@@ -196,7 +205,7 @@ void CGenerator<Writer>::output_variable_declaration(Str name, Type *type, AstNo
   print(";\n");
 }
 
-template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n, Str dst) {
+template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst) {
   switch (n->kind) {
   case Ast_scope: {
     Str sym = dst;
@@ -206,13 +215,13 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
     ForEachAstNode(e, n->scope.expressions) {
-        if (e->next) {
-          output_expression(e);
-          continue;
-        }
-
-        output_expression(e, sym);
+      if (e->next) {
+        output_expression(e, true);
+        continue;
       }
+
+      output_expression(e, true, sym);
+    }
 
   } break;
   case Ast_declaration: {
@@ -224,6 +233,37 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     output_expression(n->_while.cond);
     print(") {\n");
     output_expression(n->_while.body);
+    print("}\n");
+  } break;
+  case Ast_for: {
+    Str i = gensym();
+    Str iterable = gensym();
+
+    output_variable_declaration(iterable, n->_for.iterable->type, n->_for.iterable);
+
+    print("for (i64 ");
+    output_str(i);
+    print(" = 0; ");
+    output_str(i);
+    print(" < ");
+    output_str(iterable);
+    print(".len; ");
+    output_str(i);
+    print(" += 1) {\n");
+
+    Str item = n->_for.item->span.str();
+    output_type(n->_for.item->type);
+    print(" ");
+    output_str(item);
+    print(" = ");
+    print("((");
+    output_type(n->_for.item->type);
+    print("*)");
+    output_str(iterable);
+    print(".data)[");
+    output_str(i);
+    print("];\n");
+    output_expression(n->_for.body);
     print("}\n");
   } break;
   case Ast_assign: {
@@ -255,10 +295,28 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     output_literal_int(n);
     return;
   case Ast_identifier:
+    if (dst.is_ok()) {
+      output_str(dst);
+      print(" = ");
+      output_identifier(n);
+      print(";\n");
+      return;
+    }
+
     output_identifier(n);
+    if (is_terminal) { print(";\n"); }
     return;
   case Ast_call:
+    if (dst.is_ok()) {
+      output_str(dst);
+      print(" = ");
+      output_call(n);
+      print(";\n");
+      return;
+    }
+
     output_call(n);
+    if (is_terminal) { print(";\n"); }
     return;
   case Ast_binary_op:
     if (dst.is_ok()) {
@@ -270,9 +328,11 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
     output_binary_op(n);
+    if (is_terminal) { print(";\n"); }
     return;
   case Ast_unary_op:
     output_unary_op(n);
+    if (is_terminal) { print(";\n"); }
     return;
   case Ast_if_else:
     output_if_else(n, dst);
@@ -323,6 +383,7 @@ template<typename Writer> void CGenerator<Writer>::output_binary_op(AstNode *n) 
   case Bit_xor:           print(" ^ ");  break;
   case Bit_shift_left:    print(" << "); break;
   case Bit_shift_right:   print(" >> "); break;
+  case AddAssign:         print(" += "); break;
   default:
     print(" ??? ");
     break;

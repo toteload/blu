@@ -3,3 +3,5 @@
 *.ilk
 *.pdb
 .vs/
+out
+.ninja

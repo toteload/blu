@@ -26,6 +26,7 @@ struct Parser {
   b32 parse_identifier(AstNode **out);
 
   b32 parse_while(AstNode **out);
+  b32 parse_for(AstNode **out);
 
   b32 parse_arguments(AstNode **out);
 
@@ -143,8 +144,8 @@ b32 Parser::parse_function(AstNode **out) {
   Try(expect_token(Tok_keyword_fn));
   Try(expect_token(Tok_paren_open));
 
-  AstNode *params     = nullptr;
-  AstNode *param_tail = nullptr;
+  AstNode *params = nullptr;
+  AstNode *last   = nullptr;
 
   while (!is_at_end()) {
     Token tok;
@@ -159,22 +160,24 @@ b32 Parser::parse_function(AstNode **out) {
     if (!params) {
       params = param;
     } else {
-      param_tail->next = param;
+      last->next = param;
     }
 
-    param_tail = param;
+    last = param;
 
     Try(peek(&tok));
     if (tok.kind != Tok_comma) {
       break;
     }
 
-    Try(next(&tok));
+    next(&tok);
+  }
+
+  if (last) {
+    last->next = nullptr;
   }
 
   Try(expect_token(Tok_paren_close));
-
-  Try(expect_token(Tok_colon));
 
   AstNode *return_type;
   Try(parse_type(&return_type));
@@ -198,7 +201,7 @@ b32 Parser::parse_scope(AstNode **out) {
   Try(expect_token(Tok_brace_open));
 
   AstNode *expressions = nullptr;
-  AstNode *tail        = nullptr;
+  AstNode *last        = nullptr;
 
   while (!is_at_end()) {
     Token tok;
@@ -213,10 +216,14 @@ b32 Parser::parse_scope(AstNode **out) {
     if (!expressions) {
       expressions = x;
     } else {
-      tail->next = x;
+      last->next = x;
     }
 
-    tail = x;
+    last = x;
+  }
+
+  if (last) {
+    last->next = nullptr;
   }
 
   Try(expect_token(Tok_brace_close));
@@ -357,6 +364,23 @@ b32 Parser::parse_type(AstNode **out) {
     return true;
   }
 
+  if (tok.kind == Tok_bracket_open) {
+    next();
+    Try(expect_token(Tok_bracket_close));
+
+    AstNode *n = alloc_node();
+
+    AstNode *base;
+    Try(parse_type(&base));
+
+    n->kind       = Ast_type_slice;
+    n->slice.base = base;
+
+    *out = n;
+
+    return true;
+  }
+
   return parse_identifier(out);
 }
 
@@ -400,6 +424,33 @@ b32 Parser::parse_while(AstNode **out) {
   return true;
 }
 
+b32 Parser::parse_for(AstNode **out) {
+  AstNode *n = alloc_node();
+
+  Token tok;
+  Try(expect_token(Tok_keyword_for, &tok));
+
+  AstNode *item;
+  Try(parse_identifier(&item));
+
+  Try(expect_token(Tok_keyword_in));
+
+  AstNode *iterable;
+  Try(parse_expression(&iterable));
+
+  AstNode *body;
+  Try(parse_scope(&body));
+
+  n->kind          = Ast_for;
+  n->_for.item     = item;
+  n->_for.iterable = iterable;
+  n->_for.body     = body;
+
+  *out = n;
+
+  return true;
+}
+
 // clang-format off
 static constexpr u8 binop_precedence_group[BinaryOpKind_max] = {
   10, 10, 10,
@@ -408,6 +459,7 @@ static constexpr u8 binop_precedence_group[BinaryOpKind_max] = {
   40, 40, 40,
   50, 50, 50, 50, 50, 50,
   60, 60,
+  200,
   200,
 };
 // clang-format on
@@ -467,6 +519,10 @@ b32 Parser::parse_arguments(AstNode **out) {
     }
 
     next();
+  }
+
+  if (last) {
+    last->next = nullptr;
   }
 
   Try(expect_token(Tok_paren_close));
@@ -541,6 +597,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     Try(parse_continue(&base));
   } else if (tok.kind == Tok_keyword_while) {
     Try(parse_while(&base));
+  } else if (tok.kind == Tok_keyword_for) {
+    Try(parse_for(&base));
   } else if (tok.kind == Tok_keyword_return) {
     Try(parse_return(&base));
   } else if (tok.kind == Tok_keyword_if) {
@@ -623,6 +681,7 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
     case Tok_left_shift:  op = Bit_shift_left;    break;
     case Tok_right_shift: op = Bit_shift_right;   break;
     case Tok_equals:      op = Assign;            break;
+    case Tok_plus_equals: op = AddAssign;         break;
 
     default: { *out = lhs; return true; }
     }

@@ -41,13 +41,14 @@ char const *read_file(char const *filename, usize *len) {
 }
 
 char const *token_string[] = {
-  "colon",       "arrow",      "semicolon",   "equals",      "minus",       "plus",
-  "star",        "slash",      "percent",     "exclamation", "ampersand",   "bar",
-  "caret",       "tilde",      "left-shift",  "right-shift", "cmp-eq",      "cmp-ne",
-  "cmp-gt",      "cmp-ge",     "cmp-lt",      "cmp-le",      "comma",       "dot",
-  "literal_int", "brace_open", "brace_close", "paren_open",  "paren_close", "fn",
-  "return",      "if",         "else",        "while",       "break",       "continue",
-  "and",         "or",         "identifier",  "#run", "<illegal>",
+  "colon",        "arrow",         "semicolon",  "equals",      "minus",       "plus",
+  "star",         "slash",         "percent",    "plus_equals", "exclamation", "ampersand",
+  "bar",          "caret",         "tilde",      "left-shift",  "right-shift", "cmp-eq",
+  "cmp-ne",       "cmp-gt",        "cmp-ge",     "cmp-lt",      "cmp-le",      "comma",
+  "dot",          "literal_int",   "brace_open", "brace_close", "paren_open",  "paren_close",
+  "bracket_open", "bracket_close", "fn",         "return",      "if",          "else",
+  "while",        "break",         "continue",   "and",         "or",          "for",
+  "in",           "identifier",    "#run",       "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -77,9 +78,9 @@ void print_tokens(FILE *out, Slice<Token> tokens) {
 void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 char const *ast_string[] = {
-  "module",   "param",        "function", "scope",    "identifier", "literal-int", "declaration",
-  "assign",   "while",        "break",    "continue", "call",       "if-else",     "binary-op",
-  "unary-op", "type_pointer", "deref",    "return",   "illegal",
+  "module",    "param",    "function",     "scope",      "identifier", "literal-int", "declaration",
+  "assign",    "while",    "break",        "continue",   "for",        "call",        "if-else",
+  "binary-op", "unary-op", "type_pointer", "type_slice", "deref",      "return",      "illegal",
 };
 
 char const *ast_kind_string(AstKind kind) {
@@ -91,10 +92,13 @@ char const *ast_kind_string(AstKind kind) {
 }
 
 char const *binary_op_string[] = {
-  "* (Mul)",   "/ (Div)",     "% (Mod)",    "- (Sub)",     "+ (Add)",           "<<",
-  ">>",        "& (Bit_and)", "| (Bit_or)", "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
-  "> (CmpGt)", ">= (CmpGe)",  "< (CmpLt)",  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
-  "(Assign)",  "illegal",
+  "* (Mul)",     "/ (Div)",           "% (Mod)",
+  "- (Sub)",     "+ (Add)",           "<<",
+  ">>",          "& (Bit_and)",       "| (Bit_or)",
+  "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
+  "> (CmpGt)",   ">= (CmpGe)",        "< (CmpLt)",
+  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
+  "(Assign)",    "+= (AddAssign)",    "illegal",
 };
 
 char const *binary_op_kind_string(BinaryOpKind kind) {
@@ -123,6 +127,11 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
   case Ast_while: {
     print_ast(out, n._while.cond, depth + 1);
     print_ast(out, n._while.body, depth + 1);
+  } break;
+  case Ast_for: {
+    print_ast(out, n._for.item, depth+1);
+    print_ast(out, n._for.iterable, depth+1);
+    print_ast(out, n._for.body, depth+1);
   } break;
   case Ast_param: {
     print_ast(out, n.param.name, depth + 1);
@@ -297,17 +306,19 @@ int main() {
 
   print_ast(stdout, compiler_context.root);
 
+  printf("Type inference ... ");
   ok = infer_types(&compiler_context, compiler_context.root);
   if (!ok) {
     printf("Encountered error during type inference\n");
     return 1;
   }
+  printf("DONE\n");
 
+  printf("C code generation ... ");
   FILE *out = fopen("fib.c", "w");
   generate_c_code(&compiler_context, out, compiler_context.root);
   fclose(out);
-
-  printf("Done!\n");
+  printf("DONE\n");
 
   return 0;
 }
