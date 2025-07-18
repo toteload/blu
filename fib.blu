@@ -1,18 +1,18 @@
-fib :: fn(n: i32) i32 {
-  if n <= 1 {
-    1
-  } else {
-    fib(n-1) + fib(n-2)
-  }
-}
+// fib :: fn(n: i32) i32 {
+//   if n <= 1 {
+//     1
+//   } else {
+//     fib(n-1) + fib(n-2)
+//   }
+// }
 
-sum :: fn(xs: []i32) i32 {
-  s : i32 = 0
-  for x in xs {
-    s += x
-  }
-  s
-}
+//sum :: fn(xs: []i32) i32 {
+//  s : i32 = 0
+//  for x in xs {
+//    s += x
+//  }
+//  s
+//}
 
 count :: fn(needle: i32, haystack: []i32) i64 {
   s : i64 = 0
@@ -23,19 +23,19 @@ count :: fn(needle: i32, haystack: []i32) i64 {
   }
   s
 }
-
-main :: fn() i32 {
-  i : i32 = 1
-
-  while true {
-    if i + 2 * 3 == 10 and true {
-      break
-    }
-
-    i = i+1
-
-    continue
-  }
-
-  fib(10)
-}
+ 
+// main :: fn() i32 {
+//   i : i32 = 1
+// 
+//   while true {
+//     if i + 2 * 3 == 10 and true {
+//       break
+//     }
+// 
+//     i = i+1
+// 
+//     continue
+//   }
+// 
+//   fib(10)
+// }

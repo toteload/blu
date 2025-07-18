@@ -122,6 +122,7 @@ enum TokenKind : u32 {
   Tok_keyword_in,
   Tok_identifier,
   Tok_builtin_run,
+  Tok_line_comment,
   Tok_kind_max,
 };
 
@@ -206,6 +207,8 @@ enum AstKind : u32 {
   Ast_binary_op,
   Ast_unary_op,
 
+  Ast_cast,
+
   Ast_type_pointer,
   Ast_type_slice,
   Ast_deref,
@@ -266,6 +269,11 @@ struct AstNode {
       UnaryOpKind kind;
       AstNode *value;
     } unary_op;
+
+    struct {
+      AstNode *destination_type;
+      AstNode *value;
+    } cast;
 
     struct {
       AstNode *value;

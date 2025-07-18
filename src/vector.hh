@@ -14,6 +14,8 @@ template<typename T> struct Vector {
 
   T &operator[](usize idx) { return data[idx]; }
 
+  T *end() { return data + len; }
+
   Slice<T> slice() { return Slice<T>{data, len}; }
 
   Vector<T> move();

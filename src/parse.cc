@@ -3,7 +3,7 @@
 struct Parser {
   CompilerContext *ctx;
 
-  usize idx;
+  Token *at;
 
   void init(CompilerContext *ctx);
 
@@ -44,47 +44,58 @@ struct Parser {
 
   AstNode *alloc_node() { return ctx->nodes.alloc(); }
 
-  b32 is_at_end() { return idx == ctx->tokens.len; }
+  Token *skip_comments_from(Token *p) {
+    while (p != ctx->tokens.end() && p->kind == Tok_line_comment) {
+      p += 1;
+    }
+
+    return p;
+  }
+
+  b32 is_at_end() {
+    at = skip_comments_from(at);
+    return at == ctx->tokens.end();
+  }
 
   void add_unexpected_token_message(Token token);
 };
 
 void Parser::init(CompilerContext *ctx) {
   this->ctx = ctx;
-
-  idx = 0;
+  at = ctx->tokens.data;
 }
 
 b32 Parser::next(Token *out) {
-  if (idx == ctx->tokens.len) {
+  if (is_at_end()) {
     return false;
   }
 
   if (out != nullptr) {
-    *out = ctx->tokens[idx];
+    *out = *at;
   }
 
-  idx += 1;
+  at += 1;
 
   return true;
 }
 
 b32 Parser::peek(Token *out) {
-  if (idx == ctx->tokens.len) {
+  if (is_at_end()) {
     return false;
   }
 
-  *out = ctx->tokens[idx];
+  *out = *at;
 
   return true;
 }
 
 b32 Parser::peek2(Token *out) {
-  if (idx + 1 >= ctx->tokens.len) {
+  Token *lookahead = skip_comments_from(at+1);
+  if (lookahead == ctx->tokens.end()) {
     return false;
   }
 
-  *out = ctx->tokens[idx + 1];
+  *out = *lookahead;
 
   return true;
 }
@@ -107,6 +118,8 @@ b32 Parser::parse_module(AstNode **out) {
 
     tail = item;
   }
+
+  tail->next = nullptr;
 
   n->kind         = Ast_module;
   n->module.items = items;
@@ -150,6 +163,11 @@ b32 Parser::parse_function(AstNode **out) {
   while (!is_at_end()) {
     Token tok;
     Try(peek(&tok));
+    if (tok.kind == Tok_comma) {
+      next(&tok);
+    }
+
+    Try(peek(&tok));
     if (tok.kind == Tok_paren_close) {
       break;
     }
@@ -164,13 +182,6 @@ b32 Parser::parse_function(AstNode **out) {
     }
 
     last = param;
-
-    Try(peek(&tok));
-    if (tok.kind != Tok_comma) {
-      break;
-    }
-
-    next(&tok);
   }
 
   if (last) {

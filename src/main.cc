@@ -48,7 +48,7 @@ char const *token_string[] = {
   "dot",          "literal_int",   "brace_open", "brace_close", "paren_open",  "paren_close",
   "bracket_open", "bracket_close", "fn",         "return",      "if",          "else",
   "while",        "break",         "continue",   "and",         "or",          "for",
-  "in",           "identifier",    "#run",       "<illegal>",
+  "in",           "identifier",    "#run",       "line_comment", "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -80,7 +80,7 @@ void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 char const *ast_string[] = {
   "module",    "param",    "function",     "scope",      "identifier", "literal-int", "declaration",
   "assign",    "while",    "break",        "continue",   "for",        "call",        "if-else",
-  "binary-op", "unary-op", "type_pointer", "type_slice", "deref",      "return",      "illegal",
+  "binary-op", "unary-op", "cast", "type_pointer", "type_slice", "deref",      "return",      "illegal",
 };
 
 char const *ast_kind_string(AstKind kind) {

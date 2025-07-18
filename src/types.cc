@@ -127,10 +127,12 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
 
     Debug_assert(are_types_coercibly_equal(declared_type, v));
 
-    env->insert(decl.name->identifier.key, Value::make_local(e, v));
+    Type *coerced_type = get_coerced_type(ctx, declared_type, v);
 
-    res = get_coerced_type(ctx, declared_type, v);
-  } break;
+    env->insert(decl.name->identifier.key, Value::make_local(e, coerced_type));
+
+    res = coerced_type;   
+    } break;
   case Ast_assign: {
     Type *type = infer_expression_type(ctx, env, e->assign.value);
     Debug_assert(type);

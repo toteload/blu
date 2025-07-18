@@ -12,6 +12,7 @@ struct Tokenizer {
 
   void step();
   void skip_whitespace();
+  void step_until_new_line();
   b32 is_at_end() { return at == end; }
 };
 
@@ -35,6 +36,12 @@ b32 is_identifier_rest(char c) { return is_identifier_start(c) || is_numeric(c);
 
 void Tokenizer::skip_whitespace() {
   while (!is_at_end() && is_whitespace(*at)) {
+    step();
+  }
+}
+
+void Tokenizer::step_until_new_line() {
+  while (!is_at_end() && at[-1] != '\n') {
     step();
   }
 }
@@ -87,7 +94,6 @@ TokenizerResult Tokenizer::next(Token *tok) {
   case '[': Return_token(Tok_bracket_open);
   case ']': Return_token(Tok_bracket_close);
   case '*': Return_token(Tok_star);
-  case '/': Return_token(Tok_slash);
   case '%': Return_token(Tok_percent);
   case '&': Return_token(Tok_ampersand);
   case '|': Return_token(Tok_bar);
@@ -95,6 +101,16 @@ TokenizerResult Tokenizer::next(Token *tok) {
   case '~': Return_token(Tok_tilde);
   }
   // clang-format on
+
+  if (c == '/') {
+    if (!is_at_end() && *at == '/') {
+      // line comment
+      step_until_new_line();
+      Return_token(Tok_line_comment);
+    }
+
+    Return_token(Tok_slash);
+  }
 
   if (c == '=') {
     if (*at == '=') {
