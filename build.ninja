@@ -14,7 +14,9 @@ rule build_binary
 build $outdir\main.o: compile_cpp_debug src\main.cc
 build $outdir\toteload.o: compile_cpp_debug src\toteload.cc
 build $outdir\tokenize.o: compile_cpp_debug src\tokenize.cc
+build $outdir\compiler_context.o: compile_cpp_debug src\compiler_context.cc
 build $outdir\parse.o: compile_cpp_debug src\parse.cc
+build $outdir\builtins.o: compile_cpp_debug src\builtins.cc
 build $outdir\string_interner.o: compile_cpp_debug src\string_interner.cc
   cflags = -Iext
 build $outdir\types.o: compile_cpp_debug src\types.cc
@@ -24,6 +26,6 @@ build $outdir\type_interner.o: compile_cpp_debug src\type_interner.cc
   cflags = -Iext
 
 build $outdir\blu.exe: build_binary $outdir\main.o $outdir\tokenize.o $
-    $outdir\parse.o $outdir\string_interner.o $
-    $outdir\types.o $outdir\c_generator.o $
+    $outdir\parse.o $outdir\string_interner.o $outdir\builtins.o $
+    $outdir\types.o $outdir\c_generator.o $outdir\compiler_context.o $
     $outdir\type_interner.o $outdir\toteload.o

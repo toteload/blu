@@ -1,0 +1,11 @@
+char :: i8
+short :: i16
+ushort :: u16
+int :: i32
+uint :: u32
+long :: i32
+ulong :: u32
+longlong :: i64
+ulonglong :: u64
+size_t :: u64
+

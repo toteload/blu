@@ -205,7 +205,8 @@ void CGenerator<Writer>::output_variable_declaration(Str name, Type *type, AstNo
   print(";\n");
 }
 
-template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst) {
+template<typename Writer>
+void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst) {
   switch (n->kind) {
   case Ast_scope: {
     Str sym = dst;
@@ -224,6 +225,14 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
   } break;
+  case Ast_cast: {
+    // For now assume that any cast allowed in the language is also allowed in C.
+    print("((");
+    output_type(n->type);
+    print(")");
+    output_expression(n->cast.value);
+    print(")");
+  } break;
   case Ast_declaration: {
     Str name = n->declaration.name->span.str();
     output_variable_declaration(name, n->type, n->declaration.value);
@@ -236,7 +245,7 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     print("}\n");
   } break;
   case Ast_for: {
-    Str i = gensym();
+    Str i        = gensym();
     Str iterable = gensym();
 
     output_variable_declaration(iterable, n->_for.iterable->type, n->_for.iterable);
@@ -304,7 +313,9 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
     output_identifier(n);
-    if (is_terminal) { print(";\n"); }
+    if (is_terminal) {
+      print(";\n");
+    }
     return;
   case Ast_call:
     if (dst.is_ok()) {
@@ -316,7 +327,9 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
     output_call(n);
-    if (is_terminal) { print(";\n"); }
+    if (is_terminal) {
+      print(";\n");
+    }
     return;
   case Ast_binary_op:
     if (dst.is_ok()) {
@@ -328,11 +341,15 @@ template<typename Writer> void CGenerator<Writer>::output_expression(AstNode *n,
     }
 
     output_binary_op(n);
-    if (is_terminal) { print(";\n"); }
+    if (is_terminal) {
+      print(";\n");
+    }
     return;
   case Ast_unary_op:
     output_unary_op(n);
-    if (is_terminal) { print(";\n"); }
+    if (is_terminal) {
+      print(";\n");
+    }
     return;
   case Ast_if_else:
     output_if_else(n, dst);

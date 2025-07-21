@@ -9,6 +9,7 @@ struct Parser {
 
   b32 parse_module(AstNode **out);
 
+  b32 parse_builtin(AstNode **out);
   b32 parse_top_level(AstNode **out);
 
   b32 parse_parameter(AstNode **out);
@@ -23,6 +24,7 @@ struct Parser {
   b32 parse_return(AstNode **out);
   b32 parse_declaration(AstNode **out);
   b32 parse_literal_int(AstNode **out);
+  b32 parse_literal_string(AstNode **out);
   b32 parse_identifier(AstNode **out);
 
   b32 parse_while(AstNode **out);
@@ -62,7 +64,7 @@ struct Parser {
 
 void Parser::init(CompilerContext *ctx) {
   this->ctx = ctx;
-  at = ctx->tokens.data;
+  at        = ctx->tokens.data;
 }
 
 b32 Parser::next(Token *out) {
@@ -90,7 +92,7 @@ b32 Parser::peek(Token *out) {
 }
 
 b32 Parser::peek2(Token *out) {
-  Token *lookahead = skip_comments_from(at+1);
+  Token *lookahead = skip_comments_from(at + 1);
   if (lookahead == ctx->tokens.end()) {
     return false;
   }
@@ -129,7 +131,38 @@ b32 Parser::parse_module(AstNode **out) {
   return true;
 }
 
-b32 Parser::parse_top_level(AstNode **out) { return parse_declaration(out); }
+b32 Parser::parse_builtin(AstNode **out) {
+  Token tok;
+  next(&tok);
+
+  if (true /* is import builtin */) {
+    AstNode *filename;
+    Try(parse_literal_string(&filename));
+
+    AstNode *n = alloc_node();
+
+    n->kind          = Ast_builtin;
+    n->builtin.kind  = Builtin_import;
+    n->builtin.value = filename;
+
+    *out = n;
+
+    return true;
+  }
+
+  return false;
+}
+
+b32 Parser::parse_top_level(AstNode **out) {
+  Token tok;
+  Try(peek(&tok));
+
+  if (tok.kind == Tok_builtin) {
+    return parse_builtin(out);
+  }
+
+  return parse_declaration(out);
+}
 
 b32 Parser::parse_parameter(AstNode **out) {
   AstNode *n = alloc_node();
@@ -395,6 +428,20 @@ b32 Parser::parse_type(AstNode **out) {
   return parse_identifier(out);
 }
 
+b32 Parser::parse_literal_string(AstNode **out) {
+  AstNode *n = alloc_node();
+
+  Token tok;
+  Try(expect_token(Tok_literal_string, &tok));
+
+  n->kind = Ast_literal_string;
+  n->span = tok.span;
+
+  *out = n;
+
+  return true;
+}
+
 b32 Parser::parse_literal_int(AstNode **out) {
   AstNode *n = alloc_node();
 
@@ -650,6 +697,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     n->unary_op.value = value;
 
     base = n;
+  } else if (tok.kind == Tok_keyword_cast) {
+    Todo();
   }
 
   *out = base;

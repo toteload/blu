@@ -180,6 +180,34 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_minus);
   }
 
+  if (c == '#') {
+    if (!is_identifier_start(*at)) {
+      Todo();
+    }
+
+    step();
+
+    while (!is_at_end() && is_identifier_rest(*at)) {
+      step();
+    }
+
+    Return_token(Tok_builtin);
+  }
+
+  if (c == '"') {
+    while (!is_at_end() && *at != '"') {
+      step();
+    }
+
+    if (is_at_end()) {
+      Todo();
+    }
+
+    step();
+
+    Return_token(Tok_literal_string);
+  }
+
   if (is_numeric(c)) {
     while (!is_at_end() && is_numeric(*at)) {
       step();
@@ -188,7 +216,7 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_literal_int);
   }
 
-  if (is_identifier_start(c) || c == '#') {
+  if (is_identifier_start(c)) {
     while (!is_at_end() && is_identifier_rest(*at)) {
       step();
     }
@@ -204,8 +232,8 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_if_match("or", Tok_keyword_or);
     Return_if_match("for", Tok_keyword_for);
     Return_if_match("in", Tok_keyword_in);
-
-    Return_if_match("#run", Tok_builtin_run);
+    Return_if_match("cast", Tok_keyword_cast);
+    Return_if_match("module", Tok_keyword_module);
 
     Return_token(Tok_identifier);
   }

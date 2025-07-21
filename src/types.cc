@@ -38,17 +38,19 @@ Type *infer_ast_type(CompilerContext *ctx, Env *env, AstNode *type) {
   return v->type;
 }
 
-b32 are_types_coercibly_equal(Type *a, Type *b) {
-  if (a == b) {
+b32 is_type_coercible_to(Type *src, Type *dst) {
+  if (src == dst) {
     return true;
   }
 
-  if ((a->kind == Type_Integer && b->kind == Type_IntegerConstant) || (a->kind == Type_IntegerConstant && b->kind == Type_Integer)) {
+  if (src->kind == Type_IntegerConstant && dst->kind == Type_Integer) {
     return true;
   }
 
   return false;
 }
+
+b32 is_assignable(CompilerContext *ctx, Env *env, AstNode *n) { return true; }
 
 Type *get_coerced_type(CompilerContext *ctx, Type *a, Type *b) {
   if (a->kind == Type_Integer && b->kind == Type_IntegerConstant) {
@@ -68,15 +70,13 @@ Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs,
   switch (op) {
   case Add:
   case Sub:
+  case Div:
   case Mul: {
-    // if both have same type and are integer types = return type is same type
-    // if one is integer type and other is integer_constant = return type is integer type
-
-    if (lhs == rhs && lhs->is_integer_or_integer_constant()) {
-      return lhs;
+    if (is_type_coercible_to(lhs, rhs)) {
+      return rhs;
     }
 
-    if (lhs->kind == Type_Integer && rhs->kind == Type_IntegerConstant) {
+    if (is_type_coercible_to(rhs, lhs)) {
       return lhs;
     }
 
@@ -84,26 +84,19 @@ Type *determine_binary_op_type(CompilerContext *ctx, BinaryOpKind op, Type *lhs,
   } break;
   case Cmp_equal:
   case Cmp_less_equal: {
-    if (lhs == rhs) {
-      return ctx->types._bool;
-    }
-
-    if (lhs->kind == Type_Integer && rhs->kind == Type_IntegerConstant) {
+    if (is_type_coercible_to(lhs, rhs) || is_type_coercible_to(rhs, lhs)) {
       return ctx->types._bool;
     }
 
     Todo();
   } break;
+  case Logical_or:
   case Logical_and: {
     if (lhs == rhs && lhs->kind == Type_Boolean) {
       return ctx->types._bool;
     }
+
     Todo();
-  } break;
-  case AddAssign: {
-    Type *t = get_coerced_type(ctx, lhs, rhs);
-      // TODO: make sure types are valid
-    return ctx->types._void;
   } break;
 
   // All cases should be handled
@@ -120,20 +113,35 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
   case Ast_declaration: {
     res = ctx->types._void;
 
-    auto const &decl = e->declaration;
+    auto &decl = e->declaration;
 
     Type *declared_type = infer_ast_type(ctx, env, decl.type);
     Type *v             = infer_expression_type(ctx, env, decl.value);
 
-    Debug_assert(are_types_coercibly_equal(declared_type, v));
+    if (!is_type_coercible_to(v, declared_type)) {
+      // Type error
+      Unimplemented;
+    }
 
-    Type *coerced_type = get_coerced_type(ctx, declared_type, v);
+    if (declared_type != v) {
+      // Add an explicit cast if the type is coercible and not the same
 
-    env->insert(decl.name->identifier.key, Value::make_local(e, coerced_type));
+      AstNode *n               = ctx->nodes.alloc();
+      n->type                  = declared_type;
+      n->kind                  = Ast_cast;
+      n->cast.destination_type = nullptr;
+      n->cast.value            = decl.value;
 
-    res = coerced_type;   
-    } break;
+      decl.value = n;
+    }
+
+    env->insert(decl.name->identifier.key, Value::make_local(e, declared_type));
+
+    res = declared_type;
+  } break;
   case Ast_assign: {
+    Debug_assert(is_assignable(ctx, env, e));
+
     Type *type = infer_expression_type(ctx, env, e->assign.value);
     Debug_assert(type);
   } break;
@@ -220,16 +228,15 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
     if (e->if_else.otherwise) {
       Type *otherwise = infer_expression_type(ctx, env, e->if_else.otherwise);
 
-      if (!are_types_coercibly_equal(then, otherwise)) {
-        // oopsie, the if and else branch have different types.
-        // This is not always a problem.
-        // For example, if one of the branches returns an integer constant and the other an
-        // integer than they are different types but can be coerced to agree.
+      Type *final_type = nullptr;
+      if (is_type_coercible_to(then, otherwise)) {
+        final_type = otherwise;
+      } else if (is_type_coercible_to(otherwise, then)) {
+        final_type = then;
+      } else {
         Todo();
         break;
       }
-
-      Type *final_type = get_coerced_type(ctx, then, otherwise);
 
       e->if_else.then->type      = final_type;
       e->if_else.otherwise->type = final_type;
@@ -260,8 +267,9 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
         break;
       }
 
-      Type *arg_type = infer_expression_type(ctx, env, arg);
-      Debug_assert(are_types_coercibly_equal(callee->function.params[i], arg_type));
+      Type *arg_type   = infer_expression_type(ctx, env, arg);
+      Type *param_type = callee->function.params[i];
+      Debug_assert(is_type_coercible_to(arg_type, param_type));
       i += 1;
     }
 
@@ -277,10 +285,19 @@ Type *infer_expression_type(CompilerContext *ctx, Env *env, AstNode *e) {
 
     Debug_assert(lhs && rhs);
 
+    if (e->binary_op.kind == AddAssign) {
+      Debug_assert(is_assignable(ctx, env, e->binary_op.lhs));
+      Debug_assert(is_type_coercible_to(rhs, lhs));
+      res = ctx->types._void;
+      break;
+    }
+
     res = determine_binary_op_type(ctx, e->binary_op.kind, lhs, rhs);
   } break;
   case Ast_unary_op: {
     res = infer_expression_type(ctx, env, e->unary_op.value);
+
+    // TODO: make sure that the unary operator is defined for the type of the expression
   } break;
   default:
     Unreachable();

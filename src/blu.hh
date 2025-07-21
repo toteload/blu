@@ -4,37 +4,12 @@
 #include "vector.hh"
 #include "hashmap.hh"
 
+#include "blu_token.hh"
+
 #include <stdio.h>
 
 struct CompilerContext;
 struct Type;
-
-// -[ Source location ]-
-
-struct SourceLocation {
-  u32 line      = 0;
-  u32 col       = 0;
-  char const *p = nullptr;
-};
-
-struct SourceSpan {
-  SourceLocation start;
-  SourceLocation end;
-
-  static SourceSpan from_single_location(SourceLocation loc) {
-    return {
-      loc,
-      {
-        loc.line,
-        loc.col + 1,
-        loc.p + 1,
-      }
-    };
-  }
-
-  usize len() { return end.p - start.p; }
-  Str str() { return {start.p, cast<u32>(len())}; }
-};
 
 // -[ String interner ]-
 
@@ -73,73 +48,6 @@ struct Message {
   char const *file = nullptr;
   u32 line         = 0;
 };
-
-// -[ Token ]-
-
-enum TokenKind : u32 {
-  Tok_colon,
-  Tok_arrow,
-  Tok_semicolon,
-  Tok_equals,
-  Tok_minus,
-  Tok_plus,
-  Tok_star,
-  Tok_slash,
-  Tok_percent,
-  Tok_plus_equals,
-  Tok_exclamation,
-  Tok_ampersand,
-  Tok_bar,
-  Tok_caret,
-  Tok_tilde,
-  Tok_left_shift,
-  Tok_right_shift,
-  Tok_cmp_eq,
-  Tok_cmp_ne,
-  Tok_cmp_gt,
-  Tok_cmp_ge,
-  Tok_cmp_lt,
-  Tok_cmp_le,
-  Tok_comma,
-  Tok_dot,
-  Tok_literal_int,
-  Tok_brace_open,
-  Tok_brace_close,
-  Tok_paren_open,
-  Tok_paren_close,
-  Tok_bracket_open,
-  Tok_bracket_close,
-  Tok_keyword_fn,
-  Tok_keyword_return,
-  Tok_keyword_if,
-  Tok_keyword_else,
-  Tok_keyword_while,
-  Tok_keyword_break,
-  Tok_keyword_continue,
-  Tok_keyword_and,
-  Tok_keyword_or,
-  Tok_keyword_for,
-  Tok_keyword_in,
-  Tok_identifier,
-  Tok_builtin_run,
-  Tok_line_comment,
-  Tok_kind_max,
-};
-
-struct Token {
-  TokenKind kind;
-  SourceSpan span;
-
-  Str str() { return Str{span.start.p, cast<u32>(span.len())}; }
-};
-
-enum TokenizerResult : u32 {
-  TokResult_ok,
-  TokResult_end,
-  TokResult_unrecognized_token,
-};
-
-b32 tokenize(CompilerContext *ctx, char const *source, usize len);
 
 // -[ AST ]-
 
@@ -193,6 +101,8 @@ enum AstKind : u32 {
 
   Ast_identifier,
   Ast_literal_int,
+  Ast_literal_string,
+
   Ast_declaration,
 
   Ast_assign,
@@ -215,7 +125,13 @@ enum AstKind : u32 {
 
   Ast_return,
 
+  Ast_builtin,
+
   Ast_kind_max,
+};
+
+enum BuiltinKind : u32 {
+  Builtin_import,
 };
 
 struct AstNode {
@@ -225,6 +141,11 @@ struct AstNode {
   AstNode *next = nullptr;
 
   union {
+    struct {
+      BuiltinKind kind;
+      AstNode *value;
+    } builtin;
+
     struct {
       AstNode *params;
       AstNode *return_type;
@@ -318,9 +239,15 @@ struct AstNode {
 
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
-b32 parse(CompilerContext *ctx);
+// - messages
+// - arena, to allocate messages
+// - AstNode allocator
+// - StringInterner
+b32 parse(CompilerContext *ctx, SourceFile *source);
 
-void debug_ast_node(AstNode *n);
+//
+
+b32 run_builtins(CompilerContext *ctx);
 
 // -[ Types ]-
 
@@ -501,9 +428,9 @@ struct Value {
 
   static Value make_iter_item(Type *type, AstNode *n) {
     Value val;
-    val.kind = Value_iter_item;
+    val.kind           = Value_iter_item;
     val.iter_item.type = type;
-    val.iter_item.ast = n;
+    val.iter_item.ast  = n;
     return val;
   }
 };
@@ -575,22 +502,31 @@ struct EnvManager {
 
 // -[ Compiler context ]-
 
+struct SourceFile {
+  Str filename;
+  Str source;
+
+  Vector<Token> tokens;
+};
+
 struct CompilerContext {
   Arena arena;
-  Vector<Message> messages;
+  Arena work_arena;
 
-  Allocator ref_allocator;
+  Vector<Message> messages;
 
   StringInterner strings;
   TypeInterner types;
-
-  Vector<Token> tokens;
   ObjectPool<AstNode> nodes;
-
   EnvManager environments;
-
   Env *global_environment;
-  AstNode *root;
+
+  Vector<SourceFile> sources;
+
+  // ---
+
+  void init();
+  b32 add_source_file_compile_job(Str filename);
 };
 
 // clang-format off

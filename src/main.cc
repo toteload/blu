@@ -2,53 +2,16 @@
 
 #include "blu.hh"
 
-void *stdlib_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
-  if (!Is_null(p) && new_byte_size == 0) {
-    free(p);
-    return nullptr;
-  }
-
-  return realloc(p, new_byte_size);
-}
-
-char const *read_file(char const *filename, usize *len) {
-  FILE *f = fopen(filename, "rb");
-  if (!f) {
-    return nullptr;
-  }
-
-  fseek(f, 0, SEEK_END);
-
-  u32 size   = ftell(f);
-  char *data = Cast(char *, malloc(size + 1));
-  if (!data) {
-    return nullptr;
-  }
-
-  fseek(f, 0, SEEK_SET);
-
-  u64 bytes_read = fread(data, 1, size, f);
-  if (bytes_read != size) {
-    return nullptr;
-  }
-
-  // Set a zero-terminated byte, but don't include it in the length.
-  data[size] = '\0';
-
-  *len = size;
-
-  return data;
-}
-
 char const *token_string[] = {
-  "colon",        "arrow",         "semicolon",  "equals",      "minus",       "plus",
-  "star",         "slash",         "percent",    "plus_equals", "exclamation", "ampersand",
-  "bar",          "caret",         "tilde",      "left-shift",  "right-shift", "cmp-eq",
-  "cmp-ne",       "cmp-gt",        "cmp-ge",     "cmp-lt",      "cmp-le",      "comma",
-  "dot",          "literal_int",   "brace_open", "brace_close", "paren_open",  "paren_close",
-  "bracket_open", "bracket_close", "fn",         "return",      "if",          "else",
-  "while",        "break",         "continue",   "and",         "or",          "for",
-  "in",           "identifier",    "#run",       "line_comment", "<illegal>",
+  "colon",        "arrow",        "semicolon",      "equals",      "minus",       "plus",
+  "star",         "slash",        "percent",        "plus_equals", "exclamation", "ampersand",
+  "bar",          "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",
+  "cmp-ne",       "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",
+  "dot",          "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open",
+  "paren_close",  "bracket_open", "bracket_close",  "fn",          "return",      "if",
+  "else",         "while",        "break",          "continue",    "and",         "or",
+  "for",          "in",           "cast",           "module",      "identifier",  "builtin",
+  "line_comment", "<illegal>",
 };
 
 char const *token_kind_string(u32 kind) {
@@ -78,9 +41,10 @@ void print_tokens(FILE *out, Slice<Token> tokens) {
 void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 char const *ast_string[] = {
-  "module",    "param",    "function",     "scope",      "identifier", "literal-int", "declaration",
-  "assign",    "while",    "break",        "continue",   "for",        "call",        "if-else",
-  "binary-op", "unary-op", "cast", "type_pointer", "type_slice", "deref",      "return",      "illegal",
+  "module",      "param",     "function", "scope", "identifier",   "literal-int", "literal-string",
+  "declaration", "assign",    "while",    "break", "continue",     "for",         "call",
+  "if-else",     "binary-op", "unary-op", "cast",  "type_pointer", "type_slice",  "deref",
+  "return",      "builtin",   "illegal",
 };
 
 char const *ast_kind_string(AstKind kind) {
@@ -129,9 +93,9 @@ void print_ast(FILE *out, AstNode *ref, u32 depth = 0) {
     print_ast(out, n._while.body, depth + 1);
   } break;
   case Ast_for: {
-    print_ast(out, n._for.item, depth+1);
-    print_ast(out, n._for.iterable, depth+1);
-    print_ast(out, n._for.body, depth+1);
+    print_ast(out, n._for.item, depth + 1);
+    print_ast(out, n._for.iterable, depth + 1);
+    print_ast(out, n._for.body, depth + 1);
   } break;
   case Ast_param: {
     print_ast(out, n.param.name, depth + 1);
@@ -226,60 +190,19 @@ void display_message(FILE *out, Message *msg) {
   );
 }
 
-void populate_global_environment(CompilerContext *ctx) {
-#define Add_type(Identifier, T)                                                                    \
-  {                                                                                                \
-    auto _id  = ctx->strings.add(Str_make(Identifier));                                            \
-    auto _tmp = T;                                                                                 \
-    auto _t   = ctx->types.add(&_tmp);                                                             \
-    ctx->global_environment->insert(_id, Value::make_type(_t));                                    \
-  }
-
-  // clang-format off
-  Add_type("i8",  Type::make_integer(Signed,  8));
-  Add_type("i16", Type::make_integer(Signed, 16));
-  Add_type("i32", Type::make_integer(Signed, 32));
-  Add_type("i64", Type::make_integer(Signed, 64));
-
-  Add_type("u8",  Type::make_integer(Unsigned,  8));
-  Add_type("u16", Type::make_integer(Unsigned, 16));
-  Add_type("u32", Type::make_integer(Unsigned, 32));
-  Add_type("u64", Type::make_integer(Unsigned, 64));
-
-  Add_type("bool", Type::make_bool());
-  Add_type("void", Type::make_void());
-  // clang-format on
-
-  {
-    auto id = ctx->strings.add(Str_make("true"));
-    ctx->global_environment->insert(id, Value::make_builtin(ctx->types._bool));
-  }
-
-#undef Add_type
-}
-
-int main() {
-  Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
-
-  usize source_len   = 0;
-  char const *source = read_file("fib.blu", &source_len);
-  if (source == nullptr) {
-    printf("Could not find source\n");
+int main(i32 arg_count, char const * const args) {
+  if (arg_count < 2) {
+    printf("Please provide an input file\n");
     return 1;
   }
 
-  CompilerContext compiler_context;
-  compiler_context.arena.init(MiB(32));
-  compiler_context.messages.init(stdlib_alloc);
-  compiler_context.ref_allocator = stdlib_alloc;
-  compiler_context.strings.init(stdlib_alloc, stdlib_alloc, stdlib_alloc);
-  compiler_context.types.init(&compiler_context.arena, stdlib_alloc, stdlib_alloc);
-  compiler_context.tokens.init(stdlib_alloc);
-  compiler_context.nodes.init(stdlib_alloc);
-  compiler_context.environments.init(stdlib_alloc, stdlib_alloc);
-  compiler_context.global_environment = compiler_context.environments.alloc();
+  Arena work_arena;
+  work_arena.init(MiB(1));
 
-  populate_global_environment(&compiler_context);
+  Str source_filename = Str::from_cstr(args[1]);
+
+  CompilerContext compiler_context;
+  compiler_context.init();
 
   b32 ok;
   ok = tokenize(&compiler_context, source, source_len);
@@ -305,6 +228,13 @@ int main() {
   }
 
   print_ast(stdout, compiler_context.root);
+
+  printf("Run builtins ... ");
+  ok = run_builtins(&compiler_context);
+  if (!ok) {
+    return 1;
+  }
+  printf("DONE\n");
 
   printf("Type inference ... ");
   ok = infer_types(&compiler_context, compiler_context.root);
