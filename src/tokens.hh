@@ -1,32 +1,4 @@
-#pragma once
-
-#include "toteload.hh"
-
-// -[ Source location ]-
-
-struct SourceLocation {
-  u32 line      = 0;
-  u32 col       = 0;
-};
-
-struct SourceSpan {
-  SourceLocation start;
-  SourceLocation end;
-
-  static SourceSpan from_single_location(SourceLocation loc) {
-    return {
-      loc,
-      {
-        loc.line,
-        loc.col + 1,
-      }
-    };
-  }
-};
-
-// -[ Token ]-
-
-enum TokenKind : u32 {
+enum TokenKind : u8 {
   Tok_colon,
   Tok_arrow,
   Tok_semicolon,
@@ -78,19 +50,3 @@ enum TokenKind : u32 {
   Tok_line_comment,
   Tok_kind_max,
 };
-
-struct Token {
-  TokenKind kind;
-  SourceSpan span;
-  Str str;
-};
-
-enum TokenizerResult : u32 {
-  TokResult_ok,
-  TokResult_end,
-  TokResult_unrecognized_token,
-};
-
-// Arena is only used to allocate memory for potential messages.
-b32 tokenize(Str source, Vector<Token> *out, Arena *arena, Vector<Message> *messages);
-

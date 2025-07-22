@@ -19,7 +19,7 @@ build $outdir\parse.o: compile_cpp_debug src\parse.cc
 build $outdir\builtins.o: compile_cpp_debug src\builtins.cc
 build $outdir\string_interner.o: compile_cpp_debug src\string_interner.cc
   cflags = -Iext
-build $outdir\types.o: compile_cpp_debug src\types.cc
+build $outdir\typecheck.o: compile_cpp_debug src\typecheck.cc
 build $outdir\c_generator.o: compile_cpp_debug src\c_generator.cc
 
 build $outdir\type_interner.o: compile_cpp_debug src\type_interner.cc
@@ -27,5 +27,5 @@ build $outdir\type_interner.o: compile_cpp_debug src\type_interner.cc
 
 build $outdir\blu.exe: build_binary $outdir\main.o $outdir\tokenize.o $
     $outdir\parse.o $outdir\string_interner.o $outdir\builtins.o $
-    $outdir\types.o $outdir\c_generator.o $outdir\compiler_context.o $
+    $outdir\typecheck.o $outdir\c_generator.o $outdir\compiler_context.o $
     $outdir\type_interner.o $outdir\toteload.o

@@ -1,14 +1,22 @@
 #include "blu.hh"
 
+enum TokenizerResult : u32 {
+  TokResult_ok,
+  TokResult_end,
+  TokResult_unrecognized_token,
+};
+
 struct Tokenizer {
-  CompilerContext *ctx;
+  TokenizeContext *ctx;
+
   char const *at;
   char const *end;
 
   SourceLocation current_location;
 
-  void init(CompilerContext *ctx, char const *source, char const *end);
-  TokenizerResult next(Token *tok);
+  void init(TokenizeContext *ctx, Str source);
+
+  TokenizerResult next(TokenKind *kind, SourceSpan *span, Str *str);
 
   void step();
   void skip_whitespace();
@@ -46,14 +54,14 @@ void Tokenizer::step_until_new_line() {
   }
 }
 
-void Tokenizer::init(CompilerContext *ctx, char const *source, char const *end) {
+void Tokenizer::init(TokenizeContext *ctx, Str source) {
   this->ctx = ctx;
+
   this->at  = source;
   this->end = end;
 
   current_location.line = 1;
   current_location.col  = 1;
-  current_location.p    = source;
 }
 
 #define Return_token(Kind)                                                                         \
@@ -244,7 +252,7 @@ TokenizerResult Tokenizer::next(Token *tok) {
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(CompilerContext *ctx, char const *source, usize len) {
+b32 tokenize(TokenizeContext ctx, Str source, TokenizeOutput output) {
   Tokenizer tokenizer;
 
   tokenizer.init(ctx, source, source + len);

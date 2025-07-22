@@ -190,7 +190,7 @@ void display_message(FILE *out, Message *msg) {
   );
 }
 
-int main(i32 arg_count, char const * const args) {
+int main(i32 arg_count, char const *const args) {
   if (arg_count < 2) {
     printf("Please provide an input file\n");
     return 1;

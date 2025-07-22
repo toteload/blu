@@ -108,9 +108,7 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 // ---
 
-struct CStr {
-  
-};
+struct CStr {};
 
 struct Str {
   char const *str = nullptr;
@@ -118,14 +116,12 @@ struct Str {
 
   bool is_ok() { return str && len; }
 
-  static Str empty() {
-    return {};
-  }
+  static Str empty() { return {}; }
 
   static Str from_cstr(char const *s) {
     // We don't include the null terminator in the length
     usize len = strlen(s);
-    return { s, len };
+    return {s, len};
   }
 };
 

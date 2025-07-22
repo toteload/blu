@@ -106,11 +106,11 @@ void TypeInterner::init(Arena *arena, Allocator storage_allocator, Allocator map
     Identifier = add(&_tmp);                                                                       \
   }
 
-  Add_type(_bool, Type::make_bool());
-  Add_type(_i32, Type::make_integer(Signed, 32));
-  Add_type(_integer_constant, Type::make_integer_constant());
-  Add_type(_void, Type::make_void());
-  Add_type(_never, Type::make_never());
+  Add_type(bool_, Type::make_bool());
+  Add_type(i32_, Type::make_integer(Signed, 32));
+  Add_type(integer_constant, Type::make_integer_constant());
+  Add_type(void_, Type::make_void());
+  Add_type(never, Type::make_never());
 
 #undef Add_type
 }
