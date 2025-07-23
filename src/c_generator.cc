@@ -239,16 +239,16 @@ void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst)
   } break;
   case Ast_while: {
     print("while (");
-    output_expression(n->_while.cond);
+    output_expression(n->while_.cond);
     print(") {\n");
-    output_expression(n->_while.body);
+    output_expression(n->while_.body);
     print("}\n");
   } break;
   case Ast_for: {
     Str i        = gensym();
     Str iterable = gensym();
 
-    output_variable_declaration(iterable, n->_for.iterable->type, n->_for.iterable);
+    output_variable_declaration(iterable, n->for_.iterable->type, n->for_.iterable);
 
     print("for (i64 ");
     output_str(i);
@@ -260,19 +260,19 @@ void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst)
     output_str(i);
     print(" += 1) {\n");
 
-    Str item = n->_for.item->span.str();
-    output_type(n->_for.item->type);
+    Str item = n->for_.item->span.str();
+    output_type(n->for_.item->type);
     print(" ");
     output_str(item);
     print(" = ");
     print("((");
-    output_type(n->_for.item->type);
+    output_type(n->for_.item->type);
     print("*)");
     output_str(iterable);
     print(".data)[");
     output_str(i);
     print("];\n");
-    output_expression(n->_for.body);
+    output_expression(n->for_.body);
     print("}\n");
   } break;
   case Ast_assign: {
@@ -289,7 +289,7 @@ void CGenerator<Writer>::output_expression(AstNode *n, b32 is_terminal, Str dst)
   } break;
   case Ast_return: {
     print("return ");
-    output_expression(n->_return.value);
+    output_expression(n->return_.value);
     print(";\n");
   } break;
   case Ast_literal_int:

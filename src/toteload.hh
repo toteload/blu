@@ -99,8 +99,8 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 #define Panic() abort()
 #define Unreachable() Panic()
-#define Todo() Panic()
-#define Unimplemented assert(!"Unimplemented");
+#define Todo() assert(!"TODO")
+#define Unimplemented() assert(!"Unimplemented")
 
 // ---
 
@@ -115,6 +115,7 @@ struct Str {
   usize len       = 0;
 
   bool is_ok() { return str && len; }
+  char const *end() { return str + len; }
 
   static Str empty() { return {}; }
 
@@ -136,9 +137,11 @@ ttld_inline b32 str_eq(Str a, Str b) {
 
 template<typename T> struct Slice {
   T *data;
-  usize len;
+  usize _len;
 
   T &operator[](usize idx) { return data[idx]; }
+  usize len() { return _len; }
+  T *end() { return data + _len; }
 };
 
 // @os
@@ -275,12 +278,12 @@ template<typename T> struct ObjectPool {
 };
 
 template<typename T> void ObjectPool<T>::deinit() {
-  Block<T> *at = blocks;
+  Block *at = blocks;
 
   while (at != nullptr) {
     at = at->next;
 
-    backing.dealloc(/* TODO */);
+    backing.free(at);
   }
 
   blocks   = nullptr;

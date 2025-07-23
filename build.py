@@ -8,8 +8,11 @@ import platform
 
 join = os.path.join
 
+is_macos = platform.system() == 'Darwin'
+is_windows = platform.system() == 'Windows'
+
 def exe(name):
-    if platform.system() == 'Windows':
+    if is_windows:
         return f'{name}.exe'
     else:
         return name
@@ -29,33 +32,36 @@ def create_build_ninja():
         )
 
     out.rule(
-        name    = 'compile_c_debug',
+        name    = 'compile_cpp_debug',
         depfile = '$out.d',
-        command = ' '.join((
-                  'clang',
+        command = ' '.join([
+                  'clang++',
                   '-MD -MF $out.d',
                   '-Wall -Wextra',
-                  #'-O2 -S -mllvm --x86-asm-syntax=intel',
-                  '-g -gcodeview',
-                  '-fansi-escape-codes -fcolor-diagnostics',
-                  '-march=native',
                   '-Wno-unused-parameter',
+                  #'-O2 -S -mllvm --x86-asm-syntax=intel',
+                  '-fansi-escape-codes -fcolor-diagnostics',
+                  '-march=native -std=c++17',
+                  '-DTTLD_DEBUG',
+                  '-g' if is_macos else '',
+'-g -gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
                   '$cflags',
                   '-c',
                   '$in',
                   '-o $out',
-                  ))
+
+                  ])
         )
 
     out.rule(
         name = 'build_binary',
-        command = 'clang -g $in -o $out',
+        command = 'clang++ -g $in -o $out',
         )
 
     out.build(
         outputs   = outd('main.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'main.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'main.cc'),
         variables = {
             'cflags': '',
         },
@@ -63,8 +69,8 @@ def create_build_ninja():
 
     out.build(
         outputs   = outd('toteload.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'toteload.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'toteload.cc'),
         variables = {
             'cflags': '',
         },
@@ -72,8 +78,8 @@ def create_build_ninja():
 
     out.build(
         outputs   = outd('tokenize.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'tokenize.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'tokenize.cc'),
         variables = {
             'cflags': '',
         },
@@ -81,172 +87,61 @@ def create_build_ninja():
 
     out.build(
         outputs   = outd('parse.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'parse.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'parse.cc'),
         variables = {
             'cflags': '',
         },
         )
 
     out.build(
-        outputs   = outd('keke_helpers.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'keke_helpers.c'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('value_store.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'value_store.c'),
+        outputs   = outd('type_interner.o'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'type_interner.cc'),
         variables = {
             'cflags': '-Iext',
+        },
+        )
+
+    out.build(
+        outputs   = outd('c_generator.o'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'c_generator.cc'),
+        variables = {
+            'cflags': '',
         },
         )
 
     out.build(
         outputs   = outd('string_interner.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'string_interner.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'string_interner.cc'),
         variables = {
             'cflags': '-Iext',
         },
         )
 
     out.build(
-        outputs   = outd('ir.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'ir.c'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
         outputs   = outd('typecheck.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'typecheck.c'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'typecheck.cc'),
         variables = {
             'cflags': '',
         },
         )
 
     out.build(
-        outputs   = outd('value_check.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'value_check.c'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('typeresolve.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('src', 'typeresolve.c'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs = outd(exe('keke')),
+        outputs = outd(exe('blu')),
         rule = 'build_binary',
         inputs = [
             outd('main.o'),
             outd('tokenize.o'),
             outd('parse.o'),
-            outd('string_interner.o'),
-            outd('value_store.o'),
-            outd('keke_helpers.o'),
-            outd('ir.o'),
             outd('typecheck.o'),
-            outd('typeresolve.o'),
-            outd('value_check.o'),
-            outd('toteload.o'),
-        ],
-        )
-
-    toteload_test(out)
-    hashmap_test(out)
-    string_interner_test(out)
-    hashmap_fuzz_test(out)
-
-def toteload_test(out):
-    out.build(
-        outputs   = outd('toteload.test.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('test', 'toteload.test.c'),
-        variables = {
-            'cflags': '-Isrc',
-        },
-        )
-
-    out.build(
-        outputs = outd(exe('toteload.test')),
-        rule = 'build_binary',
-        inputs = [
-            outd('toteload.test.o'),
-            outd('toteload.o'),
-        ],
-        )
-
-def string_interner_test(out):
-    out.build(
-        outputs = outd('string_interner.test.o'),
-        rule    = 'compile_c_debug',
-        inputs  = join('test', 'string_interner.test.c'),
-        variables = {
-            'cflags': '-Isrc',
-        },
-        )
-
-    out.build(
-        outputs = outd(exe('string_interner.test')),
-        rule = 'build_binary',
-        inputs = [
-            outd('string_interner.test.o'),
             outd('string_interner.o'),
+            outd('type_interner.o'),
             outd('toteload.o'),
-        ],
-        )
-
-def hashmap_test(out):
-    out.build(
-        outputs = outd('hashmap.test.o'),
-        rule    = 'compile_c_debug',
-        inputs  = join('test', 'hashmap.test.c'),
-        variables = {
-            'cflags': '-Isrc',
-        },
-        )
-
-    out.build(
-        outputs = outd(exe('hashmap.test')),
-        rule = 'build_binary',
-        inputs = [
-            outd('hashmap.test.o'),
-            outd('toteload.o'),
-        ],
-        )
-
-def hashmap_fuzz_test(out):
-    out.build(
-        outputs   = outd('hashmap.fuzz.o'),
-        rule      = 'compile_c_debug',
-        inputs    = join('test', 'hashmap.fuzz.c'),
-        variables = {
-            'cflags': '-Isrc -Iext',
-        },
-        )
-    
-    out.build(
-        outputs = outd(exe('hashmap.fuzz')),
-        rule = 'build_binary',
-        inputs = [
-            outd('hashmap.fuzz.o'),
+            outd('c_generator.o'),
         ],
         )
 

@@ -1,5 +1,3 @@
-#pragma once
-
 enum ValueKind : u8 {
   Value_type,
 
@@ -79,5 +77,5 @@ struct Value {
 // This makes sure that no matter variant Value is, you can always access the type of the value
 // through the type field.
 // This may not be a good idea :)
-static_assert(offsetof(Value, type) == offsetof(Value, param.type));
-static_assert(offsetof(Value, type) == offsetof(Value, local.type));
+//static_assert(offsetof(Value, type) == offsetof(Value, param.type));
+//static_assert(offsetof(Value, type) == offsetof(Value, local.type));

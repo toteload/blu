@@ -7,14 +7,14 @@ enum TokenizerResult : u32 {
 };
 
 struct Tokenizer {
-  TokenizeContext *ctx;
+  TokenizeContext ctx;
 
   char const *at;
   char const *end;
 
   SourceLocation current_location;
 
-  void init(TokenizeContext *ctx, Str source);
+  void init(TokenizeContext ctx, Str source);
 
   TokenizerResult next(TokenKind *kind, SourceSpan *span, Str *str);
 
@@ -32,7 +32,6 @@ void Tokenizer::step() {
     current_location.col += 1;
   }
 
-  current_location.p += 1;
   at                 += 1;
 }
 
@@ -54,11 +53,11 @@ void Tokenizer::step_until_new_line() {
   }
 }
 
-void Tokenizer::init(TokenizeContext *ctx, Str source) {
+void Tokenizer::init(TokenizeContext ctx, Str source) {
   this->ctx = ctx;
 
-  this->at  = source;
-  this->end = end;
+  this->at  = source.str;
+  this->end = source.end();
 
   current_location.line = 1;
   current_location.col  = 1;
@@ -66,18 +65,19 @@ void Tokenizer::init(TokenizeContext *ctx, Str source) {
 
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
-    tok->kind       = Kind;                                                                        \
-    tok->span.start = start;                                                                       \
-    tok->span.end   = current_location;                                                            \
+    *kind       = Kind;                                                                        \
+    span->start = start;                                                                       \
+    span->end   = current_location;                                                            \
+    *str = { pstart, cast<usize>(at - pstart), }; \
     return TokResult_ok;                                                                           \
   }
 
 #define Return_if_match(String, Kind)                                                              \
-  if (str_eq(Str_make(String), {start.p, cast<u32>(current_location.p - start.p)})) {              \
+  if (str_eq(Str_make(String), {pstart, cast<usize>(at - pstart)})) {              \
     Return_token(Kind);                                                                            \
   }
 
-TokenizerResult Tokenizer::next(Token *tok) {
+TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
   skip_whitespace();
 
   if (is_at_end()) {
@@ -85,6 +85,7 @@ TokenizerResult Tokenizer::next(Token *tok) {
   }
 
   char c               = *at;
+  char const *pstart = at;
   SourceLocation start = current_location;
 
   step();
@@ -246,27 +247,26 @@ TokenizerResult Tokenizer::next(Token *tok) {
     Return_token(Tok_identifier);
   }
 
-  Str msg = ctx->arena.push_format_string("Unrecognized character '%c'\n", c);
-  ctx->messages.push({SourceSpan::from_single_location(start), Error, msg});
+  Str msg = ctx.arena->push_format_string("Unrecognized character '%c'\n", c);
+  ctx.messages->push({SourceSpan::from_single_location(start), Error, msg});
 
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(TokenizeContext ctx, Str source, TokenizeOutput output) {
+b32 tokenize(TokenizeContext ctx, Str source, Vector<Token> *output) {
   Tokenizer tokenizer;
-
-  tokenizer.init(ctx, source, source + len);
+  tokenizer.init(ctx, source);
 
   TokenizerResult res;
   while (true) {
     Token tok;
-    res = tokenizer.next(&tok);
+    res = tokenizer.next(&tok.kind, &tok.span, &tok.str);
 
     if (res != TokResult_ok) {
       break;
     }
 
-    ctx->tokens.push(tok);
+    output->push(tok);
   }
 
   return res == TokResult_end;

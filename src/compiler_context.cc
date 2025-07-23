@@ -59,38 +59,7 @@ void CompilerContext::init() {
   types.init(&compiler_context.arena, stdlib_alloc, stdlib_alloc);
   nodes.init(stdlib_alloc);
   environments.init(stdlib_alloc, stdlib_alloc);
-  global_environment = compiler_context.environments.alloc();
   sources.init(stdlib_alloc);
-
-#define Add_type(Identifier, T)                                                                    \
-  {                                                                                                \
-    auto _id  = ctx->strings.add(Str_make(Identifier));                                            \
-    auto _tmp = T;                                                                                 \
-    auto _t   = ctx->types.add(&_tmp);                                                             \
-    ctx->global_environment->insert(_id, Value::make_type(_t));                                    \
-  }
-
-  // clang-format off
-  Add_type("i8",  Type::make_integer(Signed,  8));
-  Add_type("i16", Type::make_integer(Signed, 16));
-  Add_type("i32", Type::make_integer(Signed, 32));
-  Add_type("i64", Type::make_integer(Signed, 64));
-
-  Add_type("u8",  Type::make_integer(Unsigned,  8));
-  Add_type("u16", Type::make_integer(Unsigned, 16));
-  Add_type("u32", Type::make_integer(Unsigned, 32));
-  Add_type("u64", Type::make_integer(Unsigned, 64));
-
-  Add_type("bool", Type::make_bool());
-  Add_type("void", Type::make_void());
-  // clang-format on
-
-#undef Add_type
-
-  {
-    auto id = ctx->strings.add(Str_make("true"));
-    ctx->global_environment->insert(id, Value::make_builtin(ctx->types._bool));
-  }
 }
 
 b32 CompilerContext::add_source_file_compile_job(Str filename) {

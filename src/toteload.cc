@@ -28,7 +28,34 @@ b32 mem_commit(void *p, usize size) {
 void mem_release(void *p, usize size) {
   VirtualFree(p, size, MEM_RELEASE);
 }
+#endif
 
+#ifdef __APPLE__
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
+static u32 macos_page_size = 0;
+
+u32 page_size() {
+  if (macos_page_size == 0) {
+    macos_page_size = getpagesize();
+  }
+
+  return macos_page_size;
+}
+
+void *mem_reserve(usize size) {
+  return mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+}
+
+b32 mem_commit(void *p, usize size) {
+  return 0 != mprotect(p, size, PROT_READ | PROT_WRITE);
+}
+
+void mem_release(void *p, usize size) {
+  munmap(p, size);
+}
 #endif
 }
 

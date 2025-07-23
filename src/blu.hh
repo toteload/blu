@@ -5,7 +5,6 @@
 #include "hashmap.hh"
 
 #include "string_interner.hh"
-#include "env.hh"
 
 #include <stdio.h>
 
@@ -52,20 +51,34 @@ struct Message {
 
 #include "tokens.hh"
 
+struct Token {
+  TokenKind kind;
+  SourceSpan span;
+  Str str;
+};
+
 struct TokenizeContext {
   Arena *arena;
   Vector<Message> *messages;
 };
 
-struct TokenizeOutput {
-  Vector<TokenKind> *out;
-  Vector<SourceSpan> *spans;
-  Vector<Str> *strs;
-};
+// TODO: Convert tokenize output of tokens to SoA layout
 
-b32 tokenize(TokenizeContext ctx, Str source, TokenizeOutput output);
+b32 tokenize(TokenizeContext ctx, Str source, Vector<Token> *output);
 
 #include "ast.hh"
+
+ttld_inline Str get_ast_str(AstNode *node, Slice<Token> tokens) {
+  char const *start = tokens[node->token_span.start].str.str;
+  char const *end = tokens[node->token_span.end].str.end();
+  return { start, cast<usize>(end - start), };
+}
+
+ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
+  SourceLocation start = tokens[node->token_span.start].span.start;
+  SourceLocation end = tokens[node->token_span.end].span.end;
+  return { start, end, };
+}
 
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
@@ -77,35 +90,56 @@ struct ParseContext {
   ObjectPool<AstNode> *nodes;
 };
 
-b32 parse(ParseContext ctx, TokenizeOutput tokens, AstNode **root);
+b32 parse(ParseContext ctx, Slice<Token> tokens, AstNode **root);
+
+#include "value.hh"
+#include "env.hh"
 
 struct TypeCheckContext {
   Arena *arena;
   Vector<Message> *messages;
+
+  Arena *work_arena;
 
   EnvManager *envs;
   TypeInterner *types;
   ObjectPool<AstNode> *nodes;
 };
 
-b32 infer_types(TypeCheckContext ctx, AstNode *root);
+b32 type_check_module(TypeCheckContext ctx, AstNode *module);
 
-//b32 generate_c_code(CompilerContext *ctx, FILE *out, AstNode *mod);
+struct CCodeGenerateContext {
+  Arena *work_arena;
+
+};
+
+b32 generate_c_code(CCodeGenerateContext *ctx, AstNode *mod);
 
 // -[ Compiler context ]-
 
-struct SourceFile {
-  Str filename;
-  Str source;
-
-  Vector<TokenKind> tokens;
-  Vector<SourceSpan> spans;
-  Vector<Str> strs;
-
-  AstNode *root = nullptr;
+enum JobKind : u8 {
+  Job_read_file,
+  Job_tokenize,
+  Job_parse,
+  Job_typecheck,
 };
 
-struct CompilerContext {
+typedef u32 SourceIdx;
+
+struct Job {
+  JobKind kind;
+  SourceIdx source_idx;
+};
+
+struct Source {
+  Str filename;
+
+  Str text;
+  Vector<Token> tokens;
+  AstNode *mod = nullptr;
+};
+
+struct Compiler {
   Arena arena;
   Arena work_arena;
 
@@ -115,14 +149,16 @@ struct CompilerContext {
   TypeInterner types;
   ObjectPool<AstNode> nodes;
   EnvManager environments;
-  Env *global_environment;
 
-  Vector<SourceFile> sources;
+  Vector<Source> sources;
+  Queue<Job> jobs;
 
   // ---
 
   void init();
   b32 add_source_file_compile_job(Str filename);
+
+  void run();
 };
 
 // clang-format off
