@@ -2,6 +2,7 @@
 
 #include "toteload.hh"
 #include "vector.hh"
+#include "queue.hh"
 #include "hashmap.hh"
 
 #include "string_interner.hh"
@@ -128,7 +129,7 @@ typedef u32 SourceIdx;
 
 struct Job {
   JobKind kind;
-  SourceIdx source_idx;
+  SourceIdx src_idx;
 };
 
 struct Source {
@@ -136,6 +137,7 @@ struct Source {
 
   Str text;
   Vector<Token> tokens;
+
   AstNode *mod = nullptr;
 };
 
@@ -156,7 +158,7 @@ struct Compiler {
   // ---
 
   void init();
-  b32 add_source_file_compile_job(Str filename);
+  b32 add_source_file_job(Str filename);
 
   void run();
 };

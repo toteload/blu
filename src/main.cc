@@ -206,9 +206,6 @@ int main(i32 arg_count, char const *const *args) {
 
   Str source_filename = Str::from_cstr(args[1]);
 
-  CompilerContext compiler_context;
-  compiler_context.init();
-
   printf("DONE\n");
 
   return 0;

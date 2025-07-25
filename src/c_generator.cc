@@ -26,7 +26,6 @@ struct CFileWriter {
 };
 
 template<typename Writer> struct CGenerator {
-  CompilerContext *ctx;
   Writer writer;
 
   u32 sym_id = 0;
@@ -431,7 +430,7 @@ template<typename Writer> void CGenerator<Writer>::output_module(AstNode *n) {
   }
 }
 
-b32 generate_c_code(CompilerContext *ctx, FILE *out, AstNode *mod) {
+b32 generate_c_code(TypeCheckContext ctx, AstNode *mod) {
   CFileWriter writer;
   writer.out = out;
 

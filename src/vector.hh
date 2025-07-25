@@ -1,3 +1,5 @@
+#pragma once
+
 template<typename T> struct Vector {
   Allocator alloc;
   usize len;
@@ -17,6 +19,15 @@ template<typename T> struct Vector {
   T *end() { return data + len; }
 
   Slice<T> slice() { return Slice<T>{data, len}; }
+
+  T shift_left() {
+    T res = data[0];
+
+    memmove(data, data + 1, (len - 1) * sizeof(T));
+    len -= 1;
+
+    return res;
+  }
 
   Vector<T> move();
 };
