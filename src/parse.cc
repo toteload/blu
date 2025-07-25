@@ -47,8 +47,8 @@ struct Parser {
 
   u32 token_offset() { return cast<u32>(at - tokens.data); }
 
-  AstNode *alloc_node() { 
-    AstNode *n = ctx.nodes->alloc();
+  AstNode *alloc_node() {
+    AstNode *n          = ctx.nodes->alloc();
     n->token_span.start = token_offset();
     return n;
   }
@@ -70,9 +70,9 @@ struct Parser {
 };
 
 void Parser::init(ParseContext ctx, Slice<Token> tokens) {
-  this->ctx = ctx;
+  this->ctx    = ctx;
   this->tokens = tokens;
-  at        = tokens.data;
+  at           = tokens.data;
 }
 
 b32 Parser::next(Token *out) {
@@ -131,9 +131,9 @@ b32 Parser::parse_module(AstNode **out) {
 
   tail->next = nullptr;
 
+  n->kind           = Ast_module;
+  n->module.items   = items;
   n->token_span.end = token_offset();
-  n->kind         = Ast_module;
-  n->module.items = items;
 
   *out = n;
 
@@ -144,16 +144,16 @@ b32 Parser::parse_builtin(AstNode **out) {
   Token tok;
   next(&tok);
 
-  if (true /* is import builtin */) {
+  if (true /* is include builtin */) {
     AstNode *filename;
     Try(parse_literal_string(&filename));
 
     AstNode *n = alloc_node();
 
-  n->token_span.end = token_offset();
-    n->kind          = Ast_builtin;
-    n->builtin.kind  = Builtin_import;
-    n->builtin.value = filename;
+    n->kind           = Ast_builtin;
+    n->builtin.kind   = Builtin_include;
+    n->builtin.value  = filename;
+    n->token_span.end = token_offset();
 
     *out = n;
 
@@ -185,9 +185,9 @@ b32 Parser::parse_parameter(AstNode **out) {
   AstNode *type;
   Try(parse_type(&type));
 
-  n->kind       = Ast_param;
-  n->param.name = name;
-  n->param.type = type;
+  n->kind           = Ast_param;
+  n->param.name     = name;
+  n->param.type     = type;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -244,7 +244,7 @@ b32 Parser::parse_function(AstNode **out) {
   n->function.params      = params;
   n->function.return_type = return_type;
   n->function.body        = body;
-  n->token_span.end = token_offset();
+  n->token_span.end       = token_offset();
 
   *out = n;
 
@@ -286,7 +286,7 @@ b32 Parser::parse_scope(AstNode **out) {
 
   n->kind              = Ast_scope;
   n->scope.expressions = expressions;
-  n->token_span.end = token_offset();
+  n->token_span.end    = token_offset();
 
   *out = n;
 
@@ -335,7 +335,7 @@ b32 Parser::parse_declaration(AstNode **out) {
   n->declaration.name     = identifier;
   n->declaration.type     = type;
   n->declaration.value    = value;
-  n->token_span.end = token_offset();
+  n->token_span.end       = token_offset();
 
   *out = n;
 
@@ -361,7 +361,7 @@ b32 Parser::parse_continue(AstNode **out) {
   Token tok;
   Try(expect_token(Tok_keyword_continue, &tok));
 
-  n->kind = Ast_continue;
+  n->kind           = Ast_continue;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -377,8 +377,8 @@ b32 Parser::parse_return(AstNode **out) {
   AstNode *value_ref;
   Try(parse_expression(&value_ref));
 
-  n->kind          = Ast_return;
-  n->return_.value = value_ref;
+  n->kind           = Ast_return;
+  n->return_.value  = value_ref;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -415,9 +415,9 @@ b32 Parser::parse_type(AstNode **out) {
     AstNode *base;
     Try(parse_type(&base));
 
-    n->kind         = Ast_type_pointer;
-    n->pointer.base = base;
-  n->token_span.end = token_offset();
+    n->kind           = Ast_type_pointer;
+    n->pointer.base   = base;
+    n->token_span.end = token_offset();
 
     *out = n;
 
@@ -433,9 +433,9 @@ b32 Parser::parse_type(AstNode **out) {
     AstNode *base;
     Try(parse_type(&base));
 
-    n->kind       = Ast_type_slice;
-    n->slice.base = base;
-  n->token_span.end = token_offset();
+    n->kind           = Ast_type_slice;
+    n->slice.base     = base;
+    n->token_span.end = token_offset();
 
     *out = n;
 
@@ -451,7 +451,7 @@ b32 Parser::parse_literal_string(AstNode **out) {
   Token tok;
   Try(expect_token(Tok_literal_string, &tok));
 
-  n->kind = Ast_literal_string;
+  n->kind           = Ast_literal_string;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -465,7 +465,7 @@ b32 Parser::parse_literal_int(AstNode **out) {
   Token tok;
   Try(expect_token(Tok_literal_int, &tok));
 
-  n->kind = Ast_literal_int;
+  n->kind           = Ast_literal_int;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -490,9 +490,9 @@ b32 Parser::parse_while(AstNode **out) {
   AstNode *body;
   Try(parse_scope(&body));
 
-  n->kind        = Ast_while;
-  n->while_.cond = cond;
-  n->while_.body = body;
+  n->kind           = Ast_while;
+  n->while_.cond    = cond;
+  n->while_.body    = body;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -517,10 +517,10 @@ b32 Parser::parse_for(AstNode **out) {
   AstNode *body;
   Try(parse_scope(&body));
 
-  n->kind          = Ast_for;
-  n->for_.item     = item;
-  n->for_.iterable = iterable;
-  n->for_.body     = body;
+  n->kind           = Ast_for;
+  n->for_.item      = item;
+  n->for_.iterable  = iterable;
+  n->for_.body      = body;
   n->token_span.end = token_offset();
 
   *out = n;
@@ -624,10 +624,10 @@ b32 Parser::parse_base_expression_post(AstNode *base, AstNode **out) {
       AstNode *args = nullptr;
       Try(parse_arguments(&args));
 
-      n->kind        = Ast_call;
-      n->call.callee = lhs;
-      n->call.args   = args;
-  n->token_span.end = token_offset();
+      n->kind           = Ast_call;
+      n->call.callee    = lhs;
+      n->call.args      = args;
+      n->token_span.end = token_offset();
 
       lhs = n;
 
@@ -641,9 +641,9 @@ b32 Parser::parse_base_expression_post(AstNode *base, AstNode **out) {
 
       Try(expect_token(Tok_star));
 
-      n->kind        = Ast_deref;
-      n->deref.value = lhs;
-  n->token_span.end = token_offset();
+      n->kind           = Ast_deref;
+      n->deref.value    = lhs;
+      n->token_span.end = token_offset();
 
       lhs = n;
 
@@ -716,7 +716,7 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     n->kind           = Ast_unary_op;
     n->unary_op.kind  = op;
     n->unary_op.value = value;
-  n->token_span.end = token_offset();
+    n->token_span.end = token_offset();
 
     base = n;
   } else if (tok.kind == Tok_keyword_cast) {
@@ -796,7 +796,7 @@ b32 Parser::parse_expression(AstNode **out, BinaryOpKind prev_op) {
       n->binary_op.lhs  = lhs;
       n->binary_op.rhs  = rhs;
     }
-  n->token_span.end = token_offset();
+    n->token_span.end = token_offset();
 
     lhs = n;
   }
@@ -825,7 +825,7 @@ b32 Parser::parse_if_else(AstNode **out) {
   Try(peek(&tok));
   if (tok.kind != Tok_keyword_else) {
     n->if_else.otherwise = nullptr;
-  n->token_span.end = token_offset();
+    n->token_span.end    = token_offset();
 
     *out = n;
 
@@ -838,7 +838,7 @@ b32 Parser::parse_if_else(AstNode **out) {
   Try(parse_scope(&otherwise));
 
   n->if_else.otherwise = otherwise;
-  n->token_span.end = token_offset();
+  n->token_span.end    = token_offset();
 
   *out = n;
 
@@ -846,9 +846,9 @@ b32 Parser::parse_if_else(AstNode **out) {
 }
 
 void Parser::add_unexpected_token_message(Token token) {
-  Str s       = ctx.arena->push_format_string("Unexpected token encountered %d\n", token.kind);
-  Message msg = {token.span, Error, s};
-  //Push_message(ctx.messages, msg);
+  // Str s       = ctx.arena->push_format_string("Unexpected token encountered %d\n", token.kind);
+  // Message msg = {token.span, Error, s};
+  //  Push_message(ctx.messages, msg);
 }
 
 b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
@@ -856,7 +856,12 @@ b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
-    add_unexpected_token_message(tok);
+    Message *msg  = ctx.messages->alloc_message(2);
+    msg->severity = Error;
+    msg->format   = Str_make("Unexpected token encountered. Expected {tk}, but got {tk}.");
+    msg->args[0]  = {expected_kind};
+    msg->args[1]  = {tok.kind};
+    ctx.messages->log(msg);
     return false;
   }
 

@@ -1,4 +1,5 @@
-#include "c"
+#include "c.blu"
+#include "sum.blu"
 
 fib :: fn(n: i32) i32 {
   if n <= 1 {
@@ -6,14 +7,6 @@ fib :: fn(n: i32) i32 {
   } else {
     return fib(n-1) + fib(n-2)
   }
-}
-
-sum :: fn(xs: []i32) i32 {
-  s : i32 = 0
-  for x in xs {
-    s += x
-  }
-  return s
 }
 
 count :: fn(needle: i32, haystack: []i32) i64 {

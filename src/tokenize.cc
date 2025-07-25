@@ -32,7 +32,7 @@ void Tokenizer::step() {
     current_location.col += 1;
   }
 
-  at                 += 1;
+  at += 1;
 }
 
 b32 is_whitespace(char c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
@@ -65,15 +65,18 @@ void Tokenizer::init(TokenizeContext ctx, Str source) {
 
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
-    *kind       = Kind;                                                                        \
-    span->start = start;                                                                       \
-    span->end   = current_location;                                                            \
-    *str = { pstart, cast<usize>(at - pstart), }; \
+    *kind       = Kind;                                                                            \
+    span->start = start;                                                                           \
+    span->end   = current_location;                                                                \
+    *str        = {                                                                                \
+      pstart,                                                                               \
+      cast<usize>(at - pstart),                                                             \
+    };                                                                                      \
     return TokResult_ok;                                                                           \
   }
 
 #define Return_if_match(String, Kind)                                                              \
-  if (str_eq(Str_make(String), {pstart, cast<usize>(at - pstart)})) {              \
+  if (str_eq(Str_make(String), {pstart, cast<usize>(at - pstart)})) {                              \
     Return_token(Kind);                                                                            \
   }
 
@@ -85,7 +88,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
   }
 
   char c               = *at;
-  char const *pstart = at;
+  char const *pstart   = at;
   SourceLocation start = current_location;
 
   step();
@@ -247,8 +250,8 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     Return_token(Tok_identifier);
   }
 
-  Str msg = ctx.arena->push_format_string("Unrecognized character '%c'\n", c);
-  ctx.messages->push({SourceSpan::from_single_location(start), Error, msg});
+  // Str msg = ctx.arena->push_format_string("Unrecognized character '%c'\n", c);
+  // ctx.messages->push({SourceSpan::from_single_location(start), Error, msg});
 
   return TokResult_unrecognized_token;
 }

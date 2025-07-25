@@ -25,6 +25,22 @@ struct CFileWriter {
   void vprintf(char const *format, va_list arg) { vfprintf(out, format, arg); }
 };
 
+struct StringWriter {
+  Arena arena;
+
+  void vprintf(char const *format, va_list arg) {
+    int len   = vsnprintf(nullptr, 0, format, arg);
+    char *buf = arena.alloc<char>(len);
+    vsnprintf(buf, len, format, arg);
+  }
+
+  void write_to_file(char const *filename) {
+    FILE *f = fopen(filename, "w");
+    fwrite(arena.base, 1, arena.size(), f);
+    fclose(f);
+  }
+};
+
 template<typename Writer> struct CGenerator {
   Writer writer;
 
@@ -430,13 +446,14 @@ template<typename Writer> void CGenerator<Writer>::output_module(AstNode *n) {
   }
 }
 
-b32 generate_c_code(TypeCheckContext ctx, AstNode *mod) {
-  CFileWriter writer;
-  writer.out = out;
+b32 generate_c_code(AstNode *mod) {
+  StringWriter writer;
+  writer.arena.init(MiB(4));
 
-  CGenerator<CFileWriter> gen{ctx, writer};
+  CGenerator<StringWriter> gen{writer};
   gen.print(preamble);
   gen.output_module(mod);
+  writer.write_to_file("fib.c");
 
   return true;
 }

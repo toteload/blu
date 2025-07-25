@@ -3,7 +3,7 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-u32 str_hash(void *context, Str s) { return XXH32(s.str, s.len, 0); }
+u32 str_hash(void *context, Str s) { return XXH32(s.str, s.len(), 0); }
 
 void StringInterner::init(
   Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator
@@ -27,11 +27,11 @@ StrKey StringInterner::add(Str s) {
     return bucket->val;
   }
 
-  char *intern = storage.alloc<char>(s.len);
-  memcpy(intern, s.str, s.len);
+  char *intern = storage.alloc<char>(s.len());
+  memcpy(intern, s.str, s.len());
 
-  Str owns{intern, s.len};
-  StrKey key{cast<u32>(list.len)};
+  Str owns{intern, s.len()};
+  StrKey key{cast<u32>(list.len())};
 
   bucket->key = owns;
   bucket->val = key;

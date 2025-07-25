@@ -1,16 +1,16 @@
 #include "blu.hh"
 
 struct TypeChecker {
-TypeCheckContext ctx;	
+  TypeCheckContext ctx;
 
-	void init(TypeCheckContext ctx);
+  void init(TypeCheckContext ctx);
 
-	Type *infer_ast_type(Env *env, AstNode *type);
-	Type *infer_function_type(Env *env, AstNode *function);
-	Type *infer_expression_type(Env *env, AstNode *expression);
+  Type *infer_ast_type(Env *env, AstNode *type);
+  Type *infer_function_type(Env *env, AstNode *function);
+  Type *infer_expression_type(Env *env, AstNode *expression);
 
-	b32 check_function_body(Env *env, AstNode *function);
-	b32 check_module(AstNode *module);
+  b32 check_function_body(Env *env, AstNode *function);
+  b32 check_module(AstNode *module);
 };
 
 b32 is_type_coercible_to(Type *src, Type *dst) {
@@ -67,9 +67,7 @@ Type *determine_binary_op_type(TypeInterner *types, BinaryOpKind op, Type *lhs, 
   }
 }
 
-void TypeChecker::init(TypeCheckContext ctx) {
-	this->ctx = ctx;
-}
+void TypeChecker::init(TypeCheckContext ctx) { this->ctx = ctx; }
 
 Type *TypeChecker::infer_ast_type(Env *env, AstNode *type) {
   Debug_assert(
@@ -91,12 +89,12 @@ Type *TypeChecker::infer_ast_type(Env *env, AstNode *type) {
   Value *v     = env->lookup(idkey);
 
   if (!v) {
-	  Todo();
-	  // TODO also display the identifier to the user. would be nice to know what is wrong :)
-    //Str msg        = ctx.arena->push_format_string(
-    //  "Expected defined identifier, but it could not be found.\n"
+    Todo();
+    // TODO also display the identifier to the user. would be nice to know what is wrong :)
+    // Str msg        = ctx.arena->push_format_string(
+    //   "Expected defined identifier, but it could not be found.\n"
     //);
-    //ctx.messages->push({get_ast_source_span(type->span, tokens), Error, msg});
+    // ctx.messages->push({get_ast_source_span(type->span, tokens), Error, msg});
 
     return nullptr;
   }
@@ -200,9 +198,9 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     Value *p   = env->lookup(idkey);
 
     if (!p) {
-	    Todo();
-      //Str msg        = ctx.arena->push_format_string( "Could not find identifier.");
-      //ctx.messages->push({e->span, Error, msg});
+      Todo();
+      // Str msg        = ctx.arena->push_format_string( "Could not find identifier.");
+      // ctx.messages->push({e->span, Error, msg});
       break;
     }
 
@@ -214,9 +212,9 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
   case Ast_if_else: {
     Type *cond = infer_expression_type(env, e->if_else.cond);
     if (cond->kind != Type_Boolean) {
-	    Todo();
-      //Str msg = ctx.arena->push_format_string("Condition in if-expression is not of type 'bool'.");
-      //ctx.messages->push({e->if_else.cond->span, Error, msg});
+      Todo();
+      // Str msg = ctx.arena->push_format_string("Condition in if-expression is not of type
+      // 'bool'."); ctx.messages->push({e->if_else.cond->span, Error, msg});
     }
 
     Type *then = infer_expression_type(env, e->if_else.then);
@@ -242,10 +240,10 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     }
 
     // We only have an if-branch, then the return type of the branch should be void.
-    if (then->kind != Type_Void) {
-	    Todo();
-      //Str msg = ctx.arena->push_format_string("If-expression should return type 'void'.");
-      //ctx.messages->push({e->if_else.then->span, Error, msg});
+    if (!(then->kind == Type_Never || then->kind == Type_Void)) {
+      Todo();
+      // Str msg = ctx.arena->push_format_string("If-expression should return type 'void'.");
+      // ctx.messages->push({e->if_else.then->span, Error, msg});
     }
 
     res = then;
@@ -312,8 +310,9 @@ Type *TypeChecker::infer_function_type(Env *env, AstNode *function) {
   u32 param_count = 0;
   ForEachAstNode(param, function->function.params) { param_count += 1; }
 
-  Type *function_type =
-    cast<Type *>(ctx.work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type)));
+  Type *function_type = cast<Type *>(
+    ctx.work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type))
+  );
   function_type->kind                 = Type_Function;
   function_type->function.param_count = param_count;
   function_type->function.return_type = return_type;
@@ -366,20 +365,29 @@ b32 TypeChecker::check_function_body(Env *env, AstNode *function) {
 }
 
 b32 TypeChecker::check_module(AstNode *module) {
-  Env *mod_environment = ctx.envs->alloc();
+  Env *mod_environment = ctx.envs->alloc(ctx.envs->global_env);
 
   // Declarations are added to the module environment.
 
   ForEachAstNode(item, module->module.items) {
+    if (item->kind == Ast_builtin) {
+      continue;
+    }
+
     Debug_assert(item->kind == Ast_declaration);
+    Debug_assert(item->declaration.name->kind == Ast_identifier);
 
     AstNode *value = item->declaration.value;
-    Debug_assert(value->kind == Ast_function);
 
-    Type *type = infer_function_type(mod_environment, value);
+    Type *type = nullptr;
+
+    if (value->kind == Ast_function) {
+      type = infer_function_type(mod_environment, value);
+    } else {
+      type = infer_expression_type(mod_environment, value);
+    }
 
     Debug_assert(type);
-    Debug_assert(item->declaration.name->kind == Ast_identifier);
 
     item->type = type;
 
@@ -387,22 +395,27 @@ b32 TypeChecker::check_module(AstNode *module) {
   }
 
   ForEachAstNode(item, module->module.items) {
+    if (item->kind == Ast_builtin) {
+      continue;
+    }
+
     Debug_assert(item->kind == Ast_declaration);
 
-    AstNode *function = item->declaration.value;
-    Debug_assert(function->kind == Ast_function);
+    AstNode *value = item->declaration.value;
 
-    check_function_body(mod_environment, function);
+    if (value->kind == Ast_function) {
+      check_function_body(mod_environment, value);
+    }
   }
 
   return true;
 }
 
 b32 type_check_module(TypeCheckContext ctx, AstNode *module) {
-	TypeChecker typechecker;
-	typechecker.init(ctx);
-	auto snapshot = ctx.work_arena->take_snapshot();
-	b32 ok = typechecker.check_module(module);
-	ctx.work_arena->restore(snapshot);
-	return ok;
+  TypeChecker typechecker;
+  typechecker.init(ctx);
+  auto snapshot = ctx.work_arena->take_snapshot();
+  b32 ok        = typechecker.check_module(module);
+  ctx.work_arena->restore(snapshot);
+  return ok;
 }

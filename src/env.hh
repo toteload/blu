@@ -43,7 +43,7 @@ struct EnvManager {
   }
 
   void init_global_env(StringInterner *strings, TypeInterner *types) {
-    global_env = pool.alloc();
+    global_env = alloc(nullptr);
 
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
@@ -83,11 +83,8 @@ struct EnvManager {
 
   void deinit();
 
-  Env *alloc(Env *parent = nullptr) {
+  Env *alloc(Env *parent) {
     Env *env = pool.alloc();
-    if (!parent) {
-      parent = global_env;
-    }
     env->init(env_allocator, parent);
     return env;
   }

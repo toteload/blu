@@ -9,6 +9,8 @@
 
 #include <stdio.h>
 
+typedef u32 SourceIdx;
+
 // -[ Source location ]-
 
 struct SourceLocation {
@@ -31,22 +33,7 @@ struct SourceSpan {
   }
 };
 
-// -[ Message ]-
-
-enum MessageSeverity : u8 {
-  Error,
-  Warning,
-  Info,
-};
-
-struct Message {
-  SourceSpan span;
-  MessageSeverity severity;
-  Str message;
-
-  char const *file = nullptr;
-  u32 line         = 0;
-};
+struct MessageManager;
 
 #include "types.hh"
 
@@ -59,8 +46,7 @@ struct Token {
 };
 
 struct TokenizeContext {
-  Arena *arena;
-  Vector<Message> *messages;
+  MessageManager *messages;
 };
 
 // TODO: Convert tokenize output of tokens to SoA layout
@@ -71,22 +57,26 @@ b32 tokenize(TokenizeContext ctx, Str source, Vector<Token> *output);
 
 ttld_inline Str get_ast_str(AstNode *node, Slice<Token> tokens) {
   char const *start = tokens[node->token_span.start].str.str;
-  char const *end = tokens[node->token_span.end].str.end();
-  return { start, cast<usize>(end - start), };
+  char const *end   = tokens[node->token_span.end - 1].str.end();
+  return {
+    start,
+    cast<usize>(end - start),
+  };
 }
 
 ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
   SourceLocation start = tokens[node->token_span.start].span.start;
-  SourceLocation end = tokens[node->token_span.end].span.end;
-  return { start, end, };
+  SourceLocation end   = tokens[node->token_span.end].span.end;
+  return {
+    start,
+    end,
+  };
 }
 
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
 struct ParseContext {
-  Arena *arena;
-  Vector<Message> *messages;
-
+  MessageManager *messages;
   StringInterner *strings;
   ObjectPool<AstNode> *nodes;
 };
@@ -97,9 +87,9 @@ b32 parse(ParseContext ctx, Slice<Token> tokens, AstNode **root);
 #include "env.hh"
 
 struct TypeCheckContext {
-  Arena *arena;
-  Vector<Message> *messages;
+  MessageManager *messages;
 
+  Arena *arena;
   Arena *work_arena;
 
   EnvManager *envs;
@@ -109,12 +99,48 @@ struct TypeCheckContext {
 
 b32 type_check_module(TypeCheckContext ctx, AstNode *module);
 
-struct CCodeGenerateContext {
-  Arena *work_arena;
+b32 generate_c_code(AstNode *mod);
 
+// -[ Message ]-
+
+enum MessageSeverity : u8 {
+  Error,
+  Warning,
+  Info,
 };
 
-b32 generate_c_code(CCodeGenerateContext *ctx, AstNode *mod);
+union MessageArg {
+  TokenKind token_kind;
+};
+
+struct Message {
+  MessageSeverity severity;
+  SourceIdx src_idx = UINT32_MAX;
+  SourceSpan span;
+  Str format;
+
+  MessageArg args[0];
+};
+
+struct MessageManager {
+  Arena arena;
+  Vector<Message *> messages;
+
+  void init(Allocator list_alloc) {
+    arena.init(MiB(16));
+    messages.init(list_alloc);
+  }
+
+  void deinit();
+
+  Message *alloc_message(u32 arg_count = 0) {
+    return cast<Message *>(
+      arena.raw_alloc(sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message))
+    );
+  }
+
+  void log(Message *msg) { messages.push(msg); }
+};
 
 // -[ Compiler context ]-
 
@@ -122,10 +148,7 @@ enum JobKind : u8 {
   Job_read_file,
   Job_tokenize,
   Job_parse,
-  Job_typecheck,
 };
-
-typedef u32 SourceIdx;
 
 struct Job {
   JobKind kind;
@@ -145,12 +168,12 @@ struct Compiler {
   Arena arena;
   Arena work_arena;
 
-  Vector<Message> messages;
+  MessageManager messages;
 
   StringInterner strings;
   TypeInterner types;
   ObjectPool<AstNode> nodes;
-  EnvManager environments;
+  EnvManager envs;
 
   Vector<Source> sources;
   Queue<Job> jobs;
@@ -158,9 +181,9 @@ struct Compiler {
   // ---
 
   void init();
-  b32 add_source_file_job(Str filename);
+  void compile_file(Str filename);
 
-  void run();
+  SourceIdx add_source_file_job(Str filename);
 };
 
 // clang-format off

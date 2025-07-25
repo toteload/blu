@@ -1,0 +1,58 @@
+#include-c "SDL.h"
+
+Ball :: struct {
+  pos: [2]f32 = .[0.0, 0.0];
+  vel: [2]f32 = .[0.0, 0.0];
+}
+
+implement Ball {
+  update :: fn(t: f32) {
+    pos[0] += t * vel[1]
+    pos[1] += t * vel[1]
+  }
+}
+
+State :: struct {
+  paddles: [2]f32;
+  scores: [2]u32;
+  ball: Ball;
+}
+
+main :: (): i32 {
+  if !SDL_Init(.SDL_INIT_EVERYTHING)
+    return 1
+
+  window := SDL_CreateWindow(
+    "Pong",
+    800,
+    800,
+    0,
+  )
+
+  if window == null 
+    return 1
+
+  renderer := SDL_CreateRenderer(window, null)
+  if renderer == null
+    return 1
+
+  done := true
+
+  while !done :gameloop {
+    SDL_Event event
+    while SDL_PollEvent(*event) {
+      if event.type == .SDL_EVENT_QUIT {
+        break :gameloop
+      }
+    }
+
+    SDL_RenderClear(renderer)
+    SDL_RenderPresent(renderer)
+  }
+
+  SDL_DestroyRenderer(renderer)
+  SDL_DestroyWindow(window)
+  SDL_Quit()
+
+  0
+}

@@ -1,0 +1,95 @@
+#include "c"
+
+stdio :: module {
+  FILE :: opaque
+
+  malloc : @callconv("c") fn(size: c.size_t) @nullable ptr : #extern("malloc")
+
+  fopen :
+    @callconv("c")
+    fn(filename: *c.char, mode: *c.char) @nullable *FILE
+    : #extern("fopen")
+
+  fclose :: #extern "fclose"
+  fread : @callconv("c") fn(p: ptr, size: c.size_t, count: c.size_t, stream: @nullable *FILE) c.size_t : #extern "fread"
+  ftell : @callconv("c") fn(stream: @nullable *FILE) c.long : #extern "ftell"
+  fseek : @callconv("c") fn(stream: @nullable *FILE, offset: c.long, origin: c.int) c.int : #extern "fseek"
+
+  #link_library("vcstdlib.lib")
+}
+
+DWORD :: c.ulong
+
+CreateFileA : @callconv("c") fn(
+    lpFileName: LPCSTR,
+    dwDesiredAccess: DWORD,
+    dwShareMode: DWORD,
+    lpSecurityAttributes,
+  ) HANDLE
+  : #extern("CreateFileA")
+
+#foreign_library("kernel32.lib")
+
+readfile :: fn(filename: string) string {
+  f := c.fopen(filename.ptr, "r")
+
+  // This also implies that a `ptr` can be null
+  if !f return ""
+
+  defer c.fclose(f)
+
+  c.fseek(f, 0, c.SEEK_END)
+  size := c.ftell(f)
+
+  data : ptr = c.malloc(size + 1)
+  if !data return ""
+
+  c.fseek(f, 0, c.SEEK_SET)
+  c.fread(data, 1, size, f)
+}
+
+sort :: fn(xs: []i32) {
+  todo()
+}
+
+count :: (needle: i32, haystack: []i32) i64 {
+  s := 0
+  for x in haystack {
+    if x == needle {
+      s += 1
+    }
+  }
+  s
+}
+
+main :: () {
+  input := std.io.readfile("day01.txt")
+
+  xs := Vec(i32).new()
+  ys := Vec(i32).new()
+
+  for lines(input) do line {
+    x := ...
+    y := ...
+    xs.push(x)
+    ys.push(y)
+  }
+
+  sort(xs)
+  sort(ys)
+
+  s : i64 = 0
+  for x,y in xs,ys {
+    s += x - y
+  }
+
+  std.io.print(s)
+
+  s = 0
+  for xs do x {
+    s += x * count(x, ys)
+  }
+
+  std.io.print(s)
+}
+

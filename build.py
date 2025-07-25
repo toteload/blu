@@ -103,14 +103,14 @@ def create_build_ninja():
         },
         )
 
-    out.build(
-        outputs   = outd('c_generator.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'c_generator.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
+    #out.build(
+    #    outputs   = outd('c_generator.o'),
+    #    rule      = 'compile_cpp_debug',
+    #    inputs    = join('src', 'c_generator.cc'),
+    #    variables = {
+    #        'cflags': '',
+    #    },
+    #    )
 
     out.build(
         outputs   = outd('string_interner.o'),
@@ -131,6 +131,15 @@ def create_build_ninja():
         )
 
     out.build(
+        outputs   = outd('compiler.o'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'compiler.cc'),
+        variables = {
+            'cflags': '',
+        },
+        )
+
+    out.build(
         outputs = outd(exe('blu')),
         rule = 'build_binary',
         inputs = [
@@ -141,7 +150,8 @@ def create_build_ninja():
             outd('string_interner.o'),
             outd('type_interner.o'),
             outd('toteload.o'),
-            outd('c_generator.o'),
+            #outd('c_generator.o'),
+            outd('compiler.o'),
         ],
         )
 

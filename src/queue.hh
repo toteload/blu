@@ -2,23 +2,16 @@
 
 #include "vector.hh"
 
-template<typename T>
-struct Queue {
+template<typename T> struct Queue {
   Vector<T> backing;
 
-  void init(Allocator alloc) {
-    backing.init(alloc);
-  }
+  void init(Allocator alloc) { backing.init(alloc); }
 
-  void deinit() {
-    backing.deinit();
-  }
+  void deinit() { backing.deinit(); }
 
-  void push_back(T x) {
-    backing.push(x);
-  }
+  bool is_empty() { return backing.is_empty(); }
 
-  T pop_front() {
-    return backing.shift_left();
-  }
+  void push_back(T x) { backing.push(x); }
+
+  T pop_front() { return backing.shift_left(); }
 };

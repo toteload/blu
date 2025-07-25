@@ -112,10 +112,13 @@ struct CStr {};
 
 struct Str {
   char const *str = nullptr;
-  usize len       = 0;
+  usize _len      = 0;
 
-  bool is_ok() { return str && len; }
-  char const *end() { return str + len; }
+  bool is_ok() { return str && _len; }
+  bool is_empty() { return _len == 0; }
+  char const *end() { return str + _len; }
+
+  usize len() { return _len; }
 
   static Str empty() { return {}; }
 
@@ -130,8 +133,8 @@ struct Str {
   { s, (sizeof(s) - 1), }
 
 ttld_inline b32 str_eq(Str a, Str b) {
-  b32 is_same_len     = a.len == b.len;
-  b32 is_same_content = memcmp(a.str, b.str, a.len) == 0;
+  b32 is_same_len     = a.len() == b.len();
+  b32 is_same_content = memcmp(a.str, b.str, a.len()) == 0;
   return is_same_len && is_same_content;
 }
 
@@ -217,7 +220,7 @@ struct Arena {
   void init(usize reserve_size);
   void deinit();
 
-  Allocator as_allocator();
+  usize size() { return ptr_diff(at, base); }
 
   void *raw_alloc(usize byte_size, u32 align);
   template<typename T> T *alloc(usize count = 1) {

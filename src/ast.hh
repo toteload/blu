@@ -78,7 +78,7 @@ enum AstKind : u8 {
 };
 
 enum BuiltinKind : u8 {
-  Builtin_import,
+  Builtin_include,
 };
 
 struct AstNode {

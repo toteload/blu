@@ -32,7 +32,7 @@ void print_tokens(FILE *out, Slice<Token> tokens) {
       tok.span.start.line,
       tok.span.start.col,
       token_kind_string(tok.kind),
-      Cast(int, tok.str.len),
+      cast<int>(tok.str.len()),
       tok.str.str
     );
   }
@@ -124,7 +124,7 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   case Ast_identifier: {
     Str identifier = get_ast_str(ref, ctx->tokens);
     pad(ctx->out, depth + 1);
-    fprintf(ctx->out, " '%.*s'\n", cast<i32>(identifier.len), identifier.str);
+    fprintf(ctx->out, " '%.*s'\n", cast<i32>(identifier.len()), identifier.str);
   } break;
   case Ast_declaration: {
     print_ast(ctx, n.declaration.name, depth + 1);
@@ -134,7 +134,7 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   case Ast_literal_int: {
     Str literal = get_ast_str(ref, ctx->tokens);
     pad(ctx->out, depth + 1);
-    fprintf(ctx->out, " '%.*s'\n", cast<i32>(literal.len), literal.str);
+    fprintf(ctx->out, " '%.*s'\n", cast<i32>(literal.len()), literal.str);
   } break;
   case Ast_call: {
     print_ast(ctx, n.call.callee, depth + 1);
@@ -183,15 +183,12 @@ void display_message(FILE *out, Message *msg) {
 
   fprintf(
     out,
-    "[%s:%d]\n"
     "[%d:%d] %s: %.*s\n",
-    msg->file,
-    msg->line,
     msg->span.start.line,
     msg->span.start.col,
     severity,
-    cast<i32>(msg->message.len),
-    msg->message.str
+    cast<i32>(msg->format.len()),
+    msg->format.str
   );
 }
 
@@ -205,6 +202,11 @@ int main(i32 arg_count, char const *const *args) {
   work_arena.init(MiB(1));
 
   Str source_filename = Str::from_cstr(args[1]);
+
+  Compiler compiler;
+
+  compiler.init();
+  compiler.compile_file(source_filename);
 
   printf("DONE\n");
 
