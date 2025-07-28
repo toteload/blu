@@ -23,6 +23,10 @@ main :: fn() i32 {
   i : i32 = 1
   x : i32 = 2 + 5 * 16 / 4 * 35 + i
 
+  xs : []i32 = .[]i32{1, 2, 3, 4}
+
+  s : i32 = sum(xs)
+
   while true {
     if i + 2 * 3 == 10 and true {
       break

@@ -86,6 +86,15 @@ b32 parse(ParseContext ctx, Slice<Token> tokens, AstNode **root);
 #include "value.hh"
 #include "env.hh"
 
+struct Source {
+  Str filename;
+
+  Str text;
+  Vector<Token> tokens;
+
+  AstNode *mod = nullptr;
+};
+
 struct TypeCheckContext {
   MessageManager *messages;
 
@@ -95,6 +104,8 @@ struct TypeCheckContext {
   EnvManager *envs;
   TypeInterner *types;
   ObjectPool<AstNode> *nodes;
+
+  Vector<Source> *sources;
 };
 
 b32 type_check_module(TypeCheckContext ctx, AstNode *module);
@@ -133,13 +144,8 @@ struct MessageManager {
 
   void deinit();
 
-  Message *alloc_message(u32 arg_count = 0) {
-    return cast<Message *>(
-      arena.raw_alloc(sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message))
-    );
-  }
-
-  void log(Message *msg) { messages.push(msg); }
+  void write_messages();
+  void error(char const *format, ...);
 };
 
 // -[ Compiler context ]-
@@ -155,14 +161,9 @@ struct Job {
   SourceIdx src_idx;
 };
 
-struct Source {
-  Str filename;
+struct Compiler;
 
-  Str text;
-  Vector<Token> tokens;
-
-  AstNode *mod = nullptr;
-};
+typedef void (*JobCompletionListenerFn)(Compiler *compiler, JobKind kind, Source *source); 
 
 struct Compiler {
   Arena arena;
@@ -178,12 +179,18 @@ struct Compiler {
   Vector<Source> sources;
   Queue<Job> jobs;
 
+  JobCompletionListenerFn listener = nullptr;
+
   // ---
 
   void init();
   void compile_file(Str filename);
 
-  SourceIdx add_source_file_job(Str filename);
+  void register_job_completion_listener(JobCompletionListenerFn f) {
+    listener = f;
+  }
+
+  SourceIdx add_read_file_job(Str filename);
 };
 
 // clang-format off

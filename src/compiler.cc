@@ -68,7 +68,7 @@ Str copy_str(Arena *arena, Str s) {
   return {data, s.len()};
 }
 
-SourceIdx Compiler::add_source_file_job(Str filename) {
+SourceIdx Compiler::add_read_file_job(Str filename) {
   Str own_filename = copy_str(&arena, filename);
 
   Source source;
@@ -87,7 +87,7 @@ SourceIdx Compiler::add_source_file_job(Str filename) {
 }
 
 void Compiler::compile_file(Str filename) {
-  SourceIdx root_src_idx = add_source_file_job(filename);
+  SourceIdx root_src_idx = add_read_file_job(filename);
 
   while (!jobs.is_empty()) {
     Job job = jobs.pop_front();
@@ -141,17 +141,21 @@ void Compiler::compile_file(Str filename) {
       b32 ok = parse(ctx, src->tokens.slice(), &src->mod);
       if (!ok) {
         printf("Error encountered during parsing\n");
+        messages.write_messages();
         Todo();
       }
 
-      // TODO: if the file has includes add more read file jobs
+      if (listener) {
+        listener(this, Job_parse, src);
+      }
 
       ForEachAstNode(n, src->mod->module.items) {
         if (n->kind == Ast_builtin && n->builtin.kind == Builtin_include) {
           Str filename_string = get_ast_str(n->builtin.value, src->tokens.slice());
           Str filename        = {filename_string.str + 1, filename_string.len() - 2};
           // printf("Adding source file job for %.*s\n", cast<int>(filename.len()), filename.str);
-          add_source_file_job(filename);
+          SourceIdx src_idx = add_read_file_job(filename);
+          n->builtin.src_idx = src_idx;
         }
       }
     } break;
@@ -169,6 +173,7 @@ void Compiler::compile_file(Str filename) {
   ctx.envs       = &envs;
   ctx.types      = &types;
   ctx.nodes      = &nodes;
+  ctx.sources    = &sources;
 
   b32 ok = type_check_module(ctx, src->mod);
   if (!ok) {

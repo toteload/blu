@@ -49,6 +49,7 @@ enum AstKind : u8 {
   Ast_identifier,
   Ast_literal_int,
   Ast_literal_string,
+  Ast_literal_array_or_slice,
 
   Ast_declaration,
 
@@ -94,7 +95,16 @@ struct AstNode {
     struct {
       BuiltinKind kind;
       AstNode *value;
+
+      union {
+        SourceIdx src_idx;
+      };
     } builtin;
+
+    struct {
+      AstNode *declared_type;
+      AstNode *items;
+    } array_or_slice;
 
     struct {
       AstNode *params;

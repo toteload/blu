@@ -42,6 +42,7 @@ void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 char const *ast_string[] = {
   "module",      "param",     "function", "scope", "identifier",   "literal-int", "literal-string",
+  "literal-array-or-slice",
   "declaration", "assign",    "while",    "break", "continue",     "for",         "call",
   "if-else",     "binary-op", "unary-op", "cast",  "type_pointer", "type_slice",  "deref",
   "return",      "builtin",   "illegal",
@@ -162,8 +163,9 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
     print_ast(ctx, n.deref.value, depth + 1);
   } break;
 
-  default:
-    break;
+  default: {
+    fprintf(ctx->out, "unimplemented\n");
+  } break;
   }
 }
 
@@ -192,6 +194,18 @@ void display_message(FILE *out, Message *msg) {
   );
 }
 
+void completion_listener(Compiler *compiler, JobKind kind, Source *source) {
+  if (kind != Job_parse) {
+    return;
+  }
+
+  PrintAstContext ctx;
+  ctx.out = stdout;
+  ctx.tokens = source->tokens.slice();
+
+  print_ast(&ctx, source->mod);
+}
+
 int main(i32 arg_count, char const *const *args) {
   if (arg_count < 2) {
     printf("Please provide an input file\n");
@@ -206,6 +220,7 @@ int main(i32 arg_count, char const *const *args) {
   Compiler compiler;
 
   compiler.init();
+  compiler.register_job_completion_listener(completion_listener);
   compiler.compile_file(source_filename);
 
   printf("DONE\n");

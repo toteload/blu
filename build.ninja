@@ -22,8 +22,11 @@ build $outdir\string_interner.o: compile_cpp_debug src\string_interner.cc
   cflags = -Iext
 build $outdir\typecheck.o: compile_cpp_debug src\typecheck.cc
   cflags = 
+build $outdir\message_manager.o: compile_cpp_debug src\message_manager.cc
+  cflags = 
 build $outdir\compiler.o: compile_cpp_debug src\compiler.cc
   cflags = 
 build $outdir\blu.exe: build_binary $outdir\main.o $outdir\tokenize.o $
     $outdir\parse.o $outdir\typecheck.o $outdir\string_interner.o $
-    $outdir\type_interner.o $outdir\toteload.o $outdir\compiler.o
+    $outdir\type_interner.o $outdir\toteload.o $outdir\message_manager.o $
+    $outdir\compiler.o

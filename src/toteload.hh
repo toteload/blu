@@ -118,6 +118,8 @@ struct Str {
   bool is_empty() { return _len == 0; }
   char const *end() { return str + _len; }
 
+  char operator[](usize idx) { return str[idx]; }
+
   usize len() { return _len; }
 
   static Str empty() { return {}; }

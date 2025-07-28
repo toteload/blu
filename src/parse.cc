@@ -26,6 +26,7 @@ struct Parser {
   b32 parse_declaration(AstNode **out);
   b32 parse_literal_int(AstNode **out);
   b32 parse_literal_string(AstNode **out);
+  b32 parse_literal_array_or_slice(AstNode **out);
   b32 parse_identifier(AstNode **out);
 
   b32 parse_while(AstNode **out);
@@ -207,11 +208,11 @@ b32 Parser::parse_function(AstNode **out) {
   while (!is_at_end()) {
     Token tok;
     Try(peek(&tok));
+
     if (tok.kind == Tok_comma) {
       next(&tok);
     }
 
-    Try(peek(&tok));
     if (tok.kind == Tok_paren_close) {
       break;
     }
@@ -473,6 +474,64 @@ b32 Parser::parse_literal_int(AstNode **out) {
   return true;
 }
 
+b32 Parser::parse_literal_array_or_slice(AstNode **out) {
+  AstNode *n = alloc_node();
+
+  Try(expect_token(Tok_dot));
+
+  Token tok;
+  Try(peek(&tok));
+
+  AstNode *type = nullptr;
+  if (tok.kind != Tok_brace_open) {
+    Try(parse_type(&type));
+  }
+
+  Try(expect_token(Tok_brace_open));
+
+  AstNode *items = nullptr;
+  AstNode *last  = nullptr;
+
+  while (!is_at_end()) {
+    Token tok;
+    Try(peek(&tok));
+
+    if (tok.kind == Tok_comma) {
+      next(&tok);
+    }
+
+    if (tok.kind == Tok_brace_close) {
+      break;
+    }
+
+    AstNode *x;
+    Try(parse_expression(&x));
+
+    if (!items) {
+      items = x;
+    } else {
+      last->next = x;
+    }
+
+    last = x;
+  }
+
+  if (last) {
+    last->next = nullptr;
+  }
+
+  Try(expect_token(Tok_brace_close));
+
+  n->kind                         = Ast_literal_array_or_slice;
+  n->array_or_slice.declared_type = type;
+  n->array_or_slice.items         = items;
+  n->token_span.end               = token_offset();
+
+  *out = n;
+
+  return true;
+}
+
 enum Precedence : u32 {
   Left,
   Right,
@@ -693,6 +752,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     Try(parse_literal_int(&base));
   } else if (tok.kind == Tok_keyword_fn) {
     Try(parse_function(&base));
+  } else if (tok.kind == Tok_dot) {
+    Try(parse_literal_array_or_slice(&base));
   } else if (is_unary_op_token(tok.kind)) {
     next();
 
@@ -721,6 +782,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     base = n;
   } else if (tok.kind == Tok_keyword_cast) {
     Todo();
+  } else {
+    return false;
   }
 
   *out = base;
@@ -856,12 +919,11 @@ b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
-    Message *msg  = ctx.messages->alloc_message(2);
-    msg->severity = Error;
-    msg->format   = Str_make("Unexpected token encountered. Expected {tk}, but got {tk}.");
-    msg->args[0]  = {expected_kind};
-    msg->args[1]  = {tok.kind};
-    ctx.messages->log(msg);
+    ctx.messages->error(
+      "Unexpected token encountered. Expected {tokenkind}, but got {token}.",
+      expected_kind,
+      tok
+    );
     return false;
   }
 

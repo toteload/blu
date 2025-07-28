@@ -131,6 +131,15 @@ def create_build_ninja():
         )
 
     out.build(
+        outputs   = outd('message_manager.o'),
+        rule      = 'compile_cpp_debug',
+        inputs    = join('src', 'message_manager.cc'),
+        variables = {
+            'cflags': '',
+        },
+        )
+
+    out.build(
         outputs   = outd('compiler.o'),
         rule      = 'compile_cpp_debug',
         inputs    = join('src', 'compiler.cc'),
@@ -150,6 +159,7 @@ def create_build_ninja():
             outd('string_interner.o'),
             outd('type_interner.o'),
             outd('toteload.o'),
+            outd('message_manager.o'),
             #outd('c_generator.o'),
             outd('compiler.o'),
         ],

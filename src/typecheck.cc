@@ -10,7 +10,9 @@ struct TypeChecker {
   Type *infer_expression_type(Env *env, AstNode *expression);
 
   b32 check_function_body(Env *env, AstNode *function);
-  b32 check_module(AstNode *module);
+
+  b32 check_toplevel(AstNode *root, Env *env);
+  b32 check_toplevel_function_bodies(AstNode *root, Env *env);
 };
 
 b32 is_type_coercible_to(Type *src, Type *dst) {
@@ -198,6 +200,11 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     Value *p   = env->lookup(idkey);
 
     if (!p) {
+      ctx.messages->error(
+        "Could not find identifier {strkey} at {astnode}.",
+        idkey,
+        e
+      );
       Todo();
       // Str msg        = ctx.arena->push_format_string( "Could not find identifier.");
       // ctx.messages->push({e->span, Error, msg});
@@ -208,6 +215,25 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
   } break;
   case Ast_literal_int: {
     res = ctx.types->integer_constant;
+  } break;
+  case Ast_literal_array_or_slice: {
+    if (!e->array_or_slice.declared_type) {
+      // Slice literals must be written with an explicit type.
+      Todo();
+    }
+
+    Type *declared_type = infer_ast_type(env, e->array_or_slice.declared_type);
+
+    Debug_assert(declared_type->kind == Type_slice);
+
+    ForEachAstNode(item, e->array_or_slice.items) {
+      Type *t = infer_expression_type(env, item);
+
+      // All the items in the slice literal must be coercible to the declared type
+      Debug_assert(is_type_coercible_to(t, declared_type->slice.base_type));
+    }
+
+    res = declared_type;
   } break;
   case Ast_if_else: {
     Type *cond = infer_expression_type(env, e->if_else.cond);
@@ -364,38 +390,58 @@ b32 TypeChecker::check_function_body(Env *env, AstNode *function) {
   return true;
 }
 
-b32 TypeChecker::check_module(AstNode *module) {
-  Env *mod_environment = ctx.envs->alloc(ctx.envs->global_env);
+b32 TypeChecker::check_toplevel(AstNode *root, Env *env) {
+  // TODO
+  // The current setup does not take into consideration that the value of a declaration may depend
+  // on the value of a declaration ahead.
+  // You can use functions that have not been declared yet, but that is it.
 
-  // Declarations are added to the module environment.
+  b32 ok = true;
 
-  ForEachAstNode(item, module->module.items) {
+  ForEachAstNode(item, root->module.items) {
     if (item->kind == Ast_builtin) {
+      if (item->builtin.kind != Builtin_include) {
+        Todo();
+      }
+
+      ok = check_toplevel((*ctx.sources)[item->builtin.src_idx].mod, env);
       continue;
     }
 
     Debug_assert(item->kind == Ast_declaration);
-    Debug_assert(item->declaration.name->kind == Ast_identifier);
 
     AstNode *value = item->declaration.value;
 
     Type *type = nullptr;
 
     if (value->kind == Ast_function) {
-      type = infer_function_type(mod_environment, value);
+      type = infer_function_type(env, value);
     } else {
-      type = infer_expression_type(mod_environment, value);
+      type = infer_expression_type(env, value);
     }
 
     Debug_assert(type);
 
     item->type = type;
 
-    mod_environment->insert(item->declaration.name->identifier.key, Value::make_local(item, type));
+    Debug_assert(item->declaration.name->kind == Ast_identifier);
+
+    env->insert(item->declaration.name->identifier.key, Value::make_local(item, type));
   }
 
-  ForEachAstNode(item, module->module.items) {
+  return ok;
+}
+
+b32 TypeChecker::check_toplevel_function_bodies(AstNode *root, Env *env) {
+  b32 ok = true;
+
+  ForEachAstNode(item, root->module.items) {
     if (item->kind == Ast_builtin) {
+      if (item->builtin.kind != Builtin_include) {
+        Todo();
+      }
+
+      ok = check_toplevel_function_bodies((*ctx.sources)[item->builtin.src_idx].mod, env);
       continue;
     }
 
@@ -404,18 +450,22 @@ b32 TypeChecker::check_module(AstNode *module) {
     AstNode *value = item->declaration.value;
 
     if (value->kind == Ast_function) {
-      check_function_body(mod_environment, value);
+      check_function_body(env, value);
     }
   }
 
-  return true;
+  return ok;
 }
 
 b32 type_check_module(TypeCheckContext ctx, AstNode *module) {
   TypeChecker typechecker;
   typechecker.init(ctx);
   auto snapshot = ctx.work_arena->take_snapshot();
-  b32 ok        = typechecker.check_module(module);
+
+  Env *root_environment = ctx.envs->alloc(ctx.envs->global_env);
+  Try(typechecker.check_toplevel(module, root_environment));
+  Try(typechecker.check_toplevel_function_bodies(module, root_environment));
+  // TODO free root_environment
   ctx.work_arena->restore(snapshot);
-  return ok;
+  return true;
 }
