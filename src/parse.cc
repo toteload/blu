@@ -66,8 +66,6 @@ struct Parser {
     at = skip_comments_from(at);
     return at == tokens.end();
   }
-
-  void add_unexpected_token_message(Token token);
 };
 
 void Parser::init(ParseContext ctx, Slice<Token> tokens) {
@@ -321,7 +319,6 @@ b32 Parser::parse_declaration(AstNode **out) {
     Try(next(&tok));
 
     if (tok.kind != Tok_equals && tok.kind != Tok_colon) {
-      add_unexpected_token_message(tok);
       return false;
     }
   } else {
@@ -908,21 +905,15 @@ b32 Parser::parse_if_else(AstNode **out) {
   return true;
 }
 
-void Parser::add_unexpected_token_message(Token token) {
-  // Str s       = ctx.arena->push_format_string("Unexpected token encountered %d\n", token.kind);
-  // Message msg = {token.span, Error, s};
-  //  Push_message(ctx.messages, msg);
-}
-
 b32 Parser::expect_token(TokenKind expected_kind, Token *out) {
   Token tok;
   Try(next(&tok));
 
   if (tok.kind != expected_kind) {
     ctx.messages->error(
-      "Unexpected token encountered. Expected {tokenkind}, but got {token}.",
+      "Unexpected token encountered. Expected {tokenkind}, but got {tokenkind}.",
       expected_kind,
-      tok
+      tok.kind
     );
     return false;
   }
