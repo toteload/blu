@@ -1,6 +1,5 @@
 enum TokenKind : u8 {
   Tok_colon,
-  Tok_arrow,
   Tok_semicolon,
   Tok_equals,
   Tok_minus,
@@ -54,7 +53,7 @@ enum TokenKind : u8 {
 };
 
 constexpr char const *token_string[Tok_kind_max + 1] = {
-  "colon",       "arrow",        "semicolon",      "equals",      "minus",       "plus",
+  "colon",               "semicolon",      "equals",      "minus",       "plus",
   "star",        "slash",        "percent",        "plus_equals", "exclamation", "ampersand",
   "bar",         "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",
   "cmp-ne",      "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",

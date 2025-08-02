@@ -46,9 +46,14 @@ b32 parse_arg_from(Str *format, Str *arg) {
 	return false;
 }
 
-void write_message(Message *msg) {
-  if (msg->severity == Error) {
-    printf("[error] ");
+void print_message(Slice<Source> sources, Message *msg) {
+  Source *src = &sources[msg->src_idx];
+
+  printf("%.*s:%d:%d ", cast<int>(src->filename.len()), src->filename.str, msg->span.start.line, msg->span.start.col);
+
+  switch (msg->severity) {
+  case Error: printf("[error] "); break;
+  default: Todo();
   }
 
   Str format = msg->format;
@@ -86,15 +91,17 @@ void write_message(Message *msg) {
   printf("\n");
 }
 
-void MessageManager::write_messages() {
+void MessageManager::print_messages(Slice<Source> sources) {
   for (usize i = 0; i < messages.len(); i++) {
     Message *msg = messages[i];
-    write_message(msg);
+    print_message(sources, msg);
   }
 }
 
 // It is assumed that format will be a constant string and thus does not need to be copied.
 void MessageManager::error(
+  SourceIdx src_idx,
+  SourceSpan span,
   char const *format,
   ...)
 {
@@ -102,7 +109,10 @@ void MessageManager::error(
   va_start(varargs, format);
 
   Message *msg = arena.alloc<Message>();
+
   msg->severity = Error;
+  msg->src_idx  = src_idx;
+  msg->span     = span;
 
   Str fmt = Str::from_cstr(format);
   msg->format = fmt;

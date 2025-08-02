@@ -1,9 +1,13 @@
+c := module {
+#include "c.blu"
+}
+
 #include "c.blu"
 #include "sum.blu"
 
 LPSECURITY_ATTRIBUTES := distinct *void
 
-DWORD := u32
+DWORD  := u32
 LPCSTR := *char
 HANDLE := distinct *void
 

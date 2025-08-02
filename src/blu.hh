@@ -76,6 +76,7 @@ ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
 struct ParseContext {
+  SourceIdx src_idx;
   MessageManager *messages;
   StringInterner *strings;
   ObjectPool<AstNode> *nodes;
@@ -126,10 +127,11 @@ union MessageArg {
 
 struct Message {
   MessageSeverity severity;
+
   SourceIdx src_idx = UINT32_MAX;
   SourceSpan span;
-  Str format;
 
+  Str format;
   MessageArg args[0];
 };
 
@@ -144,8 +146,8 @@ struct MessageManager {
 
   void deinit();
 
-  void write_messages();
-  void error(char const *format, ...);
+  void print_messages(Slice<Source> sources);
+  void error(SourceIdx src_idx, SourceSpan span, char const *format, ...);
 };
 
 // -[ Compiler context ]-

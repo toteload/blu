@@ -216,10 +216,11 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     Value *p   = env->lookup(idkey);
 
     if (!p) {
-      ctx.messages->error("Could not find identifier {strkey} at {astnode}.", idkey, e);
+      ctx.messages->error(
+          UINT32_MAX, // TODO
+          {}, // TODO
+          "Could not find identifier {strkey} at {astnode}.", idkey, e);
       Todo();
-      // Str msg        = ctx.arena->push_format_string( "Could not find identifier.");
-      // ctx.messages->push({e->span, Error, msg});
       break;
     }
 

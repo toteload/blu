@@ -111,6 +111,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
   case '|': Return_token(Tok_bar);
   case '^': Return_token(Tok_caret);
   case '~': Return_token(Tok_tilde);
+  case '-': Return_token(Tok_minus);
   }
   // clang-format on
 
@@ -177,19 +178,6 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     }
 
     Return_token(Tok_exclamation);
-  }
-
-  if (c == '-') {
-    if (is_at_end()) {
-      Return_token(Tok_minus);
-    }
-
-    if (*at == '>') {
-      step();
-      Return_token(Tok_arrow);
-    }
-
-    Return_token(Tok_minus);
   }
 
   if (c == '#') {
