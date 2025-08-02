@@ -1,3 +1,44 @@
+enum AstKind : u8 {
+  Ast_module,
+
+  Ast_type,
+
+  Ast_param,
+  Ast_function,
+
+  Ast_scope,
+
+  Ast_identifier,
+
+  Ast_literal_int,
+  Ast_literal_string,
+  Ast_literal_array_or_slice,
+
+  Ast_declaration,
+
+  Ast_assign,
+
+  Ast_while,
+  Ast_break,
+  Ast_continue,
+  Ast_for,
+
+  Ast_call,
+  Ast_if_else,
+  Ast_binary_op,
+  Ast_unary_op,
+
+  Ast_cast,
+
+  Ast_deref,
+
+  Ast_return,
+
+  Ast_builtin,
+
+  Ast_kind_max,
+};
+
 enum BinaryOpKind : u8 {
   Mul,
   Div,
@@ -38,48 +79,18 @@ enum UnaryOpKind : u8 {
   UnaryOpKind_max,
 };
 
-enum AstKind : u8 {
-  Ast_module,
-
-  Ast_param,
-  Ast_function,
-
-  Ast_scope,
-
-  Ast_identifier,
-  Ast_literal_int,
-  Ast_literal_string,
-  Ast_literal_array_or_slice,
-
-  Ast_declaration,
-
-  Ast_assign,
-
-  Ast_while,
-  Ast_break,
-  Ast_continue,
-  Ast_for,
-
-  Ast_call,
-  Ast_if_else,
-  Ast_binary_op,
-  Ast_unary_op,
-
-  Ast_cast,
-
-  Ast_type_pointer,
-  Ast_type_slice,
-  Ast_deref,
-
-  Ast_return,
-
-  Ast_builtin,
-
-  Ast_kind_max,
-};
-
 enum BuiltinKind : u8 {
   Builtin_include,
+};
+
+enum AstTypeKind {
+  Ast_type_identifier,
+  Ast_type_pointer,
+  Ast_type_slice,
+};
+
+enum TypeFlag : u32 {
+  Distinct = 1 >> 0,
 };
 
 struct AstNode {
@@ -100,6 +111,12 @@ struct AstNode {
         SourceIdx src_idx;
       };
     } builtin;
+
+    struct {
+      AstTypeKind kind;
+      u32 flags;
+      AstNode *base;
+    } ast_type;
 
     struct {
       AstNode *declared_type;
@@ -184,15 +201,45 @@ struct AstNode {
     } module;
 
     struct {
-      AstNode *base;
-    } pointer;
-
-    struct {
-      AstNode *base;
-    } slice;
-
-    struct {
       AstNode *value;
     } deref;
   };
 };
+
+constexpr char const *ast_string[Ast_kind_max + 1] = {
+  "module",      "type",           "param",
+  "function",    "scope",          "identifier",
+  "literal-int", "literal-string", "literal-array-or-slice",
+  "declaration", "assign",         "while",
+  "break",       "continue",       "for",
+  "call",        "if-else",        "binary-op",
+  "unary-op",    "cast",           "deref",
+  "return",      "builtin",        "illegal",
+};
+
+ttld_inline char const *ast_kind_string(u32 kind) {
+  if (kind >= Ast_kind_max) {
+    return ast_string[Ast_kind_max];
+  }
+
+  return ast_string[kind];
+}
+
+constexpr char const *binary_op_string[BinaryOpKind_max + 1] = {
+  "* (Mul)",     "/ (Div)",           "% (Mod)",
+  "- (Sub)",     "+ (Add)",           "<<",
+  ">>",          "& (Bit_and)",       "| (Bit_or)",
+  "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
+  "> (CmpGt)",   ">= (CmpGe)",        "< (CmpLt)",
+  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
+  "(Assign)",    "+= (AddAssign)",    "illegal",
+};
+
+ttld_inline char const *binary_op_kind_string(u32 kind) {
+  if (kind >= BinaryOpKind_max) {
+    return binary_op_string[BinaryOpKind_max];
+  }
+
+  return binary_op_string[kind];
+}
+

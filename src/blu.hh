@@ -163,7 +163,7 @@ struct Job {
 
 struct Compiler;
 
-typedef void (*JobCompletionListenerFn)(Compiler *compiler, JobKind kind, Source *source); 
+typedef void (*JobCompletionListenerFn)(Compiler *compiler, JobKind kind, Source *source);
 
 struct Compiler {
   Arena arena;
@@ -186,9 +186,7 @@ struct Compiler {
   void init();
   void compile_file(Str filename);
 
-  void register_job_completion_listener(JobCompletionListenerFn f) {
-    listener = f;
-  }
+  void register_job_completion_listener(JobCompletionListenerFn f) { listener = f; }
 
   SourceIdx add_read_file_job(Str filename);
 };

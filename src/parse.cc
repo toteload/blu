@@ -34,6 +34,8 @@ struct Parser {
 
   b32 parse_arguments(AstNode **out);
 
+  b32 parse_metadata(AstNode **out);
+
   b32 parse_expression(AstNode **out, BinaryOpKind prev_op = BinaryOpKind_max);
   b32 parse_base_expression(AstNode **out);
   b32 parse_base_expression_pre(AstNode **out);
@@ -402,19 +404,31 @@ b32 Parser::parse_identifier(AstNode **out) {
 }
 
 b32 Parser::parse_type(AstNode **out) {
+  AstNode *n = alloc_node();
+  n->kind    = Ast_type;
+
   Token tok;
   Try(peek(&tok));
+
+  u32 flags = 0;
+
+  if (tok.kind == Tok_keyword_distinct) {
+    flags |= Distinct;
+    next();
+
+    Try(peek(&tok));
+  }
+
+  n->ast_type.flags = flags;
 
   if (tok.kind == Tok_star) {
     next();
 
-    AstNode *n = alloc_node();
-
     AstNode *base;
     Try(parse_type(&base));
 
-    n->kind           = Ast_type_pointer;
-    n->pointer.base   = base;
+    n->ast_type.kind  = Ast_type_pointer;
+    n->ast_type.base  = base;
     n->token_span.end = token_offset();
 
     *out = n;
@@ -426,13 +440,11 @@ b32 Parser::parse_type(AstNode **out) {
     next();
     Try(expect_token(Tok_bracket_close));
 
-    AstNode *n = alloc_node();
-
     AstNode *base;
     Try(parse_type(&base));
 
-    n->kind           = Ast_type_slice;
-    n->slice.base     = base;
+    n->ast_type.kind  = Ast_type_slice;
+    n->ast_type.base  = base;
     n->token_span.end = token_offset();
 
     *out = n;
@@ -440,7 +452,16 @@ b32 Parser::parse_type(AstNode **out) {
     return true;
   }
 
-  return parse_identifier(out);
+  AstNode *identifier;
+  Try(parse_identifier(&identifier));
+
+  n->ast_type.kind  = Ast_type_identifier;
+  n->ast_type.base  = identifier;
+  n->token_span.end = token_offset();
+
+  *out = n;
+
+  return true;
 }
 
 b32 Parser::parse_literal_string(AstNode **out) {
@@ -726,6 +747,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     Try(parse_expression(&base));
 
     Try(expect_token(Tok_paren_close));
+  } else if (tok.kind == Tok_keyword_distinct || tok.kind == Tok_star || tok.kind == Tok_bracket_open) {
+    Try(parse_type(&base));
   } else if (tok.kind == Tok_keyword_break) {
     Try(parse_break(&base));
   } else if (tok.kind == Tok_keyword_continue) {

@@ -2,26 +2,6 @@
 
 #include "blu.hh"
 
-char const *token_string[] = {
-  "colon",        "arrow",        "semicolon",      "equals",      "minus",       "plus",
-  "star",         "slash",        "percent",        "plus_equals", "exclamation", "ampersand",
-  "bar",          "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",
-  "cmp-ne",       "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",
-  "dot",          "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open",
-  "paren_close",  "bracket_open", "bracket_close",  "fn",          "return",      "if",
-  "else",         "while",        "break",          "continue",    "and",         "or",
-  "for",          "in",           "cast",           "module",      "identifier",  "builtin",
-  "line_comment", "<illegal>",
-};
-
-char const *token_kind_string(u32 kind) {
-  if (kind >= Tok_kind_max) {
-    return token_string[Tok_kind_max];
-  }
-
-  return token_string[kind];
-}
-
 void print_tokens(FILE *out, Slice<Token> tokens) {
   for (usize i = 0; i < tokens.len(); i++) {
     Token tok = tokens[i];
@@ -39,40 +19,6 @@ void print_tokens(FILE *out, Slice<Token> tokens) {
 }
 
 void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
-
-char const *ast_string[] = {
-  "module",      "param",     "function", "scope", "identifier",   "literal-int", "literal-string",
-  "literal-array-or-slice",
-  "declaration", "assign",    "while",    "break", "continue",     "for",         "call",
-  "if-else",     "binary-op", "unary-op", "cast",  "type_pointer", "type_slice",  "deref",
-  "return",      "builtin",   "illegal",
-};
-
-char const *ast_kind_string(AstKind kind) {
-  if (kind >= Ast_kind_max) {
-    return ast_string[Ast_kind_max];
-  }
-
-  return ast_string[kind];
-}
-
-char const *binary_op_string[] = {
-  "* (Mul)",     "/ (Div)",           "% (Mod)",
-  "- (Sub)",     "+ (Add)",           "<<",
-  ">>",          "& (Bit_and)",       "| (Bit_or)",
-  "^ (Bit_xor)", "== (CmpEq)",        "!= (CmpNe)",
-  "> (CmpGt)",   ">= (CmpGe)",        "< (CmpLt)",
-  "<= (CmpLe)",  "and (Logical_and)", "or (Logical_or)",
-  "(Assign)",    "+= (AddAssign)",    "illegal",
-};
-
-char const *binary_op_kind_string(BinaryOpKind kind) {
-  if (kind >= BinaryOpKind_max) {
-    return binary_op_string[BinaryOpKind_max];
-  }
-
-  return binary_op_string[kind];
-}
 
 struct PrintAstContext {
   FILE *out;
@@ -93,6 +39,24 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   switch (n.kind) {
   case Ast_module: {
     ForEachAstNode(item, n.module.items) { print_ast(ctx, item, depth + 1); }
+  } break;
+  case Ast_type: {
+    pad(ctx->out, depth + 1);
+    fprintf(ctx->out, "kind: ");
+    switch (n.ast_type.kind) {
+    case Ast_type_identifier: {
+      fprintf(ctx->out, "<type-identifer>\n");
+      print_ast(ctx, n.ast_type.base, depth + 1);
+    } break;
+    case Ast_type_pointer: {
+      fprintf(ctx->out, "<type-pointer>\n");
+      print_ast(ctx, n.ast_type.base, depth + 1);
+    } break;
+    case Ast_type_slice: {
+      fprintf(ctx->out, "<type-slice>\n");
+      print_ast(ctx, n.ast_type.base, depth + 1);
+    } break;
+    }
   } break;
   case Ast_while: {
     print_ast(ctx, n.while_.cond, depth + 1);
@@ -162,6 +126,9 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   case Ast_deref: {
     print_ast(ctx, n.deref.value, depth + 1);
   } break;
+  case Ast_continue:
+  case Ast_break:
+    break;
 
   default: {
     fprintf(ctx->out, "unimplemented\n");
@@ -200,7 +167,7 @@ void completion_listener(Compiler *compiler, JobKind kind, Source *source) {
   }
 
   PrintAstContext ctx;
-  ctx.out = stdout;
+  ctx.out    = stdout;
   ctx.tokens = source->tokens.slice();
 
   print_ast(&ctx, source->mod);

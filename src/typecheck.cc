@@ -5,7 +5,7 @@ struct TypeChecker {
 
   void init(TypeCheckContext ctx);
 
-  Type *infer_ast_type(Env *env, AstNode *type);
+  Type *read_ast_type(Env *env, AstNode *type);
   Type *infer_function_type(Env *env, AstNode *function);
   Type *infer_expression_type(Env *env, AstNode *expression);
 
@@ -71,21 +71,32 @@ Type *determine_binary_op_type(TypeInterner *types, BinaryOpKind op, Type *lhs, 
 
 void TypeChecker::init(TypeCheckContext ctx) { this->ctx = ctx; }
 
-Type *TypeChecker::infer_ast_type(Env *env, AstNode *type) {
-  Debug_assert(
-    type->kind == Ast_identifier || type->kind == Ast_type_pointer || type->kind == Ast_type_slice
-  );
+Type *TypeChecker::read_ast_type(Env *env, AstNode *type) {
+  Debug_assert(type->kind == Ast_type);
 
-  if (type->kind == Ast_type_pointer) {
-    Todo();
+  if (type->ast_type.kind == Ast_type_pointer) {
+    Type *base = read_ast_type(env, type->ast_type.base);
+    Type pointer_type = Type::make_pointer(base);
+
+    if (type->ast_type.flags & Distinct) {
+      return ctx.types->add_as_distinct(&pointer_type);
+    }
+
+    return ctx.types->add(&pointer_type);
   }
 
-  if (type->kind == Ast_type_slice) {
-    Type *base      = infer_ast_type(env, type->slice.base);
+  if (type->ast_type.kind == Ast_type_slice) {
+    Type *base      = read_ast_type(env, type->ast_type.base);
     Type slice_type = Type::make_slice(base);
+
+    if (type->ast_type.flags & Distinct) {
+      return ctx.types->add_as_distinct(&slice_type);
+    }
 
     return ctx.types->add(&slice_type);
   }
+
+  Debug_assert(type->ast_type.kind == Ast_type_identifier);
 
   StrKey idkey = type->identifier.key;
   Value *v     = env->lookup(idkey);
@@ -113,7 +124,7 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
 
     auto &decl = e->declaration;
 
-    Type *declared_type = infer_ast_type(env, decl.type);
+    Type *declared_type = read_ast_type(env, decl.type);
     Type *v             = infer_expression_type(env, decl.value);
 
     if (!is_type_coercible_to(v, declared_type)) {
@@ -136,6 +147,11 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     env->insert(decl.name->identifier.key, Value::make_local(e, declared_type));
 
     res = declared_type;
+  } break;
+  case Ast_type: {
+    Type *type = read_ast_type(env, e);
+    Type *type_type = ctx.types->add_as_type(type);
+    res = type_type;
   } break;
   case Ast_assign: {
     Debug_assert(is_assignable(env, e));
@@ -200,11 +216,7 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
     Value *p   = env->lookup(idkey);
 
     if (!p) {
-      ctx.messages->error(
-        "Could not find identifier {strkey} at {astnode}.",
-        idkey,
-        e
-      );
+      ctx.messages->error("Could not find identifier {strkey} at {astnode}.", idkey, e);
       Todo();
       // Str msg        = ctx.arena->push_format_string( "Could not find identifier.");
       // ctx.messages->push({e->span, Error, msg});
@@ -222,7 +234,7 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
       Todo();
     }
 
-    Type *declared_type = infer_ast_type(env, e->array_or_slice.declared_type);
+    Type *declared_type = read_ast_type(env, e->array_or_slice.declared_type);
 
     Debug_assert(declared_type->kind == Type_slice);
 
@@ -331,7 +343,7 @@ Type *TypeChecker::infer_expression_type(Env *env, AstNode *e) {
 Type *TypeChecker::infer_function_type(Env *env, AstNode *function) {
   Debug_assert(function->kind == Ast_function);
 
-  Type *return_type = infer_ast_type(env, function->function.return_type);
+  Type *return_type = read_ast_type(env, function->function.return_type);
 
   u32 param_count = 0;
   ForEachAstNode(param, function->function.params) { param_count += 1; }
@@ -347,7 +359,7 @@ Type *TypeChecker::infer_function_type(Env *env, AstNode *function) {
 
   u32 i = 0;
   ForEachAstNode(param, function->function.params) {
-    Type *t = infer_ast_type(env, param->param.type);
+    Type *t = read_ast_type(env, param->param.type);
     if (!t) {
       has_param_type_error = true;
       break;
@@ -377,7 +389,7 @@ b32 TypeChecker::check_function_body(Env *env, AstNode *function) {
   Env *param_env = ctx.envs->alloc(env);
 
   ForEachAstNode(param, function->function.params) {
-    Type *param_type = infer_ast_type(env, param->param.type);
+    Type *param_type = read_ast_type(env, param->param.type);
     param_env->insert(param->param.name->identifier.key, Value::make_param(param, param_type));
   }
 

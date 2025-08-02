@@ -46,26 +46,6 @@ b32 parse_arg_from(Str *format, Str *arg) {
 	return false;
 }
 
-static char const *token_string[] = {
-  "colon",        "arrow",        "semicolon",      "equals",      "minus",       "plus",
-  "star",         "slash",        "percent",        "plus_equals", "exclamation", "ampersand",
-  "bar",          "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",
-  "cmp-ne",       "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",
-  "dot",          "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open",
-  "paren_close",  "bracket_open", "bracket_close",  "fn",          "return",      "if",
-  "else",         "while",        "break",          "continue",    "and",         "or",
-  "for",          "in",           "cast",           "module",      "identifier",  "builtin",
-  "line_comment", "<illegal>",
-};
-
-static char const *token_kind_string(u32 kind) {
-  if (kind >= Tok_kind_max) {
-    return token_string[Tok_kind_max];
-  }
-
-  return token_string[kind];
-}
-
 void write_message(Message *msg) {
   if (msg->severity == Error) {
     printf("[error] ");

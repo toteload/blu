@@ -17,6 +17,9 @@ b32 type_eq(void *context, Type *a, Type *b) {
   case Type_Pointer: {
     return type_eq(context, a->pointer.base_type, b->pointer.base_type);
   }
+  case Type_type: {
+      return type_eq(context, a->type.base, b->type.base);
+    }
   case Type_slice: {
     return type_eq(context, a->slice.base_type, b->slice.base_type);
   }
@@ -36,6 +39,9 @@ b32 type_eq(void *context, Type *a, Type *b) {
     }
 
     return true;
+  }
+  case Type_distinct: {
+    return a->distinct.uid == b->distinct.uid;
   }
   case Type_Integer:
     return a->integer.signedness == b->integer.signedness &&
@@ -61,6 +67,9 @@ u32 push_type_data(Arena *arena, Type *x) {
   case Type_Never:
   case Type_Boolean:
     break;
+  case Type_distinct: {
+    Push_data(x->distinct.uid);
+  } break;
   case Type_Integer: {
     Push_data(x->integer.signedness);
     Push_data(x->integer.bitwidth);
@@ -68,6 +77,9 @@ u32 push_type_data(Arena *arena, Type *x) {
   case Type_Pointer: {
     push_type_data(arena, x->pointer.base_type);
   } break;
+    case Type_type: {
+      push_type_data(arena, x->type.base);
+    } break;
   case Type_slice: {
     push_type_data(arena, x->slice.base_type);
   } break;
@@ -117,6 +129,41 @@ void TypeInterner::init(Arena *arena, Allocator storage_allocator, Allocator map
 
 void TypeInterner::deinit() {}
 
+Type *TypeInterner::_intern_type(Type *type) {
+  u32 byte_size = type->byte_size();
+  Type *intern  = cast<Type *>(storage.raw_alloc(byte_size, Align_of(Type)));
+  memcpy(intern, type, byte_size);
+
+  switch (type->kind) {
+  case Type_Void:
+  case Type_IntegerConstant:
+  case Type_Never:
+  case Type_Boolean:
+  case Type_Integer:
+    break;
+  case Type_distinct: {
+    intern->distinct.base = add(type->distinct.base);
+  } break;
+    case Type_type: {
+      intern->type.base = add(type->type.base);
+    } break;
+  case Type_Pointer: {
+    intern->pointer.base_type = add(type->pointer.base_type);
+  } break;
+  case Type_slice: {
+    intern->slice.base_type = add(type->slice.base_type);
+  } break;
+  case Type_Function: {
+    intern->function.return_type = add(type->function.return_type);
+    for (usize i = 0; i < type->function.param_count; i += 1) {
+      intern->function.params[i] = add(type->function.params[i]);
+    }
+  } break;
+  }
+
+  return intern;
+}
+
 Type *TypeInterner::add(Type *type) {
   b32 was_occupied;
   auto bucket = map.insert_key_and_get_bucket(type, &was_occupied);
@@ -124,15 +171,37 @@ Type *TypeInterner::add(Type *type) {
     return bucket->val;
   }
 
-  // TODO: using the user provided type pointer as the key is wrong as we don't control the memory.
-  // Also need to recursively add all the types.
-
-  u32 byte_size = type->byte_size();
-  Type *intern  = cast<Type *>(storage.raw_alloc(byte_size, Align_of(Type)));
-  memcpy(intern, type, byte_size);
+  Type *intern = _intern_type(type);
 
   bucket->key = intern;
   bucket->val = intern;
 
   return intern;
+}
+
+Type *TypeInterner::add_as_distinct(Type *type) {
+  Type *t = _intern_type(type);
+
+  Type *distinct_type = storage.alloc<Type>();
+
+  distinct_type->kind          = Type_distinct;
+  distinct_type->distinct.uid  = _get_new_distinct_uid();
+  distinct_type->distinct.base = t;
+
+  map.insert(distinct_type, distinct_type);
+
+  return distinct_type;
+}
+
+Type *TypeInterner::add_as_type(Type *type) {
+  Type *t = _intern_type(type);
+
+  Type *type_type = storage.alloc<Type>();
+
+  type_type->kind = Type_type;
+  type_type->type.base = t;
+
+  map.insert(type_type, type_type);
+
+  return type_type;
 }

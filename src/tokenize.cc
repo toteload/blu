@@ -246,6 +246,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     Return_if_match("in", Tok_keyword_in);
     Return_if_match("cast", Tok_keyword_cast);
     Return_if_match("module", Tok_keyword_module);
+    Return_if_match("distinct", Tok_keyword_distinct);
 
     Return_token(Tok_identifier);
   }

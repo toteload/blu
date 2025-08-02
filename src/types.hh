@@ -7,6 +7,8 @@ enum TypeKind : u8 {
   Type_Never,
   Type_Pointer,
   Type_slice,
+  Type_distinct,
+  Type_type,
 };
 
 enum Signedness : u8 {
@@ -33,6 +35,13 @@ struct Type {
       Type *return_type;
       Type *params[0];
     } function;
+    struct {
+      u32 uid;
+      Type *base;
+    } distinct;
+    struct {
+      Type *base;
+    } type;
   };
 
   b32 is_sized_type() { return kind != Type_Void && kind != Type_Never; }
@@ -45,6 +54,8 @@ struct Type {
     case Type_Never:
     case Type_Pointer:
     case Type_slice:
+    case Type_distinct:
+    case Type_type:
     case Type_Boolean:
       return sizeof(*this);
     case Type_Function: {
@@ -61,6 +72,12 @@ struct Type {
     Type t;
     t.kind            = Type_slice;
     t.slice.base_type = base;
+    return t;
+  }
+  static Type make_pointer(Type *base) {
+    Type t;
+    t.kind = Type_Pointer;
+    t.pointer.base_type = base;
     return t;
   }
   static Type make_void() { return {Type_Void, {}}; }
@@ -83,9 +100,10 @@ u32 type_hash(void *context, Type *x);
 
 struct TypeInterner {
   Allocator storage;
-  HashMap<Type *, Type *, type_eq, type_hash> map;
+  HashMap<Type *, Type *, type_eq, type_hash> map; // TODO this should be a set
+  u32 distinct_uid_gen = 0;
 
-  // Often used and always available
+  // Often used and always available types
   Type *bool_;
   Type *i32_;
   Type *integer_constant;
@@ -95,5 +113,15 @@ struct TypeInterner {
   void init(Arena *arena, Allocator storage_allocator, Allocator map_allocator);
   void deinit();
 
+  u32 _get_new_distinct_uid() {
+    u32 uid           = distinct_uid_gen;
+    distinct_uid_gen += 1;
+    return uid;
+  }
+
+  Type *_intern_type(Type *type);
+
   Type *add(Type *type);
+  Type *add_as_distinct(Type *type);
+  Type *add_as_type(Type *type);
 };

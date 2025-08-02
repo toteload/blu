@@ -154,7 +154,7 @@ void Compiler::compile_file(Str filename) {
           Str filename_string = get_ast_str(n->builtin.value, src->tokens.slice());
           Str filename        = {filename_string.str + 1, filename_string.len() - 2};
           // printf("Adding source file job for %.*s\n", cast<int>(filename.len()), filename.str);
-          SourceIdx src_idx = add_read_file_job(filename);
+          SourceIdx src_idx  = add_read_file_job(filename);
           n->builtin.src_idx = src_idx;
         }
       }
