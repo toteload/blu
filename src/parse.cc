@@ -31,6 +31,7 @@ struct Parser {
   b32 parse_literal_string(AstNode **out);
   b32 parse_literal_array_or_slice(AstNode **out);
   b32 parse_identifier(AstNode **out);
+  b32 parse_simple_identifier(AstNode **out);
 
   b32 parse_while(AstNode **out);
   b32 parse_for(AstNode **out);
@@ -428,7 +429,7 @@ b32 Parser::parse_return(AstNode **out) {
   return true;
 }
 
-b32 Parser::parse_identifier(AstNode **out) {
+b32 Parser::parse_simple_identifier(AstNode **out) {
   AstNode *n = alloc_node();
 
   Token tok;
@@ -441,6 +442,43 @@ b32 Parser::parse_identifier(AstNode **out) {
   n->token_span.end = token_offset();
 
   *out = n;
+
+  return true;
+}
+
+b32 Parser::parse_identifier(AstNode **out) {
+  AstNode *base = alloc_node();
+
+  Token tok;
+  Try(expect_token(Tok_identifier, &tok));
+
+  StrKey key = ctx.strings->add(tok.str);
+
+  base->kind           = Ast_identifier;
+  base->identifier.key = key;
+  base->token_span.end = token_offset();
+
+  while (!is_at_end()) {
+    peek(&tok);
+
+    if (tok.kind != Tok_dot) {
+      break;
+    }
+
+    next();
+
+    AstNode *field;
+    Try(parse_simple_identifier(&field));
+
+    AstNode *n = alloc_node();
+    n->kind = Ast_field_access;
+    n->field_access.base = base;
+    n->field_access.field = field;
+
+    base = n;
+  }
+
+  *out = base;
 
   return true;
 }
@@ -619,6 +657,50 @@ b32 Parser::parse_while(AstNode **out) {
   return true;
 }
 
+b32 Parser::parse_arguments(AstNode **out) {
+  AstNode *args = nullptr;
+  AstNode *last = nullptr;
+
+  Try(expect_token(Tok_paren_open));
+
+  while (!is_at_end()) {
+    Token tok;
+    Try(peek(&tok));
+
+    if (tok.kind == Tok_paren_close) {
+      break;
+    }
+
+    AstNode *arg;
+    Try(parse_expression(&arg));
+
+    if (!args) {
+      args = arg;
+    } else {
+      last->next = arg;
+    }
+
+    last = arg;
+
+    Try(peek(&tok));
+    if (tok.kind != Tok_comma) {
+      break;
+    }
+
+    next();
+  }
+
+  if (last) {
+    last->next = nullptr;
+  }
+
+  Try(expect_token(Tok_paren_close));
+
+  *out = args;
+
+  return true;
+}
+
 b32 Parser::parse_for(AstNode **out) {
   AstNode *n = alloc_node();
 
@@ -669,105 +751,6 @@ Precedence determine_precedence(BinaryOpKind lhs, BinaryOpKind rhs) {
   }
 
   return Right;
-}
-
-b32 Parser::parse_base_expression(AstNode **out) {
-  AstNode *pre = nullptr;
-
-  Try(parse_base_expression_pre(&pre));
-
-  while (!is_at_end()) {
-    Token tok;
-    if (!peek(&tok)) {
-      break;
-    }
-
-    if (tok.kind == Tok_paren_open) {
-      AstNode *n = alloc_node();
-
-      AstNode *args = nullptr;
-      Try(parse_arguments(&args));
-
-      n->kind           = Ast_call;
-      n->call.callee    = pre;
-      n->call.args      = args;
-      n->token_span.end = token_offset();
-
-      pre = n;
-
-      continue;
-    }
-
-    if (tok.kind == Tok_dot) {
-      AstNode *n = alloc_node();
-
-      next();
-
-      if (tok.kind == Tok_star) {
-        next();
-
-        n->kind = Ast_deref;
-        n->deref.value = pre;
-        n->token_span.end = token_offset();
-
-        pre = n;
-
-        continue;
-      }
-
-      Todo();
-    }
-
-    break;
-  }
-
-  *out = pre;
-
-  return true;
-}
-
-b32 Parser::parse_arguments(AstNode **out) {
-  AstNode *args = nullptr;
-  AstNode *last = nullptr;
-
-  Try(expect_token(Tok_paren_open));
-
-  while (!is_at_end()) {
-    Token tok;
-    Try(peek(&tok));
-
-    if (tok.kind == Tok_paren_close) {
-      break;
-    }
-
-    AstNode *arg;
-    Try(parse_expression(&arg));
-
-    if (!args) {
-      args = arg;
-    } else {
-      last->next = arg;
-    }
-
-    last = arg;
-
-    Try(peek(&tok));
-    if (tok.kind != Tok_comma) {
-      break;
-    }
-
-    next();
-  }
-
-  if (last) {
-    last->next = nullptr;
-  }
-
-  Try(expect_token(Tok_paren_close));
-
-  *out = args;
-
-  return true;
 }
 
 b32 Parser::parse_base_expression_pre(AstNode **out) {
@@ -853,6 +836,74 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
   }
 
   *out = base;
+
+  return true;
+}
+
+b32 Parser::parse_base_expression(AstNode **out) {
+  AstNode *pre = nullptr;
+
+  Try(parse_base_expression_pre(&pre));
+
+  while (!is_at_end()) {
+    Token tok;
+    peek(&tok);
+
+    if (tok.kind == Tok_paren_open) {
+      AstNode *n = alloc_node();
+
+      AstNode *args = nullptr;
+      Try(parse_arguments(&args));
+
+      n->kind           = Ast_call;
+      n->call.callee    = pre;
+      n->call.args      = args;
+      n->token_span.end = token_offset();
+
+      pre = n;
+
+      continue;
+    }
+
+    if (tok.kind == Tok_dot) {
+      AstNode *n = alloc_node();
+
+      next();
+
+      Try(peek(&tok));
+
+      if (tok.kind == Tok_star) {
+        next();
+
+        n->kind = Ast_deref;
+        n->deref.value = pre;
+        n->token_span.end = token_offset();
+
+        pre = n;
+
+        continue;
+      }
+
+      if (tok.kind == Tok_identifier) {
+        AstNode *field;
+        Try(parse_identifier(&field));
+
+        n->kind = Ast_field_access;
+        n->field_access.base = pre;
+        n->field_access.field = field;
+
+        pre = n;
+
+        continue;
+      }
+
+      Todo();
+    }
+
+    break;
+  }
+
+  *out = pre;
 
   return true;
 }

@@ -2,13 +2,10 @@ c := module {
 #include "c.blu"
 }
 
-#include "c.blu"
-#include "sum.blu"
-
 LPSECURITY_ATTRIBUTES := distinct *void
 
 DWORD  := u32
-LPCSTR := *char
+LPCSTR := *c.char
 HANDLE := distinct *void
 
 //CreateFileA : fn(
@@ -44,7 +41,7 @@ main := fn() i32 {
   i : i32 = 1
   x : i32 = 2 + 5 * 16 / 4 * 35 + i
 
-  xs : []i32 = .[]i32{1, 2, 3, 4}
+  xs : []i32 = .{1, 2, 3, 4}
 
   s : i32 = sum(xs)
 

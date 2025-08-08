@@ -36,6 +36,8 @@ enum AstKind : u8 {
 
   Ast_builtin,
 
+  Ast_field_access,
+
   Ast_kind_max,
 };
 
@@ -111,6 +113,11 @@ struct AstNode {
         SourceIdx src_idx;
       };
     } builtin;
+
+    struct {
+      AstNode *base;
+      AstNode *field;
+    } field_access;
 
     struct {
       AstTypeKind kind;
@@ -214,7 +221,7 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "break",       "continue",       "for",
   "call",        "if-else",        "binary-op",
   "unary-op",    "cast",           "deref",
-  "return",      "builtin",        "illegal",
+  "return",      "builtin",        "field_access", "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

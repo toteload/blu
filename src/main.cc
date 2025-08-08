@@ -45,7 +45,7 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
     fprintf(ctx->out, "kind: ");
     switch (n.ast_type.kind) {
     case Ast_type_identifier: {
-      fprintf(ctx->out, "<type-identifer>\n");
+      fprintf(ctx->out, "<type-identifier>\n");
       print_ast(ctx, n.ast_type.base, depth + 1);
     } break;
     case Ast_type_pointer: {
@@ -125,6 +125,10 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   } break;
   case Ast_deref: {
     print_ast(ctx, n.deref.value, depth + 1);
+  } break;
+  case Ast_field_access: {
+    print_ast(ctx, n.field_access.base, depth+1);
+    print_ast(ctx, n.field_access.field, depth+1);
   } break;
   case Ast_continue:
   case Ast_break:

@@ -425,6 +425,10 @@ b32 TypeChecker::check_toplevel(AstNode *root, Env *env) {
 
     AstNode *value = item->declaration.value;
 
+    if (value->kind == Ast_module) {
+      continue;
+    }
+
     Type *type = nullptr;
 
     if (value->kind == Ast_function) {
