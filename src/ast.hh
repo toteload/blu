@@ -12,7 +12,7 @@ enum AstKind : u8 {
 
   Ast_literal_int,
   Ast_literal_string,
-  Ast_literal_array_or_slice,
+  Ast_literal_tuple,
 
   Ast_declaration,
 
@@ -97,10 +97,12 @@ enum TypeFlag : u32 {
 
 struct AstNode {
   AstKind kind;
+
   struct {
     u32 start;
     u32 end;
   } token_span;
+
   Type *type    = nullptr;
   AstNode *next = nullptr;
 
@@ -128,7 +130,7 @@ struct AstNode {
     struct {
       AstNode *declared_type;
       AstNode *items;
-    } array_or_slice;
+    } tuple;
 
     struct {
       AstNode *params;
@@ -214,14 +216,11 @@ struct AstNode {
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "module",      "type",           "param",
-  "function",    "scope",          "identifier",
-  "literal-int", "literal-string", "literal-array-or-slice",
-  "declaration", "assign",         "while",
-  "break",       "continue",       "for",
-  "call",        "if-else",        "binary-op",
-  "unary-op",    "cast",           "deref",
-  "return",      "builtin",        "field_access", "illegal",
+  "module",     "type",        "param",          "function",      "scope",
+  "identifier", "literal-int", "literal-string", "literal-tuple", "declaration",
+  "assign",     "while",       "break",          "continue",      "for",
+  "call",       "if-else",     "binary-op",      "unary-op",      "cast",
+  "deref",      "return",      "builtin",        "field_access",  "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {
@@ -249,4 +248,3 @@ ttld_inline char const *binary_op_kind_string(u32 kind) {
 
   return binary_op_string[kind];
 }
-

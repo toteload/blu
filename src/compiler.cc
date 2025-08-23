@@ -98,7 +98,7 @@ void Compiler::compile_file(Str filename) {
 
     switch (job.kind) {
     case Job_read_file: {
-      //printf("- %.*s - Reading\n", cast<int>(src->filename.len()), src->filename.str);
+      // printf("- %.*s - Reading\n", cast<int>(src->filename.len()), src->filename.str);
       Str text = read_file(&arena, src->filename);
       if (text.is_empty()) {
         Todo();
@@ -113,7 +113,7 @@ void Compiler::compile_file(Str filename) {
       jobs.push_back(job);
     } break;
     case Job_tokenize: {
-      //printf("- %.*s - Tokenizing\n", cast<int>(src->filename.len()), src->filename.str);
+      // printf("- %.*s - Tokenizing\n", cast<int>(src->filename.len()), src->filename.str);
       src->tokens.init(stdlib_alloc);
 
       TokenizeContext ctx;
@@ -132,7 +132,7 @@ void Compiler::compile_file(Str filename) {
       jobs.push_back(job);
     } break;
     case Job_parse: {
-      //printf("- %.*s - Parsing\n", cast<int>(src->filename.len()), src->filename.str);
+      // printf("- %.*s - Parsing\n", cast<int>(src->filename.len()), src->filename.str);
       ParseContext ctx;
       ctx.src_idx  = src_idx;
       ctx.messages = &messages;
@@ -165,7 +165,7 @@ void Compiler::compile_file(Str filename) {
 
   Source *src = &sources[root_src_idx];
 
-  //printf("- %.*s - Type checking\n", cast<int>(src->filename.len()), src->filename.str);
+  // printf("- %.*s - Type checking\n", cast<int>(src->filename.len()), src->filename.str);
 
   TypeCheckContext ctx;
   ctx.arena      = &arena;
@@ -178,6 +178,7 @@ void Compiler::compile_file(Str filename) {
 
   b32 ok = type_check_module(ctx, src->mod);
   if (!ok) {
+    messages.print_messages(sources.slice());
     Todo();
   }
 }

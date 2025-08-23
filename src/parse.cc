@@ -196,7 +196,7 @@ b32 Parser::parse_items(AstNode **out) {
     if (tok.kind == Tok_brace_close) {
       break;
     }
-    
+
     AstNode *item = nullptr;
     Try(parse_item(&item));
 
@@ -470,9 +470,9 @@ b32 Parser::parse_identifier(AstNode **out) {
     AstNode *field;
     Try(parse_simple_identifier(&field));
 
-    AstNode *n = alloc_node();
-    n->kind = Ast_field_access;
-    n->field_access.base = base;
+    AstNode *n            = alloc_node();
+    n->kind               = Ast_field_access;
+    n->field_access.base  = base;
     n->field_access.field = field;
 
     base = n;
@@ -620,10 +620,10 @@ b32 Parser::parse_literal_array_or_slice(AstNode **out) {
 
   Try(expect_token(Tok_brace_close));
 
-  n->kind                         = Ast_literal_array_or_slice;
-  n->array_or_slice.declared_type = type;
-  n->array_or_slice.items         = items;
-  n->token_span.end               = token_offset();
+  n->kind                = Ast_literal_tuple;
+  n->tuple.declared_type = type;
+  n->tuple.items         = items;
+  n->token_span.end      = token_offset();
 
   *out = n;
 
@@ -707,13 +707,13 @@ b32 Parser::parse_for(AstNode **out) {
   Token tok;
   Try(expect_token(Tok_keyword_for, &tok));
 
-  AstNode *item;
-  Try(parse_identifier(&item));
-
-  Try(expect_token(Tok_keyword_in));
-
   AstNode *iterable;
   Try(parse_expression(&iterable));
+
+  Try(expect_token(Tok_keyword_do));
+
+  AstNode *item;
+  Try(parse_identifier(&item));
 
   AstNode *body;
   Try(parse_scope(&body));
@@ -760,7 +760,7 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
   AstNode *base = nullptr;
 
   switch (tok.kind) {
-  // clang-format off
+    // clang-format off
   case Tok_keyword_for:      Try(parse_for(&base));         break;
   case Tok_keyword_while:    Try(parse_while(&base));       break;
   case Tok_keyword_continue: Try(parse_continue(&base));    break;
@@ -771,7 +771,7 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
   case Tok_keyword_fn:       Try(parse_function(&base));    break;
   case Tok_keyword_cast:     Todo();                        break;
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
-  // clang-format on
+    // clang-format on
 
   case Tok_dot: {
     next();
@@ -815,13 +815,13 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     UnaryOpKind op;
 
     switch (tok.kind) {
-    // clang-format off
+      // clang-format off
     case Tok_exclamation: op = Not;       break;
     case Tok_minus:       op = Negate;    break;
     case Tok_ampersand:   op = AddressOf; break;
 
     default: { Unreachable(); } break;
-    // clang-format on
+      // clang-format on
     }
 
     n->kind           = Ast_unary_op;
@@ -832,7 +832,8 @@ b32 Parser::parse_base_expression_pre(AstNode **out) {
     base = n;
   } break;
 
-  default: return false;
+  default:
+    return false;
   }
 
   *out = base;
@@ -875,8 +876,8 @@ b32 Parser::parse_base_expression(AstNode **out) {
       if (tok.kind == Tok_star) {
         next();
 
-        n->kind = Ast_deref;
-        n->deref.value = pre;
+        n->kind           = Ast_deref;
+        n->deref.value    = pre;
         n->token_span.end = token_offset();
 
         pre = n;
@@ -888,8 +889,8 @@ b32 Parser::parse_base_expression(AstNode **out) {
         AstNode *field;
         Try(parse_identifier(&field));
 
-        n->kind = Ast_field_access;
-        n->field_access.base = pre;
+        n->kind               = Ast_field_access;
+        n->field_access.base  = pre;
         n->field_access.field = field;
 
         pre = n;

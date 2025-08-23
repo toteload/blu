@@ -41,7 +41,7 @@ enum TokenKind : u8 {
   Tok_keyword_and,
   Tok_keyword_or,
   Tok_keyword_for,
-  Tok_keyword_in,
+  Tok_keyword_do,
   Tok_keyword_cast,
   Tok_keyword_module,
   Tok_keyword_distinct,
@@ -53,15 +53,15 @@ enum TokenKind : u8 {
 };
 
 constexpr char const *token_string[Tok_kind_max + 1] = {
-  "colon",               "semicolon",      "equals",      "minus",       "plus",
-  "star",        "slash",        "percent",        "plus_equals", "exclamation", "ampersand",
-  "bar",         "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",
-  "cmp-ne",      "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",
-  "dot",         "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open",
-  "paren_close", "bracket_open", "bracket_close",  "fn",          "return",      "if",
-  "else",        "while",        "break",          "continue",    "and",         "or",
-  "for",         "in",           "cast",           "module",      "distinct",    "identifier",
-  "builtin",     "line_comment", "<illegal>",
+  "colon",        "semicolon",      "equals",      "minus",       "plus",       "star",
+  "slash",        "percent",        "plus_equals", "exclamation", "ampersand",  "bar",
+  "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",     "cmp-ne",
+  "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",      "comma",      "dot",
+  "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open", "paren_close",
+  "bracket_open", "bracket_close",  "fn",          "return",      "if",         "else",
+  "while",        "break",          "continue",    "and",         "or",         "for",
+  "do",           "cast",           "module",      "distinct",    "identifier", "builtin",
+  "line_comment", "<illegal>",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {

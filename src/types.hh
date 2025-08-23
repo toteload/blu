@@ -8,6 +8,7 @@ enum TypeKind : u8 {
   Type_Pointer,
   Type_slice,
   Type_distinct,
+  Type_tuple,
   Type_type,
 };
 
@@ -42,9 +43,15 @@ struct Type {
     struct {
       Type *base;
     } type;
+    struct {
+      u32 count;
+      Type *items[0];
+    } tuple;
   };
 
   b32 is_sized_type() { return kind != Type_Void && kind != Type_Never; }
+
+  u32 write_string(Slice<char> out);
 
   u32 byte_size() {
     switch (kind) {
@@ -61,6 +68,8 @@ struct Type {
     case Type_Function: {
       return sizeof(*this) + function.param_count * sizeof(Type *);
     } break;
+    case Type_tuple:
+      return sizeof(*this) + tuple.count * sizeof(Type *);
     }
   }
 
@@ -76,7 +85,7 @@ struct Type {
   }
   static Type make_pointer(Type *base) {
     Type t;
-    t.kind = Type_Pointer;
+    t.kind              = Type_Pointer;
     t.pointer.base_type = base;
     return t;
   }
@@ -105,7 +114,14 @@ struct TypeInterner {
 
   // Often used and always available types
   Type *bool_;
+  Type *u8_;
+  Type *u16_;
+  Type *u32_;
+  Type *u64_;
+  Type *i8_;
+  Type *i16_;
   Type *i32_;
+  Type *i64_;
   Type *integer_constant;
   Type *void_;
   Type *never;
@@ -122,6 +138,10 @@ struct TypeInterner {
   Type *_intern_type(Type *type);
 
   Type *add(Type *type);
+
+  // Intern the provided type, but make it distinct as well.
+  // Two calls to this function with the same pointer will result in two different types returned.
   Type *add_as_distinct(Type *type);
+
   Type *add_as_type(Type *type);
 };

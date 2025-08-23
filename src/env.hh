@@ -49,8 +49,8 @@ struct EnvManager {
   {                                                                                                \
     auto _id  = strings->add(Str_make(Identifier));                                            \
     auto _tmp = T;                                                                                 \
-    auto _t   = types->add(&_tmp);                                                             \
-    global_env->insert(_id, Value::make_type(_t));                                    \
+    auto _t   = types->add_as_type(&_tmp);                                                             \
+    global_env->insert(_id, Value::make_builtin(_t));                                    \
   }
 
   // clang-format off

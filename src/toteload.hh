@@ -147,6 +147,13 @@ template<typename T> struct Slice {
   T &operator[](usize idx) { return data[idx]; }
   usize len() { return _len; }
   T *end() { return data + _len; }
+  Slice<T> sub(usize start, usize end) {
+    Debug_assert(start <= _len);
+    Debug_assert(end <= _len);
+    return {data + start, end - start};
+  }
+
+  static Slice from_ptr_and_len(T *p, usize len) { return {p, len}; }
 };
 
 // @os

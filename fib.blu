@@ -2,6 +2,8 @@ c := module {
 #include "c.blu"
 }
 
+#include "sum.blu"
+
 LPSECURITY_ATTRIBUTES := distinct *void
 
 DWORD  := u32
@@ -29,7 +31,7 @@ fib := fn(n: i32) i32 {
 
 count := fn(needle: i32, haystack: []i32) i64 {
   s : i64 = 0
-  for x in haystack {
+  for haystack do x {
     if x == needle {
       s += 1
     }
@@ -44,6 +46,8 @@ main := fn() i32 {
   xs : []i32 = .{1, 2, 3, 4}
 
   s : i32 = sum(xs)
+
+  test : DWORD = 0
 
   while true {
     if i + 2 * 3 == 10 and true {

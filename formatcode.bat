@@ -17,3 +17,4 @@ clang-format -i src\string_interner.cc
 clang-format -i src\type_interner.cc
 clang-format -i src\typecheck.cc
 clang-format -i src\c_generator.cc
+clang-format -i src\message_manager.cc

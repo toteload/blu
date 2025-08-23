@@ -123,6 +123,7 @@ enum MessageSeverity : u8 {
 
 union MessageArg {
   TokenKind token_kind;
+  Type *type;
 };
 
 struct Message {

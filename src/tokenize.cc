@@ -231,7 +231,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     Return_if_match("and", Tok_keyword_and);
     Return_if_match("or", Tok_keyword_or);
     Return_if_match("for", Tok_keyword_for);
-    Return_if_match("in", Tok_keyword_in);
+    Return_if_match("do", Tok_keyword_do);
     Return_if_match("cast", Tok_keyword_cast);
     Return_if_match("module", Tok_keyword_module);
     Return_if_match("distinct", Tok_keyword_distinct);

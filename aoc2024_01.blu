@@ -7,7 +7,7 @@ stdio :: module {
 
   fopen :
     @callconv("c")
-    fn(filename: *c.char, mode: *c.char) @nullable *FILE
+    fn(filename: *c.char, mode: *c.char) *FILE | nil
     : #extern("fopen")
 
   fclose :: #extern "fclose"
@@ -48,13 +48,13 @@ readfile :: fn(filename: string) string {
   c.fread(data, 1, size, f)
 }
 
-sort :: fn(xs: []i32) {
+sort := fn(xs: []i32) nil {
   todo()
 }
 
 count :: (needle: i32, haystack: []i32) i64 {
   s := 0
-  for x in haystack {
+  for haystack do x {
     if x == needle {
       s += 1
     }
@@ -62,7 +62,7 @@ count :: (needle: i32, haystack: []i32) i64 {
   s
 }
 
-main :: () {
+main := fn() nil {
   input := std.io.readfile("day01.txt")
 
   xs := Vec(i32).new()
@@ -79,7 +79,7 @@ main :: () {
   sort(ys)
 
   s : i64 = 0
-  for x,y in xs,ys {
+  for .{xs,ys} do .{x,y} {
     s += x - y
   }
 

@@ -101,6 +101,9 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
     pad(ctx->out, depth + 1);
     fprintf(ctx->out, " '%.*s'\n", cast<i32>(literal.len()), literal.str);
   } break;
+  case Ast_literal_tuple: {
+    ForEachAstNode(item, n.tuple.items) { print_ast(ctx, item, depth + 1); }
+  } break;
   case Ast_call: {
     print_ast(ctx, n.call.callee, depth + 1);
     ForEachAstNode(arg, n.call.args) { print_ast(ctx, arg, depth + 1); }
@@ -127,8 +130,8 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
     print_ast(ctx, n.deref.value, depth + 1);
   } break;
   case Ast_field_access: {
-    print_ast(ctx, n.field_access.base, depth+1);
-    print_ast(ctx, n.field_access.field, depth+1);
+    print_ast(ctx, n.field_access.base, depth + 1);
+    print_ast(ctx, n.field_access.field, depth + 1);
   } break;
   case Ast_continue:
   case Ast_break:
@@ -191,7 +194,7 @@ int main(i32 arg_count, char const *const *args) {
   Compiler compiler;
 
   compiler.init();
-  compiler.register_job_completion_listener(completion_listener);
+  // compiler.register_job_completion_listener(completion_listener);
   compiler.compile_file(source_filename);
 
   printf("DONE\n");

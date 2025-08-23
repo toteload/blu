@@ -23,40 +23,49 @@ usize next_arg_offset(Str format) {
       continue;
     }
 
-    if ((i+1) < format.len() && format[i+1] == '{') {
-	    i += 1;
-	    continue;
+    if ((i + 1) < format.len() && format[i + 1] == '{') {
+      i += 1;
+      continue;
     }
 
-	return i;
+    return i;
   }
 
   return format.len();
 }
 
 b32 parse_arg_from(Str *format, Str *arg) {
-	for (usize i = 0; i < format->len(); i++) {
-		if ((*format)[i] == '}') {
-			*arg = { format->str, i + 1 };
-			*format = { format->str + i + 1, format->len() - i - 1 };
-			return true;
-		}
-	}
+  for (usize i = 0; i < format->len(); i++) {
+    if ((*format)[i] == '}') {
+      *arg    = {format->str, i + 1};
+      *format = {format->str + i + 1, format->len() - i - 1};
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 }
 
 void print_message(Slice<Source> sources, Message *msg) {
   Source *src = &sources[msg->src_idx];
 
-  printf("%.*s:%d:%d ", cast<int>(src->filename.len()), src->filename.str, msg->span.start.line, msg->span.start.col);
+  printf(
+    "%.*s:%d:%d ",
+    cast<int>(src->filename.len()),
+    src->filename.str,
+    msg->span.start.line,
+    msg->span.start.col
+  );
 
   switch (msg->severity) {
-  case Error: printf("[error] "); break;
-  default: Todo();
+  case Error:
+    printf("[error] ");
+    break;
+  default:
+    Todo();
   }
 
-  Str format = msg->format;
+  Str format  = msg->format;
   u32 arg_idx = 0;
   while (true) {
     usize offset = next_arg_offset(format);
@@ -65,24 +74,29 @@ void print_message(Slice<Source> sources, Message *msg) {
       printf("%.*s", cast<int>(offset), format.str);
     }
 
-    format.str += offset;
+    format.str  += offset;
     format._len -= offset;
 
     if (format.is_empty()) {
-	    break;
+      break;
     }
 
     Str arg;
     b32 ok = parse_arg_from(&format, &arg);
 
     if (!ok) {
-	    Todo();
+      Todo();
     }
 
     if (str_eq(arg, Str_make("{tokenkind}"))) {
-            printf("<%s>", token_kind_string(msg->args[arg_idx].token_kind));
+      printf("<%s>", token_kind_string(msg->args[arg_idx].token_kind));
+    } else if (str_eq(arg, Str_make("{type}"))) {
+      char buf[256] = {0};
+      Type *type    = msg->args[arg_idx].type;
+      u32 len       = type->write_string(Slice<char>::from_ptr_and_len(buf, 256));
+      printf("%.*s", cast<int>(len), buf);
     } else {
-            printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);
+      printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);
     }
 
     arg_idx += 1;
@@ -99,12 +113,7 @@ void MessageManager::print_messages(Slice<Source> sources) {
 }
 
 // It is assumed that format will be a constant string and thus does not need to be copied.
-void MessageManager::error(
-  SourceIdx src_idx,
-  SourceSpan span,
-  char const *format,
-  ...)
-{
+void MessageManager::error(SourceIdx src_idx, SourceSpan span, char const *format, ...) {
   va_list varargs;
   va_start(varargs, format);
 
@@ -114,7 +123,7 @@ void MessageManager::error(
   msg->src_idx  = src_idx;
   msg->span     = span;
 
-  Str fmt = Str::from_cstr(format);
+  Str fmt     = Str::from_cstr(format);
   msg->format = fmt;
 
   usize count = count_args(fmt);

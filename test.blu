@@ -1,0 +1,16 @@
+A := distinct u32
+B := distinct u32
+
+test := fn() void {
+  w: u32 = 0
+
+  x: A = 1
+  y: A = w
+  z: A = y
+
+  a: B = 2
+  b: B = a
+  c: B = b
+
+  h: A = a
+}
