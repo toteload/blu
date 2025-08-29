@@ -74,6 +74,12 @@ enum NodeKind : u8 {
   // - node_and_node.a_idx to the condition expression
   // - node_and_node.b_idx to the body
   Ast_while,
+
+  // main_token is '='
+  // Uses node_and_node.
+  // - node_and_node.a_idx to the L-value expression
+  // - node_and_node.b_idx to the rhs expression
+  Ast_assign,
 };
 
 struct NodeIndex {

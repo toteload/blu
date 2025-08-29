@@ -56,31 +56,26 @@ char const *html_template = R"(<!DOCTYPE html>
     %.*s
     </div>
 <script>
-const colors = [
-  '#a2e754',
-  '#eace4b',
-  '#fbc097',
-  '#fbbbbe',
-  '#f4b9e2',
-  '#d5c3fa',
-  '#b6cffa',
-  '#92d9fa',
-  '#5ee4ec',
-];
+const colors = [];
+for (var i = 0; i < 7; i++) {
+  colors.push(`oklch(0.99 55%% ${(i * 151.0) %% 360.0})`);
+}
 const tokenCount = %d;
 for (var i = 0; i < tokenCount; i++) {
   const query = `.a${String(i).padStart(%d, '0')}`
   const pair = document.querySelectorAll(query);
   const color = colors[i%%colors.length];
-  console.log(color);
   for (const e of pair) {
+    pair[0].style.background = color;
     e.addEventListener('mouseenter', () => {
-      pair[0].style.background = color;
+      pair[0].style.outline = 'solid 1px';
+      pair[1].style.outline = 'solid 1px';
       pair[1].style.background = color;
     });
     e.addEventListener('mouseleave', () => {
-      pair[0].style.background = 'white';
-      pair[1].style.background = 'white';
+      pair[0].style.outline = 'none';
+      pair[1].style.outline = 'none';
+      pair[1].style.background = 'none';
     });
   }
 }
