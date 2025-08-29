@@ -39,39 +39,41 @@ struct MessageManager;
 
 #include "tokens.hh"
 
-struct Token {
-  TokenKind kind;
-  SourceSpan span;
-  Str str;
+// `start` and `end` are byte offsets in the source.
+struct Span {
+  u32 start;
+  u32 end;
 };
 
-struct TokenizeContext {
-  MessageManager *messages;
+struct Tokens {
+  Vector<TokenKind> kinds;
+  Vector<Span> spans;
+
+  TokenKind kind(u32 idx) { return kinds[idx]; }
+  Span span(u32 idx) { return spans[idx]; }
 };
 
-// TODO: Convert tokenize output of tokens to SoA layout
-
-b32 tokenize(TokenizeContext ctx, Str source, Vector<Token> *output);
+b32 tokenize(MessageManager *messages, Str source, Tokens *output);
 
 #include "ast.hh"
 
-ttld_inline Str get_ast_str(AstNode *node, Slice<Token> tokens) {
-  char const *start = tokens[node->token_span.start].str.str;
-  char const *end   = tokens[node->token_span.end - 1].str.end();
-  return {
-    start,
-    cast<usize>(end - start),
-  };
-}
-
-ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
-  SourceLocation start = tokens[node->token_span.start].span.start;
-  SourceLocation end   = tokens[node->token_span.end].span.end;
-  return {
-    start,
-    end,
-  };
-}
+//ttld_inline Str get_ast_str(AstNode *node, Slice<Token> tokens) {
+//  char const *start = tokens[node->token_span.start].str.str;
+//  char const *end   = tokens[node->token_span.end - 1].str.end();
+//  return {
+//    start,
+//    cast<usize>(end - start),
+//  };
+//}
+//
+//ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
+//  SourceLocation start = tokens[node->token_span.start].span.start;
+//  SourceLocation end   = tokens[node->token_span.end].span.end;
+//  return {
+//    start,
+//    end,
+//  };
+//}
 
 #define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
 
@@ -82,7 +84,7 @@ struct ParseContext {
   ObjectPool<AstNode> *nodes;
 };
 
-b32 parse(ParseContext ctx, Slice<Token> tokens, AstNode **root);
+b32 parse(ParseContext ctx, Tokens *tokens, AstNode **root);
 
 #include "value.hh"
 #include "env.hh"
@@ -91,7 +93,7 @@ struct Source {
   Str filename;
 
   Str text;
-  Vector<Token> tokens;
+  Tokens *tokens;
 
   AstNode *mod = nullptr;
 };
@@ -106,7 +108,7 @@ struct TypeCheckContext {
   TypeInterner *types;
   ObjectPool<AstNode> *nodes;
 
-  Vector<Source> *sources;
+  Source sources;
 };
 
 b32 type_check_module(TypeCheckContext ctx, AstNode *module);
@@ -147,7 +149,7 @@ struct MessageManager {
 
   void deinit();
 
-  void print_messages(Slice<Source> sources);
+  void print_messages(Source sources);
   void error(SourceIdx src_idx, SourceSpan span, char const *format, ...);
 };
 

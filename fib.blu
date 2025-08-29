@@ -1,53 +1,16 @@
-c := module {
-#include "c.blu"
-}
-
-#include "sum.blu"
-
-LPSECURITY_ATTRIBUTES := distinct *void
-
-DWORD  := u32
-LPCSTR := *c.char
-HANDLE := distinct *void
-
-//CreateFileA : fn(
-//  lpFileName: LPCSTR,
-//  dwDesiredAccess: DWORD,
-//  dwShareMode: DWORD,
-//  lpSecurityAttributes: LPSECURITY_ATTRIBUTES,
-//  dwCreationDisposition: DWORD,
-//  dwFlagsAndAttributes: DWORD,
-//  hTemplateFile: HANDLE,
-//  ) HANDLE
-//  = #extern("CreateFileA")
-
-fib := fn(n: i32) i32 {
+fib: fn(i32) i32 = fn(n: i32) i32 {
   if n <= 1 {
     return 1
   } else {
     return fib(n-1) + fib(n-2)
   }
 }
-
-count := fn(needle: i32, haystack: []i32) i64 {
-  s : i64 = 0
-  for haystack do x {
-    if x == needle {
-      s += 1
-    }
-  }
-  return s
-}
  
-main := fn() i32 {
-  i : i32 = 1
-  x : i32 = 2 + 5 * 16 / 4 * 35 + i
+main: fn() i32 = fn() i32 {
+  i: i32 = 1
+  x: i32 = 2 + 5 * 16 / 4 * 35 + i
 
-  xs : []i32 = .{1, 2, 3, 4}
-
-  s : i32 = sum(xs)
-
-  test : DWORD = 0
+  s: i32 = fib(xs)
 
   while true {
     if i + 2 * 3 == 10 and true {

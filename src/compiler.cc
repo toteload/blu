@@ -1,54 +1,5 @@
 #include "blu.hh"
 
-void *stdlib_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
-  if (!Is_null(p) && new_byte_size == 0) {
-    free(p);
-    return nullptr;
-  }
-
-  return realloc(p, new_byte_size);
-}
-
-static Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
-
-Str read_file_aux(Arena *arena, Str filename) {
-  char *buf = arena->alloc<char>(filename.len() + 1);
-  memcpy(buf, filename.str, filename.len());
-  buf[filename.len()] = '\0';
-
-  FILE *f = fopen(buf, "rb");
-  if (!f) {
-    return Str::empty();
-  }
-
-  fseek(f, 0, SEEK_END);
-
-  u32 size   = ftell(f);
-  char *data = Cast(char *, malloc(size + 1));
-  if (!data) {
-    return Str::empty();
-  }
-
-  fseek(f, 0, SEEK_SET);
-
-  u64 bytes_read = fread(data, 1, size, f);
-  if (bytes_read != size) {
-    return Str::empty();
-  }
-
-  // Set a zero-terminated byte, but don't include it in the length.
-  data[size] = '\0';
-
-  return {data, size};
-}
-
-Str read_file(Arena *arena, Str filename) {
-  auto snapshot = arena->take_snapshot();
-  auto res      = read_file_aux(arena, filename);
-  arena->restore(snapshot);
-  return res;
-}
-
 void Compiler::init() {
   arena.init(MiB(32));
   work_arena.init(MiB(32));

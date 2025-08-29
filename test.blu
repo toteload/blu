@@ -1,7 +1,7 @@
-A := distinct u32
-B := distinct u32
+A: type = distinct u32
+B: type = distinct u32
 
-test := fn() void {
+test: fn() void = fn() void {
   w: u32 = 0
 
   x: A = 1

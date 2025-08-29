@@ -7,33 +7,21 @@ enum TokenizerResult : u32 {
 };
 
 struct Tokenizer {
-  TokenizeContext ctx;
+  MessageManager *messages;
 
+  char const *start;
   char const *at;
   char const *end;
 
-  SourceLocation current_location;
+  void init(MessageManager *messages, Str source);
 
-  void init(TokenizeContext ctx, Str source);
+  TokenizerResult next(TokenKind *kind, Span *span);
 
-  TokenizerResult next(TokenKind *kind, SourceSpan *span, Str *str);
-
-  void step();
+  void step() { at += 1; }
   void skip_whitespace();
   void step_until_new_line();
   b32 is_at_end() { return at == end; }
 };
-
-void Tokenizer::step() {
-  if (*at == '\n') {
-    current_location.line += 1;
-    current_location.col   = 1;
-  } else {
-    current_location.col += 1;
-  }
-
-  at += 1;
-}
 
 b32 is_whitespace(char c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
 b32 is_numeric(char c) { return c >= '0' && c <= '9'; }
@@ -53,43 +41,35 @@ void Tokenizer::step_until_new_line() {
   }
 }
 
-void Tokenizer::init(TokenizeContext ctx, Str source) {
-  this->ctx = ctx;
-
-  this->at  = source.str;
-  this->end = source.end();
-
-  current_location.line = 1;
-  current_location.col  = 1;
+void Tokenizer::init(MessageManager *messages, Str source) {
+  this->messages = messages;
+  this->start    = source.str;
+  this->at       = source.str;
+  this->end      = source.end();
 }
 
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
     *kind       = Kind;                                                                            \
-    span->start = start;                                                                           \
-    span->end   = current_location;                                                                \
-    *str        = {                                                                                \
-      pstart,                                                                               \
-      cast<usize>(at - pstart),                                                             \
-    };                                                                                      \
+    span->start = cast<u32>(token_start - start);                                                  \
+    span->end   = cast<u32>(at - start);                                                           \
     return TokResult_ok;                                                                           \
   }
 
 #define Return_if_match(String, Kind)                                                              \
-  if (str_eq(Str_make(String), {pstart, cast<usize>(at - pstart)})) {                              \
+  if (str_eq(Str_make(String), {token_start, cast<usize>(at - token_start)})) {                    \
     Return_token(Kind);                                                                            \
   }
 
-TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
+TokenizerResult Tokenizer::next(TokenKind *kind, Span *span) {
   skip_whitespace();
 
   if (is_at_end()) {
     return TokResult_end;
   }
 
-  char c               = *at;
-  char const *pstart   = at;
-  SourceLocation start = current_location;
+  char c                  = *at;
+  char const *token_start = at;
 
   step();
 
@@ -180,20 +160,6 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     Return_token(Tok_exclamation);
   }
 
-  if (c == '#') {
-    if (!is_identifier_start(*at)) {
-      Todo();
-    }
-
-    step();
-
-    while (!is_at_end() && is_identifier_rest(*at)) {
-      step();
-    }
-
-    Return_token(Tok_builtin);
-  }
-
   if (c == '"') {
     while (!is_at_end() && *at != '"') {
       step();
@@ -230,10 +196,6 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
     Return_if_match("continue", Tok_keyword_continue);
     Return_if_match("and", Tok_keyword_and);
     Return_if_match("or", Tok_keyword_or);
-    Return_if_match("for", Tok_keyword_for);
-    Return_if_match("do", Tok_keyword_do);
-    Return_if_match("cast", Tok_keyword_cast);
-    Return_if_match("module", Tok_keyword_module);
     Return_if_match("distinct", Tok_keyword_distinct);
 
     Return_token(Tok_identifier);
@@ -245,20 +207,22 @@ TokenizerResult Tokenizer::next(TokenKind *kind, SourceSpan *span, Str *str) {
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(TokenizeContext ctx, Str source, Vector<Token> *output) {
+b32 tokenize(MessageManager *messages, Str source, Tokens *output) {
   Tokenizer tokenizer;
-  tokenizer.init(ctx, source);
+  tokenizer.init(messages, source);
 
   TokenizerResult res;
   while (true) {
-    Token tok;
-    res = tokenizer.next(&tok.kind, &tok.span, &tok.str);
+    TokenKind kind;
+    Span span;
+    res = tokenizer.next(&kind, &span);
 
     if (res != TokResult_ok) {
       break;
     }
 
-    output->push(tok);
+    output->kinds.push(kind);
+    output->spans.push(span);
   }
 
   return res == TokResult_end;

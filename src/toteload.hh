@@ -64,6 +64,35 @@ template<typename T> constexpr T max(T a, T b) {
   return b;
 }
 
+ttld_inline u32 clz32(u32 x) {
+#ifdef __clang__
+  // Result is undefined if x == 0
+  return __builtin_clz(x);
+#else
+#error "todo"
+#endif
+}
+
+ttld_inline u32 clz(u64 x) {
+#ifdef __clang__
+  // Result is undefined if x == 0
+  return __builtin_clzll(x);
+#else
+#error "todo"
+#endif
+}
+
+ttld_inline u32 bitwidth(u64 x) {
+#ifdef __clang__
+  if (x == 0) {
+    return 0;
+  }
+  return 64 - clz(x);
+#else
+#error "todo"
+#endif
+}
+
 template<typename T, typename U> constexpr T cast(U &&x) { return (T)x; }
 
 #define Is_null(p) ((p) == nullptr)
@@ -78,6 +107,15 @@ template<typename T, typename U> constexpr T cast(U &&x) { return (T)x; }
 
 template<typename T> constexpr T round_up_to_power_of_two(T x, T p) {
   return (x + (p - 1)) & (~(p - 1));
+}
+
+template<typename T>
+constexpr T round_up_to_nearest_power_of_two(T x) {
+  if (x <= 1) {
+    return 1;
+  }
+
+  return 1 << bitwidth(x); 
 }
 template<typename T> constexpr b32 is_zero_or_power_of_two(T x) { return ((((x)-1) & (x)) == 0); }
 
@@ -128,6 +166,12 @@ struct Str {
     // We don't include the null terminator in the length
     usize len = strlen(s);
     return {s, len};
+  }
+
+  Str sub(usize start, usize end) {
+    Debug_assert(start <= _len);
+    Debug_assert(end <= _len);
+    return {str + start, end - start};
   }
 };
 

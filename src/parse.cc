@@ -3,12 +3,27 @@
 struct Parser {
   ParseContext ctx;
 
-  Slice<Token> tokens;
-  Token *at;
+  u32 at;
+  Tokens tokens;
 
-  void init(ParseContext ctx, Slice<Token> tokens);
+  void init(ParseContext *ctx, Slice<Token> tokens);
 
   b32 parse_root(AstNode **out);
+  b32 parse_declaration(AstNode **out);
+
+  b32 parse_literal_int(AstNode **out);
+  b32 parse_literal_string(AstNode **out);
+
+  b32 parse_block(AstNode **out);
+
+  b32 parse_type(AstNode **out);
+
+  b32 parse_function(AstNode **out);
+
+  b32 parse_return(AstNode **out);
+
+  // ---
+
   b32 parse_module(AstNode **out);
 
   b32 parse_builtin(AstNode **out);
@@ -17,18 +32,9 @@ struct Parser {
   b32 parse_items(AstNode **out);
 
   b32 parse_parameter(AstNode **out);
-  b32 parse_function(AstNode **out);
-
-  b32 parse_type(AstNode **out);
-
-  b32 parse_scope(AstNode **out);
 
   b32 parse_break(AstNode **out);
   b32 parse_continue(AstNode **out);
-  b32 parse_return(AstNode **out);
-  b32 parse_declaration(AstNode **out);
-  b32 parse_literal_int(AstNode **out);
-  b32 parse_literal_string(AstNode **out);
   b32 parse_literal_array_or_slice(AstNode **out);
   b32 parse_identifier(AstNode **out);
   b32 parse_simple_identifier(AstNode **out);
@@ -282,7 +288,7 @@ b32 Parser::parse_function(AstNode **out) {
   Try(parse_type(&return_type));
 
   AstNode *body;
-  Try(parse_scope(&body));
+  Try(parse_block(&body));
 
   n->kind                 = Ast_function;
   n->function.params      = params;
@@ -295,7 +301,7 @@ b32 Parser::parse_function(AstNode **out) {
   return true;
 }
 
-b32 Parser::parse_scope(AstNode **out) {
+b32 Parser::parse_block(AstNode **out) {
   AstNode *n = alloc_node();
 
   Try(expect_token(Tok_brace_open));
@@ -645,7 +651,7 @@ b32 Parser::parse_while(AstNode **out) {
   Try(parse_expression(&cond));
 
   AstNode *body;
-  Try(parse_scope(&body));
+  Try(parse_block(&body));
 
   n->kind           = Ast_while;
   n->while_.cond    = cond;
@@ -716,7 +722,7 @@ b32 Parser::parse_for(AstNode **out) {
   Try(parse_identifier(&item));
 
   AstNode *body;
-  Try(parse_scope(&body));
+  Try(parse_block(&body));
 
   n->kind           = Ast_for;
   n->for_.item      = item;
@@ -996,7 +1002,7 @@ b32 Parser::parse_if_else(AstNode **out) {
   Try(parse_expression(&cond));
 
   AstNode *then;
-  Try(parse_scope(&then));
+  Try(parse_block(&then));
 
   n->kind         = Ast_if_else;
   n->if_else.cond = cond;
@@ -1016,7 +1022,7 @@ b32 Parser::parse_if_else(AstNode **out) {
   Try(next(&tok));
 
   AstNode *otherwise;
-  Try(parse_scope(&otherwise));
+  Try(parse_block(&otherwise));
 
   n->if_else.otherwise = otherwise;
   n->token_span.end    = token_offset();

@@ -111,7 +111,7 @@ b32 TypeChecker::read_ast_type(Env *env, AstNode *type, Type **out) {
     t               = ctx.types->add(&slice_type);
   } break;
   case Ast_type_identifier: {
-      // TODO: also support field accessed identifiers
+    // TODO: also support field accessed identifiers
     Debug_assert(type->ast_type.base->kind == Ast_identifier);
 
     StrKey idkey = type->ast_type.base->identifier.key;

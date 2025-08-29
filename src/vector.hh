@@ -9,9 +9,13 @@ template<typename T> struct Vector {
   void init(Allocator alloc);
   void deinit();
 
+  ~Vector() { deinit(); }
+
   bool is_empty() { return _len == 0; }
   usize len() { return _len; }
 
+  void ensure_free_capacity(usize min_free_cap);
+  void ensure_capacity(usize min_cap);
   void grow();
 
   void push(T x) { *push_empty() = x; }
@@ -45,18 +49,32 @@ template<typename T> void Vector<T>::init(Allocator alloc) {
 }
 
 template<typename T> void Vector<T>::deinit() {
-  if (data == nullptr) {
-    return;
+  if (data) {
+    alloc.free(data, cap);
   }
 
-  alloc.free(data, cap);
+  _len = 0;
+  cap = 0;
+  data = nullptr;
 }
 
 template<typename T> void Vector<T>::grow() {
-  usize new_cap = max<usize>(4, 2 * cap);
+  usize new_capacity = max<usize>(4, 2 * cap);
+  ensure_capacity(new_capacity);
+}
 
-  data = alloc.realloc(data, cap, new_cap);
-  cap  = new_cap;
+template<typename T> void Vector<T>::ensure_capacity(usize minimum_capacity) {
+  usize new_capacity = max(cap, round_up_to_nearest_power_of_two(minimum_capacity));
+  if (new_capacity == cap) {
+    return;
+  }
+  data = alloc.realloc(data, cap, new_capacity);
+  cap = minimum_capacity;
+}
+
+template<typename T> void Vector<T>::ensure_free_capacity(usize minimum_free_capacity) {
+  usize new_capacity = round_up_to_nearest_power_of_two(_len + minimum_free_capacity);
+  ensure_capacity(new_capacity);
 }
 
 template<typename T> T *Vector<T>::push_empty() {
