@@ -18,7 +18,7 @@ def exe(name):
         return name
 
 def outd(p):
-    return join('$outdir', p)
+    return join('$outdir', p.replace('\\', '__'))
 
 def create_build_ninja():
     fout = open('build.ninja', 'w')
@@ -44,12 +44,11 @@ def create_build_ninja():
                   '-march=native -std=c++17',
                   '-DTTLD_DEBUG',
                   '-g' if is_macos else '',
-'-g -gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
+                  '-g -gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
                   '$cflags',
                   '-c',
                   '$in',
                   '-o $out',
-
                   ])
         )
 
@@ -58,121 +57,60 @@ def create_build_ninja():
         command = 'clang++ -g $in -o $out',
         )
 
-    out.build(
-        outputs   = outd('main.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'main.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
+    inputs = [
+        'main.cc',
+        'toteload.cc',
+        'tokenize.cc',
+        'parse.cc',
+        'type_interner.cc',
+        'string_interner.cc',
+        'types.cc',
+        'typecheck.cc',
+        'message_manager.cc',
+        join('tools', 'tokenviewer.cc'),
+        join('utils', 'stdlib.cc'),
+    ]
 
-    out.build(
-        outputs   = outd('toteload.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'toteload.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
+    outputs = []
 
-    out.build(
-        outputs   = outd('tokenize.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'tokenize.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('parse.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'parse.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('type_interner.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'type_interner.cc'),
-        variables = {
-            'cflags': '-Iext',
-        },
-        )
-
-    #out.build(
-    #    outputs   = outd('c_generator.o'),
-    #    rule      = 'compile_cpp_debug',
-    #    inputs    = join('src', 'c_generator.cc'),
-    #    variables = {
-    #        'cflags': '',
-    #    },
-    #    )
-
-    out.build(
-        outputs   = outd('string_interner.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'string_interner.cc'),
-        variables = {
-            'cflags': '-Iext',
-        },
-        )
-
-    out.build(
-        outputs   = outd('typecheck.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'typecheck.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('types.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'types.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('message_manager.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'message_manager.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
-
-    out.build(
-        outputs   = outd('compiler.o'),
-        rule      = 'compile_cpp_debug',
-        inputs    = join('src', 'compiler.cc'),
-        variables = {
-            'cflags': '',
-        },
-        )
+    for f in inputs:
+        fout = outd(f'{f}.o')
+        outputs.append(fout)
+        out.build(
+            outputs   = fout,
+            rule      = 'compile_cpp_debug',
+            inputs    = join('src', f),
+            variables = {
+                'cflags': '-Iext -Isrc',
+            },
+            )
 
     out.build(
         outputs = outd(exe('blu')),
-        rule = 'build_binary',
-        inputs = [
-            outd('main.o'),
-            outd('tokenize.o'),
-            outd('parse.o'),
-            outd('typecheck.o'),
-            outd('string_interner.o'),
-            outd('type_interner.o'),
-            outd('types.o'),
-            outd('toteload.o'),
-            outd('message_manager.o'),
-            #outd('c_generator.o'),
-            outd('compiler.o'),
-        ],
+        rule    = 'build_binary',
+        inputs  = [outd(f'{f}.o') for f in [
+                'main.cc',
+                'toteload.cc',
+                'tokenize.cc',
+                'parse.cc',
+                'type_interner.cc',
+                'string_interner.cc',
+                'types.cc',
+                'typecheck.cc',
+                'message_manager.cc',
+                join('utils', 'stdlib.cc'),
+        ]],
+        )
+
+    out.build(
+        outputs = outd(exe('tokenviewer')),
+        rule    = 'build_binary',
+        inputs  = [outd(f'{f}.o') for f in [
+                'toteload.cc',
+                'tokenize.cc',
+                join('tools', 'tokenviewer.cc'),
+                join('utils', 'stdlib.cc'),
+        ]],
         )
 
 if __name__ == '__main__':

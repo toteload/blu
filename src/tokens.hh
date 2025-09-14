@@ -48,8 +48,6 @@ enum TokenKind : u8 {
   Tok_keyword_and,
   Tok_keyword_or,
 
-
-
   Tok_identifier,
 
   Tok_line_comment,
@@ -57,16 +55,53 @@ enum TokenKind : u8 {
   Tok_kind_max,
 };
 
+struct TokenIndex {
+  u32 idx;
+};
+
+struct Tokens {
+  Vector<TokenKind> kinds;
+
+  // Each span denotes what bytes in the source the token spans.
+  Vector<Span<u32>> spans;
+
+  TokenIndex end() { return {cast<u32>(kinds.len())}; }
+
+  TokenIndex alloc() {
+    TokenIndex res = end();
+    kinds.push_empty();
+    spans.push_empty();
+    return res;
+  }
+
+  TokenKind &kind(TokenIndex idx) { return kinds[idx.idx]; }
+  Span<u32> &span(TokenIndex idx) { return spans[idx.idx]; }
+};
+
 constexpr char const *token_string[Tok_kind_max + 1] = {
-  "colon",        "semicolon",    "comma", "dot", "equals",      "minus",       "plus",       "star",
-  "slash",        "percent",        "plus_equals", "exclamation", "ampersand",  "bar",
-  "caret",        "tilde",          "left-shift",  "right-shift", "cmp-eq",     "cmp-ne",
-  "cmp-gt",       "cmp-ge",         "cmp-lt",      "cmp-le",
-  "literal_int",  "literal_string", "brace_open",  "brace_close", "paren_open", "paren_close",
-  "bracket_open", "bracket_close",  "fn",          "distinct",      "if",         "else",
-  "while",        "break",          "continue", "return",    "and",         "or",        
-      "identifier", 
-  "line_comment", "<illegal>",
+  "colon",        "semicolon",
+  "comma",        "dot",
+  "equals",       "minus",
+  "plus",         "star",
+  "slash",        "percent",
+  "plus_equals",  "exclamation",
+  "ampersand",    "bar",
+  "caret",        "tilde",
+  "left-shift",   "right-shift",
+  "cmp-eq",       "cmp-ne",
+  "cmp-gt",       "cmp-ge",
+  "cmp-lt",       "cmp-le",
+  "literal_int",  "literal_string",
+  "brace_open",   "brace_close",
+  "paren_open",   "paren_close",
+  "bracket_open", "bracket_close",
+  "fn",           "distinct",
+  "if",           "else",
+  "while",        "break",
+  "continue",     "return",
+  "and",          "or",
+  "identifier",   "line_comment",
+  "<illegal>",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {

@@ -1,23 +1,9 @@
 #include <stdio.h>
 
 #include "blu.hh"
+#include "utils/stdlib.hh"
 
-void print_tokens(FILE *out, Slice<Token> tokens) {
-  for (usize i = 0; i < tokens.len(); i++) {
-    Token tok = tokens[i];
-
-    fprintf(
-      out,
-      "[%4d:%4d] %s = \"%.*s\"\n",
-      tok.span.start.line,
-      tok.span.start.col,
-      token_kind_string(tok.kind),
-      cast<int>(tok.str.len()),
-      tok.str.str
-    );
-  }
-}
-
+#if 0
 void pad(FILE *out, u32 depth) { fprintf(out, "%*s", 2 * depth, ""); }
 
 struct PrintAstContext {
@@ -142,43 +128,19 @@ void print_ast(PrintAstContext *ctx, AstNode *ref, u32 depth = 0) {
   } break;
   }
 }
+#endif
 
-void display_message(FILE *out, Message *msg) {
-  char const *severity = "unknown";
-  switch (msg->severity) {
-  case Error:
-    severity = "error";
-    break;
-  case Warning:
-    severity = "warning";
-    break;
-  case Info:
-    severity = "info";
-    break;
-  };
-
-  fprintf(
-    out,
-    "[%d:%d] %s: %.*s\n",
-    msg->span.start.line,
-    msg->span.start.col,
-    severity,
-    cast<i32>(msg->format.len()),
-    msg->format.str
-  );
-}
-
-void completion_listener(Compiler *compiler, JobKind kind, Source *source) {
-  if (kind != Job_parse) {
-    return;
-  }
-
-  PrintAstContext ctx;
-  ctx.out    = stdout;
-  ctx.tokens = source->tokens.slice();
-
-  print_ast(&ctx, source->mod);
-}
+// void completion_listener(Compiler *compiler, JobKind kind, Source *source) {
+//   if (kind != Job_parse) {
+//     return;
+//   }
+//
+//   PrintAstContext ctx;
+//   ctx.out    = stdout;
+//   ctx.tokens = source->tokens.slice();
+//
+//   print_ast(&ctx, source->mod);
+// }
 
 int main(i32 arg_count, char const *const *args) {
   if (arg_count < 2) {
@@ -186,18 +148,77 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+  Str filename = Str::from_cstr(args[1]);
+
+  Str source_text = read_file(filename);
+
+  MessageManager messages;
+  messages.init(stdlib_alloc);
+
+  Tokens tokens;
+  tokens.kinds.init(stdlib_alloc);
+  tokens.spans.init(stdlib_alloc);
+
+  b32 ok;
+  ok = tokenize(&messages, source_text, &tokens);
+
+  if (!ok) {
+    printf("Tokenization error\n");
+    return 1;
+  }
+
+  Arena arena;
+  arena.init(MiB(2));
+
+  Nodes nodes;
+  nodes.kinds.init(stdlib_alloc);
+  nodes.spans.init(stdlib_alloc);
+  nodes.datas.init(stdlib_alloc);
+  nodes.segment_allocator = arena.as_allocator();
+
+  ParseContext parse_context;
+  parse_context.messages = &messages;
+  parse_context.tokens   = &tokens;
+
+  ok = parse(&parse_context, &nodes);
+  if (!ok) {
+    printf("Parse error\n");
+    return 1;
+  }
+
   Arena work_arena;
   work_arena.init(MiB(1));
 
-  Str source_filename = Str::from_cstr(args[1]);
+  TypeInterner types;
+  types.init(&work_arena, stdlib_alloc, stdlib_alloc);
 
-  Compiler compiler;
+  StringInterner strings;
+  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
 
-  compiler.init();
-  // compiler.register_job_completion_listener(completion_listener);
-  compiler.compile_file(source_filename);
+  EnvManager envs;
+  envs.init(arena.as_allocator(), stdlib_alloc);
+  envs.init_global_env(&strings, &types);
 
-  printf("DONE\n");
+  TypeCheckContext type_check_context;
+  type_check_context.messages   = &messages;
+  type_check_context.work_arena = &work_arena;
+  type_check_context.envs       = &envs;
+  type_check_context.types      = &types;
+  type_check_context.strings    = &strings;
+
+  Source source;
+  source.filename = filename;
+  source.source   = source_text;
+  source.tokens   = &tokens;
+  source.nodes    = &nodes;
+
+  ok = type_check(&type_check_context, &source);
+  if (!ok) {
+    printf("Type check error\n");
+    return 1;
+  }
+
+  printf("ok\n");
 
   return 0;
 }

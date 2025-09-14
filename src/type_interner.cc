@@ -9,21 +9,16 @@ b32 type_eq(void *context, Type *a, Type *b) {
   }
 
   switch (a->kind) {
-  case Type_Void:
-  case Type_IntegerConstant:
-  case Type_Never:
-  case Type_Boolean:
+  case Type_nil:
+  case Type_integer_constant:
+  case Type_never:
+  case Type_boolean:
+  case Type_type:
     return true;
-  case Type_Pointer: {
-    return type_eq(context, a->pointer.base_type, b->pointer.base_type);
-  }
-  case Type_type: {
-    return type_eq(context, a->type.base, b->type.base);
-  }
   case Type_slice: {
     return type_eq(context, a->slice.base_type, b->slice.base_type);
   }
-  case Type_Function: {
+  case Type_function: {
     if (!type_eq(context, a->function.return_type, b->function.return_type)) {
       return false;
     }
@@ -40,13 +35,13 @@ b32 type_eq(void *context, Type *a, Type *b) {
 
     return true;
   }
-  case Type_tuple: {
-    if (a->tuple.count != b->tuple.count) {
+  case Type_sequence: {
+    if (a->sequence.count != b->sequence.count) {
       return false;
     }
 
-    ForEachIndex(i, a->tuple.count) {
-      if (!type_eq(context, a->tuple.items[i], b->tuple.items[i])) {
+    ForEachIndex(i, a->sequence.count) {
+      if (!type_eq(context, a->sequence.items[i], b->sequence.items[i])) {
         return false;
       }
     }
@@ -56,7 +51,7 @@ b32 type_eq(void *context, Type *a, Type *b) {
   case Type_distinct: {
     return a->distinct.uid == b->distinct.uid;
   }
-  case Type_Integer:
+  case Type_integer:
     return a->integer.signedness == b->integer.signedness &&
            a->integer.bitwidth == b->integer.bitwidth;
   }
@@ -75,35 +70,30 @@ u32 push_type_data(Arena *arena, Type *x) {
   Push_data(x->kind);
 
   switch (x->kind) {
-  case Type_Void:
-  case Type_IntegerConstant:
-  case Type_Never:
-  case Type_Boolean:
+  case Type_nil:
+  case Type_integer_constant:
+  case Type_never:
+  case Type_boolean:
+  case Type_type:
     break;
   case Type_distinct: {
     Push_data(x->distinct.uid);
   } break;
-  case Type_Integer: {
+  case Type_integer: {
     Push_data(x->integer.signedness);
     Push_data(x->integer.bitwidth);
-  } break;
-  case Type_Pointer: {
-    push_type_data(arena, x->pointer.base_type);
-  } break;
-  case Type_type: {
-    push_type_data(arena, x->type.base);
   } break;
   case Type_slice: {
     push_type_data(arena, x->slice.base_type);
   } break;
-  case Type_Function: {
+  case Type_function: {
     push_type_data(arena, x->function.return_type);
     Push_data(x->function.param_count);
     ForEachIndex(i, x->function.param_count) { push_type_data(arena, x->function.params[i]); }
   } break;
-  case Type_tuple: {
-    Push_data(x->tuple.count);
-    ForEachIndex(i, x->tuple.count) { push_type_data(arena, x->tuple.items[i]); }
+  case Type_sequence: {
+    Push_data(x->sequence.count);
+    ForEachIndex(i, x->sequence.count) { push_type_data(arena, x->sequence.items[i]); }
   } break;
   }
 
@@ -125,9 +115,9 @@ u32 type_hash(void *context, Type *x) {
   return hash;
 }
 
-void TypeInterner::init(Arena *arena, Allocator storage_allocator, Allocator map_allocator) {
+void TypeInterner::init(Arena *work_arena, Allocator storage_allocator, Allocator map_allocator) {
   storage = storage_allocator;
-  map.init(map_allocator, arena);
+  map.init(map_allocator, work_arena);
 
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
@@ -135,18 +125,20 @@ void TypeInterner::init(Arena *arena, Allocator storage_allocator, Allocator map
     Identifier = add(&_tmp);                                                                       \
   }
 
+  // clang-format off
+  Add_type(u8_,   Type::make_integer(Unsigned, 8));
+  Add_type(u16_,  Type::make_integer(Unsigned, 16));
+  Add_type(u32_,  Type::make_integer(Unsigned, 32));
+  Add_type(u64_,  Type::make_integer(Unsigned, 64));
+  Add_type(i8_,   Type::make_integer(Signed,    8));
+  Add_type(i16_,  Type::make_integer(Signed,   16));
+  Add_type(i32_,  Type::make_integer(Signed,   32));
+  Add_type(i64_,  Type::make_integer(Signed,   64));
   Add_type(bool_, Type::make_bool());
-  Add_type(u8_, Type::make_integer(Unsigned, 8));
-  Add_type(u16_, Type::make_integer(Unsigned, 16));
-  Add_type(u32_, Type::make_integer(Unsigned, 32));
-  Add_type(u64_, Type::make_integer(Unsigned, 64));
-  Add_type(i8_, Type::make_integer(Signed, 8));
-  Add_type(i16_, Type::make_integer(Signed, 16));
-  Add_type(i32_, Type::make_integer(Signed, 32));
-  Add_type(i64_, Type::make_integer(Signed, 64));
-  Add_type(integer_constant, Type::make_integer_constant());
-  Add_type(void_, Type::make_void());
+  Add_type(nil,   Type::make_nil());
   Add_type(never, Type::make_never());
+  Add_type(integer_constant, Type::make_integer_constant());
+  // clang-format on
 
 #undef Add_type
 }
@@ -159,32 +151,29 @@ Type *TypeInterner::_intern_type(Type *type) {
   memcpy(intern, type, byte_size);
 
   switch (type->kind) {
-  case Type_Void:
-  case Type_IntegerConstant:
-  case Type_Never:
-  case Type_Boolean:
-  case Type_Integer:
+  case Type_nil:
+  case Type_integer_constant:
+  case Type_never:
+  case Type_boolean:
+  case Type_integer:
+  case Type_type:
     break;
   case Type_distinct: {
     intern->distinct.base = add(type->distinct.base);
   } break;
-  case Type_type: {
-    intern->type.base = add(type->type.base);
-  } break;
-  case Type_Pointer: {
-    intern->pointer.base_type = add(type->pointer.base_type);
-  } break;
   case Type_slice: {
     intern->slice.base_type = add(type->slice.base_type);
   } break;
-  case Type_Function: {
+  case Type_function: {
     intern->function.return_type = add(type->function.return_type);
     for (usize i = 0; i < type->function.param_count; i += 1) {
       intern->function.params[i] = add(type->function.params[i]);
     }
   } break;
-  case Type_tuple: {
-    ForEachIndex(i, type->tuple.count) { intern->tuple.items[i] = add(type->tuple.items[i]); }
+  case Type_sequence: {
+    ForEachIndex(i, type->sequence.count) {
+      intern->sequence.items[i] = add(type->sequence.items[i]);
+    }
   } break;
   }
 
@@ -218,17 +207,4 @@ Type *TypeInterner::add_as_distinct(Type *type) {
   map.insert(distinct_type, distinct_type);
 
   return distinct_type;
-}
-
-Type *TypeInterner::add_as_type(Type *type) {
-  Type *t = add(type);
-
-  Type *type_type = storage.alloc<Type>();
-
-  type_type->kind      = Type_type;
-  type_type->type.base = t;
-
-  map.insert(type_type, type_type);
-
-  return type_type;
 }

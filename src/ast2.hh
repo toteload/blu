@@ -16,7 +16,8 @@ enum NodeKind : u8 {
   // Does not use data
   Ast_literal_string,
 
-  // Does not use data
+  // main_token is the identifier
+  // Uses strkey. strkey is the key for the interned string.
   Ast_identifier,
 
   // main_token is '{'
@@ -91,10 +92,6 @@ struct OptionalNodeIndex {
   u32 idx;
 };
 
-struct TokenIndex {
-  u32 idx;
-};
-
 struct ExtraIndex {
   u32 idx;
 };
@@ -110,6 +107,7 @@ struct IfPayload {
 };
 
 union NodeData {
+  StrKey strkey;
   NodeIndex node_idx;
 
   struct {
@@ -126,18 +124,18 @@ union NodeData {
 };
 
 struct Nodes {
-  Vector<NodeKind> kind;
-  Vector<NodeData> data;
+  // kind, data, and main_token have one item per node.
+
+  Vector<NodeKind>   kind;
+  Vector<NodeData>   data;
   Vector<TokenIndex> main_token;
 
-  // -
-
+  // extra is used by nodes that need to store more information than fits in data.
   Vector<u32> extra;
-};
 
-struct Ast {
-  Str source;
-  Tokens tokens;
-  Nodes nodes;
-};
+  NodeIndex alloc_node();
 
+  void set_kind(NodeIndex n, NodeKind k) { kind[n.idx] = k; }
+  void set_data(NodeIndex n, NodeData data) { data[n.idx] = data; }
+  void set_main_token(NodeIndex n, TokenIndex i) { main_token[n.idx] = i; }
+};

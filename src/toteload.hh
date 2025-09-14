@@ -78,7 +78,7 @@ ttld_inline u32 clz(u64 x) {
   // Result is undefined if x == 0
   return __builtin_clzll(x);
 #else
-#error "todo"
+#error "todo: clz is not implemented for this platform"
 #endif
 }
 
@@ -89,7 +89,7 @@ ttld_inline u32 bitwidth(u64 x) {
   }
   return 64 - clz(x);
 #else
-#error "todo"
+#error "todo: bitwidth is not implemented for this platform"
 #endif
 }
 
@@ -109,13 +109,12 @@ template<typename T> constexpr T round_up_to_power_of_two(T x, T p) {
   return (x + (p - 1)) & (~(p - 1));
 }
 
-template<typename T>
-constexpr T round_up_to_nearest_power_of_two(T x) {
+template<typename T> constexpr T round_up_to_nearest_power_of_two(T x) {
   if (x <= 1) {
     return 1;
   }
 
-  return 1 << bitwidth(x); 
+  return 1 << bitwidth(x);
 }
 template<typename T> constexpr b32 is_zero_or_power_of_two(T x) { return ((((x)-1) & (x)) == 0); }
 
@@ -129,16 +128,18 @@ template<typename T, typename U> isize ptr_diff(T *a, U *b) {
 
 template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 *>(p) + d; }
 
+#define Assert(cond) assert(cond)
+
 #ifdef TTLD_DEBUG
-#define Debug_assert(cond) assert(cond)
+#define Debug_assert(cond) Assert(cond)
 #else
 #define Debug_assert(cond) Cast(void, cond)
 #endif
 
 #define Panic() abort()
 #define Unreachable() Panic()
-#define Todo() assert(!"TODO")
-#define Unimplemented() assert(!"Unimplemented")
+#define Todo() Assert(!"TODO")
+#define Unimplemented() Assert(!"Unimplemented")
 
 // ---
 
@@ -284,6 +285,8 @@ struct Arena {
 
   ttld_inline ArenaSnapshot take_snapshot();
   void restore(ArenaSnapshot snapshot);
+
+  Allocator as_allocator();
 };
 
 ttld_inline ArenaSnapshot Arena::take_snapshot() { return {.owner = this, .at = at}; }

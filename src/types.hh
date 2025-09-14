@@ -1,14 +1,13 @@
 enum TypeKind : u8 {
-  Type_IntegerConstant,
-  Type_Integer,
-  Type_Boolean,
-  Type_Function,
-  Type_Void,
-  Type_Never,
-  Type_Pointer,
+  Type_integer_constant,
+  Type_integer,
+  Type_boolean,
+  Type_function,
+  Type_nil,
+  Type_never,
   Type_slice,
   Type_distinct,
-  Type_tuple,
+  Type_sequence,
   Type_type,
 };
 
@@ -27,13 +26,10 @@ struct Type {
     } integer;
     struct {
       Type *base_type;
-    } pointer;
-    struct {
-      Type *base_type;
     } slice;
     struct {
-      u32 param_count;
       Type *return_type;
+      u32 param_count;
       Type *params[0];
     } function;
     struct {
@@ -41,40 +37,36 @@ struct Type {
       Type *base;
     } distinct;
     struct {
-      Type *base;
-    } type;
-    struct {
       u32 count;
       Type *items[0];
-    } tuple;
+    } sequence;
   };
 
-  b32 is_sized_type() { return kind != Type_Void && kind != Type_Never; }
+  b32 is_sized_type() { return kind != Type_nil && kind != Type_never; }
 
   u32 write_string(Slice<char> out);
 
   u32 byte_size() {
     switch (kind) {
-    case Type_Integer:
-    case Type_IntegerConstant:
-    case Type_Void:
-    case Type_Never:
-    case Type_Pointer:
+    case Type_integer:
+    case Type_integer_constant:
+    case Type_nil:
+    case Type_never:
     case Type_slice:
     case Type_distinct:
     case Type_type:
-    case Type_Boolean:
+    case Type_boolean:
       return sizeof(*this);
-    case Type_Function: {
+    case Type_function: {
       return sizeof(*this) + function.param_count * sizeof(Type *);
     } break;
-    case Type_tuple:
-      return sizeof(*this) + tuple.count * sizeof(Type *);
+    case Type_sequence:
+      return sizeof(*this) + sequence.count * sizeof(Type *);
     }
   }
 
   bool is_integer_or_integer_constant() {
-    return kind == Type_Integer || kind == Type_IntegerConstant;
+    return kind == Type_integer || kind == Type_integer_constant;
   }
 
   static Type make_slice(Type *base) {
@@ -83,19 +75,14 @@ struct Type {
     t.slice.base_type = base;
     return t;
   }
-  static Type make_pointer(Type *base) {
-    Type t;
-    t.kind              = Type_Pointer;
-    t.pointer.base_type = base;
-    return t;
-  }
-  static Type make_void() { return {Type_Void, {}}; }
-  static Type make_bool() { return {Type_Boolean, {}}; }
-  static Type make_never() { return {Type_Never, {}}; }
-  static Type make_integer_constant() { return {Type_IntegerConstant, {}}; }
+  static Type make_nil() { return {Type_nil, {}}; }
+  static Type make_bool() { return {Type_boolean, {}}; }
+  static Type make_never() { return {Type_never, {}}; }
+  static Type make_type() { return {Type_type, {}}; }
+  static Type make_integer_constant() { return {Type_integer_constant, {}}; }
   static Type make_integer(Signedness s, u16 width) {
     return {
-      Type_Integer,
+      Type_integer,
       {{
         s,
         width,
@@ -106,6 +93,10 @@ struct Type {
 
 b32 type_eq(void *context, Type *a, Type *b);
 u32 type_hash(void *context, Type *x);
+
+struct TypeKey {
+  u32 idx;
+};
 
 struct TypeInterner {
   Allocator storage;
@@ -123,10 +114,10 @@ struct TypeInterner {
   Type *i32_;
   Type *i64_;
   Type *integer_constant;
-  Type *void_;
+  Type *nil;
   Type *never;
 
-  void init(Arena *arena, Allocator storage_allocator, Allocator map_allocator);
+  void init(Arena *work_arena, Allocator storage_allocator, Allocator map_allocator);
   void deinit();
 
   u32 _get_new_distinct_uid() {
@@ -142,6 +133,4 @@ struct TypeInterner {
   // Intern the provided type, but make it distinct as well.
   // Two calls to this function with the same pointer will result in two different types returned.
   Type *add_as_distinct(Type *type);
-
-  Type *add_as_type(Type *type);
 };

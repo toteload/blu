@@ -108,3 +108,25 @@ Str Arena::push_format_string(char const *format, ...) {
   return { s, cast<u32>(len), };
 }
 
+static void *arena_alloc_fn(void *ctx, void *ptr, usize old_byte_size, usize new_byte_size, u32 align) {
+  Arena *arena = cast<Arena*>(ctx);
+
+  if (!ptr) {
+    return arena->raw_alloc(new_byte_size, align);
+  }
+
+  if (new_byte_size >= 0) {
+    void *p = arena->raw_alloc(new_byte_size, align);
+    memcpy(p, ptr, old_byte_size);
+    return p;
+  }
+
+  return nullptr;
+}
+
+Allocator Arena::as_allocator() {
+  return {
+    arena_alloc_fn,
+    this,
+  };
+}

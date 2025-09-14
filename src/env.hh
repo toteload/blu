@@ -49,35 +49,28 @@ struct EnvManager {
   {                                                                                                \
     auto _id  = strings->add(Str_make(Identifier));                                            \
     auto _tmp = T;                                                                                 \
-    auto _t   = types->add_as_type(&_tmp);                                                             \
-    global_env->insert(_id, Value::make_builtin(_t));                                    \
+    auto _t   = types->add(&_tmp);                                                             \
+    global_env->insert(_id, Value::make_primitive_type(_t));                                    \
   }
 
   // clang-format off
-  Add_type("i8",  Type::make_integer(Signed,  8));
+  Add_type( "i8", Type::make_integer(Signed,  8));
   Add_type("i16", Type::make_integer(Signed, 16));
   Add_type("i32", Type::make_integer(Signed, 32));
   Add_type("i64", Type::make_integer(Signed, 64));
 
-  Add_type("u8",  Type::make_integer(Unsigned,  8));
+  Add_type( "u8", Type::make_integer(Unsigned,  8));
   Add_type("u16", Type::make_integer(Unsigned, 16));
   Add_type("u32", Type::make_integer(Unsigned, 32));
   Add_type("u64", Type::make_integer(Unsigned, 64));
 
-  Add_type("bool", Type::make_bool());
-  Add_type("void", Type::make_void());
+  Add_type("bool",  Type::make_bool());
+  Add_type("nil",   Type::make_nil());
+  Add_type("never", Type::make_never());
+  Add_type("type",  Type::make_type());
   // clang-format on
 
 #undef Add_type
-
-  {
-    auto id = strings->add(Str_make("true"));
-    global_env->insert(id, Value::make_builtin(types->bool_));
-  }
-  {
-    auto id = strings->add(Str_make("false"));
-    global_env->insert(id, Value::make_builtin(types->bool_));
-  }
 
   }
 

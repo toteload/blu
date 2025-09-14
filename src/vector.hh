@@ -54,7 +54,7 @@ template<typename T> void Vector<T>::deinit() {
   }
 
   _len = 0;
-  cap = 0;
+  cap  = 0;
   data = nullptr;
 }
 
@@ -69,7 +69,7 @@ template<typename T> void Vector<T>::ensure_capacity(usize minimum_capacity) {
     return;
   }
   data = alloc.realloc(data, cap, new_capacity);
-  cap = minimum_capacity;
+  cap  = minimum_capacity;
 }
 
 template<typename T> void Vector<T>::ensure_free_capacity(usize minimum_free_capacity) {

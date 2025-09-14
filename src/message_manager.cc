@@ -46,17 +46,7 @@ b32 parse_arg_from(Str *format, Str *arg) {
   return false;
 }
 
-void print_message(Slice<Source> sources, Message *msg) {
-  Source *src = &sources[msg->src_idx];
-
-  printf(
-    "%.*s:%d:%d ",
-    cast<int>(src->filename.len()),
-    src->filename.str,
-    msg->span.start.line,
-    msg->span.start.col
-  );
-
+void print_message(Message *msg) {
   switch (msg->severity) {
   case Error:
     printf("[error] ");
@@ -105,23 +95,20 @@ void print_message(Slice<Source> sources, Message *msg) {
   printf("\n");
 }
 
-void MessageManager::print_messages(Slice<Source> sources) {
+void MessageManager::print_messages() {
   for (usize i = 0; i < messages.len(); i++) {
-    Message *msg = messages[i];
-    print_message(sources, msg);
+    print_message(messages[i]);
   }
 }
 
 // It is assumed that format will be a constant string and thus does not need to be copied.
-void MessageManager::error(SourceIdx src_idx, SourceSpan span, char const *format, ...) {
+void MessageManager::error(char const *format, ...) {
   va_list varargs;
   va_start(varargs, format);
 
   Message *msg = arena.alloc<Message>();
 
   msg->severity = Error;
-  msg->src_idx  = src_idx;
-  msg->span     = span;
 
   Str fmt     = Str::from_cstr(format);
   msg->format = fmt;

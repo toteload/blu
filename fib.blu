@@ -10,10 +10,10 @@ main: fn() i32 = fn() i32 {
   i: i32 = 1
   x: i32 = 2 + 5 * 16 / 4 * 35 + i
 
-  s: i32 = fib(xs)
+  s: i32 = fib(x)
 
-  while true {
-    if i + 2 * 3 == 10 and true {
+  while 1 == 1 {
+    if i + 2 * 3 == 10 {
       break
     }
 

@@ -4,6 +4,7 @@
 #include "vector.hh"
 #include "queue.hh"
 #include "hashmap.hh"
+#include "segment_list.hh"
 
 #include "string_interner.hh"
 
@@ -37,83 +38,57 @@ struct MessageManager;
 
 #include "types.hh"
 
+template<typename T> struct Span {
+  T start;
+  T end;
+};
+
 #include "tokens.hh"
-
-// `start` and `end` are byte offsets in the source.
-struct Span {
-  u32 start;
-  u32 end;
-};
-
-struct Tokens {
-  Vector<TokenKind> kinds;
-  Vector<Span> spans;
-
-  TokenKind kind(u32 idx) { return kinds[idx]; }
-  Span span(u32 idx) { return spans[idx]; }
-};
 
 b32 tokenize(MessageManager *messages, Str source, Tokens *output);
 
 #include "ast.hh"
 
-//ttld_inline Str get_ast_str(AstNode *node, Slice<Token> tokens) {
-//  char const *start = tokens[node->token_span.start].str.str;
-//  char const *end   = tokens[node->token_span.end - 1].str.end();
-//  return {
-//    start,
-//    cast<usize>(end - start),
-//  };
-//}
-//
-//ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
-//  SourceLocation start = tokens[node->token_span.start].span.start;
-//  SourceLocation end   = tokens[node->token_span.end].span.end;
-//  return {
-//    start,
-//    end,
-//  };
-//}
-
-#define ForEachAstNode(i, n) for (AstNode *i = n; i; i = i->next)
+// ttld_inline SourceSpan get_ast_source_span(AstNode *node, Slice<Token> tokens) {
+//   SourceLocation start = tokens[node->token_span.start].span.start;
+//   SourceLocation end   = tokens[node->token_span.end].span.end;
+//   return {
+//     start,
+//     end,
+//   };
+// }
 
 struct ParseContext {
-  SourceIdx src_idx;
   MessageManager *messages;
-  StringInterner *strings;
-  ObjectPool<AstNode> *nodes;
+  Tokens *tokens;
 };
 
-b32 parse(ParseContext ctx, Tokens *tokens, AstNode **root);
+b32 parse(ParseContext *ctx, Nodes *nodes);
 
 #include "value.hh"
 #include "env.hh"
 
 struct Source {
   Str filename;
-
-  Str text;
+  Str source;
   Tokens *tokens;
+  Nodes *nodes;
 
-  AstNode *mod = nullptr;
+  Str get_token_str(TokenIndex idx) {
+    auto span = tokens->span(idx);
+    return source.sub(span.start, span.end);
+  }
 };
 
 struct TypeCheckContext {
   MessageManager *messages;
-
-  Arena *arena;
   Arena *work_arena;
-
   EnvManager *envs;
   TypeInterner *types;
-  ObjectPool<AstNode> *nodes;
-
-  Source sources;
+  StringInterner *strings;
 };
 
-b32 type_check_module(TypeCheckContext ctx, AstNode *module);
-
-b32 generate_c_code(AstNode *mod);
+b32 type_check(TypeCheckContext *ctx, Source *source);
 
 // -[ Message ]-
 
@@ -131,9 +106,6 @@ union MessageArg {
 struct Message {
   MessageSeverity severity;
 
-  SourceIdx src_idx = UINT32_MAX;
-  SourceSpan span;
-
   Str format;
   MessageArg args[0];
 };
@@ -149,53 +121,48 @@ struct MessageManager {
 
   void deinit();
 
-  void print_messages(Source sources);
-  void error(SourceIdx src_idx, SourceSpan span, char const *format, ...);
+  void print_messages();
+  void error(char const *format, ...);
 };
 
 // -[ Compiler context ]-
 
-enum JobKind : u8 {
-  Job_read_file,
-  Job_tokenize,
-  Job_parse,
-};
-
-struct Job {
-  JobKind kind;
-  SourceIdx src_idx;
-};
-
-struct Compiler;
-
-typedef void (*JobCompletionListenerFn)(Compiler *compiler, JobKind kind, Source *source);
-
-struct Compiler {
-  Arena arena;
-  Arena work_arena;
-
-  MessageManager messages;
-
-  StringInterner strings;
-  TypeInterner types;
-  ObjectPool<AstNode> nodes;
-  EnvManager envs;
-
-  Vector<Source> sources;
-  Queue<Job> jobs;
-
-  JobCompletionListenerFn listener = nullptr;
-
-  // ---
-
-  void init();
-  void compile_file(Str filename);
-
-  void register_job_completion_listener(JobCompletionListenerFn f) { listener = f; }
-
-  SourceIdx add_read_file_job(Str filename);
-};
-
-// clang-format off
-//#define Push_message(Messages, Msg) { Message _tmp = Msg; _tmp.file = __FILE__; _tmp.line = __LINE__; (Messages).push(_tmp); }
-// clang-format on
+// enum JobKind : u8 {
+//   Job_read_file,
+//   Job_tokenize,
+//   Job_parse,
+// };
+//
+// struct Job {
+//   JobKind kind;
+//   SourceIdx src_idx;
+// };
+//
+// struct Compiler;
+//
+// typedef void (*JobCompletionListenerFn)(Compiler *compiler, JobKind kind, Source *source);
+//
+// struct Compiler {
+//   Arena arena;
+//   Arena work_arena;
+//
+//   MessageManager messages;
+//
+//   StringInterner strings;
+//   TypeInterner types;
+//   EnvManager envs;
+//
+//   Vector<Source> sources;
+//   Queue<Job> jobs;
+//
+//   JobCompletionListenerFn listener = nullptr;
+//
+//   // ---
+//
+//   void init();
+//   void compile_file(Str filename);
+//
+//   void register_job_completion_listener(JobCompletionListenerFn f) { listener = f; }
+//
+//   SourceIdx add_read_file_job(Str filename);
+// };

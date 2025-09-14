@@ -15,7 +15,7 @@ struct Tokenizer {
 
   void init(MessageManager *messages, Str source);
 
-  TokenizerResult next(TokenKind *kind, Span *span);
+  TokenizerResult next(TokenKind *kind, Span<u32> *span);
 
   void step() { at += 1; }
   void skip_whitespace();
@@ -61,7 +61,7 @@ void Tokenizer::init(MessageManager *messages, Str source) {
     Return_token(Kind);                                                                            \
   }
 
-TokenizerResult Tokenizer::next(TokenKind *kind, Span *span) {
+TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
   skip_whitespace();
 
   if (is_at_end()) {
@@ -207,22 +207,28 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span *span) {
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(MessageManager *messages, Str source, Tokens *output) {
+b32 tokenize(MessageManager *messages, Str source, Tokens *tokens) {
   Tokenizer tokenizer;
   tokenizer.init(messages, source);
 
   TokenizerResult res;
   while (true) {
     TokenKind kind;
-    Span span;
+    Span<u32> span;
     res = tokenizer.next(&kind, &span);
 
     if (res != TokResult_ok) {
       break;
     }
 
-    output->kinds.push(kind);
-    output->spans.push(span);
+    if (kind == Tok_line_comment) {
+      continue;
+    }
+
+    TokenIndex i = tokens->alloc();
+
+    tokens->kind(i) = kind;
+    tokens->span(i) = span;
   }
 
   return res == TokResult_end;
