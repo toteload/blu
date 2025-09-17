@@ -152,8 +152,14 @@ int main(i32 arg_count, char const *const *args) {
 
   Str source_text = read_file(filename);
 
+  Arena arena;
+  arena.init(MiB(2));
+
+  StringInterner strings;
+  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
+
   MessageManager messages;
-  messages.init(stdlib_alloc);
+  messages.init(stdlib_alloc, &strings);
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);
@@ -166,9 +172,6 @@ int main(i32 arg_count, char const *const *args) {
     printf("Tokenization error\n");
     return 1;
   }
-
-  Arena arena;
-  arena.init(MiB(2));
 
   Nodes nodes;
   nodes.kinds.init(stdlib_alloc);
@@ -192,9 +195,6 @@ int main(i32 arg_count, char const *const *args) {
   TypeInterner types;
   types.init(&work_arena, stdlib_alloc, stdlib_alloc);
 
-  StringInterner strings;
-  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
-
   EnvManager envs;
   envs.init(arena.as_allocator(), stdlib_alloc);
   envs.init_global_env(&strings, &types);
@@ -215,6 +215,7 @@ int main(i32 arg_count, char const *const *args) {
   ok = type_check(&type_check_context, &source);
   if (!ok) {
     printf("Type check error\n");
+    messages.print_messages();
     return 1;
   }
 

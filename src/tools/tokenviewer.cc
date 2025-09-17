@@ -206,8 +206,11 @@ i32 main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+  StringInterner strings;
+  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
+
   MessageManager messages;
-  messages.init(stdlib_alloc);
+  messages.init(stdlib_alloc, &strings);
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);

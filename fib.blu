@@ -12,6 +12,9 @@ main: fn() i32 = fn() i32 {
 
   s: i32 = fib(x)
 
+  s = 5
+  3 = 4
+
   while 1 == 1 {
     if i + 2 * 3 == 10 {
       break

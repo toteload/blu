@@ -12,7 +12,7 @@ static void *stdlib_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_
 
 Allocator stdlib_alloc{stdlib_alloc_fn, nullptr};
 
-static Str read_file(Str filename) {
+Str read_file(Str filename) {
   char *buf = cast<char*>(malloc(filename.len() + 1));
   memcpy(buf, filename.str, filename.len());
   buf[filename.len()] = '\0';

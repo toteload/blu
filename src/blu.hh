@@ -100,6 +100,7 @@ enum MessageSeverity : u8 {
 
 union MessageArg {
   TokenKind token_kind;
+  StrKey strkey;
   Type *type;
 };
 
@@ -113,13 +114,17 @@ struct Message {
 struct MessageManager {
   Arena arena;
   Vector<Message *> messages;
+  StringInterner *strings;
 
-  void init(Allocator list_alloc) {
+  void init(Allocator list_alloc, StringInterner *strings) {
     arena.init(MiB(16));
     messages.init(list_alloc);
+    this->strings = strings;
   }
 
   void deinit();
+
+  void print_message(Message *message);
 
   void print_messages();
   void error(char const *format, ...);

@@ -46,7 +46,7 @@ b32 parse_arg_from(Str *format, Str *arg) {
   return false;
 }
 
-void print_message(Message *msg) {
+void MessageManager::print_message(Message *msg) {
   switch (msg->severity) {
   case Error:
     printf("[error] ");
@@ -85,6 +85,10 @@ void print_message(Message *msg) {
       Type *type    = msg->args[arg_idx].type;
       u32 len       = type->write_string(Slice<char>::from_ptr_and_len(buf, 256));
       printf("%.*s", cast<int>(len), buf);
+    } else if (str_eq(arg, Str_make("{strkey}"))) {
+      StrKey key = msg->args[arg_idx].strkey;
+      Str str = strings->get(key);
+      printf("%.*s", cast<int>(str.len()), str.str);
     } else {
       printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);
     }

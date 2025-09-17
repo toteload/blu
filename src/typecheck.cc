@@ -35,7 +35,13 @@ struct TypeChecker {
   b32 check_if_else(NodeIndex function, Env *env, Type **out);
   b32 check_return(NodeIndex node_index, Env *env, Type **out);
 
-  b32 is_assignable(NodeIndex node_index, Env *env) { return true; }
+  b32 is_assignable(NodeIndex node_index, Env *env) {
+    AstKind kind = nodes->kind(node_index);
+    if (kind != Ast_identifier) {
+      return false;
+    }
+    return true;
+  }
 };
 
 b32 TypeChecker::is_type_coercible_to(Type *src, Type *dst) {
@@ -824,7 +830,8 @@ b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, Type **out) {
   Value *val             = env->lookup(key);
 
   if (!val) {
-    Todo();
+    messages->error("Unrecognized identifier '{strkey}' encountered", key);
+    return false;
   }
 
   *out = val->type;
