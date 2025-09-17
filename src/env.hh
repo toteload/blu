@@ -42,9 +42,6 @@ struct EnvManager {
     pool.init(pool_allocator);
   }
 
-  void init_global_env(StringInterner *strings, TypeInterner *types) {
-    global_env = alloc(nullptr);
-
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
     auto _id  = strings->add(Str_make(Identifier));                                            \
@@ -53,26 +50,38 @@ struct EnvManager {
     global_env->insert(_id, Value::make_primitive_type(_t));                                    \
   }
 
-  // clang-format off
-  Add_type( "i8", Type::make_integer(Signed,  8));
-  Add_type("i16", Type::make_integer(Signed, 16));
-  Add_type("i32", Type::make_integer(Signed, 32));
-  Add_type("i64", Type::make_integer(Signed, 64));
+  void init_global_env(StringInterner *strings, TypeInterner *types) {
+    global_env = alloc(nullptr);
 
-  Add_type( "u8", Type::make_integer(Unsigned,  8));
-  Add_type("u16", Type::make_integer(Unsigned, 16));
-  Add_type("u32", Type::make_integer(Unsigned, 32));
-  Add_type("u64", Type::make_integer(Unsigned, 64));
+    // clang-format off
+    Add_type( "i8", Type::make_integer(Signed,  8));
+    Add_type("i16", Type::make_integer(Signed, 16));
+    Add_type("i32", Type::make_integer(Signed, 32));
+    Add_type("i64", Type::make_integer(Signed, 64));
 
-  Add_type("bool",  Type::make_bool());
-  Add_type("nil",   Type::make_nil());
-  Add_type("never", Type::make_never());
-  Add_type("type",  Type::make_type());
-  // clang-format on
+    Add_type( "u8", Type::make_integer(Unsigned,  8));
+    Add_type("u16", Type::make_integer(Unsigned, 16));
+    Add_type("u32", Type::make_integer(Unsigned, 32));
+    Add_type("u64", Type::make_integer(Unsigned, 64));
+
+    Add_type("nil",   Type::make_nil());
+    Add_type("never", Type::make_never());
+    Add_type("type",  Type::make_type());
+    // clang-format on
+
+    Type *bool_type;
+    {
+      auto tmp_bool_type = Type::make_bool();
+      bool_type = types->add(&tmp_bool_type);
+      auto key = strings->add(Str_make("bool"));
+      global_env->insert(key, Value::make_primitive_type(bool_type));
+    }
+
+    global_env->insert(strings->add(Str_make("true")), { Value_true, bool_type, {}, });
+    global_env->insert(strings->add(Str_make("false")), { Value_false, bool_type, {}, });
+  }
 
 #undef Add_type
-
-  }
 
   void deinit();
 

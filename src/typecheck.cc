@@ -136,349 +136,6 @@ b32 TypeChecker::determine_binary_op_type(BinaryOpKind op, Type *lhs, Type *rhs,
   return false;
 }
 
-// b32 TypeChecker::infer_literal_tuple_type(Env *env, AstNode *tuple, Type **out) {
-//   u32 item_count = 0;
-//
-//   ForEachAstNode(item, tuple->tuple.items) { item_count += 1; }
-//
-//   Type *t = cast<Type *>(
-//     ctx.work_arena->raw_alloc(sizeof(Type) + item_count * sizeof(Type *), Align_of(Type))
-//   );
-//
-//   t->kind        = Type_tuple;
-//   t->tuple.count = item_count;
-//
-//   u32 i = 0;
-//   ForEachAstNode(item, tuple->tuple.items) {
-//     Type *item_type = nullptr;
-//     Try(infer_expression_type(env, item, &item_type));
-//
-//     t->tuple.items[i]  = item_type;
-//     i                 += 1;
-//   }
-//
-//   *out = ctx.types->add(t);
-//
-//   return true;
-// }
-//
-// b32 TypeChecker::infer_expression_type(Env *env, AstNode *e, Type **out) {
-//   Type *res = nullptr;
-//
-//   switch (e->kind) {
-//   case Ast_declaration: {
-//     res = ctx.types->void_;
-//
-//     auto &decl = e->declaration;
-//
-//     Type *declared_type = nullptr;
-//     Try(read_ast_type(env, decl.type, &declared_type));
-//
-//     Type *v = nullptr;
-//     Try(infer_expression_type(env, decl.value, &v));
-//
-//     if (!is_type_coercible_to(v, declared_type)) {
-//       ctx.messages->error(0, {}, "Cannot coerce type {type} to type {type}", v, declared_type);
-//
-//       return false;
-//     }
-//
-//     if (declared_type != v) {
-//       // Add an explicit cast if the type is coercible and not the same
-//
-//       AstNode *n               = ctx.nodes->alloc();
-//       n->type                  = declared_type;
-//       n->kind                  = Ast_cast;
-//       n->cast.destination_type = nullptr;
-//       n->cast.value            = decl.value;
-//
-//       decl.value = n;
-//     }
-//
-//     env->insert(decl.name->identifier.key, Value::make_local(e, declared_type));
-//
-//     res = declared_type;
-//   } break;
-//   case Ast_type: {
-//     Type *type = nullptr;
-//     Try(read_ast_type(env, e, &type));
-//     Type *type_type = ctx.types->add_as_type(type);
-//     res             = type_type;
-//   } break;
-//   case Ast_assign: {
-//     res = ctx.types->void_;
-//
-//     if (!is_assignable(env, e->assign.lhs)) {
-//       Todo();
-//       // ctx.messages->error();
-//       return false;
-//     }
-//
-//     Type *type = nullptr;
-//     Try(infer_expression_type(env, e->assign.value, &type));
-//   } break;
-//   case Ast_continue:
-//   case Ast_break: {
-//     res = ctx.types->never;
-//   } break;
-//   case Ast_return: {
-//     res = ctx.types->never;
-//
-//     if (!e->return_.value) {
-//       break;
-//     }
-//
-//     Type *type = nullptr;
-//     Try(infer_expression_type(env, e->return_.value, &type));
-//   } break;
-//   case Ast_while: {
-//     res = ctx.types->void_;
-//
-//     Type *cond = nullptr;
-//     Try(infer_expression_type(env, e->while_.cond, &cond));
-//
-//     Type *body = nullptr;
-//     Try(infer_expression_type(env, e->while_.body, &body));
-//   } break;
-//   case Ast_for: {
-//     res = ctx.types->void_;
-//
-//     Type *iterable_type = nullptr;
-//     Try(infer_expression_type(env, e->for_.iterable, &iterable_type));
-//
-//     if (iterable_type->kind != Type_slice) {
-//       Todo();
-//       return false;
-//     }
-//
-//     Type *base_type = iterable_type->slice.base_type;
-//
-//     e->for_.item->type = base_type;
-//
-//     Env *for_env = ctx.envs->alloc(env);
-//     for_env->insert(e->for_.item->identifier.key, Value::make_iter_item(base_type,
-//     e->for_.item));
-//
-//     Type *body_type = nullptr;
-//     Try(infer_expression_type(for_env, e->for_.body, &body_type));
-//   } break;
-//   case Ast_scope: {
-//     res = ctx.types->void_;
-//
-//     auto exprs = e->scope.expressions;
-//     ForEachAstNode(e, exprs) {
-//       Type *t = nullptr;
-//       Try(infer_expression_type(env, e, &t));
-//     }
-//   } break;
-//   case Ast_identifier: {
-//     auto idkey = e->identifier.key;
-//     Value *p   = env->lookup(idkey);
-//
-//     if (!p) {
-//       ctx.messages->error(
-//         UINT32_MAX, // TODO
-//         {},         // TODO
-//         "Could not find identifier {strkey} at {astnode}.",
-//         idkey,
-//         e
-//       );
-//       Todo();
-//       return false;
-//     }
-//
-//     res = p->type;
-//   } break;
-//   case Ast_literal_int: {
-//     res = ctx.types->integer_constant;
-//   } break;
-//   case Ast_literal_tuple: {
-//     if (e->tuple.declared_type) {
-//       // Slice literals must be written with an explicit type.
-//       Todo();
-//     }
-//
-//     Type *tuple_type = nullptr;
-//     Try(infer_literal_tuple_type(env, e, &tuple_type));
-//
-//     res = tuple_type;
-//   } break;
-//   case Ast_if_else: {
-//     Type *cond = nullptr;
-//     Try(infer_expression_type(env, e->if_else.cond, &cond));
-//     if (cond->kind != Type_Boolean) {
-//       Todo();
-//       // Str msg = ctx.arena->push_format_string("Condition in if-expression is not of type
-//       // 'bool'."); ctx.messages->push({e->if_else.cond->span, Error, msg});
-//     }
-//
-//     Type *then = nullptr;
-//     Try(infer_expression_type(env, e->if_else.then, &then));
-//
-//     if (e->if_else.otherwise) {
-//       Type *otherwise = nullptr;
-//       Try(infer_expression_type(env, e->if_else.otherwise, &otherwise));
-//
-//       Type *final_type = nullptr;
-//       if (is_type_coercible_to(then, otherwise)) {
-//         final_type = otherwise;
-//       } else if (is_type_coercible_to(otherwise, then)) {
-//         final_type = then;
-//       } else {
-//         Todo();
-//         break;
-//       }
-//
-//       e->if_else.then->type      = final_type;
-//       e->if_else.otherwise->type = final_type;
-//
-//       res = final_type;
-//
-//       break;
-//     }
-//
-//     // We only have an if-branch, then the return type of the branch should be void.
-//     if (!(then->kind == Type_Never || then->kind == Type_Void)) {
-//       Todo();
-//       // Str msg = ctx.arena->push_format_string("If-expression should return type 'void'.");
-//       // ctx.messages->push({e->if_else.then->span, Error, msg});
-//     }
-//
-//     res = then;
-//   } break;
-//   case Ast_call: {
-//     Type *callee = nullptr;
-//     Try(infer_expression_type(env, e->call.callee, &callee));
-//     Debug_assert(callee->kind == Type_Function);
-//
-//     u32 param_count = callee->function.param_count;
-//
-//     u32 i = 0;
-//     ForEachAstNode(arg, e->call.args) {
-//       if (i == param_count) {
-//         // More arguments provided than the function takes parameters.
-//         break;
-//       }
-//
-//       Type *arg_type = nullptr;
-//       Try(infer_expression_type(env, arg, &arg_type));
-//       Type *param_type = callee->function.params[i];
-//
-//       if (!is_type_coercible_to(arg_type, param_type)) {
-//         Todo();
-//         return false;
-//       }
-//
-//       i += 1;
-//     }
-//
-//     u32 arg_count = i;
-//
-//     Debug_assert(param_count == arg_count);
-//
-//     res = callee->function.return_type;
-//   } break;
-//   case Ast_binary_op: {
-//     Type *lhs = nullptr;
-//     Try(infer_expression_type(env, e->binary_op.lhs, &lhs));
-//
-//     Type *rhs = nullptr;
-//     Try(infer_expression_type(env, e->binary_op.rhs, &rhs));
-//
-//     if (e->binary_op.kind == AddAssign) {
-//       Debug_assert(is_assignable(env, e->binary_op.lhs));
-//       Debug_assert(is_type_coercible_to(rhs, lhs));
-//       res = ctx.types->void_;
-//       break;
-//     }
-//
-//     res = determine_binary_op_type(ctx.types, e->binary_op.kind, lhs, rhs);
-//   } break;
-//   case Ast_unary_op: {
-//     Try(infer_expression_type(env, e->unary_op.value, &res));
-//
-//     // TODO: make sure that the unary operator is defined for the type of the expression
-//   } break;
-//   default:
-//     Unreachable();
-//   }
-//
-//   e->type = res;
-//
-//   *out = res;
-//
-//   return true;
-// }
-
-// b32 TypeChecker::infer_function_type(Env *env, AstNode *function, Type **out) {
-//   Debug_assert(function->kind == Ast_function);
-//
-//   Type *return_type = nullptr;
-//   Try(read_ast_type(env, function->function.return_type, &return_type));
-//
-//   u32 param_count = 0;
-//   ForEachAstNode(param, function->function.params) { param_count += 1; }
-//
-//   Type *function_type = cast<Type *>(
-//     ctx.work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type))
-//   );
-//
-//   function_type->kind                 = Type_Function;
-//   function_type->function.param_count = param_count;
-//   function_type->function.return_type = return_type;
-//
-//   b32 has_param_type_error = false;
-//
-//   u32 i = 0;
-//   ForEachAstNode(param, function->function.params) {
-//     Type *t = nullptr;
-//     Try(read_ast_type(env, param->param.type, &t));
-//
-//     if (!t) {
-//       has_param_type_error = true;
-//       break;
-//     }
-//
-//     param->type = t;
-//
-//     function_type->function.params[i] = t;
-//
-//     i += 1;
-//   }
-//
-//   if (!return_type || has_param_type_error) {
-//     return false;
-//   }
-//
-//   Type *intern_type = ctx.types->add(function_type);
-//
-//   function->type = intern_type;
-//
-//   *out = intern_type;
-//
-//   return true;
-// }
-
-// b32 TypeChecker::check_function_body(Env *env, AstNode *function) {
-//   Debug_assert(function->kind == Ast_function);
-//
-//   Env *param_env = ctx.envs->alloc(env);
-//
-//   ForEachAstNode(param, function->function.params) {
-//     Type *param_type = nullptr;
-//     Try(read_ast_type(env, param->param.type, &param_type));
-//     param_env->insert(param->param.name->identifier.key, Value::make_param(param, param_type));
-//   }
-//
-//   Type *t = nullptr;
-//   Try(infer_expression_type(param_env, function->function.body, &t));
-//
-//   // TODO: This is a memory leak if we encountered an error.
-//   ctx.envs->dealloc(param_env);
-//
-//   return true;
-// }
-
 b32 TypeChecker::check_root(NodeIndex root, Env *env) {
   auto items = &nodes->data(root).root.items;
 
@@ -640,7 +297,12 @@ b32 TypeChecker::check_return(NodeIndex node_index, Env *env, Type **out) {
   Try(check_expression(nodes->data(node_index).return_.value, env, &return_type));
 
   if (!is_type_coercible_to(return_type, return_type_of_current_function)) {
-    Todo();
+    messages->error(
+      "Cannot return value of type '{type}'. Expected type '{type}'",
+      return_type,
+      return_type_of_current_function
+    );
+    return false;
   }
 
   *out = types->never;
@@ -687,7 +349,9 @@ b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, Type **
   return_type_of_current_function = nullptr;
 
   if (!is_type_coercible_to(body_type, return_type)) {
-    Todo();
+    messages
+      ->error("Cannot coerce value of type '{type}' to type '{type}'", body_type, return_type);
+    return false;
   }
 
   *out = function_type;
@@ -706,7 +370,11 @@ b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, Type **out) {
 
   if (data.otherwise.is_none()) {
     if (!is_type_coercible_to(then, types->never)) {
-      Todo();
+      messages->error(
+        "if-expression without an else clause cannot return a value. Found '{type}'",
+        then
+      );
+      return false;
     }
 
     *out = types->never;
@@ -781,19 +449,24 @@ b32 TypeChecker::check_call(NodeIndex node_index, Env *env, Type **out) {
   Try(check_expression(call.callee, env, &callee_type));
 
   if (callee_type->kind != Type_function) {
-    Todo();
+    messages->error("Callee is not a function. Found type '{type}'.", callee_type);
+    return false;
   }
 
   if (callee_type->function.param_count != call.args.len()) {
-    Todo();
+    messages->error("Function was called with incorrect number of arguments.");
+    return false;
   }
 
   for (usize i = 0; i < call.args.len(); i += 1) {
     Type *arg_type;
     Try(check_expression(call.args[i], env, &arg_type));
 
-    if (!is_type_coercible_to(arg_type, callee_type->function.params[i])) {
-      Todo();
+    Type *param_type = callee_type->function.params[i];
+    if (!is_type_coercible_to(arg_type, param_type)) {
+      messages
+        ->error("Cannot coerce value of type '{type}' to type '{type}'.", arg_type, param_type);
+      return false;
     }
   }
 
@@ -809,14 +482,16 @@ b32 TypeChecker::check_assign(NodeIndex node_index, Env *env, Type **out) {
   Try(check_expression(assign.lhs, env, &lhs_type));
 
   if (!is_assignable(assign.lhs, env)) {
-    Todo();
+    messages->error("Expression is not assignable");
+    return false;
   }
 
   Type *value_type;
   Try(check_expression(assign.value, env, &value_type));
 
   if (!is_type_coercible_to(value_type, lhs_type)) {
-    Todo();
+    messages->error("Cannot coerce value of type '{type}' to type '{type}'", value_type, lhs_type);
+    return false;
   }
 
   *out = types->nil;
@@ -849,7 +524,9 @@ b32 TypeChecker::check_declaration(NodeIndex node_index, Env *env, Type **out) {
   Try(check_expression(decl.value, env, &value_type));
 
   if (!is_type_coercible_to(value_type, declared_type)) {
-    Todo();
+    messages
+      ->error("Cannot coerce value of type '{type}' to type '{type}'", value_type, declared_type);
+    return false;
   }
 
   StrKey key = strings->add(source->get_token_str(decl.name));

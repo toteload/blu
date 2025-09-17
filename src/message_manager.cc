@@ -87,7 +87,7 @@ void MessageManager::print_message(Message *msg) {
       printf("%.*s", cast<int>(len), buf);
     } else if (str_eq(arg, Str_make("{strkey}"))) {
       StrKey key = msg->args[arg_idx].strkey;
-      Str str = strings->get(key);
+      Str str    = strings->get(key);
       printf("%.*s", cast<int>(str.len()), str.str);
     } else {
       printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);

@@ -659,7 +659,8 @@ b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
     case Tok_caret:       op = Bit_xor;           break;
     case Tok_left_shift:  op = Bit_shift_left;    break;
     case Tok_right_shift: op = Bit_shift_right;   break;
-    case Tok_equals:      op = Assign_normal;     break;
+
+    case Tok_equals:      op = BinaryOpKind_max + Assign_normal; break;
 
     default: { *out = lhs; return true; }
     }

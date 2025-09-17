@@ -1,5 +1,7 @@
 enum ValueKind : u8 {
   Value_primitive_type,
+  Value_true,
+  Value_false,
   Value_param,
   Value_lazy_declaration,
 };
@@ -26,14 +28,14 @@ struct Value {
 
   static Value make_primitive_type(Type *type) {
     Value val;
-    val.kind       = Value_primitive_type;
+    val.kind = Value_primitive_type;
     val.type = type;
     return val;
   }
 
   static Value make_param(TokenIndex param, Type *type) {
     Value val;
-    val.kind       = Value_param;
+    val.kind = Value_param;
     val.type = type;
     val.data.param.token_index = param;
     return val;

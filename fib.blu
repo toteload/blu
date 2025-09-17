@@ -1,21 +1,13 @@
-fib: fn(i32) i32 = fn(n: i32) i32 {
-  if n <= 1 {
-    return 1
-  } else {
-    return fib(n-1) + fib(n-2)
-  }
-}
- 
 main: fn() i32 = fn() i32 {
   i: i32 = 1
   x: i32 = 2 + 5 * 16 / 4 * 35 + i
 
-  s: i32 = fib(x)
+  y: i32 = 16
+  s: i32 = fib(y)
 
-  s = 5
-  3 = 4
+  r: i32 = if true { 2 } else { 3 }
 
-  while 1 == 1 {
+  while 1 == 1 and true {
     if i + 2 * 3 == 10 {
       break
     }
@@ -27,3 +19,16 @@ main: fn() i32 = fn() i32 {
 
   return fib(10)
 }
+
+fob: fn() i32 = fn() i32 {
+  44444
+}
+
+fib: fn(i32) i32 = fn(n: i32) i32 {
+  if n <= 1 {
+    return 1
+  } else {
+    return fib(n-1) + fib(n-2)
+  }
+}
+ 
