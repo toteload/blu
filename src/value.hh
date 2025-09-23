@@ -1,7 +1,7 @@
 enum ValueKind : u8 {
-  Value_primitive_type,
   Value_true,
   Value_false,
+  Value_type,
   Value_param,
   Value_lazy_declaration,
 };
@@ -22,14 +22,15 @@ struct Value {
   union {
     Param param;
     Declaration declaration;
+    Type *type;
   } data;
 
-  b32 is_type_known() { return type != nullptr; }
+  b32 is_type_known() { return kind == Value_type || type != nullptr; }
 
-  static Value make_primitive_type(Type *type) {
+  static Value make_type(Type *type) {
     Value val;
-    val.kind = Value_primitive_type;
-    val.type = type;
+    val.kind = Value_type;
+    val.data.type = type;
     return val;
   }
 

@@ -20,6 +20,7 @@ struct Tokenizer {
   void step() { at += 1; }
   void skip_whitespace();
   void step_until_new_line();
+
   b32 is_at_end() { return at == end; }
 };
 
@@ -36,7 +37,7 @@ void Tokenizer::skip_whitespace() {
 }
 
 void Tokenizer::step_until_new_line() {
-  while (!is_at_end() && at[-1] != '\n') {
+  while (!is_at_end() && *at != '\n') {
     step();
   }
 }
@@ -77,7 +78,6 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
   switch (c) {
   case ',': Return_token(Tok_comma);
   case '.': Return_token(Tok_dot);
-  case ';': Return_token(Tok_semicolon);
   case ':': Return_token(Tok_colon);
   case '{': Return_token(Tok_brace_open);
   case '}': Return_token(Tok_brace_close);
@@ -86,6 +86,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
   case '[': Return_token(Tok_bracket_open);
   case ']': Return_token(Tok_bracket_close);
   case '*': Return_token(Tok_star);
+  case '/': Return_token(Tok_slash);
   case '%': Return_token(Tok_percent);
   case '&': Return_token(Tok_ampersand);
   case '|': Return_token(Tok_bar);
@@ -95,14 +96,9 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
   }
   // clang-format on
 
-  if (c == '/') {
-    if (!is_at_end() && *at == '/') {
-      // line comment
-      step_until_new_line();
-      Return_token(Tok_line_comment);
-    }
-
-    Return_token(Tok_slash);
+  if (c == ';') {
+    step_until_new_line();
+    Return_token(Tok_line_comment);
   }
 
   if (c == '=') {
@@ -187,22 +183,21 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
       step();
     }
 
-    Return_if_match("fn", Tok_keyword_fn);
-    Return_if_match("return", Tok_keyword_return);
-    Return_if_match("if", Tok_keyword_if);
-    Return_if_match("else", Tok_keyword_else);
-    Return_if_match("while", Tok_keyword_while);
-    Return_if_match("break", Tok_keyword_break);
+    // clang-format off
+    Return_if_match("fn",       Tok_keyword_fn);
+    Return_if_match("return",   Tok_keyword_return);
+    Return_if_match("if",       Tok_keyword_if);
+    Return_if_match("else",     Tok_keyword_else);
+    Return_if_match("while",    Tok_keyword_while);
+    Return_if_match("break",    Tok_keyword_break);
     Return_if_match("continue", Tok_keyword_continue);
-    Return_if_match("and", Tok_keyword_and);
-    Return_if_match("or", Tok_keyword_or);
+    Return_if_match("and",      Tok_keyword_and);
+    Return_if_match("or",       Tok_keyword_or);
     Return_if_match("distinct", Tok_keyword_distinct);
+    // clang-format on
 
     Return_token(Tok_identifier);
   }
-
-  // Str msg = ctx.arena->push_format_string("Unrecognized character '%c'\n", c);
-  // ctx.messages->push({SourceSpan::from_single_location(start), Error, msg});
 
   return TokResult_unrecognized_token;
 }

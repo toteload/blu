@@ -34,9 +34,9 @@
 
 template<typename T>
 struct SegmentList {
-  usize segment_count;
-  T **segments;
-  usize _len;
+  usize segment_count = 0;
+  T **segments = nullptr;
+  usize _len = 0;
 
   void init() {
     segment_count = 0;

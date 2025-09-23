@@ -1,0 +1,86 @@
+ArrayList := with(T: type) struct {
+  backing: Allocator,
+  data : []{ T | uninitialized(T) },
+  len : uint,
+}
+
+with(T: type) extend ArrayList(T) {
+  new := .(backing: Allocator) .{ }
+
+  at := .(self: &Self, idx uint) {
+    if idx >= len {
+      panic()
+    }
+
+    assume self.data[idx] is T
+
+    &self.data[idx]
+  }
+
+  append := .(self: &Self, item: T) {
+    if len == #length(data) {
+      grow()
+    }
+
+    data[len] = item
+    len += 1
+  }
+}
+
+malloc : fn(byte_count: uint) ptr = #extern("malloc")
+
+alloc : fn(type, n: uint) []T & 'tag & 'no_drop = .(T: type, count: uint) {
+  p := malloc(#sizeof(T) * count)
+}
+
+dealloc := with(type: T) .(p: []T & 'tag) {
+  free(p.ptr)
+}
+
+; Who owns the returned memory?
+lines := fn(backing: *Allocator, text: []'a u8) { []'b []'a u8 } & 'tag {
+  ls := mut ArrayList([]'a u8).new(backing)
+
+  mut i : uint = 0
+  for .{text, 0..} do .{c, j} {
+    if c == "\n" {
+      ls.append(text[i..j])
+      i = j
+    }
+  }
+
+  ls.append(text[i..])
+
+  ls.to_slice()
+}
+
+count := fn(needle: i32, haystack: []i32) i64 {
+  s : i64 = 0
+  for haystack do x {
+    if x == needle { s += 1 }
+  }
+  s
+}
+
+main := fn() {
+  input := #embed("day01.txt")
+
+  xs := ..
+  ys := ..
+
+  for input.lines() do line {
+    
+  }
+
+  mut s : i64 = 0
+  for .{xs, ys} do .{x, y} {
+    s += x - y
+  }
+
+  println(s)
+
+  mut s : i64 = 0
+  for xs do x {
+    s += x * count(x, ys)
+  }
+}

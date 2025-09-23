@@ -47,7 +47,7 @@ struct EnvManager {
     auto _id  = strings->add(Str_make(Identifier));                                            \
     auto _tmp = T;                                                                                 \
     auto _t   = types->add(&_tmp);                                                             \
-    global_env->insert(_id, Value::make_primitive_type(_t));                                    \
+    global_env->insert(_id, Value::make_type(_t));                                    \
   }
 
   void init_global_env(StringInterner *strings, TypeInterner *types) {
@@ -74,7 +74,7 @@ struct EnvManager {
       auto tmp_bool_type = Type::make_bool();
       bool_type = types->add(&tmp_bool_type);
       auto key = strings->add(Str_make("bool"));
-      global_env->insert(key, Value::make_primitive_type(bool_type));
+      global_env->insert(key, Value::make_type(bool_type));
     }
 
     global_env->insert(strings->add(Str_make("true")), { Value_true, bool_type, {}, });

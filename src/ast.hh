@@ -1,7 +1,8 @@
 enum AstKind : u8 {
   Ast_root,
   Ast_block,
-  Ast_type,
+  Ast_type_slice,
+  Ast_type_function,
   Ast_declaration,
   Ast_assign,
   Ast_literal_sequence,
@@ -62,17 +63,6 @@ enum UnaryOpKind : u8 {
   UnaryOpKind_max,
 };
 
-enum AstTypeKind {
-  Ast_type_identifier,
-  Ast_type_slice,
-  Ast_type_function,
-};
-
-enum TypeFlag : u32 {
-  None     = 0,
-  Distinct = 1 >> 0,
-};
-
 struct OptionalNodeIndex;
 
 struct NodeIndex {
@@ -98,17 +88,13 @@ constexpr OptionalNodeIndex OptionalNodeIndex_none = {UINT32_MAX};
 
 struct AstNode;
 
-struct AstType {
-  AstTypeKind kind;
-  u32 flags;
-  union {
-    TokenIndex token_index;
-    NodeIndex base;
-    struct {
-      NodeIndex return_type;
-      SegmentList<NodeIndex> params;
-    } function;
-  } data;
+struct TypeFunction {
+  NodeIndex return_type;
+  SegmentList<NodeIndex> params;
+};
+
+struct TypeSlice {
+  NodeIndex base;
 };
 
 struct Param {
@@ -194,7 +180,8 @@ struct Assign {
 union NodeData {
   Root root;
   Block block;
-  AstType type;
+  TypeFunction type_function;
+  TypeSlice type_slice;
   Declaration declaration;
   Assign assign;
   LiteralSequence literal_sequence;
@@ -211,6 +198,12 @@ union NodeData {
   Return return_;
 };
 
+struct Node {
+  AstKind kind;
+  Span<TokenIndex> span;
+  NodeData data;
+};
+
 struct Nodes {
   Vector<AstKind> kinds;
   Vector<Span<TokenIndex>> spans;
@@ -218,24 +211,24 @@ struct Nodes {
 
   Allocator segment_allocator;
 
-  NodeIndex alloc() {
+  NodeIndex add(Node node) {
     NodeIndex res = {cast<u32>(kinds.len())};
-    kinds.push_empty();
-    spans.push_empty();
-    datas.push_empty();
+    kinds.push(node.kind);
+    spans.push(node.span);
+    datas.push(node.data);
     return res;
   }
 
-  AstKind &kind(NodeIndex idx) { return kinds[idx.idx]; }
-  Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx]; }
-  NodeData &data(NodeIndex idx) { return datas[idx.idx]; }
+  AstKind kind(NodeIndex idx) { return kinds[idx.idx]; }
+  Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
+  NodeData data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",        "block",      "type",         "declaration", "literal-sequence",
-  "literal-int", "identifier", "field-access", "call",        "cast",
-  "unary-op",    "binary-op",  "function",     "if-else",     "while",
-  "break",       "continue",   "return",       "illegal",
+  "root",        "block",      "type-slice",   "type-function", "declaration", "literal-sequence",
+  "literal-int", "identifier", "field-access", "call",          "cast",        "unary-op",
+  "binary-op",   "function",   "if-else",      "while",         "break",       "continue",
+  "return",      "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

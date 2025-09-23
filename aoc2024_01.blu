@@ -63,12 +63,15 @@ count :: (needle: i32, haystack: []i32) i64 {
 }
 
 main := fn() nil {
+  ; What should be the return type of `readfile`?
+  ; Something like a Box that has a destructor which releases the memory when it goes out of scope?
+
   input := std.io.readfile("day01.txt")
 
-  xs := Vec(i32).new()
-  ys := Vec(i32).new()
+  mut xs := ArrayList(i32).init(std.mem.general_allocator)
+  mut ys := ArrayList(i32).init(std.mem.general_allocator)
 
-  for lines(input) do line {
+  for input.lines() do line {
     x := ...
     y := ...
     xs.push(x)
@@ -78,18 +81,18 @@ main := fn() nil {
   sort(xs)
   sort(ys)
 
-  s : i64 = 0
+  mut s : i64 = 0
   for .{xs,ys} do .{x,y} {
     s += x - y
   }
 
-  std.io.print(s)
+  std.io.println(s)
 
   s = 0
   for xs do x {
     s += x * count(x, ys)
   }
 
-  std.io.print(s)
+  std.io.println(s)
 }
 

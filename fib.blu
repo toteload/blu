@@ -1,13 +1,13 @@
-main: fn() i32 = fn() i32 {
-  i: i32 = 1
-  x: i32 = 2 + 5 * 16 / 4 * 35 + i
+main : fn() i32 = fn() i32 {
+  i : i32 = 1
+  x : i32 = 2 + 5 * 16 / 4 * 35 + i
 
-  y: i32 = 16
-  s: i32 = fib(y)
+  y : i32 = 16
+  s : i32 = fib(y)
 
-  r: i32 = if true { 2 } else { 3 }
+  r : i32 = if true { 2 } else { 3 }
 
-  while 1 == 1 and true {
+  while true {
     if i + 2 * 3 == 10 {
       break
     }
@@ -20,15 +20,29 @@ main: fn() i32 = fn() i32 {
   return fib(10)
 }
 
-fob: fn() i32 = fn() i32 {
-  44444
-}
+number : type = i32
+one : number = 1
 
-fib: fn(i32) i32 = fn(n: i32) i32 {
+fib : fn(i32) i32 = fn(n : i32) i32 {
   if n <= 1 {
-    return 1
+    1
   } else {
-    return fib(n-1) + fib(n-2)
+    fib(n-1) + fib(n-2)
   }
 }
- 
+
+;  0      hir_declaration   { value = %1 }
+;  1      hir_function      { return_type = %2, body = %3 }
+;  2      hir_int_type      { bitwidth = 32, signed = true }
+;  3 +--- hir_block         { len = 9 }
+;  4 |    hir_param         { type = %2 }
+;  5 |    hir_alloc         { type = %2 }
+;  6 | +- hir_block         { len = 7, loop = true }
+;  7 | |  hir_cmp_less_than { lhs = %5, rhs = %4 }
+;  8 | |  hir_cond_br       { then = %9, else = %13 }
+;  9 | |  hir_load %5
+; 10 | |  hir_int 1
+; 11 | |  hir_add %9, %10
+; 12 | |  hir_store %5, %11
+; 12 | +- hir_repeat        { block = %6 }
+; 13 +--- hir_return %5

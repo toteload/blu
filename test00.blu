@@ -1,0 +1,2 @@
+number : type = i32
+pi : number = 3

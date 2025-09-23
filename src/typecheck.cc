@@ -137,13 +137,13 @@ b32 TypeChecker::determine_binary_op_type(BinaryOpKind op, Type *lhs, Type *rhs,
 }
 
 b32 TypeChecker::check_root(NodeIndex root, Env *env) {
-  auto items = &nodes->data(root).root.items;
+  auto items = nodes->data(root).root.items;
 
   // Add declarations to the environment
-  for (usize i = 0; i < items->len(); i += 1) {
-    Debug_assert(nodes->kind(items->at(i)) == Ast_declaration);
+  for (usize i = 0; i < items.len(); i += 1) {
+    Debug_assert(nodes->kind(items.at(i)) == Ast_declaration);
 
-    auto decl = nodes->data(items->at(i)).declaration;
+    auto decl = nodes->data(items.at(i)).declaration;
 
     StrKey key = strings->add(source->get_token_str(decl.name));
 
@@ -151,8 +151,8 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
   }
 
   // Determine the declared types for all declarations
-  for (usize i = 0; i < items->len(); i += 1) {
-    auto decl = nodes->data(items->at(i)).declaration;
+  for (usize i = 0; i < items.len(); i += 1) {
+    auto decl = nodes->data(items.at(i)).declaration;
 
     StrKey key = strings->add(source->get_token_str(decl.name));
 
@@ -167,8 +167,8 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
 
   // At this point each declaration has its declared type determined.
 
-  for (usize i = 0; i < items->len(); i += 1) {
-    auto decl = nodes->data(items->at(i)).declaration;
+  for (usize i = 0; i < items.len(); i += 1) {
+    auto decl = nodes->data(items.at(i)).declaration;
 
     AstKind value_kind = nodes->kind(decl.value);
 
@@ -182,39 +182,56 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
 }
 
 b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
-  auto data = nodes->data(node_index).type;
+  auto kind = nodes->kind(node_index);
 
-  Type *type = nullptr;
+  if (kind == Ast_identifier) {
+    auto token_index = nodes->data(node_index).identifier.token_index;
+    StrKey key       = strings->add(source->get_token_str(token_index));
+    Value *val       = env->lookup(key);
+    if (!val) {
+      messages->error("Unrecognized identifier '{strkey}' encountered", key);
+      return false;
+    }
 
-  switch (data.kind) {
-  case Ast_type_identifier: {
-    StrKey key = strings->add(source->get_token_str(data.data.token_index));
-    Value *val = env->lookup(key);
-    if (!val || val->kind == Value_param) {
+    switch (val->kind) {
+    case Value_param:
       Todo();
+      break;
+    case Value_lazy_declaration: {
+      Try(determine_type(val->data.declaration.value_node_index, env, &val->data.type));
+      *out = val->data.type;
+    } break;
+    case Value_type:
+      *out = val->data.type;
+      break;
+    default:
+      Todo();
+      break;
     }
 
-    if (val->kind == Value_lazy_declaration) {
-      Try(determine_type(val->data.declaration.value_node_index, env, &val->type));
-    }
+    return true;
+  }
 
-    Debug_assert(val->type);
+  if (kind == Ast_type_slice) {
+    auto data = nodes->data(node_index).type_slice;
 
-    type = val->type;
-  } break;
-  case Ast_type_slice: {
     Type *base = nullptr;
-    Try(determine_type(data.data.base, env, &base));
+    Try(determine_type(data.base, env, &base));
 
     Type slice_type = Type::make_slice(base);
 
-    type = types->add(&slice_type);
-  } break;
-  case Ast_type_function: {
-    Type *return_type = nullptr;
-    Try(determine_type(data.data.function.return_type, env, &return_type));
+    *out = types->add(&slice_type);
 
-    usize param_count = data.data.function.params.len();
+    return true;
+  }
+
+  if (kind == Ast_type_function) {
+    auto data = nodes->data(node_index).type_function;
+
+    Type *return_type = nullptr;
+    Try(determine_type(data.return_type, env, &return_type));
+
+    usize param_count = data.params.len();
 
     Type *function_type = cast<Type *>(
       work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type))
@@ -225,30 +242,26 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
     function_type->function.param_count = param_count;
 
     for (usize i = 0; i < param_count; i += 1) {
-      Try(determine_type(data.data.function.params[i], env, &function_type->function.params[i]));
+      Try(determine_type(data.params[i], env, &function_type->function.params[i]));
     }
 
-    type = types->add(function_type);
-  } break;
+    *out = types->add(function_type);
+
+    return true;
   }
 
-  Debug_assert(type);
-
-  if (data.flags & Distinct) {
-    type = types->add_as_distinct(type);
-  }
-
-  *out = type;
-
-  return true;
+  return false;
 }
 
 b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, Type **out) {
   AstKind kind = nodes->kind(expr_node_index);
 
+  // clang-format off
   switch (kind) {
-    // clang-format off
-  case Ast_type:        Try(determine_type(expr_node_index, env, out)); break;
+  case Ast_type_slice:
+  case Ast_type_function: {
+    Try(determine_type(expr_node_index, env, out));
+  } break;
   case Ast_block:       Try(check_block(expr_node_index, env, out)); break;
   case Ast_declaration: Try(check_declaration(expr_node_index, env, out)); break;
   case Ast_assign:      Try(check_assign(expr_node_index, env, out)); break;
@@ -264,28 +277,28 @@ b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, Type **ou
   case Ast_break:       *out = types->never; break;
   case Ast_continue:    *out = types->never; break;
   case Ast_return:      Try(check_return(expr_node_index, env, out)); break;
-    // clang-format on
   }
+  // clang-format on
 
   return true;
 }
 
 b32 TypeChecker::check_block(NodeIndex node_index, Env *env, Type **out) {
-  auto items = &nodes->data(node_index).block.items;
+  auto items = nodes->data(node_index).block.items;
 
-  if (items->len() == 0) {
+  if (items.len() == 0) {
     *out = types->nil;
     return true;
   }
 
   Env *block_env = envs->alloc(env);
 
-  for (usize i = 0; i < items->len() - 1; i += 1) {
+  for (usize i = 0; i < items.len() - 1; i += 1) {
     Type *type;
-    Try(check_expression(items->at(i), block_env, &type));
+    Try(check_expression(items.at(i), block_env, &type));
   }
 
-  Try(check_expression(items->at(items->len() - 1), block_env, out));
+  Try(check_expression(items.at(items.len() - 1), block_env, out));
 
   envs->dealloc(block_env);
 

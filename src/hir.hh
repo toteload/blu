@@ -3,24 +3,45 @@
 #include "blu.hh"
 
 enum InstructionKind : u8 {
-  i_mul,
-  i_div,
-  i_mod,
-  i_sub,
-  i_add,
+  hir_root,
 
-  i_logical_and,
-  i_logical_or,
+  hir_declaration,
 
-  i_cmp_equal,
-  i_cmp_less_than,
+  hir_sub,
+  hir_add,
+  hir_mul,
+  hir_div,
+  hir_mod,
 
-  i_store,
+  hir_logical_and,
+  hir_logical_or,
+
+  hir_cmp_equal,
+  hir_cmp_less_than,
+
+  hir_alloc,
+
+  hir_load,
+  hir_store,
+
+  hir_call,
+
+  hir_loop,
+  hir_return,
 };
 
-struct Instruction {
-  InstructionKind kind;
-  union {
-
-  };
+struct Ref {
+  u32 idx;
 };
+
+struct Root {
+  SegmentList<Ref> declarations;
+};
+
+struct Declaration {
+  NodeIndex ast;
+  Ref type;
+  Ref value;
+};
+
+struct CondBr {};
