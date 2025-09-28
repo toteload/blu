@@ -1,2 +1,109 @@
-number : type = i32
-pi : number = 3
+fac : fn(i32) i32 = fn(n: i32) i32 {
+  if n <= 0 { 1 } else { n * fac(n - 1) }
+}
+
+;  0 | hir_declaration
+;  1 | hir_function
+;  2 | hir_parameter (n: i32)
+;  3 | hir_const_int (0)
+;  4 | hir_cmp_less_eq %2, %3
+;  5 | hir_condbr %4, %7, %9
+;  6 | hir_block (7 instructions)
+;  7 | hir_const_int (1)
+;  8 | hir_break %6, %7
+;  9 | hir_const_int (1)
+; 10 | hir_sub %2, %9
+; 11 | hir_call %(fac), %10
+; 12 | hir_mul %2, %11
+; 13 | hir_break %6, %12
+; 14 | hir_return %6
+
+NodeIndex := u32 & struct { unique.field_name: unique.type("node-tag") }
+
+main : fn() i32 = fn() i32 {
+  y : i32 = 16
+  s : i32 = fac(y)
+
+  i : i32 = if true then 2 else 3
+
+  while true :s {
+    if i == 10 {
+      break :s
+    }
+
+    i = i+1
+  }
+
+  return fac(10)
+}
+
+;  0 | hir_declaration
+;  1 | hir_function
+;  2 | hir_const_int (16)           ; constants are stored in a separate data structure
+;  3 | hir_alloc (i32)              ; alloc y
+;  4 | hir_store %3, %2             ; y = 16
+;  5 | hir_alloc (i32)              ; alloc s
+;  6 | hir_load %3
+;  7 | hir_call %(fac), %6          ; fac(y)
+;  8 | hir_store %5, %7             ; s = fac(y)
+;  8 | hir_alloc (i32)              ; alloc r
+;  9 | hir_const_int (1)
+; 10 | hir_condbr %9, %12, %14      ; if 1 then ... else ...
+; 11 | hir_block (4 instructions)
+; 12 | hir_const_int (2)
+; 13 | hir_break %11, %12
+; 14 | hir_const_int (3)
+; 15 | hir_break %11, %14
+; 16 | hir_store %8, %11            ; r = (result of if-else expression)
+; 18 | hir_alloc (i32)              ; i
+; 19 | hir_const_int (0)
+; 20 | hir_store %18, %19           ; i = 0
+; 21 | hir_block (13 instructions)  ; while
+; 22 | hir_const_int (1)            ; true
+; 23 | hir_condbr %22, %25, %24
+; 24 | hir_break %21
+; 25 | hir_load %18                 ; get i
+; 26 | hir_const_int (10)
+; 27 | hir_cmp_eq %25, %26          ; i == 10
+; 28 | hir_condbr %27, %29, %30
+; 29 | hir_break %21                ; break while loop
+; 30 | hir_load %18                 ; get i
+; 31 | hir_const_int (1)
+; 32 | hir_add %30, %31             ; i + 1
+; 33 | hir_store %18, %32           ; i = i + 1
+; 34 | hir_loop %21
+; 35 | hir_const_int (10)
+; 36 | hir_call %(fac), %35
+; 37 | hir_return %36
+
+; i32 main() {
+;   i32 y;
+;   y = 16;
+;   i32 s;
+;   s = fac(y);
+;   i32 r;
+;   {
+;     i32 _x;
+;     if (1) {
+;       _x = 2;
+;     } else {
+;       _x = 3;
+;     }
+;     r = _x;
+;   }
+;   i32 i;
+;   i = 0;
+;   while (1) {
+;     if (1) {
+;       u8 _x = i == 10;
+;       if (_x) {
+;         goto _label_00;
+;       }
+;       i = i + 1;
+;     } else {
+;       goto _label_00;
+;     }
+;   }
+;   _label_00:
+;   return fac(10);
+; }
