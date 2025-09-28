@@ -115,11 +115,13 @@ struct MessageManager {
   Arena arena;
   Vector<Message *> messages;
   StringInterner *strings;
+  TypeInterner *types;
 
-  void init(Allocator list_alloc, StringInterner *strings) {
+  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types) {
     arena.init(MiB(16));
     messages.init(list_alloc);
     this->strings = strings;
+    this->types   = types;
   }
 
   void deinit();

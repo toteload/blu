@@ -108,6 +108,7 @@ def create_build_ninja():
         inputs  = [outd(f'{f}.o') for f in [
                 'toteload.cc',
                 'tokenize.cc',
+                'type_interner.cc',
                 'string_interner.cc',
                 join('tools', 'tokenviewer.cc'),
                 join('utils', 'stdlib.cc'),

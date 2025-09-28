@@ -155,11 +155,17 @@ int main(i32 arg_count, char const *const *args) {
   Arena arena;
   arena.init(MiB(2));
 
+  Arena work_arena;
+  work_arena.init(MiB(1));
+
+  TypeInterner types;
+  types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
+
   StringInterner strings;
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
 
   MessageManager messages;
-  messages.init(stdlib_alloc, &strings);
+  messages.init(stdlib_alloc, &strings, &types);
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);
@@ -188,12 +194,6 @@ int main(i32 arg_count, char const *const *args) {
     printf("Parse error\n");
     return 1;
   }
-
-  Arena work_arena;
-  work_arena.init(MiB(1));
-
-  TypeInterner types;
-  types.init(&work_arena, stdlib_alloc, stdlib_alloc);
 
   EnvManager envs;
   envs.init(arena.as_allocator(), stdlib_alloc);

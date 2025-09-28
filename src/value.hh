@@ -8,7 +8,7 @@ enum ValueKind : u8 {
 
 struct Value {
   ValueKind kind;
-  Type *type = nullptr;
+  TypeIndex type;
 
   struct Param {
     TokenIndex token_index;
@@ -22,19 +22,19 @@ struct Value {
   union {
     Param param;
     Declaration declaration;
-    Type *type;
+    TypeIndex type;
   } data;
 
-  b32 is_type_known() { return kind == Value_type || type != nullptr; }
+  b32 is_type_known() { return kind == Value_type; }
 
-  static Value make_type(Type *type) {
+  static Value make_type(TypeIndex type) {
     Value val;
     val.kind = Value_type;
     val.data.type = type;
     return val;
   }
 
-  static Value make_param(TokenIndex param, Type *type) {
+  static Value make_param(TokenIndex param, TypeIndex type) {
     Value val;
     val.kind = Value_param;
     val.type = type;

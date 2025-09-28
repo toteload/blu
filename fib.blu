@@ -31,18 +31,3 @@ fib : fn(i32) i32 = fn(n : i32) i32 {
   }
 }
 
-;  0      hir_declaration   { value = %1 }
-;  1      hir_function      { return_type = %2, body = %3 }
-;  2      hir_int_type      { bitwidth = 32, signed = true }
-;  3 +--- hir_block         { len = 9 }
-;  4 |    hir_param         { type = %2 }
-;  5 |    hir_alloc         { type = %2 }
-;  6 | +- hir_block         { len = 7, loop = true }
-;  7 | |  hir_cmp_less_than { lhs = %5, rhs = %4 }
-;  8 | |  hir_cond_br       { then = %9, else = %13 }
-;  9 | |  hir_load %5
-; 10 | |  hir_int 1
-; 11 | |  hir_add %9, %10
-; 12 | |  hir_store %5, %11
-; 12 | +- hir_repeat        { block = %6 }
-; 13 +--- hir_return %5

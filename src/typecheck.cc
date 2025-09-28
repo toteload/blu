@@ -9,31 +9,31 @@ struct TypeChecker {
   Source *source;
   Nodes *nodes;
 
-  Type *return_type_of_current_function = nullptr;
+  TypeIndex return_type_of_current_function;
 
   // -
 
   b32 check_root(NodeIndex root, Env *env);
 
-  b32 determine_type(NodeIndex type, Env *env, Type **out);
+  b32 determine_type(NodeIndex type, Env *env, TypeIndex *out);
 
-  b32 determine_unary_op_type(UnaryOpKind op, Type *value, Type **out);
-  b32 determine_binary_op_type(BinaryOpKind op, Type *lhs, Type *rhs, Type **out);
+  b32 determine_unary_op_type(UnaryOpKind op, TypeIndex value, TypeIndex *out);
+  b32 determine_binary_op_type(BinaryOpKind op, TypeIndex lhs, TypeIndex rhs, TypeIndex *out);
 
-  b32 is_type_coercible_to(Type *src, Type *dst);
+  b32 is_type_coercible_to(TypeIndex src, TypeIndex dst);
 
-  b32 check_expression(NodeIndex expr_node_index, Env *env, Type **out);
-  b32 check_block(NodeIndex node_index, Env *env, Type **out);
-  b32 check_declaration(NodeIndex node_index, Env *env, Type **out);
-  b32 check_assign(NodeIndex node_index, Env *env, Type **out);
-  b32 check_identifier(NodeIndex node_index, Env *env, Type **out);
-  b32 check_function(NodeIndex function, Env *env, Type **out);
-  b32 check_call(NodeIndex function, Env *env, Type **out);
-  b32 check_unary_op(NodeIndex function, Env *env, Type **out);
-  b32 check_binary_op(NodeIndex function, Env *env, Type **out);
-  b32 check_while(NodeIndex function, Env *env, Type **out);
-  b32 check_if_else(NodeIndex function, Env *env, Type **out);
-  b32 check_return(NodeIndex node_index, Env *env, Type **out);
+  b32 check_expression(NodeIndex expr_node_index, Env *env, TypeIndex *out);
+  b32 check_block(NodeIndex node_index, Env *env, TypeIndex *out);
+  b32 check_declaration(NodeIndex node_index, Env *env, TypeIndex *out);
+  b32 check_assign(NodeIndex node_index, Env *env, TypeIndex *out);
+  b32 check_identifier(NodeIndex node_index, Env *env, TypeIndex *out);
+  b32 check_function(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_call(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_unary_op(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_binary_op(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_while(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_if_else(NodeIndex function, Env *env, TypeIndex *out);
+  b32 check_return(NodeIndex node_index, Env *env, TypeIndex *out);
 
   b32 is_assignable(NodeIndex node_index, Env *env) {
     AstKind kind = nodes->kind(node_index);
@@ -44,22 +44,26 @@ struct TypeChecker {
   }
 };
 
-b32 TypeChecker::is_type_coercible_to(Type *src, Type *dst) {
+b32 TypeChecker::is_type_coercible_to(TypeIndex src, TypeIndex dst) {
   if (src == dst) {
     return true;
   }
 
-  if (src->kind == Type_never) {
+  // `never` can be coerced to everything.
+  if (src == types->never) {
     return true;
   }
 
-  if (src->kind == Type_integer_constant && dst->kind == Type_integer) {
+  auto src_type = types->get(src);
+  auto dst_type = types->get(dst);
+
+  if (src_type->kind == Type_integer_constant && dst_type->kind == Type_integer) {
     return true;
   }
 
-  if (src->kind == Type_sequence && dst->kind == Type_slice) {
-    ForEachIndex(i, src->sequence.count) {
-      if (!is_type_coercible_to(src->sequence.items[i], dst->slice.base_type)) {
+  if (src_type->kind == Type_sequence && dst_type->kind == Type_slice) {
+    ForEachIndex(i, src_type->sequence.count) {
+      if (!is_type_coercible_to(src_type->sequence.item_types[i], dst_type->slice.base_type)) {
         return false;
       }
     }
@@ -67,27 +71,29 @@ b32 TypeChecker::is_type_coercible_to(Type *src, Type *dst) {
     return true;
   }
 
-  if (dst->kind == Type_distinct) {
-    if (src->kind == Type_distinct && dst->distinct.uid != src->distinct.uid) {
+  if (dst_type->kind == Type_distinct) {
+    if (src_type->kind == Type_distinct && dst_type->distinct.uid != src_type->distinct.uid) {
       return false;
     }
 
-    return is_type_coercible_to(src, dst->distinct.base);
+    return is_type_coercible_to(src, dst_type->distinct.base_type);
   }
 
   return false;
 }
 
-b32 TypeChecker::determine_unary_op_type(UnaryOpKind op, Type *value, Type **out) {
+b32 TypeChecker::determine_unary_op_type(UnaryOpKind op, TypeIndex value, TypeIndex *out) {
+  auto value_type = types->get(value);
+
   switch (op) {
   case Negate: {
-    if (value->kind == Type_integer_constant || (value->kind == Type_integer && value->integer.signedness == Signed)) {
+    if (value == types->integer_constant || (value_type->kind == Type_integer && value_type->integer.signedness == Signed)) {
       *out = value;
       return true;
     }
   } break;
   case Not: {
-    if (value->kind == Type_integer_constant || value->kind == Type_integer || value->kind == Type_boolean) {
+    if (value == types->integer_constant || value_type->kind == Type_integer || value == types->bool_) {
       *out = value;
       return true;
     }
@@ -99,7 +105,9 @@ b32 TypeChecker::determine_unary_op_type(UnaryOpKind op, Type *value, Type **out
   return false;
 }
 
-b32 TypeChecker::determine_binary_op_type(BinaryOpKind op, Type *lhs, Type *rhs, Type **out) {
+b32 TypeChecker::determine_binary_op_type(
+  BinaryOpKind op, TypeIndex lhs, TypeIndex rhs, TypeIndex *out
+) {
   switch (op) {
   case Add:
   case Sub:
@@ -124,7 +132,7 @@ b32 TypeChecker::determine_binary_op_type(BinaryOpKind op, Type *lhs, Type *rhs,
   } break;
   case Logical_or:
   case Logical_and: {
-    if (lhs == rhs && lhs->kind == Type_boolean) {
+    if (lhs == rhs && lhs == types->bool_) {
       *out = types->bool_;
       return true;
     }
@@ -172,7 +180,7 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
 
     AstKind value_kind = nodes->kind(decl.value);
 
-    Type *value_type = nullptr;
+    TypeIndex value_type;
     Try(check_expression(decl.value, env, &value_type));
 
     // TODO: make sure that the declared type and the value type are compatible
@@ -181,7 +189,7 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
   return true;
 }
 
-b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto kind = nodes->kind(node_index);
 
   if (kind == Ast_identifier) {
@@ -215,7 +223,7 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
   if (kind == Ast_type_slice) {
     auto data = nodes->data(node_index).type_slice;
 
-    Type *base = nullptr;
+    TypeIndex base;
     Try(determine_type(data.base, env, &base));
 
     Type slice_type = Type::make_slice(base);
@@ -228,13 +236,13 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
   if (kind == Ast_type_function) {
     auto data = nodes->data(node_index).type_function;
 
-    Type *return_type = nullptr;
+    TypeIndex return_type;
     Try(determine_type(data.return_type, env, &return_type));
 
     usize param_count = data.params.len();
 
     Type *function_type = cast<Type *>(
-      work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type))
+      work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(TypeIndex), Align_of(Type))
     );
 
     function_type->kind                 = Type_function;
@@ -242,7 +250,7 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
     function_type->function.param_count = param_count;
 
     for (usize i = 0; i < param_count; i += 1) {
-      Try(determine_type(data.params[i], env, &function_type->function.params[i]));
+      Try(determine_type(data.params[i], env, &function_type->function.param_types[i]));
     }
 
     *out = types->add(function_type);
@@ -253,7 +261,7 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, Type **out) {
   return false;
 }
 
-b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, Type **out) {
+b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, TypeIndex *out) {
   AstKind kind = nodes->kind(expr_node_index);
 
   // clang-format off
@@ -283,7 +291,7 @@ b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, Type **ou
   return true;
 }
 
-b32 TypeChecker::check_block(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_block(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto items = nodes->data(node_index).block.items;
 
   if (items.len() == 0) {
@@ -294,7 +302,7 @@ b32 TypeChecker::check_block(NodeIndex node_index, Env *env, Type **out) {
   Env *block_env = envs->alloc(env);
 
   for (usize i = 0; i < items.len() - 1; i += 1) {
-    Type *type;
+    TypeIndex type;
     Try(check_expression(items.at(i), block_env, &type));
   }
 
@@ -305,8 +313,8 @@ b32 TypeChecker::check_block(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_return(NodeIndex node_index, Env *env, Type **out) {
-  Type *return_type;
+b32 TypeChecker::check_return(NodeIndex node_index, Env *env, TypeIndex *out) {
+  TypeIndex return_type;
   Try(check_expression(nodes->data(node_index).return_.value, env, &return_type));
 
   if (!is_type_coercible_to(return_type, return_type_of_current_function)) {
@@ -323,16 +331,16 @@ b32 TypeChecker::check_return(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, Type **out) {
+b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, TypeIndex *out) {
   auto function = nodes->data(function_node_index).function;
 
   Env *param_env = envs->alloc(env);
 
   usize param_count = function.params.len();
 
-  Type *function_type =
-    cast<Type *>(work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(Type *), Align_of(Type))
-    );
+  Type *function_type = cast<Type *>(
+    work_arena->raw_alloc(sizeof(Type) + param_count * sizeof(TypeIndex), Align_of(Type))
+  );
 
   function_type->kind                 = Type_function;
   function_type->function.param_count = param_count;
@@ -341,25 +349,23 @@ b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, Type **
     TokenIndex name = function.params[i].name;
     StrKey key      = strings->add(source->get_token_str(name));
 
-    Type *param_type;
+    TypeIndex param_type;
     Try(determine_type(function.params[i].type, env, &param_type));
 
-    function_type->function.params[i] = param_type;
+    function_type->function.param_types[i] = param_type;
 
     param_env->insert(key, Value::make_param(name, param_type));
   }
 
-  Type *return_type;
+  TypeIndex return_type;
   Try(determine_type(function.return_type, env, &return_type));
 
   function_type->function.return_type = return_type;
 
   return_type_of_current_function = return_type;
 
-  Type *body_type;
+  TypeIndex body_type;
   Try(check_expression(function.body, param_env, &body_type));
-
-  return_type_of_current_function = nullptr;
 
   if (!is_type_coercible_to(body_type, return_type)) {
     messages
@@ -367,18 +373,18 @@ b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, Type **
     return false;
   }
 
-  *out = function_type;
+  *out = types->add(function_type);
 
   return true;
 }
 
-b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, Type **out) {
+b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, TypeIndex *out) {
   auto data = nodes->data(expr).if_else;
 
-  Type *cond;
+  TypeIndex cond;
   Try(check_expression(data.cond, env, &cond));
 
-  Type *then;
+  TypeIndex then;
   Try(check_expression(data.then, env, &then));
 
   if (data.otherwise.is_none()) {
@@ -395,10 +401,10 @@ b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, Type **out) {
     return true;
   }
 
-  Type *otherwise;
+  TypeIndex otherwise;
   Try(check_expression(NodeIndex::from_optional(data.otherwise), env, &otherwise));
 
-  Type *final_type;
+  TypeIndex final_type;
   if (is_type_coercible_to(then, otherwise)) {
     final_type = otherwise;
   } else if (is_type_coercible_to(otherwise, then)) {
@@ -412,10 +418,10 @@ b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_unary_op(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_unary_op(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto unary_op = nodes->data(node_index).unary_op;
 
-  Type *type;
+  TypeIndex type;
   Try(check_expression(unary_op.value, env, &type));
 
   Try(determine_unary_op_type(unary_op.kind, type, out));
@@ -423,13 +429,13 @@ b32 TypeChecker::check_unary_op(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_binary_op(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_binary_op(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto binary_op = nodes->data(node_index).binary_op;
 
-  Type *lhs;
+  TypeIndex lhs;
   Try(check_expression(binary_op.lhs, env, &lhs));
 
-  Type *rhs;
+  TypeIndex rhs;
   Try(check_expression(binary_op.rhs, env, &rhs));
 
   Try(determine_binary_op_type(binary_op.kind, lhs, rhs, out));
@@ -437,17 +443,17 @@ b32 TypeChecker::check_binary_op(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_while(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_while(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto while_ = nodes->data(node_index).while_;
 
-  Type *cond_type;
+  TypeIndex cond_type;
   Try(check_expression(while_.cond, env, &cond_type));
 
-  if (cond_type->kind != Type_boolean) {
+  if (cond_type != types->bool_) {
     Todo();
   }
 
-  Type *body_type;
+  TypeIndex body_type;
   Try(check_expression(while_.body, env, &body_type));
 
   *out = types->nil;
@@ -455,11 +461,13 @@ b32 TypeChecker::check_while(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_call(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_call(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto call = nodes->data(node_index).call;
 
-  Type *callee_type;
-  Try(check_expression(call.callee, env, &callee_type));
+  TypeIndex callee_type_index;
+  Try(check_expression(call.callee, env, &callee_type_index));
+
+  Type *callee_type = types->get(callee_type_index);
 
   if (callee_type->kind != Type_function) {
     messages->error("Callee is not a function. Found type '{type}'.", callee_type);
@@ -472,10 +480,10 @@ b32 TypeChecker::check_call(NodeIndex node_index, Env *env, Type **out) {
   }
 
   for (usize i = 0; i < call.args.len(); i += 1) {
-    Type *arg_type;
+    TypeIndex arg_type;
     Try(check_expression(call.args[i], env, &arg_type));
 
-    Type *param_type = callee_type->function.params[i];
+    TypeIndex param_type = callee_type->function.param_types[i];
     if (!is_type_coercible_to(arg_type, param_type)) {
       messages
         ->error("Cannot coerce value of type '{type}' to type '{type}'.", arg_type, param_type);
@@ -488,10 +496,10 @@ b32 TypeChecker::check_call(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_assign(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_assign(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto assign = nodes->data(node_index).assign;
 
-  Type *lhs_type;
+  TypeIndex lhs_type;
   Try(check_expression(assign.lhs, env, &lhs_type));
 
   if (!is_assignable(assign.lhs, env)) {
@@ -499,7 +507,7 @@ b32 TypeChecker::check_assign(NodeIndex node_index, Env *env, Type **out) {
     return false;
   }
 
-  Type *value_type;
+  TypeIndex value_type;
   Try(check_expression(assign.value, env, &value_type));
 
   if (!is_type_coercible_to(value_type, lhs_type)) {
@@ -512,7 +520,7 @@ b32 TypeChecker::check_assign(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, TypeIndex *out) {
   TokenIndex token_index = nodes->data(node_index).identifier.token_index;
   StrKey key             = strings->add(source->get_token_str(token_index));
   Value *val             = env->lookup(key);
@@ -527,13 +535,13 @@ b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, Type **out) {
   return true;
 }
 
-b32 TypeChecker::check_declaration(NodeIndex node_index, Env *env, Type **out) {
+b32 TypeChecker::check_declaration(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto decl = nodes->data(node_index).declaration;
 
-  Type *declared_type;
+  TypeIndex declared_type;
   Try(determine_type(decl.type, env, &declared_type));
 
-  Type *value_type;
+  TypeIndex value_type;
   Try(check_expression(decl.value, env, &value_type));
 
   if (!is_type_coercible_to(value_type, declared_type)) {

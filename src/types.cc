@@ -2,7 +2,7 @@
 
 // Should this Slice<char> be a Str?
 // Should Str be a subtype of Slice?
-u32 Type::write_string(Slice<char> out) {
+u32 Type::write_string(TypeInterner *types, Slice<char> out) {
   switch (kind) {
   case Type_integer:
     return snprintf(out.data, out.len(), "%s%d", integer.signedness == Signed ? "i" : "u", integer.bitwidth);
@@ -17,13 +17,13 @@ u32 Type::write_string(Slice<char> out) {
   case Type_slice: {
     u32 offset = 0;
     offset += cast<u32>(snprintf(out.data, out.len(), "[]"));
-    offset += slice.base_type->write_string(out.sub(offset, out.len()));
+    offset += types->get(slice.base_type)->write_string(types, out.sub(offset, out.len()));
     return offset;
   }
   case Type_distinct: {
     u32 offset = 0;
     offset += cast<u32>(snprintf(out.data, out.len(), "distinct(%d) ", distinct.uid));
-    offset += distinct.base->write_string(out.sub(offset, out.len()));
+    offset += types->get(distinct.base_type)->write_string(types, out.sub(offset, out.len()));
     return offset;
   }
   }

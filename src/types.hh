@@ -1,3 +1,5 @@
+struct TypeInterner;
+
 enum TypeKind : u8 {
   Type_integer_constant,
   Type_integer,
@@ -16,6 +18,17 @@ enum Signedness : u8 {
   Unsigned,
 };
 
+struct TypeIndex {
+  u32 idx;
+};
+
+ttld_inline bool operator==(const TypeIndex &lhs, const TypeIndex &rhs) {
+  return lhs.idx == rhs.idx;
+}
+ttld_inline bool operator!=(const TypeIndex &lhs, const TypeIndex &rhs) {
+  return lhs.idx != rhs.idx;
+}
+
 struct Type {
   TypeKind kind;
 
@@ -25,26 +38,26 @@ struct Type {
       u16 bitwidth;
     } integer;
     struct {
-      Type *base_type;
+      TypeIndex base_type;
     } slice;
     struct {
-      Type *return_type;
+      TypeIndex return_type;
       u32 param_count;
-      Type *params[0];
+      TypeIndex param_types[0];
     } function;
     struct {
       u32 uid;
-      Type *base;
+      TypeIndex base_type;
     } distinct;
     struct {
       u32 count;
-      Type *items[0];
+      TypeIndex item_types[0];
     } sequence;
   };
 
   b32 is_sized_type() { return kind != Type_nil && kind != Type_never; }
 
-  u32 write_string(Slice<char> out);
+  u32 write_string(TypeInterner *types, Slice<char> out);
 
   u32 byte_size() {
     switch (kind) {
@@ -58,10 +71,10 @@ struct Type {
     case Type_boolean:
       return sizeof(*this);
     case Type_function: {
-      return sizeof(*this) + function.param_count * sizeof(Type *);
+      return sizeof(*this) + function.param_count * sizeof(TypeIndex);
     } break;
     case Type_sequence:
-      return sizeof(*this) + sequence.count * sizeof(Type *);
+      return sizeof(*this) + sequence.count * sizeof(TypeIndex);
     }
   }
 
@@ -69,10 +82,10 @@ struct Type {
     return kind == Type_integer || kind == Type_integer_constant;
   }
 
-  static Type make_slice(Type *base) {
+  static Type make_slice(TypeIndex base_type) {
     Type t;
     t.kind            = Type_slice;
-    t.slice.base_type = base;
+    t.slice.base_type = base_type;
     return t;
   }
   static Type make_nil() { return {Type_nil, {}}; }
@@ -94,30 +107,32 @@ struct Type {
 b32 type_eq(void *context, Type *a, Type *b);
 u32 type_hash(void *context, Type *x);
 
-struct TypeKey {
-  u32 idx;
-};
-
 struct TypeInterner {
   Allocator storage;
-  HashMap<Type *, Type *, type_eq, type_hash> map; // TODO this should be a set
-  u32 distinct_uid_gen = 0;
+  HashMap<Type *, TypeIndex, type_eq, type_hash> map;
+  Vector<Type *> list;
+  u32 distinct_uid_gen = 1;
 
   // Often used and always available types
-  Type *bool_;
-  Type *u8_;
-  Type *u16_;
-  Type *u32_;
-  Type *u64_;
-  Type *i8_;
-  Type *i16_;
-  Type *i32_;
-  Type *i64_;
-  Type *integer_constant;
-  Type *nil;
-  Type *never;
+  TypeIndex bool_;
+  TypeIndex u8_;
+  TypeIndex u16_;
+  TypeIndex u32_;
+  TypeIndex u64_;
+  TypeIndex i8_;
+  TypeIndex i16_;
+  TypeIndex i32_;
+  TypeIndex i64_;
+  TypeIndex integer_constant;
+  TypeIndex nil;
+  TypeIndex never;
 
-  void init(Arena *work_arena, Allocator storage_allocator, Allocator map_allocator);
+  void init(
+    Arena *work_arena,
+    Allocator storage_allocator,
+    Allocator map_allocator,
+    Allocator list_allocator
+  );
   void deinit();
 
   u32 _get_new_distinct_uid() {
@@ -126,11 +141,13 @@ struct TypeInterner {
     return uid;
   }
 
-  Type *_intern_type(Type *type);
+  TypeIndex _intern_type(Type *type);
 
-  Type *add(Type *type);
+  TypeIndex add(Type *type);
 
   // Intern the provided type, but make it distinct as well.
   // Two calls to this function with the same pointer will result in two different types returned.
-  Type *add_as_distinct(Type *type);
+  TypeIndex add_as_distinct(Type *type);
+
+  Type *get(TypeIndex idx) { return list[idx.idx]; }
 };
