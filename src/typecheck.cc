@@ -7,7 +7,8 @@ struct TypeChecker {
   TypeInterner *types;
   StringInterner *strings;
   Source *source;
-  Nodes *nodes;
+  AstNodes *nodes;
+  ValueStore *values;
 
   TypeIndex return_type_of_current_function;
 
@@ -16,6 +17,7 @@ struct TypeChecker {
   b32 check_root(NodeIndex root, Env *env);
 
   b32 determine_type(NodeIndex type, Env *env, TypeIndex *out);
+  b32 evaluate_lazy_value_expect_type(LazyValue *val, Env *env);
 
   b32 determine_unary_op_type(UnaryOpKind op, TypeIndex value, TypeIndex *out);
   b32 determine_binary_op_type(BinaryOpKind op, TypeIndex lhs, TypeIndex rhs, TypeIndex *out);
@@ -24,7 +26,7 @@ struct TypeChecker {
 
   b32 check_expression(NodeIndex expr_node_index, Env *env, TypeIndex *out);
   b32 check_block(NodeIndex node_index, Env *env, TypeIndex *out);
-  b32 check_declaration(NodeIndex node_index, Env *env, TypeIndex *out);
+  b32 check_local_declaration(NodeIndex node_index, Env *env, TypeIndex *out);
   b32 check_assign(NodeIndex node_index, Env *env, TypeIndex *out);
   b32 check_identifier(NodeIndex node_index, Env *env, TypeIndex *out);
   b32 check_function(NodeIndex function, Env *env, TypeIndex *out);
@@ -139,7 +141,7 @@ b32 TypeChecker::determine_binary_op_type(
   } break;
   }
 
-  Todo();
+  messages->error("Failed to determine type for binary operator. Type of lhs is '{type}' and type of rhs is '{type}'.", lhs, rhs);
 
   return false;
 }
@@ -166,11 +168,13 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
 
     Value *val = env->lookup(key);
 
-    if (val->is_type_known()) {
+    if (val->kind == Value_type) {
       continue;
     }
 
-    Try(determine_type(val->data.declaration.type_node_index, env, &val->type));
+    Debug_assert(val->kind == Value_declaration);
+
+    Try(evaluate_lazy_value_expect_type(&val->data.declaration.type, env));
   }
 
   // At this point each declaration has its declared type determined.
@@ -189,6 +193,20 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
   return true;
 }
 
+b32 TypeChecker::evaluate_lazy_value_expect_type(LazyValue *val, Env *env) {
+  if (val->is_evaluated()) {
+    return true;
+  }
+
+  TypeIndex actual_type;
+  Try(determine_type(val->node_index, env, &actual_type));
+
+  ValueIndex idx = values->add(Value::make_type(actual_type));
+  val->set(idx);
+
+  return true;
+}
+
 b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto kind = nodes->kind(node_index);
 
@@ -196,6 +214,7 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, TypeIndex *out) 
     auto token_index = nodes->data(node_index).identifier.token_index;
     StrKey key       = strings->add(source->get_token_str(token_index));
     Value *val       = env->lookup(key);
+
     if (!val) {
       messages->error("Unrecognized identifier '{strkey}' encountered", key);
       return false;
@@ -205,9 +224,14 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, TypeIndex *out) 
     case Value_param:
       Todo();
       break;
-    case Value_lazy_declaration: {
-      Try(determine_type(val->data.declaration.value_node_index, env, &val->data.type));
-      *out = val->data.type;
+    case Value_declaration: {
+      Try(evaluate_lazy_value_expect_type(&val->data.declaration.value, env));
+      auto idx = val->data.declaration.value.get();
+      Value *type_val = values->get(idx);
+
+      Debug_assert(type_val->kind == Value_type);
+
+      *out = type_val->data.type;
     } break;
     case Value_type:
       *out = val->data.type;
@@ -268,10 +292,11 @@ b32 TypeChecker::check_expression(NodeIndex expr_node_index, Env *env, TypeIndex
   switch (kind) {
   case Ast_type_slice:
   case Ast_type_function: {
-    Try(determine_type(expr_node_index, env, out));
+    Try(determine_type(expr_node_index, env, out)); 
   } break;
+
   case Ast_block:       Try(check_block(expr_node_index, env, out)); break;
-  case Ast_declaration: Try(check_declaration(expr_node_index, env, out)); break;
+  case Ast_declaration: Try(check_local_declaration(expr_node_index, env, out)); break;
   case Ast_assign:      Try(check_assign(expr_node_index, env, out)); break;
   //case Ast_literal_sequence: Try(check_literal_sequence(expr_node_index, env, out)); break;
   case Ast_literal_int: *out = types->integer_constant; break;
@@ -402,7 +427,7 @@ b32 TypeChecker::check_if_else(NodeIndex expr, Env *env, TypeIndex *out) {
   }
 
   TypeIndex otherwise;
-  Try(check_expression(NodeIndex::from_optional(data.otherwise), env, &otherwise));
+  Try(check_expression(NodeIndex::from_optional_index(data.otherwise), env, &otherwise));
 
   TypeIndex final_type;
   if (is_type_coercible_to(then, otherwise)) {
@@ -530,12 +555,30 @@ b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, TypeIndex *out
     return false;
   }
 
-  *out = val->type;
+  switch (val->kind) {
+    case Value_type: {
+      *out = val->data.type;
+    } break;
+    case Value_param: {
+      *out = val->data.param.type;
+    } break; 
+    case Value_declaration: {
+      Try(evaluate_lazy_value_expect_type(&val->data.declaration.type, env));
+      auto idx = val->data.declaration.type.get();
+      Value *type_val = values->get(idx);
+
+      Debug_assert(type_val->kind == Value_type);
+
+      *out = type_val->data.type;
+    } break;
+    default:
+      Todo();
+  }
 
   return true;
 }
 
-b32 TypeChecker::check_declaration(NodeIndex node_index, Env *env, TypeIndex *out) {
+b32 TypeChecker::check_local_declaration(NodeIndex node_index, Env *env, TypeIndex *out) {
   auto decl = nodes->data(node_index).declaration;
 
   TypeIndex declared_type;
@@ -552,7 +595,8 @@ b32 TypeChecker::check_declaration(NodeIndex node_index, Env *env, TypeIndex *ou
 
   StrKey key = strings->add(source->get_token_str(decl.name));
   Value val  = Value::make_declaration(decl.type, decl.value);
-  val.type   = declared_type;
+
+  *out = types->nil;
 
   env->insert(key, val);
 
@@ -566,6 +610,7 @@ b32 type_check(TypeCheckContext *ctx, Source *source) {
   typechecker.envs       = ctx->envs;
   typechecker.types      = ctx->types;
   typechecker.strings    = ctx->strings;
+  typechecker.values = ctx->values;
   typechecker.source     = source;
   typechecker.nodes      = source->nodes;
 

@@ -81,7 +81,6 @@ struct EnvManager {
       strings->add(Str_make("true")),
       {
         Value_true,
-        bool_type,
         {},
       }
     );
@@ -89,7 +88,6 @@ struct EnvManager {
       strings->add(Str_make("false")),
       {
         Value_false,
-        bool_type,
         {},
       }
     );

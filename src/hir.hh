@@ -2,72 +2,82 @@
 
 #include "blu.hh"
 
-enum InstructionKind : u8 {
-  hir_root,
+enum HirInstructionKind : u8 {
+  Hir_declaration,
 
-  hir_declaration,
+  Hir_function,
+  Hir_parameter,
 
-  hir_function,
-  hir_parameter,
+  Hir_sub,
+  Hir_add,
+  Hir_mul,
+  Hir_div,
+  Hir_mod,
 
-  hir_sub,
-  hir_add,
-  hir_mul,
-  hir_div,
-  hir_mod,
+  Hir_logical_and,
+  Hir_logical_or,
 
-  hir_logical_and,
-  hir_logical_or,
+  Hir_cmp_equal,
+  Hir_cmp_less_than,
 
-  hir_cmp_equal,
-  hir_cmp_less_than,
+  Hir_alloc,
 
-  hir_alloc,
+  Hir_load,
+  Hir_store,
 
-  hir_load,
-  hir_store,
+  Hir_call,
 
-  hir_call,
+  Hir_loop,
+  Hir_return,
+};
 
-  hir_loop,
-  hir_return,
+enum RefKind {
+  Ref_instruction_index,
+  Ref_value,
 };
 
 // Can refer to either
 // - another instruction
 // - an entry into the value store
-// - a declaration
 struct Ref {
   u32 idx;
 };
 
-struct Root {
-  SegmentList<Ref> declarations;
-};
-
-struct Declaration {
+struct HirDeclaration {
   NodeIndex ast;
   Ref type;
   Ref value;
 };
 
-struct Function {
+struct HirFunction {
   Ref return_type;
   u32 parameter_count;
   u32 body_instruction_count;
 };
 
-struct Parameter {
+struct HirParameter {
   Ref type;
 };
 
-struct CondBr {};
+struct HirCondBr {};
+
+union HirData {
+  HirDeclaration declaration;
+  HirFunction function;
+  HirParameter parameter;
+};
 
 struct HirCode {
-  Vector<u32> declarations;
   Vector<HirInstructionKind> kinds;
-  Vector<HirData> datas;
-  Vector<u32> extras;
+  Vector<HirData>            datas;
+  Vector<u32>                extras;
+
+  Ref add(HirInstructionKind kind, HirData data) {
+    u32 idx = cast<u32>(kinds.len());
+    kinds.push(kind);
+    datas.push(data);
+    return {idx};
+  }
 };
 
 b32 generate_hir(Source *src, HirCode *code);

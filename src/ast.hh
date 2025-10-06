@@ -63,155 +63,149 @@ enum UnaryOpKind : u8 {
   UnaryOpKind_max,
 };
 
-struct OptionalNodeIndex;
+struct AstNodeTag {};
 
-struct NodeIndex {
-  u32 idx;
+using NodeIndex = Index<u32, AstNodeTag>;
+using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
 
-  ttld_inline static NodeIndex from_optional(OptionalNodeIndex i);
-};
-
-struct OptionalNodeIndex {
-  u32 idx;
-
-  static OptionalNodeIndex from_node_index(NodeIndex ni) { return {ni.idx}; }
-
-  b32 is_none() { return idx == UINT32_MAX; }
-};
-
-NodeIndex NodeIndex::from_optional(OptionalNodeIndex i) {
-  Debug_assert(!i.is_none());
-  return {i.idx};
-}
-
-constexpr OptionalNodeIndex OptionalNodeIndex_none = {UINT32_MAX};
-
-struct AstNode;
-
-struct TypeFunction {
+struct AstTypeFunction {
   NodeIndex return_type;
   SegmentList<NodeIndex> params;
 };
 
-struct TypeSlice {
+struct AstTypeSlice {
   NodeIndex base;
 };
 
-struct Param {
+struct AstParam {
   TokenIndex name;
   NodeIndex type;
 };
 
-struct Declaration {
+struct AstDeclaration {
   TokenIndex name;
   NodeIndex type;
   NodeIndex value;
 };
 
-struct Root {
+struct AstRoot {
   SegmentList<NodeIndex> items;
 };
 
-struct Block {
+struct AstBlock {
   SegmentList<NodeIndex> items;
 };
 
-struct LiteralSequence {
+struct AstLiteralSequence {
   SegmentList<NodeIndex> items;
 };
 
-struct Function {
-  SegmentList<Param> params;
+struct AstFunction {
+  SegmentList<AstParam> params;
   NodeIndex return_type;
   NodeIndex body;
 };
 
-struct IfElse {
+struct AstIfElse {
   NodeIndex cond;
   NodeIndex then;
   OptionalNodeIndex otherwise;
 };
 
-struct While {
+struct AstWhile {
   NodeIndex cond;
   NodeIndex body;
 };
 
-struct UnaryOp {
+struct AstUnaryOp {
   UnaryOpKind kind;
   NodeIndex value;
 };
 
-struct BinaryOp {
+struct AstBinaryOp {
   BinaryOpKind kind;
   NodeIndex lhs;
   NodeIndex rhs;
 };
 
-struct FieldAccess {
+struct AstFieldAccess {
   NodeIndex base;
   NodeIndex field;
 };
 
-struct Call {
+struct AstCall {
   NodeIndex callee;
   SegmentList<NodeIndex> args;
 };
 
-struct Cast {
+struct AstCast {
   NodeIndex destination_type;
   NodeIndex value;
 };
 
-struct Return {
+struct AstReturn {
   NodeIndex value;
 };
 
-struct Atom {
+struct AstAtom {
   TokenIndex token_index;
 };
 
-struct Assign {
+struct AstAssign {
   AssignKind kind;
   NodeIndex lhs;
   NodeIndex value;
 };
 
-union NodeData {
-  Root root;
-  Block block;
-  TypeFunction type_function;
-  TypeSlice type_slice;
-  Declaration declaration;
-  Assign assign;
-  LiteralSequence literal_sequence;
-  Atom literal_int;
-  Atom identifier;
-  FieldAccess access;
-  Call call;
-  Cast cast;
-  UnaryOp unary_op;
-  BinaryOp binary_op;
-  Function function;
-  IfElse if_else;
-  While while_;
-  Return return_;
+union AstNodeData {
+  AstRoot root;
+  AstBlock block;
+  AstTypeFunction type_function;
+  AstTypeSlice type_slice;
+  AstDeclaration declaration;
+  AstAssign assign;
+  AstLiteralSequence literal_sequence;
+  AstAtom literal_int;
+  AstAtom identifier;
+  AstFieldAccess access;
+  AstCall call;
+  AstCast cast;
+  AstUnaryOp unary_op;
+  AstBinaryOp binary_op;
+  AstFunction function;
+  AstIfElse if_else;
+  AstWhile while_;
+  AstReturn return_;
 };
 
-struct Node {
+struct AstNode {
   AstKind kind;
   Span<TokenIndex> span;
-  NodeData data;
+  AstNodeData data;
 };
 
-struct Nodes {
+struct AstNodes {
   Vector<AstKind> kinds;
   Vector<Span<TokenIndex>> spans;
-  Vector<NodeData> datas;
+  Vector<AstNodeData> datas;
 
   Allocator segment_allocator;
 
-  NodeIndex add(Node node) {
+  NodeIndex alloc() {
+    NodeIndex res = {cast<u32>(kinds.len())};
+    kinds.push_empty();
+    spans.push_empty();
+    datas.push_empty();
+    return res;
+  }
+
+  void set(NodeIndex idx, AstNode node) {
+    kinds[idx.idx] = node.kind;
+    spans[idx.idx] = node.span;
+    datas[idx.idx] = node.data;
+  }
+
+  NodeIndex add(AstNode node) {
     NodeIndex res = {cast<u32>(kinds.len())};
     kinds.push(node.kind);
     spans.push(node.span);
@@ -221,7 +215,7 @@ struct Nodes {
 
   AstKind kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
-  NodeData data(NodeIndex idx) { return datas[idx.idx]; }
+  AstNodeData data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {

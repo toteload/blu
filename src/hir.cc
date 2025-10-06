@@ -32,6 +32,13 @@ b32 generate_hir(Source *source, HirCode *code) {
 
   auto root = source->nodes->data(0).root;
   for (usize i = 0; i < root.items.len(); i++) {
+    auto ast_decl = source->nodes->data(root.items[i]).declaration;
 
+    Declaration data;
+    data.node_index = root.items[i];
+    data.type = values->add(Value::lazy_type(ast_decl.type));
+    data.value = values->add(Value::lazy_value(ast_decl.value));
+
+    Ref decl = code->add(Hir_declaration, data);
   }
 }

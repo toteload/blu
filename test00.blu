@@ -1,5 +1,9 @@
 fac : fn(i32) i32 = fn(n: i32) i32 {
-  if n <= 0 { 1 } else { n * fac(n - 1) }
+  rec : fn(i32) i32 = fn(n: i32) i32 {
+    n * fac(n - 1)
+  }
+
+  if n <= 0 { 1 } else { rec(n) }
 }
 
 ;  0 | hir_declaration

@@ -18,9 +18,9 @@ enum Signedness : u8 {
   Unsigned,
 };
 
-struct TypeIndex {
-  u32 idx;
-};
+struct TypeIndexTag {};
+
+using TypeIndex = Index<u32, TypeIndexTag>;
 
 ttld_inline bool operator==(const TypeIndex &lhs, const TypeIndex &rhs) {
   return lhs.idx == rhs.idx;
@@ -57,8 +57,6 @@ struct Type {
 
   b32 is_sized_type() { return kind != Type_nil && kind != Type_never; }
 
-  u32 write_string(TypeInterner *types, Slice<char> out);
-
   u32 byte_size() {
     switch (kind) {
     case Type_integer:
@@ -83,7 +81,7 @@ struct Type {
   }
 
   static Type make_slice(TypeIndex base_type) {
-    Type t;
+    Type t            = {};
     t.kind            = Type_slice;
     t.slice.base_type = base_type;
     return t;
@@ -151,3 +149,6 @@ struct TypeInterner {
 
   Type *get(TypeIndex idx) { return list[idx.idx]; }
 };
+
+u32 type_to_string(TypeInterner *types, TypeIndex type, Slice<char> output);
+

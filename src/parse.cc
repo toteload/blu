@@ -5,7 +5,7 @@ static constexpr u32 Op_count = BinaryOpKind_max + AssignKind_max;
 struct Parser {
   MessageManager *messages = nullptr;
   Tokens *tokens           = nullptr;
-  Nodes *nodes             = nullptr;
+  AstNodes *nodes          = nullptr;
   TokenIndex at            = {0};
 
   // -
@@ -28,7 +28,7 @@ struct Parser {
 
   // -
 
-  b32 parse_parameter(Param *out);
+  b32 parse_parameter(AstParam *out);
 
   // - Helpers -
 
@@ -103,9 +103,10 @@ struct Parser {
 };
 
 b32 Parser::parse_root(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  Root root;
+  AstRoot root;
   root.items.init();
 
   while (!is_token_index_end(at)) {
@@ -113,19 +114,22 @@ b32 Parser::parse_root(NodeIndex *out) {
     Try(parse_declaration(decl));
   }
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_root,
     {start, at},
     {.root = root},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_block(NodeIndex *out) {
-  TokenIndex start = at;
+  auto node_index = nodes->alloc();
+  auto start = at;
 
-  Block block;
+  AstBlock block;
   block.items.init();
 
   Try(expect_token(Tok_brace_open));
@@ -143,42 +147,43 @@ b32 Parser::parse_block(NodeIndex *out) {
 
   Try(expect_token(Tok_brace_close));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_block,
     {start, at},
     {.block = block},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_type(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
   TokenKind tok;
   Try(peek(&tok));
 
-  if (tok == Tok_bracket_open) {
+  switch (tok) {
+  case Tok_bracket_open: {
     next();
     Try(expect_token(Tok_bracket_close));
 
-    TypeSlice type_slice;
+    AstTypeSlice type_slice;
     Try(parse_type(&type_slice.base));
 
-    *out = nodes->add({
+    nodes->set( node_index, {
       Ast_type_slice,
       {start, at},
       {.type_slice = type_slice},
     });
-
-    return true;
-  }
-
-  if (tok == Tok_keyword_fn) {
+  } break;
+  case Tok_keyword_fn: {
     next();
     Try(expect_token(Tok_paren_open));
 
-    TypeFunction type_function;
+    AstTypeFunction type_function;
     type_function.params.init();
 
     while (!is_token_index_end(at)) {
@@ -203,33 +208,37 @@ b32 Parser::parse_type(NodeIndex *out) {
 
     Try(parse_type(&type_function.return_type));
 
-    *out = nodes->add({
+    nodes->set(node_index, {
       Ast_type_function,
       {start, at},
       {.type_function = type_function},
     });
+  } break;
+  case Tok_identifier: {
+    AstAtom identifier;
+    identifier.token_index = at;
 
-    return true;
-  }
+    next();
 
-  Atom identifier;
-  identifier.token_index = at;
-
-  Try(expect_token(Tok_identifier));
-
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_identifier,
     {start, at},
     {.identifier = identifier},
   });
+  } break;
+  default: return false;
+  }
 
+  *out = node_index;
+  
   return true;
 }
 
 b32 Parser::parse_declaration(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  Declaration declaration;
+  AstDeclaration declaration;
 
   declaration.name = at;
   Try(expect_token(Tok_identifier));
@@ -242,36 +251,42 @@ b32 Parser::parse_declaration(NodeIndex *out) {
 
   Try(parse_expression(&declaration.value));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_declaration,
     {start, at},
     {.declaration = declaration},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_literal_int(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  Atom literal_int;
+  AstAtom literal_int;
   literal_int.token_index = at;
 
   Try(expect_token(Tok_literal_int));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_literal_int,
     {start, at},
     {.literal_int = literal_int},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_literal_sequence(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  LiteralSequence literal_sequence;
+  AstLiteralSequence literal_sequence;
   literal_sequence.items.init();
 
   Try(expect_token(Tok_dot));
@@ -295,19 +310,22 @@ b32 Parser::parse_literal_sequence(NodeIndex *out) {
 
   Try(expect_token(Tok_brace_close));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_literal_sequence,
     {start, at},
     {.literal_sequence = literal_sequence},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_function(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  Function function;
+  AstFunction function;
   function.params.init();
 
   Try(expect_token(Tok_keyword_fn));
@@ -335,32 +353,37 @@ b32 Parser::parse_function(NodeIndex *out) {
 
   Try(parse_block(&function.body));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_function,
     {start, at},
     {.function = function},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_while(NodeIndex *out) {
+  auto node_index = nodes->alloc();
   auto start = at;
 
   TokenKind tok;
   Try(expect_token(Tok_keyword_while, &tok));
 
-  While while_;
+  AstWhile while_;
 
   Try(parse_expression(&while_.cond));
 
   Try(parse_block(&while_.body));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_while,
     {start, at},
     {.while_ = while_},
   });
+
+  *out = node_index;
 
   return true;
 }
@@ -394,29 +417,33 @@ b32 Parser::parse_continue(NodeIndex *out) {
 }
 
 b32 Parser::parse_return(NodeIndex *out) {
+  auto node_index = nodes->alloc();  
   auto start = at;
 
   Try(expect_token(Tok_keyword_return));
 
-  Return return_;
+  AstReturn return_;
 
   Try(parse_expression(&return_.value));
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_return,
     {start, at},
     {.return_ = return_},
   });
 
+  *out = node_index;
+
   return true;
 }
 
 b32 Parser::parse_if_else(NodeIndex *out) {
-  Try(expect_token(Tok_keyword_if));
-
+  auto node_index = nodes->alloc();
   auto start = at;
 
-  IfElse if_else;
+  Try(expect_token(Tok_keyword_if));
+
+  AstIfElse if_else;
 
   Try(parse_expression(&if_else.cond));
 
@@ -425,13 +452,15 @@ b32 Parser::parse_if_else(NodeIndex *out) {
   TokenKind tok;
   Try(peek(&tok));
   if (tok != Tok_keyword_else) {
-    if_else.otherwise = OptionalNodeIndex_none;
+    if_else.otherwise = OptionalNodeIndex::none();
 
-    *out = nodes->add({
+    nodes->set(node_index, {
       Ast_if_else,
       {start, at},
       {.if_else = if_else},
     });
+
+    *out = node_index;
 
     return true;
   }
@@ -441,13 +470,15 @@ b32 Parser::parse_if_else(NodeIndex *out) {
   NodeIndex otherwise;
   Try(parse_block(&otherwise));
 
-  if_else.otherwise = OptionalNodeIndex::from_node_index(otherwise);
+  if_else.otherwise = OptionalNodeIndex::from_index(otherwise);
 
-  *out = nodes->add({
+  nodes->set(node_index, {
     Ast_if_else,
     {start, at},
     {.if_else = if_else},
   });
+
+  *out = node_index;
 
   return true;
 }
@@ -489,11 +520,12 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
   case Tok_exclamation:
   case Tok_minus: {
-    next();
-
+    auto node_index = nodes->alloc();
     auto start = at;
 
-    UnaryOp unary_op;
+    next();
+
+    AstUnaryOp unary_op;
 
     switch (tok) {
       // clang-format off
@@ -506,11 +538,13 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
     Try(parse_expression(&unary_op.value));
 
-    base = nodes->add({
+    nodes->set(node_index, {
       Ast_unary_op,
       {start, at},
       {.unary_op = unary_op},
     });
+
+    base = node_index;
   } break;
 
   default:
@@ -522,11 +556,12 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
     peek(&tok);
 
     if (tok == Tok_paren_open) {
-      next();
-
+      auto node_index = nodes->alloc();
       auto start = at;
 
-      Call call;
+      next();
+
+      AstCall call;
       call.args.init();
       call.callee = base;
 
@@ -550,11 +585,13 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
       Try(expect_token(Tok_paren_close));
 
-      base = nodes->add({
+      nodes->set(node_index, {
         Ast_call,
         {start, at},
         {.call = call},
       });
+
+      base = node_index;
 
       continue;
     }
@@ -596,8 +633,6 @@ Precedence determine_precedence(u32 lhs, u32 rhs) {
 }
 
 b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
-  TokenIndex start = at;
-
   NodeIndex lhs;
   Try(parse_base_expression(&lhs));
 
@@ -648,34 +683,39 @@ b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
       return true;
     }
 
+    auto node_index = nodes->alloc();
+    auto start = at;
+
     next();
 
     NodeIndex rhs;
     Try(parse_expression(&rhs, op));
 
     if (op >= BinaryOpKind_max) {
-      Assign assign;
+      AstAssign assign;
       assign.kind  = Assign_normal;
       assign.lhs   = lhs;
       assign.value = rhs;
 
-      lhs = nodes->add({
+      nodes->set(node_index, {
         Ast_assign,
         {start, at},
         {.assign = assign},
       });
     } else {
-      BinaryOp binary_op;
+      AstBinaryOp binary_op;
       binary_op.kind = cast<BinaryOpKind>(op);
       binary_op.lhs  = lhs;
       binary_op.rhs  = rhs;
 
-      lhs = nodes->add({
+      nodes->set(node_index, {
         Ast_binary_op,
         {start, at},
         {.binary_op = binary_op},
       });
     }
+
+    lhs = node_index;
   }
 
   *out = lhs;
@@ -686,7 +726,7 @@ b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
 b32 Parser::parse_identifier(NodeIndex *out) {
   auto start = at;
 
-  Atom identifier;
+  AstAtom identifier;
   identifier.token_index = at;
 
   Try(expect_token(Tok_identifier));
@@ -737,7 +777,7 @@ b32 Parser::parse_identifier(NodeIndex *out) {
 //   return true;
 // }
 
-b32 Parser::parse_parameter(Param *out) {
+b32 Parser::parse_parameter(AstParam *out) {
   TokenIndex name = at;
   Try(expect_token(Tok_identifier));
 
@@ -746,7 +786,7 @@ b32 Parser::parse_parameter(Param *out) {
   NodeIndex type;
   Try(parse_type(&type));
 
-  *out = Param{
+  *out = AstParam{
     name,
     type,
   };
@@ -754,7 +794,7 @@ b32 Parser::parse_parameter(Param *out) {
   return true;
 }
 
-b32 parse(ParseContext *ctx, Nodes *nodes) {
+b32 parse(ParseContext *ctx, AstNodes *nodes) {
   Parser parser;
   parser.messages = ctx->messages;
   parser.tokens   = ctx->tokens;
