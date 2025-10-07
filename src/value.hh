@@ -22,7 +22,10 @@ struct LazyValue {
   Option<ValueIndex> val;
 
   static LazyValue from_node_index(NodeIndex x) {
-    return { x, Option<ValueIndex>(), };
+    return {
+      x,
+      Option<ValueIndex>(),
+    };
   }
 
   bool is_evaluated() { return val.is_some(); }
@@ -64,11 +67,10 @@ struct Value {
     Value val = {
       Value_param,
       {
-        .param =
-          {
-            .token_index = param,
-            .type        = type,
-          },
+        .param = {
+          .token_index = param,
+          .type        = type,
+        },
       },
     };
     return val;
@@ -78,11 +80,10 @@ struct Value {
     Value val = {
       Value_declaration,
       {
-        .declaration =
-          {
-            LazyValue::from_node_index(declared_type),
-            LazyValue::from_node_index(value),
-          },
+        .declaration = {
+          LazyValue::from_node_index(declared_type),
+          LazyValue::from_node_index(value),
+        },
       },
     };
     return val;
@@ -102,21 +103,17 @@ struct Value {
 struct ValueStore {
   Vector<Value> values;
 
-  void init(Allocator allocator) {
-    values.init(allocator);
-  }
+  void init(Allocator allocator) { values.init(allocator); }
 
   void deinit();
 
   ValueIndex add(Value val) {
     u32 idx = cast<u32>(values.len());
     values.push(val);
-    return { idx };
+    return {idx};
   }
 
   // Careful! This pointer is not stable.
   // If you add another value, this pointer may get invalidated.
-  Value *get(ValueIndex idx) {
-    return &values[idx.idx];
-  }
+  Value *get(ValueIndex idx) { return &values[idx.idx]; }
 };

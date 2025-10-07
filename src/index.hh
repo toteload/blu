@@ -13,6 +13,15 @@ struct Index {
   static Index from_optional_index(OptionalIndex<T, Tag> idx);
 
   OptionalIndex<T, Tag> as_optional_index();
+  T get() { return idx; }
+
+  bool operator==(const Index &other) {
+    return idx == other.idx;
+  }
+
+  bool operator!=(const Index &other) {
+    return idx != other.idx;
+  }
 };
 
 template<typename T, typename Tag>
@@ -26,6 +35,10 @@ struct OptionalIndex {
 
   Index<T, Tag> as_index();
   b32 is_none() { return idx == none_idx; }
+  T get() {
+    Assert(!is_none());
+    return idx;
+  }
 };
 
 template<typename T, typename Tag>

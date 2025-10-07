@@ -57,6 +57,11 @@ struct ParseContext {
 
 b32 parse(ParseContext *ctx, AstNodes *nodes);
 
+ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
+ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.get(); }
+
+using TypeAnnotations = HashMap<NodeIndex, TypeIndex, eq_node_index, hash_node_index>;
+
 #include "value.hh"
 #include "env.hh"
 
@@ -79,11 +84,22 @@ struct TypeCheckContext {
   TypeInterner *types;
   StringInterner *strings;
   ValueStore *values;
+  TypeAnnotations *type_annotations;
 };
 
 b32 type_check(TypeCheckContext *ctx, Source *source);
 
 #include "hir.hh"
+
+struct CodeGeneratorContext {
+  MessageManager *messages;
+  Arena *output_arena;
+  ValueStore *values;
+  TypeInterner *types;
+  TypeAnnotations *type_annotations;
+};
+
+b32 generate_c_code(CodeGeneratorContext *ctx, Source *source);
 
 // -[ Message ]-
 
@@ -126,3 +142,5 @@ struct MessageManager {
   void print_messages();
   void error(char const *format, ...);
 };
+
+void debug_print_type(TypeInterner *types, TypeIndex type);

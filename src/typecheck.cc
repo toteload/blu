@@ -9,8 +9,9 @@ struct TypeChecker {
   Source *source;
   AstNodes *nodes;
   ValueStore *values;
+  TypeAnnotations *type_annotations;
 
-  TypeIndex return_type_of_current_function;
+  OptionalTypeIndex return_type_of_current_function = OptionalTypeIndex::none();
 
   // -
 
@@ -89,13 +90,15 @@ b32 TypeChecker::determine_unary_op_type(UnaryOpKind op, TypeIndex value, TypeIn
 
   switch (op) {
   case Negate: {
-    if (value == types->integer_constant || (value_type->kind == Type_integer && value_type->integer.signedness == Signed)) {
+    if (value == types->integer_constant ||
+        (value_type->kind == Type_integer && value_type->integer.signedness == Signed)) {
       *out = value;
       return true;
     }
   } break;
   case Not: {
-    if (value == types->integer_constant || value_type->kind == Type_integer || value == types->bool_) {
+    if (value == types->integer_constant || value_type->kind == Type_integer ||
+        value == types->bool_) {
       *out = value;
       return true;
     }
@@ -141,7 +144,12 @@ b32 TypeChecker::determine_binary_op_type(
   } break;
   }
 
-  messages->error("Failed to determine type for binary operator. Type of lhs is '{type}' and type of rhs is '{type}'.", lhs, rhs);
+  messages->error(
+    "Failed to determine type for binary operator. "
+    "Type of lhs is '{type}' and type of rhs is '{type}'.",
+    lhs,
+    rhs
+  );
 
   return false;
 }
@@ -175,6 +183,12 @@ b32 TypeChecker::check_root(NodeIndex root, Env *env) {
     Debug_assert(val->kind == Value_declaration);
 
     Try(evaluate_lazy_value_expect_type(&val->data.declaration.type, env));
+
+    {
+      auto idx   = val->data.declaration.type.get();
+      Value *val = values->get(idx);
+      type_annotations->insert(decl.type, val->data.type);
+    }
   }
 
   // At this point each declaration has its declared type determined.
@@ -226,7 +240,7 @@ b32 TypeChecker::determine_type(NodeIndex node_index, Env *env, TypeIndex *out) 
       break;
     case Value_declaration: {
       Try(evaluate_lazy_value_expect_type(&val->data.declaration.value, env));
-      auto idx = val->data.declaration.value.get();
+      auto idx        = val->data.declaration.value.get();
       Value *type_val = values->get(idx);
 
       Debug_assert(type_val->kind == Value_type);
@@ -342,7 +356,7 @@ b32 TypeChecker::check_return(NodeIndex node_index, Env *env, TypeIndex *out) {
   TypeIndex return_type;
   Try(check_expression(nodes->data(node_index).return_.value, env, &return_type));
 
-  if (!is_type_coercible_to(return_type, return_type_of_current_function)) {
+  if (!is_type_coercible_to(return_type, return_type_of_current_function.as_index())) {
     messages->error(
       "Cannot return value of type '{type}'. Expected type '{type}'",
       return_type,
@@ -387,7 +401,7 @@ b32 TypeChecker::check_function(NodeIndex function_node_index, Env *env, TypeInd
 
   function_type->function.return_type = return_type;
 
-  return_type_of_current_function = return_type;
+  return_type_of_current_function = OptionalTypeIndex::from_index(return_type);
 
   TypeIndex body_type;
   Try(check_expression(function.body, param_env, &body_type));
@@ -556,23 +570,23 @@ b32 TypeChecker::check_identifier(NodeIndex node_index, Env *env, TypeIndex *out
   }
 
   switch (val->kind) {
-    case Value_type: {
-      *out = val->data.type;
-    } break;
-    case Value_param: {
-      *out = val->data.param.type;
-    } break; 
-    case Value_declaration: {
-      Try(evaluate_lazy_value_expect_type(&val->data.declaration.type, env));
-      auto idx = val->data.declaration.type.get();
-      Value *type_val = values->get(idx);
+  case Value_type: {
+    *out = val->data.type;
+  } break;
+  case Value_param: {
+    *out = val->data.param.type;
+  } break;
+  case Value_declaration: {
+    Try(evaluate_lazy_value_expect_type(&val->data.declaration.type, env));
+    auto idx        = val->data.declaration.type.get();
+    Value *type_val = values->get(idx);
 
-      Debug_assert(type_val->kind == Value_type);
+    Debug_assert(type_val->kind == Value_type);
 
-      *out = type_val->data.type;
-    } break;
-    default:
-      Todo();
+    *out = type_val->data.type;
+  } break;
+  default:
+    Todo();
   }
 
   return true;
@@ -610,9 +624,10 @@ b32 type_check(TypeCheckContext *ctx, Source *source) {
   typechecker.envs       = ctx->envs;
   typechecker.types      = ctx->types;
   typechecker.strings    = ctx->strings;
-  typechecker.values = ctx->values;
+  typechecker.values     = ctx->values;
   typechecker.source     = source;
   typechecker.nodes      = source->nodes;
+  typechecker.type_annotations = ctx->type_annotations;
 
   auto snapshot         = ctx->work_arena->take_snapshot();
   Env *root_environment = ctx->envs->alloc(ctx->envs->global_env);

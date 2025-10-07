@@ -20,14 +20,8 @@ enum Signedness : u8 {
 
 struct TypeIndexTag {};
 
-using TypeIndex = Index<u32, TypeIndexTag>;
-
-ttld_inline bool operator==(const TypeIndex &lhs, const TypeIndex &rhs) {
-  return lhs.idx == rhs.idx;
-}
-ttld_inline bool operator!=(const TypeIndex &lhs, const TypeIndex &rhs) {
-  return lhs.idx != rhs.idx;
-}
+using TypeIndex         = Index<u32, TypeIndexTag>;
+using OptionalTypeIndex = OptionalIndex<u32, TypeIndexTag>;
 
 struct Type {
   TypeKind kind;
@@ -151,4 +145,3 @@ struct TypeInterner {
 };
 
 u32 type_to_string(TypeInterner *types, TypeIndex type, Slice<char> output);
-

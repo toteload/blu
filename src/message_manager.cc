@@ -81,9 +81,9 @@ void MessageManager::print_message(Message *msg) {
     if (str_eq(arg, Str_make("{tokenkind}"))) {
       printf("<%s>", token_kind_string(msg->args[arg_idx].token_kind));
     } else if (str_eq(arg, Str_make("{type}"))) {
-      char buf[256] = {0};
+      char buf[256]  = {0};
       TypeIndex type = msg->args[arg_idx].type;
-      u32 len       = type_to_string(types, type, Slice<char>::from_ptr_and_len(buf, 256));
+      u32 len        = type_to_string(types, type, Slice<char>::from_ptr_and_len(buf, 256));
       printf("%.*s", cast<int>(len), buf);
     } else if (str_eq(arg, Str_make("{strkey}"))) {
       StrKey key = msg->args[arg_idx].strkey;

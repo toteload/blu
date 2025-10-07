@@ -177,7 +177,10 @@ struct Str {
 };
 
 #define Str_make(s)                                                                                \
-  { s, (sizeof(s) - 1), }
+  {                                                                                                \
+    s,                                                                                             \
+    (sizeof(s) - 1),                                                                               \
+  }
 
 ttld_inline b32 str_eq(Str a, Str b) {
   b32 is_same_len     = a.len() == b.len();

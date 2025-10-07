@@ -33,6 +33,19 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, Slice<char> out) {
     offset += type_to_string(types, type->distinct.base_type, out.sub(offset, out.len()));
     return offset;
   }
+  case Type_function: {
+    u32 offset = 0;
+    offset += cast<u32>(snprintf(out.data, out.len(), "fn("));
+    if (type->function.param_count > 0) {
+      offset += type_to_string(types, type->function.param_types[0], out.sub(offset, out.len()));
+    }
+    for (u32 i = 1; i < type->function.param_count; i += 1) {
+      offset += type_to_string(types, type->function.param_types[i], out.sub(offset, out.len()));
+    }
+    offset += cast<u32>(snprintf(out.data + offset, out.len() - offset, ") "));
+    offset += type_to_string(types, type->function.return_type, out.sub(offset, out.len()));
+    return offset;
+  }
   }
   Todo();
   return 0;

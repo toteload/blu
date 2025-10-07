@@ -63,13 +63,17 @@ int main(i32 arg_count, char const *const *args) {
   ValueStore values;
   values.init(stdlib_alloc);
 
+  TypeAnnotations type_annotations;
+  type_annotations.init(stdlib_alloc);
+
   TypeCheckContext type_check_context;
-  type_check_context.messages   = &messages;
-  type_check_context.work_arena = &work_arena;
-  type_check_context.envs       = &envs;
-  type_check_context.types      = &types;
-  type_check_context.strings    = &strings;
-  type_check_context.values = &values;
+  type_check_context.messages         = &messages;
+  type_check_context.work_arena       = &work_arena;
+  type_check_context.envs             = &envs;
+  type_check_context.types            = &types;
+  type_check_context.strings          = &strings;
+  type_check_context.values           = &values;
+  type_check_context.type_annotations = &type_annotations;
 
   Source source;
   source.filename = filename;
@@ -80,6 +84,23 @@ int main(i32 arg_count, char const *const *args) {
   ok = type_check(&type_check_context, &source);
   if (!ok) {
     printf("Type check error\n");
+    messages.print_messages();
+    return 1;
+  }
+
+  Arena output_arena;
+  output_arena.init(MiB(4));
+
+  CodeGeneratorContext code_generator_context;
+  code_generator_context.messages         = &messages;
+  code_generator_context.output_arena     = &output_arena;
+  code_generator_context.values           = &values;
+  code_generator_context.types            = &types;
+  code_generator_context.type_annotations = &type_annotations;
+
+  ok = generate_c_code(&code_generator_context, &source);
+  if (!ok) {
+    printf("Code generation error\n");
     messages.print_messages();
     return 1;
   }

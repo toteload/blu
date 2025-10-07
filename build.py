@@ -66,6 +66,8 @@ def create_build_ninja():
         'types.cc',
         'typecheck.cc',
         'message_manager.cc',
+        'c_code_generator.cc',
+        'utils.cc',
         join('tools', 'tokenviewer.cc'),
         join('utils', 'stdlib.cc'),
     ]
@@ -94,8 +96,10 @@ def create_build_ninja():
                 'parse.cc',
                 'string_interner.cc',
                 'types.cc',
+                'utils.cc',
                 'typecheck.cc',
                 'message_manager.cc',
+                'c_code_generator.cc',
                 join('utils', 'stdlib.cc'),
         ]],
         )

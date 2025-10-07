@@ -65,7 +65,7 @@ enum UnaryOpKind : u8 {
 
 struct AstNodeTag {};
 
-using NodeIndex = Index<u32, AstNodeTag>;
+using NodeIndex         = Index<u32, AstNodeTag>;
 using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
 
 struct AstTypeFunction {
