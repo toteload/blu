@@ -619,14 +619,14 @@ b32 TypeChecker::check_local_declaration(NodeIndex node_index, Env *env, TypeInd
 
 b32 type_check(TypeCheckContext *ctx, Source *source) {
   TypeChecker typechecker;
-  typechecker.messages   = ctx->messages;
-  typechecker.work_arena = ctx->work_arena;
-  typechecker.envs       = ctx->envs;
-  typechecker.types      = ctx->types;
-  typechecker.strings    = ctx->strings;
-  typechecker.values     = ctx->values;
-  typechecker.source     = source;
-  typechecker.nodes      = source->nodes;
+  typechecker.messages         = ctx->messages;
+  typechecker.work_arena       = ctx->work_arena;
+  typechecker.envs             = ctx->envs;
+  typechecker.types            = ctx->types;
+  typechecker.strings          = ctx->strings;
+  typechecker.values           = ctx->values;
+  typechecker.source           = source;
+  typechecker.nodes            = source->nodes;
   typechecker.type_annotations = ctx->type_annotations;
 
   auto snapshot         = ctx->work_arena->take_snapshot();

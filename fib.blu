@@ -1,6 +1,6 @@
 int : type = i64
 
-fib : fn(int) int = fn(n : int) int {
+fib : fn(int) int = fn(n: int) int {
   if n <= 1 {
     1
   } else {
@@ -8,3 +8,56 @@ fib : fn(int) int = fn(n : int) int {
   }
 }
 
+;  0 function (i64, 1 parameter)
+;  1 param (i64)
+;  4 cmp_le %1, (i64 1) (bool)
+;  5 condbr %4, %7, %8
+;  6 block (7 instructions) (i64)
+;  7 block (1 instruction)
+;  8 break %7, (i64 1)
+;  9 break %6, %7
+; 10 block ()
+;  8 sub %1, (i64 1) (i64)
+;  9 call ('fib'), %8 (i64)
+; 10 sub %1, (i64 2) (i64)
+; 11 call ('fib'), %10 (i64)
+; 12 add %9, %11 (i64)
+; 13 break %6, %12
+; 14 return %6
+
+min : fn(int, int) int = fn(a: int, b: int) int {
+  if a < b { a } else { b }
+}
+
+;  0 function (i64, 2 parameters)
+;  1 param (i64)
+;  2 param (i64)
+;  3 block (6 instructions) (nil)
+;  4 cmp_lt %1, %2 (bool)
+;  5 condbr %4, %7, %8
+;  6 block (2 instructions) (i64)
+;  7 break %6, %1
+;  8 break %6, %2
+;  9 return %6
+
+test: fn(i32) i32 = fn(x: i32) i32 {
+  a: i32 = 0
+  if x < 0 {
+    a = 12
+  }
+  a
+}
+
+;  0 function (i32, 1 parameter)
+;  1 param (i32)
+;  2 block (10 instructions) (nil)
+;  3 alloc (i32)
+;  4 store %3, (i32 0)
+;  5 cmp_lt %1, (i32 0) (bool)
+;  6 condbr %5, %8, %10
+;  7 block (3 instructions) (nil)
+;  8 store %3, (i32 12)
+;  9 break %7
+; 10 break %7
+; 11 load %3 (i32)
+; 12 return %11

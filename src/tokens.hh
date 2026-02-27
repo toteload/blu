@@ -35,10 +35,6 @@ enum TokenKind : u8 {
   Tok_bracket_open,
   Tok_bracket_close,
 
-  Tok_keyword_fn,
-
-  Tok_keyword_distinct,
-
   Tok_keyword_if,
   Tok_keyword_else,
   Tok_keyword_while,
@@ -95,7 +91,6 @@ constexpr char const *token_string[Tok_kind_max + 1] = {
   "brace-open",   "brace-close",
   "paren-open",   "paren-close",
   "bracket-open", "bracket-close",
-  "fn",           "distinct",
   "if",           "else",
   "while",        "break",
   "continue",     "return",

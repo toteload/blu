@@ -26,10 +26,6 @@ struct Parser {
   b32 parse_expression(NodeIndex *out, u32 prev_op = Op_count);
   b32 parse_identifier(NodeIndex *out);
 
-  // -
-
-  b32 parse_parameter(AstParam *out);
-
   // - Helpers -
 
   b32 next(TokenKind *out = nullptr) {
@@ -188,12 +184,10 @@ b32 Parser::parse_type(NodeIndex *out) {
       }
     );
   } break;
-  case Tok_keyword_fn: {
+  case Tok_paren_open: {
     next();
-    Try(expect_token(Tok_paren_open));
-
     AstTypeFunction type_function;
-    type_function.params.init();
+    type_function.param_types.init();
 
     while (!is_token_index_end(at)) {
       Try(peek(&tok));
@@ -202,7 +196,7 @@ b32 Parser::parse_type(NodeIndex *out) {
         break;
       }
 
-      auto param = type_function.params.push(nodes->segment_allocator);
+      auto param = type_function.param_types.push(nodes->segment_allocator);
       Try(parse_type(param));
 
       Try(peek(&tok));
@@ -214,6 +208,7 @@ b32 Parser::parse_type(NodeIndex *out) {
     }
 
     Try(expect_token(Tok_paren_close));
+    Try(expect_token(Tok_colon));
 
     Try(parse_type(&type_function.return_type));
 
@@ -351,9 +346,8 @@ b32 Parser::parse_function(NodeIndex *out) {
   auto start      = at;
 
   AstFunction function;
-  function.params.init();
+  function.param_names.init();
 
-  Try(expect_token(Tok_keyword_fn));
   Try(expect_token(Tok_paren_open));
 
   while (!is_token_index_end(at)) {
@@ -368,13 +362,11 @@ b32 Parser::parse_function(NodeIndex *out) {
       break;
     }
 
-    auto param = function.params.push(nodes->segment_allocator);
-    Try(parse_parameter(param));
+    auto param = function.param_names.push(nodes->segment_allocator);
+    Try(parse_identifier(param));
   }
 
   Try(expect_token(Tok_paren_close));
-
-  Try(parse_type(&function.return_type));
 
   Try(parse_block(&function.body));
 
@@ -529,15 +521,21 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
   NodeIndex base;
   switch (tok) {
-    // clang-format off
+  // clang-format off
   case Tok_keyword_while:    Try(parse_while(&base));       break;
   case Tok_keyword_continue: Try(parse_continue(&base));    break;
   case Tok_keyword_break:    Try(parse_break(&base));       break;
   case Tok_keyword_return:   Try(parse_return(&base));      break;
   case Tok_keyword_if:       Try(parse_if_else(&base));     break;
-  case Tok_keyword_fn:       Try(parse_function(&base));    break;
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
-    // clang-format on
+  // clang-format on
+
+  case Tok_paren_open: Try(parse_function(&base)); break;
+
+  case Tok_brace_open: {
+    Try(parse_expression(&base));
+    Try(expect_token(Tok_brace_close));
+  } break;
 
   case Tok_dot: {
     Try(parse_literal_sequence(&base));
@@ -552,7 +550,6 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
     }
   } break;
 
-  case Tok_keyword_distinct:
   case Tok_star:
   case Tok_bracket_open: {
     Try(parse_type(&base));
@@ -828,23 +825,6 @@ b32 Parser::parse_identifier(NodeIndex *out) {
 //
 //   return true;
 // }
-
-b32 Parser::parse_parameter(AstParam *out) {
-  TokenIndex name = at;
-  Try(expect_token(Tok_identifier));
-
-  Try(expect_token(Tok_colon));
-
-  NodeIndex type;
-  Try(parse_type(&type));
-
-  *out = AstParam{
-    name,
-    type,
-  };
-
-  return true;
-}
 
 b32 parse(ParseContext *ctx, AstNodes *nodes) {
   Parser parser;

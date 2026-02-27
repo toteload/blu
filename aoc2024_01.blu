@@ -30,7 +30,7 @@ CreateFileA : @callconv("c") fn(
 
 #foreign_library("kernel32.lib")
 
-readfile :: fn(filename: string) string {
+readfile := fn(filename: string): string {
   f := c.fopen(filename.ptr, "r")
 
   // This also implies that a `ptr` can be null

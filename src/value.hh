@@ -1,8 +1,9 @@
 #include "option.hh"
 
-struct ValueIndex {
-  u32 idx = UINT32_MAX;
-};
+struct ValueIndexTag {};
+
+using ValueIndex         = Index<u32, ValueIndexTag>;
+using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
 
 enum ValueKind : u8 {
   Value_true,
@@ -13,24 +14,25 @@ enum ValueKind : u8 {
   Value_param,
   Value_declaration,
 
-  Value_lazy_type,
+  Value_hir,
+
   Value_lazy_value,
 };
 
 struct LazyValue {
   NodeIndex node_index;
-  Option<ValueIndex> val;
+  OptionalValueIndex val;
 
   static LazyValue from_node_index(NodeIndex x) {
     return {
       x,
-      Option<ValueIndex>(),
+      OptionalValueIndex::none(),
     };
   }
 
   bool is_evaluated() { return val.is_some(); }
-  void set(ValueIndex x) { val.set(x); }
-  ValueIndex get() { return val.get(); }
+  void set(ValueIndex x) { val = OptionalValueIndex::from_index(x); }
+  ValueIndex get() { return val.as_index(); }
 };
 
 struct Value {
@@ -54,17 +56,16 @@ struct Value {
   } data;
 
   static Value make_type(TypeIndex type) {
-    Value val = {
+    return {
       Value_type,
       {
         .type = type,
       }
     };
-    return val;
   }
 
   static Value make_param(TokenIndex param, TypeIndex type) {
-    Value val = {
+    return {
       Value_param,
       {
         .param = {
@@ -73,11 +74,10 @@ struct Value {
         },
       },
     };
-    return val;
   }
 
   static Value make_declaration(NodeIndex declared_type, NodeIndex value) {
-    Value val = {
+    return {
       Value_declaration,
       {
         .declaration = {
@@ -86,17 +86,15 @@ struct Value {
         },
       },
     };
-    return val;
   }
 
-  static Value lazy_type(NodeIndex node_index) {
-    Value val = {
-      Value_lazy_type,
+  static Value make_lazy_value(NodeIndex node_index) {
+    return {
+      Value_lazy_value,
       {
         .lazy_value = LazyValue::from_node_index(node_index),
       },
     };
-    return val;
   }
 };
 

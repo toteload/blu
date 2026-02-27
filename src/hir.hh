@@ -1,12 +1,23 @@
 #pragma once
 
 #include "blu.hh"
+#include "utils/stdlib.hh"
 
 enum HirInstructionKind : u8 {
   Hir_declaration,
 
+  Hir_literal_int,
+
+  Hir_declared_value,
+
+  Hir_type_int,
+  Hir_type_nil,
+  Hir_type_function,
+
   Hir_function,
-  Hir_parameter,
+  Hir_param,
+
+  Hir_block,
 
   Hir_sub,
   Hir_add,
@@ -14,11 +25,10 @@ enum HirInstructionKind : u8 {
   Hir_div,
   Hir_mod,
 
-  Hir_logical_and,
-  Hir_logical_or,
+  Hir_cmp_eq,
+  Hir_cmp_le,
 
-  Hir_cmp_equal,
-  Hir_cmp_less_than,
+  Hir_condbr,
 
   Hir_alloc,
 
@@ -28,56 +38,150 @@ enum HirInstructionKind : u8 {
   Hir_call,
 
   Hir_loop,
+  Hir_break,
+  Hir_repeat,
   Hir_return,
+
+  Hir_kind_max,
 };
 
-enum RefKind {
-  Ref_instruction_index,
-  Ref_value,
+struct HirExtraIndexTag {};
+using HirExtraIndex = Index<u32, HirExtraIndexTag>;
+
+struct HirTag {};
+using HirIndex = Index<u32, HirTag>;
+
+constexpr HirIndex INVALID_HIR_INDEX = { UINT32_MAX };
+
+// The `function` instruction is always followed by n `param` instructions.
+struct HirFunction {
+  u32 param_count;
+  u32 instruction_count;
 };
 
-// Can refer to either
-// - another instruction
-// - an entry into the value store
-struct Ref {
-  u32 idx;
+struct HirTypeFunction {
+  u32 param_count;
+  HirIndex return_type;
+};
+
+struct HirParameter { };
+
+struct HirCondBr {
+  HirIndex cond;
+  HirExtraIndex extra_index;
+};
+
+struct HirBlock {
+  u32 instruction_count;
+};
+
+struct HirBinary {
+  HirIndex lhs;
+  HirIndex rhs;
+};
+
+struct HirCall {
+  HirIndex callee;
+  HirExtraIndex extra_index;
+};
+
+struct HirBreak {
+  HirIndex value;
+  HirIndex block;
 };
 
 struct HirDeclaration {
-  NodeIndex ast;
-  Ref type;
-  Ref value;
+  HirIndex type;
+  HirIndex value;
 };
 
-struct HirFunction {
-  Ref return_type;
-  u32 parameter_count;
-  u32 body_instruction_count;
+struct HirTypeInt {
+  Signedness signedness;
+  u16 bitwidth;
 };
-
-struct HirParameter {
-  Ref type;
-};
-
-struct HirCondBr {};
 
 union HirData {
   HirDeclaration declaration;
-  HirFunction function;
-  HirParameter parameter;
+  HirFunction    function;
+  HirParameter   parameter;
+  HirCondBr      condbr;
+  HirBlock       block;
+  HirBinary      binary;
+  HirBreak       break_;
+  HirTypeInt     type_int;
+  i64            int64;
+  HirIndex       idx;
 };
 
 struct HirCode {
   Vector<HirInstructionKind> kinds;
   Vector<HirData>            datas;
-  Vector<u32>                extras;
+  Vector<u32>                extra;
 
-  Ref add(HirInstructionKind kind, HirData data) {
+  u32 len() {
+    return cast<u32>(kinds.len());
+  }
+
+  HirIndex alloc() {
+    HirIndex res = {cast<u32>(kinds.len())};
+    kinds.push_empty();
+    datas.push_empty();
+    return res;
+  }
+
+  HirIndex add(HirInstructionKind kind, HirData data) {
     u32 idx = cast<u32>(kinds.len());
     kinds.push(kind);
     datas.push(data);
     return {idx};
   }
+
+  HirExtraIndex alloc_extra(u32 amount) {
+    HirExtraIndex idx = {cast<u32>(extra.len())};
+    extra.push_empty(amount);
+    return idx;
+  }
+
+  u32 *get_extra_ptr(HirExtraIndex idx) {
+    return &extra[idx.inner()];
+  }
+
+  HirData *data_ptr(HirIndex idx) { return &datas[idx.idx]; }
 };
 
-b32 generate_hir(Source *src, HirCode *code);
+constexpr char const *hir_string[Hir_kind_max] = {
+  "declaration",
+  "literal_int",
+  "declared_value",
+  "type_int",
+  "type_nil",
+  "type_function",
+  "function",
+  "param",
+  "block",
+  "sub",
+  "add",
+  "mul",
+  "div",
+  "mod",
+  "cmp_eq",
+  "cmp_le",
+  "condbr",
+  "alloc",
+  "load",
+  "store",
+  "call",
+  "loop",
+  "break",
+  "repeat",
+  "return",
+};
+
+ttld_inline char const *hir_kind_string(u32 kind) {
+  if (kind >= Hir_kind_max) {
+    return "illegal";
+  }
+
+  return hir_string[kind];
+}
+

@@ -1,13 +1,13 @@
-ArrayList := with(T: type) struct {
+ArrayList := with(T: Type) struct {
   backing: Allocator,
-  data : []{ T | uninitialized(T) },
-  len : uint,
+  data : []{ T | Uninitialized(T) },
+  len : Uint,
 }
 
-with(T: type) extend ArrayList(T) {
+with(T: Type) extend ArrayList(T) {
   new := .(backing: Allocator) .{ }
 
-  at := .(self: &Self, idx uint) {
+  at := .(self: &Self, idx: Uint) {
     if idx >= len {
       panic()
     }
@@ -29,7 +29,7 @@ with(T: type) extend ArrayList(T) {
 
 malloc : fn(byte_count: uint) ptr = #extern("malloc")
 
-alloc : fn(type, n: uint) []T & 'tag & 'no_drop = .(T: type, count: uint) {
+alloc : fn(type, n: uint) []T & 'tag & 'no_drop = .(T: type, count: Uint) {
   p := malloc(#sizeof(T) * count)
 }
 
@@ -37,9 +37,18 @@ dealloc := with(type: T) .(p: []T & 'tag) {
   free(p.ptr)
 }
 
+Allocator := struct {
+  p: Ptr
+  vf: Function({Ptr, Uint, Uint, U32}, Ptr)
+}
+
 ; Who owns the returned memory?
-lines := fn(backing: *Allocator, text: []'a u8) { []'b []'a u8 } & 'tag {
-  ls := mut ArrayList([]'a u8).new(backing)
+lines := fn(
+  backing: Ptr(Allocator('alloc)), 
+  text: Slice('a, U8))
+  Owned('alloc, Slice('b, Slice('a, U8)))
+{
+  ls := mut ArrayList(Slice('a, u8)).new(backing)
 
   mut i : uint = 0
   for .{text, 0..} do .{c, j} {
@@ -51,7 +60,7 @@ lines := fn(backing: *Allocator, text: []'a u8) { []'b []'a u8 } & 'tag {
 
   ls.append(text[i..])
 
-  ls.to_slice()
+  ls.into_slice()
 }
 
 count := fn(needle: i32, haystack: []i32) i64 {

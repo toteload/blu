@@ -6,16 +6,15 @@ fac : fn(i32) i32 = fn(n: i32) i32 {
   if n <= 0 { 1 } else { rec(n) }
 }
 
-;  0 | hir_declaration
-;  1 | hir_function
-;  2 | hir_parameter (n: i32)
-;  3 | hir_const_int (0)
+;  1 | hir_function (i32, 1 parameter, 13 instructions)
+;  2 | hir_parameter (i32)
+;  3 | hir_const (i32 0)
 ;  4 | hir_cmp_less_eq %2, %3
 ;  5 | hir_condbr %4, %7, %9
 ;  6 | hir_block (7 instructions)
-;  7 | hir_const_int (1)
+;  7 | hir_const (i32 1)
 ;  8 | hir_break %6, %7
-;  9 | hir_const_int (1)
+;  9 | hir_const (i32 1)
 ; 10 | hir_sub %2, %9
 ; 11 | hir_call %(fac), %10
 ; 12 | hir_mul %2, %11

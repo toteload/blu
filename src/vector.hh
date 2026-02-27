@@ -19,7 +19,7 @@ template<typename T> struct Vector {
   void grow();
 
   void push(T x) { *push_empty() = x; }
-  T *push_empty();
+  T *push_empty(u32 amount=1);
 
   T &operator[](usize idx) { return data[idx]; }
 
@@ -77,13 +77,11 @@ template<typename T> void Vector<T>::ensure_free_capacity(usize minimum_free_cap
   ensure_capacity(new_capacity);
 }
 
-template<typename T> T *Vector<T>::push_empty() {
-  if (_len == cap) {
-    grow();
-  }
+template<typename T> T *Vector<T>::push_empty(u32 amount) {
+  ensure_free_capacity(amount);
 
   T *res  = data + _len;
-  _len   += 1;
+  _len   += amount;
   return res;
 }
 

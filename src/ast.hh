@@ -1,8 +1,10 @@
 enum AstKind : u8 {
   Ast_root,
   Ast_block,
+
   Ast_type_slice,
   Ast_type_function,
+
   Ast_declaration,
   Ast_assign,
   Ast_literal_sequence,
@@ -70,16 +72,11 @@ using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
 
 struct AstTypeFunction {
   NodeIndex return_type;
-  SegmentList<NodeIndex> params;
+  SegmentList<NodeIndex> param_types;
 };
 
 struct AstTypeSlice {
   NodeIndex base;
-};
-
-struct AstParam {
-  TokenIndex name;
-  NodeIndex type;
 };
 
 struct AstDeclaration {
@@ -101,9 +98,8 @@ struct AstLiteralSequence {
 };
 
 struct AstFunction {
-  SegmentList<AstParam> params;
-  NodeIndex return_type;
-  NodeIndex body;
+  SegmentList<NodeIndex> param_names;
+  NodeIndex body; // always a block
 };
 
 struct AstIfElse {
@@ -213,13 +209,13 @@ struct AstNodes {
     return res;
   }
 
-  AstKind kind(NodeIndex idx) { return kinds[idx.idx]; }
+  AstKind          kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
-  AstNodeData data(NodeIndex idx) { return datas[idx.idx]; }
+  AstNodeData      data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",        "block",      "type-slice",   "type-function", "declaration", "literal-sequence",
+  "root",        "block",      "type-slice",   "type-function", "declaration", "assign", "literal-sequence",
   "literal-int", "identifier", "field-access", "call",          "cast",        "unary-op",
   "binary-op",   "function",   "if-else",      "while",         "break",       "continue",
   "return",      "illegal",

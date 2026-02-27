@@ -58,7 +58,7 @@ struct ParseContext {
 b32 parse(ParseContext *ctx, AstNodes *nodes);
 
 ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
-ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.get(); }
+ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); }
 
 using TypeAnnotations = HashMap<NodeIndex, TypeIndex, eq_node_index, hash_node_index>;
 
@@ -74,6 +74,12 @@ struct Source {
   Str get_token_str(TokenIndex idx) {
     auto span = tokens->span(idx);
     return source.sub(span.start, span.end);
+  }
+
+  NodeIndex root_node_index() {
+    NodeIndex idx = {0};
+    Debug_assert(nodes->kind(idx) == Ast_root);
+    return idx;
   }
 };
 
@@ -91,15 +97,12 @@ b32 type_check(TypeCheckContext *ctx, Source *source);
 
 #include "hir.hh"
 
-struct CodeGeneratorContext {
+struct HirGeneratorContext {
   MessageManager *messages;
-  Arena *output_arena;
-  ValueStore *values;
-  TypeInterner *types;
-  TypeAnnotations *type_annotations;
+  StringInterner *strings;
 };
 
-b32 generate_c_code(CodeGeneratorContext *ctx, Source *source);
+b32 generate_hir(HirGeneratorContext *ctx, Source *source, HirCode *hir);
 
 // -[ Message ]-
 

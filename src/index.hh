@@ -13,7 +13,7 @@ struct Index {
   static Index from_optional_index(OptionalIndex<T, Tag> idx);
 
   OptionalIndex<T, Tag> as_optional_index();
-  T get() { return idx; }
+  T inner() { return idx; }
 
   bool operator==(const Index &other) {
     return idx == other.idx;
@@ -33,12 +33,13 @@ struct OptionalIndex {
 
   static OptionalIndex from_index(Index<T, Tag> idx);
 
-  Index<T, Tag> as_index();
-  b32 is_none() { return idx == none_idx; }
-  T get() {
-    Assert(!is_none());
-    return idx;
+  Index<T, Tag> as_index() {
+    Assert(is_some());
+    return { idx };
   }
+  b32 is_some() { return idx != none_idx; }
+  b32 is_none() { return idx == none_idx; }
+  T get() { return as_index().get(); }
 };
 
 template<typename T, typename Tag>
@@ -55,10 +56,5 @@ OptionalIndex<T,Tag> Index<T,Tag>::as_optional_index() {
 template<typename T, typename Tag>
 OptionalIndex<T,Tag> OptionalIndex<T,Tag>::from_index(Index<T,Tag> idx) {
   return {idx.idx};
-}
-
-template<typename T, typename Tag>
-Index<T,Tag> OptionalIndex<T,Tag>::as_index() {
-  return {idx};
 }
 

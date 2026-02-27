@@ -40,6 +40,10 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+  for (u32 i = 0; i < tokens.kinds.len(); i++) {
+    printf("%s\n", token_kind_string(tokens.kinds[i]));
+  }
+
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
   nodes.spans.init(stdlib_alloc);
@@ -53,27 +57,19 @@ int main(i32 arg_count, char const *const *args) {
   ok = parse(&parse_context, &nodes);
   if (!ok) {
     printf("Parse error\n");
+    messages.print_messages();
     return 1;
   }
 
-  EnvManager envs;
-  envs.init(arena.as_allocator(), stdlib_alloc);
-  envs.init_global_env(&strings, &types);
+  for (u32 i = 0; i < nodes.kinds.len(); i++) {
+    printf("%s\n", ast_kind_string(nodes.kinds[i]));
+  }
 
   ValueStore values;
   values.init(stdlib_alloc);
 
-  TypeAnnotations type_annotations;
-  type_annotations.init(stdlib_alloc);
-
-  TypeCheckContext type_check_context;
-  type_check_context.messages         = &messages;
-  type_check_context.work_arena       = &work_arena;
-  type_check_context.envs             = &envs;
-  type_check_context.types            = &types;
-  type_check_context.strings          = &strings;
-  type_check_context.values           = &values;
-  type_check_context.type_annotations = &type_annotations;
+  EnvManager envs;
+  envs.init(arena.as_allocator(), stdlib_alloc, &strings, &types, &values);
 
   Source source;
   source.filename = filename;
@@ -81,28 +77,24 @@ int main(i32 arg_count, char const *const *args) {
   source.tokens   = &tokens;
   source.nodes    = &nodes;
 
-  ok = type_check(&type_check_context, &source);
+  HirGeneratorContext hir_generator_context;
+  hir_generator_context.messages = &messages;
+  hir_generator_context.strings = &strings;
+
+  HirCode hir_code;
+  hir_code.kinds.init(stdlib_alloc);
+  hir_code.datas.init(stdlib_alloc);
+  hir_code.extra.init(stdlib_alloc);
+
+  ok = generate_hir(&hir_generator_context, &source, &hir_code);
   if (!ok) {
-    printf("Type check error\n");
-    messages.print_messages();
+    printf("HIR generation error\n");
     return 1;
   }
 
-  Arena output_arena;
-  output_arena.init(MiB(4));
-
-  CodeGeneratorContext code_generator_context;
-  code_generator_context.messages         = &messages;
-  code_generator_context.output_arena     = &output_arena;
-  code_generator_context.values           = &values;
-  code_generator_context.types            = &types;
-  code_generator_context.type_annotations = &type_annotations;
-
-  ok = generate_c_code(&code_generator_context, &source);
-  if (!ok) {
-    printf("Code generation error\n");
-    messages.print_messages();
-    return 1;
+  printf("--- HIR ---\n");
+  for (u32 i = 0; i < hir_code.kinds.len(); i++) {
+    printf("%s\n", hir_kind_string(hir_code.kinds[i]));
   }
 
   printf("ok\n");

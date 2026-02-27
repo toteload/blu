@@ -69,7 +69,6 @@ struct SegmentList {
     return (1 << segment_count) - 1;
   }
 
-  // `new_capacity` must be a power of two.
   void ensure_capacity(Allocator alloc, usize new_capacity);
 
   static usize segment_count_at_capacity(usize cap) {
@@ -112,7 +111,7 @@ T *SegmentList<T>::ptr_at_unchecked(usize i) {
 
 template<typename T>
 T *SegmentList<T>::push(Allocator alloc) {
-  ensure_capacity(alloc, round_up_to_nearest_power_of_two(_len + 1));
+  ensure_capacity(alloc, _len + 1);
   T *p = ptr_at_unchecked(_len);
   _len += 1;
   return p;
@@ -125,8 +124,6 @@ void SegmentList<T>::append(Allocator alloc, T item) {
 
 template<typename T>
 void SegmentList<T>::ensure_capacity(Allocator alloc, usize new_capacity) {
-  Debug_assert(new_capacity != 0 && is_zero_or_power_of_two(new_capacity));
-
   usize current_capacity = capacity();
   if (new_capacity <= current_capacity) {
     return;
