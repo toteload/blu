@@ -266,6 +266,8 @@ struct Arena;
 struct ArenaSnapshot {
   Arena *owner;
   void *at;
+
+  ttld_inline usize size();
 };
 
 struct Arena {
@@ -291,6 +293,10 @@ struct Arena {
 
   Allocator as_allocator();
 };
+
+ttld_inline usize ArenaSnapshot::size() {
+  return ptr_diff(owner->at, at);
+}
 
 ttld_inline ArenaSnapshot Arena::take_snapshot() { return {.owner = this, .at = at}; }
 

@@ -57,20 +57,21 @@ struct EnvManager {
 
     global_env = alloc(nullptr);
 
+    // TODO use a function instead of a macro
     // clang-format off
-  Add_type( "i8", Type::make_integer(Signed,  8));
-  Add_type("i16", Type::make_integer(Signed, 16));
-  Add_type("i32", Type::make_integer(Signed, 32));
-  Add_type("i64", Type::make_integer(Signed, 64));
+    Add_type( "i8", Type::make_integer(Signed,  8));
+    Add_type("i16", Type::make_integer(Signed, 16));
+    Add_type("i32", Type::make_integer(Signed, 32));
+    Add_type("i64", Type::make_integer(Signed, 64));
 
-  Add_type( "u8", Type::make_integer(Unsigned,  8));
-  Add_type("u16", Type::make_integer(Unsigned, 16));
-  Add_type("u32", Type::make_integer(Unsigned, 32));
-  Add_type("u64", Type::make_integer(Unsigned, 64));
+    Add_type( "u8", Type::make_integer(Unsigned,  8));
+    Add_type("u16", Type::make_integer(Unsigned, 16));
+    Add_type("u32", Type::make_integer(Unsigned, 32));
+    Add_type("u64", Type::make_integer(Unsigned, 64));
 
-  Add_type("nil",   Type::make_nil());
-  Add_type("never", Type::make_never());
-  Add_type("type",  Type::make_type());
+    Add_type("nil",   Type::make_nil());
+    Add_type("never", Type::make_never());
+    Add_type("type",  Type::make_type());
     // clang-format on
 
     TypeIndex bool_type;

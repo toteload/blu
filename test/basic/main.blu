@@ -1,9 +1,12 @@
 main: (): i32 = () { 0 }
 
-;  0 | declaration   (type=%1, value=%2)
-;  1 | type_function (param_count=0, return_type=VAL(i32))
-;  2 | function      (param_count=0, instruction_count=5) (including itself)
-;  3 | block         (instruction_count=3) (including itself)
-;  4 | literal_int 0
-;  5 | break %4, %3
-;  6 | return %3
+main := (args: []str): i32 {
+  if args.len < 2 {
+    return 1
+  }
+
+  filename := args[1]
+  source := try std.fs.read_file(filename)
+
+  0
+}

@@ -1,3 +1,5 @@
+#include "toteload.hh"
+
 struct TypeInterner;
 
 enum TypeKind : u8 {
@@ -95,6 +97,10 @@ struct Type {
     };
   }
 };
+
+ttld_inline Type *alloc_type_function(Arena *arena, u32 param_count) {
+  return Cast(Type*, arena->raw_alloc(sizeof(Type) + sizeof(TypeIndex) * param_count, Align_of(Type)));
+}
 
 b32 type_eq(void *context, Type *a, Type *b);
 u32 type_hash(void *context, Type *x);

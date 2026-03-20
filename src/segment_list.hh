@@ -30,7 +30,7 @@
 // 4 |  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
 //
 // TODO: optimize this to start segments from a larger size. zig even inlines the first segment into
-// the data structure itself. That way heap allocation might not even be used.
+// the data structure itself. That way heap allocation might not even be needed.
 
 template<typename T>
 struct SegmentList {

@@ -70,6 +70,14 @@ void Arena::init(usize reserve_size) {
   base = p;
 }
 
+void Arena::deinit() {
+  if (base) {
+    ttld::os::mem_release(base, ptr_diff(reserve_end, base));
+  }
+
+  memset(this, 0, sizeof(*this));
+}
+
 void *Arena::raw_alloc(usize byte_size, u32 align) {
   void *aligned = ptr_forward_align(at, align);
   void *at_after_alloc = ptr_offset(aligned, byte_size);
@@ -92,6 +100,8 @@ void *Arena::raw_alloc(usize byte_size, u32 align) {
   // TODO check for error? Can this even realistically happen?
   ttld::os::mem_commit(commit_end, commit_size);
 
+  memset(commit_end, 0xaa, commit_size);
+
   at = at_after_alloc;
   commit_end = ptr_offset(commit_end, commit_size);
 
@@ -104,6 +114,10 @@ Str Arena::push_format_string(char const *format, ...) {
   i32 len = vsnprintf(nullptr, 0, format, vl);
   char *s = alloc<char>(len+1);
   vsnprintf(s, len+1, format, vl);
+  // vsnprint always writes a null-terminator, but I don't want a null-terminator.
+  // We do allocate enough memory for a null-terminator to be written, but then
+  // jump back one byte to remove it.
+  at = ptr_offset(at, -1);
   va_end(vl);
   return { s, cast<u32>(len), };
 }

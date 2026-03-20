@@ -4,12 +4,18 @@
 #include "utils/stdlib.hh"
 
 enum HirInstructionKind : u8 {
+  Hir_root,
   Hir_declaration,
 
+  // Constant values
   Hir_literal_int,
+  Hir_true,
+  Hir_false,
+  Hir_nil,
 
   Hir_declared_value,
 
+  // Types
   Hir_type_int,
   Hir_type_nil,
   Hir_type_function,
@@ -68,11 +74,11 @@ struct HirParameter { };
 
 struct HirCondBr {
   HirIndex cond;
-  HirExtraIndex extra_index;
+  u32 then_instruction_count;
 };
 
 struct HirBlock {
-  u32 instruction_count;
+  u32 instruction_count; // excluding self
 };
 
 struct HirBinary {
@@ -90,9 +96,12 @@ struct HirBreak {
   HirIndex block;
 };
 
+// The type of the declaration is immediately after this instruction.
+// The value of the declaration is at `value`.
+// The total size of this declaration (including itself) is `instruction_count`.
 struct HirDeclaration {
-  HirIndex type;
   HirIndex value;
+  u32 instruction_count;
 };
 
 struct HirTypeInt {
@@ -101,6 +110,7 @@ struct HirTypeInt {
 };
 
 union HirData {
+  HirBlock       root;
   HirDeclaration declaration;
   HirFunction    function;
   HirParameter   parameter;
@@ -109,17 +119,46 @@ union HirData {
   HirBinary      binary;
   HirBreak       break_;
   HirTypeInt     type_int;
+  HirTypeFunction type_function;
   i64            int64;
   HirIndex       idx;
+};
+
+struct HirInstruction {
+  HirInstructionKind *kind;
+  HirData *data;
+  OptionalTypeIndex *type;
 };
 
 struct HirCode {
   Vector<HirInstructionKind> kinds;
   Vector<HirData>            datas;
+  Vector<OptionalTypeIndex>  types;
+  Vector<TokenIndex>         token;
   Vector<u32>                extra;
+
+  void init(Allocator alloc) {
+    kinds.init(alloc);
+    datas.init(alloc);
+    types.init(alloc);
+    token.init(alloc);
+    extra.init(alloc);
+  }
+
+  void deinit() {
+    kinds.deinit();
+    datas.deinit();
+    types.deinit();
+    token.deinit();
+    extra.deinit();
+  }
 
   u32 len() {
     return cast<u32>(kinds.len());
+  }
+
+  OptionalTypeIndex type(HirIndex idx) {
+    return types[idx.idx];
   }
 
   HirIndex alloc() {
@@ -146,12 +185,24 @@ struct HirCode {
     return &extra[idx.inner()];
   }
 
+  ttld_inline HirInstruction get(HirIndex idx) {
+    return {
+      .kind = &kinds[idx.idx],
+      .data = &datas[idx.idx],
+      .type = &types[idx.idx],
+    };
+  }
+
   HirData *data_ptr(HirIndex idx) { return &datas[idx.idx]; }
 };
 
 constexpr char const *hir_string[Hir_kind_max] = {
+  "root",
   "declaration",
   "literal_int",
+  "true",
+  "false",
+  "nil",
   "declared_value",
   "type_int",
   "type_nil",

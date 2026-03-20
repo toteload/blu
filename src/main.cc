@@ -17,7 +17,7 @@ int main(i32 arg_count, char const *const *args) {
   arena.init(MiB(2));
 
   Arena work_arena;
-  work_arena.init(MiB(1));
+  work_arena.init(MiB(8));
 
   TypeInterner types;
   types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
@@ -40,8 +40,13 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  for (u32 i = 0; i < tokens.kinds.len(); i++) {
-    printf("%s\n", token_kind_string(tokens.kinds[i]));
+  {
+    auto snapshot = work_arena.take_snapshot();
+
+    write_tokens(&tokens, source_text, &work_arena);
+    printf("%.*s", (int)snapshot.size(), (char*)snapshot.at);
+
+    work_arena.restore(snapshot);
   }
 
   AstNodes nodes;
@@ -65,11 +70,7 @@ int main(i32 arg_count, char const *const *args) {
     printf("%s\n", ast_kind_string(nodes.kinds[i]));
   }
 
-  ValueStore values;
-  values.init(stdlib_alloc);
-
-  EnvManager envs;
-  envs.init(arena.as_allocator(), stdlib_alloc, &strings, &types, &values);
+  printf("--- HIR ---\n");
 
   Source source;
   source.filename = filename;
@@ -82,9 +83,7 @@ int main(i32 arg_count, char const *const *args) {
   hir_generator_context.strings = &strings;
 
   HirCode hir_code;
-  hir_code.kinds.init(stdlib_alloc);
-  hir_code.datas.init(stdlib_alloc);
-  hir_code.extra.init(stdlib_alloc);
+  hir_code.init(stdlib_alloc);
 
   ok = generate_hir(&hir_generator_context, &source, &hir_code);
   if (!ok) {
@@ -92,10 +91,24 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  printf("--- HIR ---\n");
   for (u32 i = 0; i < hir_code.kinds.len(); i++) {
     printf("%s\n", hir_kind_string(hir_code.kinds[i]));
   }
+
+  // Validation
+  //HirValidationContext validation_context = {
+  //  .messages = &messages,
+  //  .types = &types,
+  //  .tmp = &work_arena,
+  //};
+
+  //ok = validate_hir(&validation_context, &hir_code);
+
+  //if (!ok) {
+  //  printf("Semantic analysis error\n");
+  //  messages.print_messages();
+  //  return 1;
+  //}
 
   printf("ok\n");
 

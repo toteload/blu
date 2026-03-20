@@ -47,6 +47,7 @@ template<typename T> struct Span {
 #include "tokens.hh"
 
 b32 tokenize(MessageManager *messages, Str source, Tokens *output);
+void write_tokens(Tokens *tokens, Str source, Arena *out);
 
 #include "ast.hh"
 
@@ -59,8 +60,6 @@ b32 parse(ParseContext *ctx, AstNodes *nodes);
 
 ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
 ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); }
-
-using TypeAnnotations = HashMap<NodeIndex, TypeIndex, eq_node_index, hash_node_index>;
 
 #include "value.hh"
 #include "env.hh"
@@ -83,17 +82,17 @@ struct Source {
   }
 };
 
-struct TypeCheckContext {
-  MessageManager *messages;
-  Arena *work_arena;
-  EnvManager *envs;
-  TypeInterner *types;
-  StringInterner *strings;
-  ValueStore *values;
-  TypeAnnotations *type_annotations;
-};
-
-b32 type_check(TypeCheckContext *ctx, Source *source);
+//struct TypeCheckContext {
+//  MessageManager *messages;
+//  Arena *work_arena;
+//  EnvManager *envs;
+//  TypeInterner *types;
+//  StringInterner *strings;
+//  ValueStore *values;
+//  TypeAnnotations *type_annotations;
+//};
+//
+//b32 type_check(TypeCheckContext *ctx, Source *source);
 
 #include "hir.hh"
 
@@ -103,6 +102,14 @@ struct HirGeneratorContext {
 };
 
 b32 generate_hir(HirGeneratorContext *ctx, Source *source, HirCode *hir);
+
+struct HirValidationContext {
+  MessageManager *messages;
+  TypeInterner *types;
+  Arena *tmp;
+};
+
+b32 validate_hir(HirValidationContext *ctx, HirCode *hir);
 
 // -[ Message ]-
 

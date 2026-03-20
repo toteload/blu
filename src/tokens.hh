@@ -61,6 +61,7 @@ struct Tokens {
   // Each span denotes what bytes in the source the token spans.
   Vector<Span<u32>> spans;
 
+  u32 len() { return kinds.len(); }
   TokenIndex end() { return {cast<u32>(kinds.len())}; }
 
   TokenIndex alloc() {
@@ -74,7 +75,7 @@ struct Tokens {
   Span<u32> &span(TokenIndex idx) { return spans[idx.idx]; }
 };
 
-constexpr char const *token_string[Tok_kind_max + 1] = {
+constexpr char const *token_string[Tok_kind_max] = {
   "colon",        "semicolon",
   "comma",        "dot",
   "equals",       "minus",
@@ -96,12 +97,11 @@ constexpr char const *token_string[Tok_kind_max + 1] = {
   "continue",     "return",
   "and",          "or",
   "identifier",   "line-comment",
-  "<illegal>",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {
   if (kind >= Tok_kind_max) {
-    return token_string[Tok_kind_max];
+    return "<illegal>";
   }
 
   return token_string[kind];

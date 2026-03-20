@@ -6,14 +6,17 @@ struct HirGenerator {
   StringInterner *strings = nullptr;
   HirCode *code = nullptr;
 
+  StrKey true_, false_;
+
   void init(HirGeneratorContext *context, Source *source, HirCode *code);
   void deinit() {}
 
   b32 generate_from_root(NodeIndex root);
-  b32 generate_function(NodeIndex node_index, HirIndex *out);
-  b32 generate_block(NodeIndex node_index, HirIndex *out);
-  b32 generate_expression(NodeIndex node_index, HirIndex *out);
-  b32 generate_type(NodeIndex node_index, HirIndex *out);
+  HirIndex generate_function(NodeIndex node_index);
+  HirIndex generate_block(NodeIndex node_index);
+  HirIndex generate_inline_block(NodeIndex node_index);
+  HirIndex generate_expression(NodeIndex node_index);
+  HirIndex generate_type(NodeIndex node_index);
 };
 
 void HirGenerator::init(HirGeneratorContext *context, Source *source, HirCode *code) {
@@ -22,6 +25,9 @@ void HirGenerator::init(HirGeneratorContext *context, Source *source, HirCode *c
 
   this->source = source;
   this->code = code;
+
+  true_ = strings->add(Str_make("true"));
+  false_ = strings->add(Str_make("false"));
 }
 
 b32 HirGenerator::generate_from_root(NodeIndex root_node_index) {
@@ -36,25 +42,24 @@ b32 HirGenerator::generate_from_root(NodeIndex root_node_index) {
     HirIndex decl = code->add(
         Hir_declaration, 
         { .declaration = { 
-        .type = INVALID_HIR_INDEX, 
-        .value = INVALID_HIR_INDEX, }, });
+        .value = INVALID_HIR_INDEX,
+        .instruction_count = UINT32_MAX,
+        }, });
 
-    HirIndex type;
-    Try(generate_type(ast_decl.type, &type));
+    HirIndex type = generate_type(ast_decl.type);
 
-    HirIndex value;
-    Try(generate_expression(ast_decl.value, &value));
+    HirIndex value = generate_expression(ast_decl.value);
 
     *code->data_ptr(decl) = { .declaration = {
-      .type = type,
       .value = value,
+      .instruction_count = (code->len() - decl.inner()) + 1,
     }};
   }
 
   return true;
 }
 
-b32 HirGenerator::generate_function(NodeIndex node_index, HirIndex *out) {
+HirIndex HirGenerator::generate_function(NodeIndex node_index) {
   auto function = source->nodes->data(node_index).function;
 
   auto function_idx = code->add(
@@ -71,51 +76,44 @@ b32 HirGenerator::generate_function(NodeIndex node_index, HirIndex *out) {
     code->add(Hir_param, { .parameter = { } });
   }
 
-  HirIndex body;
-  Try(generate_block(function.body, &body));
+  HirIndex body = generate_inline_block(function.body);
 
   auto function_idx_end = code->add(Hir_return, { .idx = body, });
 
   u32 instruction_count = function_idx_end.inner() - function_idx.inner() + 1;
   code->data_ptr(function_idx)->function.instruction_count = instruction_count;
 
-  *out = function_idx;
-
-  return true;
+  return function_idx;
 }
 
-b32 HirGenerator::generate_block(NodeIndex block_node_index, HirIndex *out) {
-  auto block = source->nodes->data(block_node_index).block;
+HirIndex HirGenerator::generate_block(NodeIndex block_node_index) {
+  auto hir_block = code->add(Hir_block, {});
+  auto offset_start = code->len();
 
-  HirIndex block_idx = code->add(
-    Hir_block,
-    { .block = { .instruction_count = UINT32_MAX, }, }
-  );
+  HirIndex last_expression = generate_inline_block(block_node_index);
+  code->add(Hir_break, { .break_ = { .value = last_expression, .block = hir_block, }, });
+  
+  auto offset_end = code->len();
+  
+  code->get(hir_block).data->block.instruction_count = offset_end - offset_start;
 
-  // For now only allow non-empty blocks.
-  Assert(block.items.len() > 0);
+  return hir_block;
+}
 
-  for (usize i = 0; i < block.items.len() - 1; i += 1) {
-    HirIndex e;
-    Try(generate_expression(block.items[i], &e));
-  }
+HirIndex HirGenerator::generate_inline_block(NodeIndex node_index) {
+  auto block = source->nodes->data(node_index).block;
 
   HirIndex last_expression;
-  if (block.items.len() > 0) {
-    Try(generate_expression(block.items[block.items.len()-1], &last_expression));
+
+  if (block.items.len() == 0) {
+    last_expression = code->add(Hir_nil, {});
+  } else {
+    for (usize i = 0; i < block.items.len(); i += 1) {
+      last_expression = generate_expression(block.items[i]);
+    }
   }
 
-  HirIndex break_idx = code->add(
-    Hir_break,
-    { .break_ = { .value = last_expression, .block = block_idx, }, }
-  );
-
-  u32 instruction_count = break_idx.inner() - block_idx.inner() + 1;
-  code->data_ptr(block_idx)->block.instruction_count = instruction_count;
-
-  *out = block_idx;
-
-  return true;
+  return last_expression;
 }
 
 i64 parse_integer(Str s) {
@@ -123,57 +121,100 @@ i64 parse_integer(Str s) {
   return 0;
 }
 
-b32 HirGenerator::generate_expression(NodeIndex node_index, HirIndex *out) {
+HirIndex HirGenerator::generate_expression(NodeIndex node_index) {
   auto kind = source->nodes->kind(node_index);
 
   switch (kind) {
-    case Ast_function: { Try(generate_function(node_index, out)); } break;
+    case Ast_function: { return generate_function(node_index); } break;
     case Ast_if_else: {
+      auto if_else_block = code->add(Hir_block, {});
+
+      auto offset_start = code->len();
+
       auto if_else = source->nodes->data(node_index).if_else;
-      HirIndex cond;
-      Try(generate_expression(if_else.cond, &cond));
+      HirIndex cond = generate_expression(if_else.cond);
 
-      auto extra_index = code->alloc_extra(2);
+      auto hir_condbr = code->add(Hir_condbr, { .condbr = { .cond = cond, }, });
 
-      auto hir_condbr = code->add(Hir_condbr, { .condbr = { cond, extra_index, }, });
-      auto hir_block = code->add(Hir_block, {});
+      auto offset_then = code->len();
+      HirIndex then = generate_inline_block(if_else.then);
+      code->add(Hir_break, { .break_ = { .value = then, .block = if_else_block, }, });
 
-      // TODO
+      auto offset_otherwise = code->len();
+      HirIndex otherwise;
+      if (if_else.otherwise.is_some()) {
+        otherwise = generate_inline_block(if_else.otherwise.as_index());
+      } else {
+        otherwise = code->add(Hir_nil, {});
+      }
+      code->add(Hir_break, { .break_ = { .value = otherwise, .block = if_else_block, }, });
 
+      auto offset_end = code->len();
+
+      code->get(hir_condbr).data->condbr.then_instruction_count = offset_otherwise - offset_then;
+      code->get(if_else_block).data->block.instruction_count = offset_end - offset_start;
+
+      return if_else_block;
     } break;
     case Ast_literal_int: {
       TokenIndex tok = source->nodes->data(node_index).literal_int.token_index;
       Str literal = source->get_token_str(tok);
       i64 val = parse_integer(literal);
 
-      *out = code->add(Hir_literal_int, { .int64 = val, });
+      return code->add(Hir_literal_int, { .int64 = val, });
+    } break;
+    case Ast_block: { return generate_block(node_index); } break;
+    case Ast_identifier: {
+      TokenIndex ti = source->nodes->data(node_index).identifier.token_index;
+      StrKey key = strings->add(source->get_token_str(ti));
+      if (key == true_) {
+        return code->add(Hir_true, {});
+      }
+      if (key == false_) {
+        return code->add(Hir_false, {});
+      }
+      Todo();
     } break;
     default: Todo();
   }
-
-  return true;
 }
 
-b32 HirGenerator::generate_type(NodeIndex node_index, HirIndex *out) {
+HirIndex HirGenerator::generate_type(NodeIndex node_index) {
   AstKind kind = source->nodes->kind(node_index);
 
   switch (kind) {
-  Ast_type_function: {
+  case Ast_type_function: {
+    auto node = source->nodes->data(node_index).type_function;
+
+    Assert(node.param_types.len() == 0); // TODO
+
+    auto inst = code->add(
+      Hir_type_function,
+      {
+        .type_function = {
+          .param_count = Cast(u32, node.param_types.len()),
+          .return_type = INVALID_HIR_INDEX,
+        },
+      }
+    );
+
+    code->data_ptr(inst)->type_function.return_type = generate_type(node.return_type);
+
+    return inst;
   } break;
-  Ast_identifier: {
+  case Ast_identifier: {
     Str s = source->get_token_str(source->nodes->data(node_index).identifier.token_index);
     StrKey key = strings->add(s);
 
     if (key == strings->add(Str_make("i32"))) {
-      *out = code->add(Hir_type_int, { .type_int = { .signedness = Signed, .bitwidth = 32, }});
+      return code->add(Hir_type_int, { .type_int = { .signedness = Signed, .bitwidth = 32, }});
       break;
     }
 
     Todo();
   } break;
+  default: Todo();
   }
-
-  return true;
 }
 
 b32 generate_hir(HirGeneratorContext *context, Source *source, HirCode *code) {
