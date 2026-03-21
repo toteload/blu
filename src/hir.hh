@@ -194,6 +194,8 @@ struct HirCode {
   }
 
   HirData *data_ptr(HirIndex idx) { return &datas[idx.idx]; }
+
+  void print();
 };
 
 constexpr char const *hir_string[Hir_kind_max] = {

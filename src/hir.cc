@@ -230,3 +230,41 @@ b32 generate_hir(HirGeneratorContext *context, Source *source, HirCode *code) {
 
   return ok;
 }
+
+static u32 log10(u32 n) {
+  if (n >= 1000000000) return 9;
+  if (n >= 100000000)  return 8;
+  if (n >= 10000000)   return 7;
+  if (n >= 1000000)    return 6;
+  if (n >= 100000)     return 5;
+  if (n >= 10000)      return 4;
+  if (n >= 1000)       return 3;
+  if (n >= 100)        return 2;
+  if (n >= 10)         return 1;
+  return 0;
+}
+
+void HirCode::print() {
+  u32 width = 1 + log10(len());
+
+  for (u32 i = 0; i < len(); i++) {
+    auto inst = get({i});
+    auto kind = *inst.kind;
+
+    printf("%*d | %s", width, i, hir_kind_string(kind));
+
+    switch (kind) {
+    case Hir_type_int: printf(" %s%d", inst.data->type_int.signedness == Signed ? "i" : "u", inst.data->type_int.bitwidth); break;
+    case Hir_literal_int: printf(" $%llu", inst.data->int64); break;
+    case Hir_break: printf(" %%%d, %%%d", inst.data->break_.value.inner(), inst.data->break_.block.inner()); break;
+    case Hir_condbr: {
+      auto cond = inst.data->condbr.cond.inner();
+      auto then = i + 1;
+      auto otherwise = then + inst.data->condbr.then_instruction_count;
+      printf(u8" %%%d, %%%d, %%%d", cond, then, otherwise); 
+    } break;
+    }
+
+    printf("\n");
+  }
+}

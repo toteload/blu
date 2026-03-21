@@ -91,9 +91,7 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  for (u32 i = 0; i < hir_code.kinds.len(); i++) {
-    printf("%s\n", hir_kind_string(hir_code.kinds[i]));
-  }
+  hir_code.print();
 
   // Validation
   //HirValidationContext validation_context = {
