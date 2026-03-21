@@ -306,7 +306,6 @@ b32 Parser::parse_literal_sequence(NodeIndex *out) {
   AstLiteralSequence literal_sequence;
   literal_sequence.items.init();
 
-  Try(expect_token(Tok_dot));
   Try(expect_token(Tok_brace_open));
 
   while (!is_token_index_end(at)) {
@@ -530,15 +529,19 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
   // clang-format on
 
-  case Tok_paren_open: Try(parse_function(&base)); break;
-
   case Tok_brace_open: {
     Try(parse_expression(&base));
     Try(expect_token(Tok_brace_close));
   } break;
 
   case Tok_dot: {
-    Try(parse_literal_sequence(&base));
+    next();
+    Try(peek(&tok));
+    switch (tok) {
+    case Tok_brace_open: Try(parse_literal_sequence(&base)); break;
+    case Tok_paren_open: Try(parse_function(&base)); break;
+    default: return false;
+    }
   } break;
 
   case Tok_identifier: {
