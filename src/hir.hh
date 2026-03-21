@@ -4,7 +4,6 @@
 #include "utils/stdlib.hh"
 
 enum HirInstructionKind : u8 {
-  Hir_root,
   Hir_declaration,
 
   // Constant values
@@ -110,7 +109,6 @@ struct HirTypeInt {
 };
 
 union HirData {
-  HirBlock       root;
   HirDeclaration declaration;
   HirFunction    function;
   HirParameter   parameter;
@@ -199,7 +197,6 @@ struct HirCode {
 };
 
 constexpr char const *hir_string[Hir_kind_max] = {
-  "root",
   "declaration",
   "literal_int",
   "true",
