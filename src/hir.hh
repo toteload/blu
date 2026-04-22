@@ -67,6 +67,7 @@ struct HirFunction {
 struct HirTypeFunction {
   u32 param_count;
   HirIndex return_type;
+  ValueIndex type;
 };
 
 struct HirParameter { };
@@ -125,13 +126,12 @@ union HirData {
 struct HirInstruction {
   HirInstructionKind *kind;
   HirData *data;
-  OptionalTypeIndex *type;
 };
 
 struct HirCode {
   Vector<HirInstructionKind> kinds;
   Vector<HirData>            datas;
-  Vector<OptionalTypeIndex>  types;
+  Vector<TypeIndex>          types;
   Vector<TokenIndex>         token;
   Vector<u32>                extra;
 
@@ -153,10 +153,6 @@ struct HirCode {
 
   u32 len() {
     return cast<u32>(kinds.len());
-  }
-
-  OptionalTypeIndex type(HirIndex idx) {
-    return types[idx.idx];
   }
 
   HirIndex alloc() {
@@ -187,7 +183,6 @@ struct HirCode {
     return {
       .kind = &kinds[idx.idx],
       .data = &datas[idx.idx],
-      .type = &types[idx.idx],
     };
   }
 
@@ -195,6 +190,30 @@ struct HirCode {
 
   void print();
 };
+
+struct TopLevelDeclarations {
+  HirCode *hir;
+
+  struct Iter {
+    HirCode *hir;
+    HirIndex at;
+
+    bool operator!=(const Iter &other) const { return at.inner() != other.at.inner(); }
+    Iter &operator++() {
+      auto inst = hir->get(at);
+      u32 count = inst.data->declaration.instruction_count;
+      at = { at.idx + count };
+    }
+    HirIndex operator*() const { return at; }
+  };
+
+  Iter begin() const { return { hir, {0}, }; }
+  Iter end() const { return {hir, {hir->len()}, }; }
+};
+
+ttld_inline TopLevelDeclarations toplevel_declarations(HirCode *hir) {
+  return {hir};
+}
 
 constexpr char const *hir_string[Hir_kind_max] = {
   "declaration",

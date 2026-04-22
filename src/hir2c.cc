@@ -42,5 +42,9 @@ b32 generate_c_code_from_hir(HirCode *code) {
     
   }
 
+  for (HirIndex decl : toplevel_declarations(code)) {
+    gen->output_declaration(decl);
+  }
+
   return true;
 }

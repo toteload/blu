@@ -11,8 +11,8 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, Slice<char> out) {
   switch (type->kind) {
   case Type_integer:
     return snprintf(out.data, out.len(), "%s%d", type->integer.signedness == Signed ? "i" : "u", type->integer.bitwidth);
-  case Type_integer_constant:
-    return snprintf(out.data, out.len(), "int-constant");
+  case Type_literal_int:
+    return snprintf(out.data, out.len(), "literal-int");
   case Type_boolean:
     return snprintf(out.data, out.len(), "bool");
   case Type_type:
@@ -58,7 +58,7 @@ b32 type_eq(void *context, Type *a, Type *b) {
 
   switch (a->kind) {
   case Type_nil:
-  case Type_integer_constant:
+  case Type_literal_int:
   case Type_never:
   case Type_boolean:
   case Type_type:
@@ -118,7 +118,7 @@ u32 push_type_data(Arena *arena, Type *x) {
 
   switch (x->kind) {
   case Type_nil:
-  case Type_integer_constant:
+  case Type_literal_int:
   case Type_never:
   case Type_boolean:
   case Type_type:
@@ -190,7 +190,7 @@ void TypeInterner::init(
   Add_type(nil,   Type::make_nil());
   Add_type(never, Type::make_never());
 
-  Add_type(integer_constant, Type::make_integer_constant());
+  Add_type(literal_int, Type::make_literal_int());
   // clang-format on
 
 #undef Add_type

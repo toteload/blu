@@ -13,7 +13,7 @@ struct Index {
   static Index from_optional_index(OptionalIndex<T, Tag> idx);
 
   OptionalIndex<T, Tag> as_optional_index();
-  T inner() { return idx; }
+  T inner() const { return idx; }
 
   bool operator==(const Index &other) {
     return idx == other.idx;

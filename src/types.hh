@@ -3,7 +3,7 @@
 struct TypeInterner;
 
 enum TypeKind : u8 {
-  Type_integer_constant,
+  Type_literal_int,
   Type_integer,
   Type_boolean,
   Type_function,
@@ -56,7 +56,7 @@ struct Type {
   u32 byte_size() {
     switch (kind) {
     case Type_integer:
-    case Type_integer_constant:
+    case Type_literal_int:
     case Type_nil:
     case Type_never:
     case Type_slice:
@@ -72,8 +72,8 @@ struct Type {
     }
   }
 
-  bool is_integer_or_integer_constant() {
-    return kind == Type_integer || kind == Type_integer_constant;
+  bool is_integer_or_literal_int() {
+    return kind == Type_integer || kind == Type_literal_int;
   }
 
   static Type make_slice(TypeIndex base_type) {
@@ -86,7 +86,7 @@ struct Type {
   static Type make_bool() { return {Type_boolean, {}}; }
   static Type make_never() { return {Type_never, {}}; }
   static Type make_type() { return {Type_type, {}}; }
-  static Type make_integer_constant() { return {Type_integer_constant, {}}; }
+  static Type make_literal_int() { return {Type_literal_int, {}}; }
   static Type make_integer(Signedness s, u16 width) {
     return {
       Type_integer,
@@ -121,7 +121,7 @@ struct TypeInterner {
   TypeIndex i16_;
   TypeIndex i32_;
   TypeIndex i64_;
-  TypeIndex integer_constant;
+  TypeIndex literal_int;
   TypeIndex nil;
   TypeIndex never;
 
@@ -149,5 +149,7 @@ struct TypeInterner {
 
   Type *get(TypeIndex idx) { return list[idx.idx]; }
 };
+
+bool is_coercible_to(TypeIndex src, TypeIndex dst);
 
 u32 type_to_string(TypeInterner *types, TypeIndex type, Slice<char> output);

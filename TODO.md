@@ -4,9 +4,13 @@
   - [ ] Type check.
 - [ ] Compile HIR to C. Get it working for `test\basic\main.blu`.
 - [ ] Get `test\basic\if_else.blu` to compile.
+- [ ] Set up extendible program/script that runs all tests and gives a summary.
 - [ ] Get `test\basic\call_function.blu` to compile.
 - [ ] Get `test\basic\slice.blu` to compile.
 - [ ] Get `test\error\out_of_bounds.blu` to fail compilation.
+
+- [ ] Control flow analysis.
+    - [ ] Does a function return a value?
 
 - [ ] Array type
 - [ ] Floating point type
