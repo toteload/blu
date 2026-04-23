@@ -70,43 +70,11 @@ int main(i32 arg_count, char const *const *args) {
     printf("%s\n", ast_kind_string(nodes.kinds[i]));
   }
 
-  printf("--- HIR ---\n");
-
   Source source;
   source.filename = filename;
   source.source   = source_text;
   source.tokens   = &tokens;
   source.nodes    = &nodes;
-
-  HirGeneratorContext hir_generator_context;
-  hir_generator_context.messages = &messages;
-  hir_generator_context.strings = &strings;
-
-  HirCode hir_code;
-  hir_code.init(stdlib_alloc);
-
-  ok = generate_hir(&hir_generator_context, &source, &hir_code);
-  if (!ok) {
-    printf("HIR generation error\n");
-    return 1;
-  }
-
-  hir_code.print();
-
-  // Validation
-  //HirValidationContext validation_context = {
-  //  .messages = &messages,
-  //  .types = &types,
-  //  .tmp = &work_arena,
-  //};
-
-  //ok = validate_hir(&validation_context, &hir_code);
-
-  //if (!ok) {
-  //  printf("Semantic analysis error\n");
-  //  messages.print_messages();
-  //  return 1;
-  //}
 
   printf("ok\n");
 

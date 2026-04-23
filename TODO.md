@@ -27,3 +27,5 @@
     - [ ] Add `defer try`. Gets executed at end of scope when no error occured.
 
 - [ ] Compile time code execution.
+
+- [ ] Pattern matching (?)

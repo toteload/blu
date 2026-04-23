@@ -82,35 +82,6 @@ struct Source {
   }
 };
 
-//struct TypeCheckContext {
-//  MessageManager *messages;
-//  Arena *work_arena;
-//  EnvManager *envs;
-//  TypeInterner *types;
-//  StringInterner *strings;
-//  ValueStore *values;
-//  TypeAnnotations *type_annotations;
-//};
-//
-//b32 type_check(TypeCheckContext *ctx, Source *source);
-
-#include "hir.hh"
-
-struct HirGeneratorContext {
-  MessageManager *messages;
-  StringInterner *strings;
-};
-
-b32 generate_hir(HirGeneratorContext *ctx, Source *source, HirCode *hir);
-
-struct HirValidationContext {
-  MessageManager *messages;
-  TypeInterner *types;
-  Arena *tmp;
-};
-
-b32 validate_hir(HirValidationContext *ctx, HirCode *hir);
-
 // -[ Message ]-
 
 enum MessageSeverity : u8 {
