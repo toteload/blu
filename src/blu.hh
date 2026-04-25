@@ -82,6 +82,8 @@ struct Source {
   }
 };
 
+#include "interpreter.hh"
+
 // -[ Message ]-
 
 enum MessageSeverity : u8 {

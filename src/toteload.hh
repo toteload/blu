@@ -279,6 +279,11 @@ struct Arena {
   void init(usize reserve_size);
   void deinit();
 
+  usize commit_size() const { return ptr_diff(commit_end, at); }
+  usize reserve_size() const { return ptr_diff(reserve_end, at); }
+
+  void commit(usize commit_byte_count);
+
   usize size() { return ptr_diff(at, base); }
 
   void *raw_alloc(usize byte_size, u32 align);
@@ -294,9 +299,7 @@ struct Arena {
   Allocator as_allocator();
 };
 
-ttld_inline usize ArenaSnapshot::size() {
-  return ptr_diff(owner->at, at);
-}
+ttld_inline usize ArenaSnapshot::size() { return ptr_diff(owner->at, at); }
 
 ttld_inline ArenaSnapshot Arena::take_snapshot() { return {.owner = this, .at = at}; }
 
@@ -322,6 +325,7 @@ template<typename T> struct ObjectPool {
   Allocator backing;
   Block *blocks  = nullptr;
   Item *freelist = nullptr;
+  u32 allocation_count;
 
   void init(Allocator allocator) { backing = allocator; }
   void deinit();

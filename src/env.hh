@@ -48,7 +48,7 @@ struct EnvManager {
     auto _id  = strings->add(Str_make(Identifier));                                                \
     auto _tmp = T;                                                                                 \
     auto _t   = types->add(&_tmp);                                                                 \
-    auto _val = values->add(Value::make_type(_t));                                                 \
+    auto _val = values->add({.kind = Val_type, .type = types->type.type, .data = {.type = _t}});   \
     global_env->insert(_id, _val);                                                                 \
   }
 
@@ -72,30 +72,32 @@ struct EnvManager {
     Add_type("nil",   Type::make_nil());
     Add_type("never", Type::make_never());
     Add_type("type",  Type::make_type());
+    Add_type("bool",  Type::make_bool());
     // clang-format on
 
     TypeIndex bool_type;
     {
-      auto tmp_bool_type = Type::make_bool();
-      bool_type          = types->add(&tmp_bool_type);
-      auto key           = strings->add(Str_make("bool"));
-      auto val           = values->add(Value::make_type(bool_type));
-      global_env->insert(key, val);
+      auto key   = strings->add(Str_make("bool"));
+      auto idx   = global_env->lookup(key);
+      Value *val = values->get(idx.as_index());
+      bool_type  = val->data.type;
     }
 
     global_env->insert(
       strings->add(Str_make("true")),
       values->add({
-        Value_true,
-        {},
+        .kind = Val_true,
+        .type = bool_type,
+        .data = {},
       })
     );
 
     global_env->insert(
       strings->add(Str_make("false")),
       values->add({
-        Value_false,
-        {},
+        .kind = Val_false,
+        .type = bool_type,
+        .data = {},
       })
     );
 

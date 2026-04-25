@@ -19,7 +19,7 @@ template<typename T> struct Vector {
   void grow();
 
   void push(T x) { *push_empty() = x; }
-  T *push_empty(u32 amount=1);
+  T *push_empty(u32 amount = 1);
 
   T &operator[](usize idx) { return data[idx]; }
 

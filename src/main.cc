@@ -44,7 +44,7 @@ int main(i32 arg_count, char const *const *args) {
     auto snapshot = work_arena.take_snapshot();
 
     write_tokens(&tokens, source_text, &work_arena);
-    printf("%.*s", (int)snapshot.size(), (char*)snapshot.at);
+    printf("%.*s", (int)snapshot.size(), (char *)snapshot.at);
 
     work_arena.restore(snapshot);
   }
@@ -75,6 +75,12 @@ int main(i32 arg_count, char const *const *args) {
   source.source   = source_text;
   source.tokens   = &tokens;
   source.nodes    = &nodes;
+
+  ValueStore values;
+  values.init();
+
+  Interpreter interpreter;
+  interpreter.init(&strings, &types, &values);
 
   printf("ok\n");
 

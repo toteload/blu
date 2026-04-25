@@ -16,5 +16,5 @@ clang-format -i src\parse.cc
 clang-format -i src\main.cc
 clang-format -i src\string_interner.cc
 clang-format -i src\typecheck.cc
-clang-format -i src\c_generator.cc
+clang-format -i src\interpreter.cc
 clang-format -i src\message_manager.cc

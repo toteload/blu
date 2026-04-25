@@ -209,16 +209,33 @@ struct AstNodes {
     return res;
   }
 
-  AstKind          kind(NodeIndex idx) { return kinds[idx.idx]; }
+  AstKind kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
-  AstNodeData      data(NodeIndex idx) { return datas[idx.idx]; }
+  AstNodeData data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",        "block",      "type-slice",   "type-function", "declaration", "assign", "literal-sequence",
-  "literal-int", "identifier", "field-access", "call",          "cast",        "unary-op",
-  "binary-op",   "function",   "if-else",      "while",         "break",       "continue",
-  "return",      "illegal",
+  "root",
+  "block",
+  "type-slice",
+  "type-function",
+  "declaration",
+  "assign",
+  "literal-sequence",
+  "literal-int",
+  "identifier",
+  "field-access",
+  "call",
+  "cast",
+  "unary-op",
+  "binary-op",
+  "function",
+  "if-else",
+  "while",
+  "break",
+  "continue",
+  "return",
+  "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

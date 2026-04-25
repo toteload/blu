@@ -76,27 +76,15 @@ struct Tokens {
 };
 
 constexpr char const *token_string[Tok_kind_max] = {
-  "colon",        "semicolon",
-  "comma",        "dot",
-  "equals",       "minus",
-  "plus",         "star",
-  "slash",        "percent",
-  "plus_equals",  "exclamation",
-  "ampersand",    "bar",
-  "caret",        "tilde",
-  "left-shift",   "right-shift",
-  "cmp-eq",       "cmp-ne",
-  "cmp-gt",       "cmp-ge",
-  "cmp-lt",       "cmp-le",
-  "literal-int",  "literal-string",
-  "brace-open",   "brace-close",
-  "paren-open",   "paren-close",
-  "bracket-open", "bracket-close",
-  "if",           "else",
-  "while",        "break",
-  "continue",     "return",
-  "and",          "or",
-  "identifier",   "line-comment",
+  "colon",          "semicolon",     "comma",       "dot",        "equals",
+  "minus",          "plus",          "star",        "slash",      "percent",
+  "plus_equals",    "exclamation",   "ampersand",   "bar",        "caret",
+  "tilde",          "left-shift",    "right-shift", "cmp-eq",     "cmp-ne",
+  "cmp-gt",         "cmp-ge",        "cmp-lt",      "cmp-le",     "literal-int",
+  "literal-string", "brace-open",    "brace-close", "paren-open", "paren-close",
+  "bracket-open",   "bracket-close", "if",          "else",       "while",
+  "break",          "continue",      "return",      "and",        "or",
+  "identifier",     "line-comment",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {

@@ -176,21 +176,21 @@ void TypeInterner::init(
   }
 
   // clang-format off
-  Add_type(u8_,  Type::make_integer(Unsigned, 8));
-  Add_type(u16_, Type::make_integer(Unsigned, 16));
-  Add_type(u32_, Type::make_integer(Unsigned, 32));
-  Add_type(u64_, Type::make_integer(Unsigned, 64));
+  Add_type(type.u8_,  Type::make_integer(Unsigned, 8));
+  Add_type(type.u16_, Type::make_integer(Unsigned, 16));
+  Add_type(type.u32_, Type::make_integer(Unsigned, 32));
+  Add_type(type.u64_, Type::make_integer(Unsigned, 64));
 
-  Add_type(i8_,  Type::make_integer(Signed,  8));
-  Add_type(i16_, Type::make_integer(Signed, 16));
-  Add_type(i32_, Type::make_integer(Signed, 32));
-  Add_type(i64_, Type::make_integer(Signed, 64));
+  Add_type(type.i8_,  Type::make_integer(Signed,  8));
+  Add_type(type.i16_, Type::make_integer(Signed, 16));
+  Add_type(type.i32_, Type::make_integer(Signed, 32));
+  Add_type(type.i64_, Type::make_integer(Signed, 64));
 
-  Add_type(bool_, Type::make_bool());
-  Add_type(nil,   Type::make_nil());
-  Add_type(never, Type::make_never());
+  Add_type(type.bool_, Type::make_bool());
+  Add_type(type.nil,   Type::make_nil());
+  Add_type(type.never, Type::make_never());
 
-  Add_type(literal_int, Type::make_literal_int());
+  Add_type(type.literal_int, Type::make_literal_int());
   // clang-format on
 
 #undef Add_type

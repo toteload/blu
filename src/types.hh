@@ -72,9 +72,7 @@ struct Type {
     }
   }
 
-  bool is_integer_or_literal_int() {
-    return kind == Type_integer || kind == Type_literal_int;
-  }
+  bool is_integer_or_literal_int() { return kind == Type_integer || kind == Type_literal_int; }
 
   static Type make_slice(TypeIndex base_type) {
     Type t            = {};
@@ -99,7 +97,10 @@ struct Type {
 };
 
 ttld_inline Type *alloc_type_function(Arena *arena, u32 param_count) {
-  return Cast(Type*, arena->raw_alloc(sizeof(Type) + sizeof(TypeIndex) * param_count, Align_of(Type)));
+  return Cast(
+    Type *,
+    arena->raw_alloc(sizeof(Type) + sizeof(TypeIndex) * param_count, Align_of(Type))
+  );
 }
 
 b32 type_eq(void *context, Type *a, Type *b);
@@ -112,18 +113,22 @@ struct TypeInterner {
   u32 distinct_uid_gen = 1;
 
   // Often used and always available types
-  TypeIndex bool_;
-  TypeIndex u8_;
-  TypeIndex u16_;
-  TypeIndex u32_;
-  TypeIndex u64_;
-  TypeIndex i8_;
-  TypeIndex i16_;
-  TypeIndex i32_;
-  TypeIndex i64_;
-  TypeIndex literal_int;
-  TypeIndex nil;
-  TypeIndex never;
+
+  struct {
+    TypeIndex bool_;
+    TypeIndex u8_;
+    TypeIndex u16_;
+    TypeIndex u32_;
+    TypeIndex u64_;
+    TypeIndex i8_;
+    TypeIndex i16_;
+    TypeIndex i32_;
+    TypeIndex i64_;
+    TypeIndex literal_int;
+    TypeIndex nil;
+    TypeIndex never;
+    TypeIndex type;
+  } type;
 
   void init(
     Arena *work_arena,
