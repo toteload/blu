@@ -36,6 +36,20 @@ struct EnvManager {
   Allocator env_allocator;
   Env *global_env = nullptr;
 
+  void _add_type(
+    StringInterner *strings,
+    TypeInterner *types,
+    ValueStore *values,
+    Env *env,
+    Str identifier,
+    Type type
+  ) {
+    auto key = strings->add(identifier);
+    auto ty  = types->add(&type);
+    auto val = values->add({.kind = Val_type, .type = types->type.type, .data = {.type = ty}});
+    env->insert(key, val);
+  }
+
   void init(
     Allocator pool_allocator,
     Allocator env_allocator,
@@ -43,21 +57,13 @@ struct EnvManager {
     TypeInterner *types,
     ValueStore *values
   ) {
-#define Add_type(Identifier, T)                                                                    \
-  {                                                                                                \
-    auto _id  = strings->add(Str_make(Identifier));                                                \
-    auto _tmp = T;                                                                                 \
-    auto _t   = types->add(&_tmp);                                                                 \
-    auto _val = values->add({.kind = Val_type, .type = types->type.type, .data = {.type = _t}});   \
-    global_env->insert(_id, _val);                                                                 \
-  }
-
     this->env_allocator = env_allocator;
     pool.init(pool_allocator);
-
     global_env = alloc(nullptr);
 
-    // TODO use a function instead of a macro
+#define Add_type(Identifier, Type)                                                                 \
+  _add_type(strings, types, values, global_env, Str_make(Identifier), Type)
+
     // clang-format off
     Add_type( "i8", Type::make_integer(Signed,  8));
     Add_type("i16", Type::make_integer(Signed, 16));
@@ -74,6 +80,7 @@ struct EnvManager {
     Add_type("type",  Type::make_type());
     Add_type("bool",  Type::make_bool());
     // clang-format on
+#undef Add_type
 
     TypeIndex bool_type;
     {
@@ -101,7 +108,6 @@ struct EnvManager {
       })
     );
 
-#undef Add_type
   }
   void deinit();
 
