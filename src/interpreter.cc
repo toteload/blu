@@ -15,8 +15,8 @@ void Interpreter::init(
 
   common.nil = values->add({
     .kind = Val_type,
-.type = types->type.type,
-    .data = { .type = types->type.nil },
+    .type = types->type.type,
+    .data = {.type = types->type.nil},
   });
 }
 
@@ -27,11 +27,13 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
     auto f = source->nodes->data(node_index).type_function;
 
     u32 param_count = f.param_types.len();
-    auto ty = alloc_type_function(work_arena, param_count);
+    auto ty         = alloc_type_function(work_arena, param_count);
 
     *ty = {
-      .kind = Type_function,
-      .function = { .param_count = param_count, },
+      .kind     = Type_function,
+      .function = {
+        .param_count = param_count,
+      },
     };
 
     Try(intern_type(env, f.return_type, &ty->function.return_type));
@@ -45,10 +47,12 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
   case Ast_identifier: {
     auto str = source->get_token_str(source->nodes->data(node_index).identifier.token_index);
     auto val = values->get(_lookup(env, str).as_index());
-    Assert(val->kind == Val_type); 
+    Assert(val->kind == Val_type);
     *result = val->data.type;
   } break;
-  default: Todo(); break;
+  default:
+    Todo();
+    break;
   }
 
   return true;
@@ -60,7 +64,7 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   auto nodes = source->nodes;
 
   auto env_global = envs->create_global_env(strings, types, values);
-  auto env = envs->alloc(env_global);
+  auto env        = envs->alloc(env_global);
   defer({
     envs->dealloc(env_global);
     envs->dealloc(env);
@@ -93,11 +97,11 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   TypeIndex main_function_type;
   {
     Type *t = alloc_type_function(work_arena, 0);
-    *t = {
-      .kind = Type_function,
-      .function = {
-        .return_type = types->type.i32_,
-        .param_count = 0,
+    *t      = {
+           .kind     = Type_function,
+           .function = {
+             .return_type = types->type.i32_,
+             .param_count = 0,
       },
     };
     main_function_type = types->add(t);
@@ -116,13 +120,16 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   switch (kind) {
   case Ast_literal_int: {
     auto token_index = source->nodes->data(node_index).literal_int.token_index;
-    auto str = source->get_token_str(token_index);
-    auto i = parse_i64(str);
+    auto str         = source->get_token_str(token_index);
+    auto i           = parse_i64(str);
+
     *result = values->add({
-        .kind = Val_int,
-        .type = types->type.literal_int,
-        .data = { .int64 = i, },
-      });
+      .kind = Val_int,
+      .type = types->type.literal_int,
+      .data = {
+        .int64 = i,
+      },
+    });
   } break;
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
@@ -139,22 +146,36 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
       Try(eval_expr(env_block, block.items[i], &e));
     }
 
-    Try(eval_expr(env_block, block.items[block.items.len()-1], result));
+    Try(eval_expr(env_block, block.items[block.items.len() - 1], result));
   } break;
   case Ast_function: {
     *result = values->add({
       .kind = Val_function,
       .type = types->type.literal_function,
-      .data = { .node_index = node_index },
+      .data = {.node_index = node_index},
     });
   } break;
-  default: Todo(); break;
+  case Ast_if_else: {
+    auto if_else = source->nodes->data(node_index).if_else;
+
+    ValueIndex cond;
+    Try(eval_expr(env, if_else.cond, &cond));
+
+    // TODO ensure cond is of type bool
+
+
+  } break;
+  default:
+    Todo();
+    break;
   }
 
   return true;
 }
 
-b32 Interpreter::call_function(Env *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result) {
+b32 Interpreter::call_function(
+  Env *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
+) {
   // TODO: make sure the arguments match the expected parameters
   // TODO: add parameters to env
 

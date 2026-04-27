@@ -215,7 +215,7 @@ i32 main(i32 arg_count, char const *const *args) {
   TypeInterner types;
   types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
 
-  MessageManager messages;
+  Messages messages;
   messages.init(stdlib_alloc, &strings, &types);
 
   Tokens tokens;

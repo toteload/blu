@@ -3,7 +3,7 @@
 static constexpr u32 Op_count = BinaryOpKind_max + AssignKind_max;
 
 struct Parser {
-  MessageManager *messages = nullptr;
+  Messages *messages = nullptr;
   Tokens *tokens           = nullptr;
   AstNodes *nodes          = nullptr;
   TokenIndex at            = {0};
@@ -520,7 +520,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
   NodeIndex base;
   switch (tok) {
-  // clang-format off
+    // clang-format off
   case Tok_keyword_while:    Try(parse_while(&base));       break;
   case Tok_keyword_continue: Try(parse_continue(&base));    break;
   case Tok_keyword_break:    Try(parse_break(&base));       break;
@@ -528,7 +528,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_keyword_if:       Try(parse_if_else(&base));     break;
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
   case Tok_bar:              Try(parse_function(&base));    break;
-  // clang-format on
+    // clang-format on
 
   case Tok_brace_open: {
     Try(parse_expression(&base));

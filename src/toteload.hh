@@ -189,7 +189,7 @@ ttld_inline b32 str_eq(Str a, Str b) {
 }
 
 template<typename T> struct Slice {
-  T *data = nullptr;
+  T *data    = nullptr;
   usize _len = 0;
 
   T &operator[](usize idx) { return data[idx]; }
@@ -382,16 +382,13 @@ template<typename T> void ObjectPool<T>::grow(u32 count) {
 // `s` must be a valid i64 string.
 i64 parse_i64(Str s);
 
-template<typename F>
-struct ttld__Defer {
+template<typename F> struct ttld__Defer {
   F f;
-  ttld__Defer(F f): f(f) {}
+  ttld__Defer(F f) : f(f) {}
   ~ttld__Defer() { f(); }
 };
 
-template<typename F>
-ttld__Defer<F> ttld__defer_f(F f) { return ttld__Defer<F>(f); }
+template<typename F> ttld__Defer<F> ttld__defer_f(F f) { return ttld__Defer<F>(f); }
 
 #define DEFER(x) Cat(x, __COUNTER__)
-#define defer(code) auto DEFER(_defer_) = ttld__defer_f([&](){code;})
-
+#define defer(code) auto DEFER(_defer_) = ttld__defer_f([&]() { code; })

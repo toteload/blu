@@ -35,7 +35,7 @@ struct SourceSpan {
   }
 };
 
-struct MessageManager;
+struct Messages;
 
 #include "types.hh"
 
@@ -46,13 +46,13 @@ template<typename T> struct Span {
 
 #include "tokens.hh"
 
-b32 tokenize(MessageManager *messages, Str source, Tokens *output);
+b32 tokenize(Messages *messages, Str source, Tokens *output);
 void write_tokens(Tokens *tokens, Str source, Arena *out);
 
 #include "ast.hh"
 
 struct ParseContext {
-  MessageManager *messages;
+  Messages *messages;
   Tokens *tokens;
 };
 
@@ -105,7 +105,7 @@ struct Message {
   MessageArg args[0];
 };
 
-struct MessageManager {
+struct Messages {
   Arena arena;
   Vector<Message *> messages;
   StringInterner *strings;
@@ -123,6 +123,7 @@ struct MessageManager {
   void print_message(Message *message);
 
   void print_messages();
+
   void error(char const *format, ...);
 };
 

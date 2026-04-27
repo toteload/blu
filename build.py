@@ -66,7 +66,7 @@ def create_build_ninja():
         'string_interner.cc',
         'interpreter.cc',
         'types.cc',
-        'message_manager.cc',
+        'messages.cc',
         'utils.cc',
         join('tools', 'tokenviewer.cc'),
         join('utils', 'stdlib.cc'),
@@ -99,7 +99,7 @@ def create_build_ninja():
                 'string_interner.cc',
                 'types.cc',
                 'utils.cc',
-                'message_manager.cc',
+                'messages.cc',
                 join('utils', 'stdlib.cc'),
         ]],
         )

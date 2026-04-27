@@ -46,7 +46,7 @@ b32 parse_arg_from(Str *format, Str *arg) {
   return false;
 }
 
-void MessageManager::print_message(Message *msg) {
+void Messages::print_message(Message *msg) {
   switch (msg->severity) {
   case Error:
     printf("[error] ");
@@ -99,14 +99,14 @@ void MessageManager::print_message(Message *msg) {
   printf("\n");
 }
 
-void MessageManager::print_messages() {
+void Messages::print_messages() {
   for (usize i = 0; i < messages.len(); i++) {
     print_message(messages[i]);
   }
 }
 
 // It is assumed that format will be a constant string and thus does not need to be copied.
-void MessageManager::error(char const *format, ...) {
+void Messages::error(char const *format, ...) {
   va_list varargs;
   va_start(varargs, format);
 

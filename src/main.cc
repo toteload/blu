@@ -25,7 +25,7 @@ int main(i32 arg_count, char const *const *args) {
   StringInterner strings;
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
 
-  MessageManager messages;
+  Messages messages;
   messages.init(stdlib_alloc, &strings, &types);
 
   Tokens tokens;
@@ -94,7 +94,7 @@ int main(i32 arg_count, char const *const *args) {
 
   {
     char buf[512] = {0};
-    u32 len = values.value_to_string(&types, result, buf, 512);
+    u32 len       = values.value_to_string(&types, result, buf, 512);
     printf("%.*s\n", cast<int>(len), buf);
   }
 

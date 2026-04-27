@@ -45,4 +45,3 @@ struct ValueStore {
   // Returns the number of bytes written to `buf`.
   u32 value_to_string(TypeInterner *types, ValueIndex idx, char *buf, u32 buf_size);
 };
-
