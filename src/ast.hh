@@ -99,6 +99,10 @@ struct AstLiteralSequence {
 
 struct AstFunction {
   SegmentList<NodeIndex> param_names;
+
+  // NOTE: `NodeIndex body` could be removed.
+  // You can say that the next node is the body and then you no longer have to
+  // explicitly reference it.
   NodeIndex body; // always a block
 };
 

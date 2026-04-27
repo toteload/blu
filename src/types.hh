@@ -4,6 +4,7 @@ struct TypeInterner;
 
 enum TypeKind : u8 {
   Type_literal_int,
+  Type_literal_function,
   Type_integer,
   Type_boolean,
   Type_function,
@@ -37,6 +38,9 @@ struct Type {
       TypeIndex base_type;
     } slice;
     struct {
+      u32 param_count;
+    } literal_function;
+    struct {
       TypeIndex return_type;
       u32 param_count;
       TypeIndex param_types[0];
@@ -57,6 +61,7 @@ struct Type {
     switch (kind) {
     case Type_integer:
     case Type_literal_int:
+    case Type_literal_function:
     case Type_nil:
     case Type_never:
     case Type_slice:
@@ -125,6 +130,7 @@ struct TypeInterner {
     TypeIndex i32_;
     TypeIndex i64_;
     TypeIndex literal_int;
+    TypeIndex literal_function;
     TypeIndex nil;
     TypeIndex never;
     TypeIndex type;
@@ -153,8 +159,8 @@ struct TypeInterner {
   TypeIndex add_as_distinct(Type *type);
 
   Type *get(TypeIndex idx) { return list[idx.idx]; }
+
+  bool is_coercible_to(TypeIndex src, TypeIndex dst);
 };
 
-bool is_coercible_to(TypeIndex src, TypeIndex dst);
-
-u32 type_to_string(TypeInterner *types, TypeIndex type, Slice<char> output);
+u32 type_to_string(TypeInterner *types, TypeIndex type, char *buf, u32 buf_size);

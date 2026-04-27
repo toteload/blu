@@ -33,8 +33,27 @@ struct Env {
 
 struct EnvManager {
   ObjectPool<Env> pool;
+
+  // Each Env uses the env_allocator for its own allocations.
   Allocator env_allocator;
-  Env *global_env = nullptr;
+
+  void init(Allocator pool_allocator, Allocator env_allocator) {
+    pool.init(pool_allocator);
+    this->env_allocator = env_allocator;
+  }
+
+  void deinit();
+
+  Env *alloc(Env *parent) {
+    Env *env = pool.alloc();
+    env->init(env_allocator, parent);
+    return env;
+  }
+
+  void dealloc(Env *env) {
+    env->deinit();
+    pool.dealloc(env);
+  }
 
   void _add_type(
     StringInterner *strings,
@@ -50,16 +69,8 @@ struct EnvManager {
     env->insert(key, val);
   }
 
-  void init(
-    Allocator pool_allocator,
-    Allocator env_allocator,
-    StringInterner *strings,
-    TypeInterner *types,
-    ValueStore *values
-  ) {
-    this->env_allocator = env_allocator;
-    pool.init(pool_allocator);
-    global_env = alloc(nullptr);
+  Env *create_global_env(StringInterner *strings, TypeInterner *types, ValueStore *values) {
+    auto global_env = alloc(nullptr);
 
 #define Add_type(Identifier, Type)                                                                 \
   _add_type(strings, types, values, global_env, Str_make(Identifier), Type)
@@ -108,17 +119,6 @@ struct EnvManager {
       })
     );
 
-  }
-  void deinit();
-
-  Env *alloc(Env *parent) {
-    Env *env = pool.alloc();
-    env->init(env_allocator, parent);
-    return env;
-  }
-
-  void dealloc(Env *env) {
-    env->deinit();
-    pool.dealloc(env);
+    return global_env;
   }
 };

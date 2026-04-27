@@ -189,8 +189,8 @@ ttld_inline b32 str_eq(Str a, Str b) {
 }
 
 template<typename T> struct Slice {
-  T *data;
-  usize _len;
+  T *data = nullptr;
+  usize _len = 0;
 
   T &operator[](usize idx) { return data[idx]; }
   usize len() { return _len; }
@@ -282,7 +282,7 @@ struct Arena {
   usize commit_size() const { return ptr_diff(commit_end, at); }
   usize reserve_size() const { return ptr_diff(reserve_end, at); }
 
-  void commit(usize commit_byte_count);
+  void commit(usize commit_size);
 
   usize size() { return ptr_diff(at, base); }
 
@@ -378,3 +378,20 @@ template<typename T> void ObjectPool<T>::grow(u32 count) {
   blocks   = t;
   freelist = &t->items[0];
 }
+
+// `s` must be a valid i64 string.
+i64 parse_i64(Str s);
+
+template<typename F>
+struct ttld__Defer {
+  F f;
+  ttld__Defer(F f): f(f) {}
+  ~ttld__Defer() { f(); }
+};
+
+template<typename F>
+ttld__Defer<F> ttld__defer_f(F f) { return ttld__Defer<F>(f); }
+
+#define DEFER(x) Cat(x, __COUNTER__)
+#define defer(code) auto DEFER(_defer_) = ttld__defer_f([&](){code;})
+

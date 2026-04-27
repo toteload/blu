@@ -5,45 +5,45 @@
 
 // Should this Slice<char> be a Str?
 // Should Str be a subtype of Slice?
-u32 type_to_string(TypeInterner *types, TypeIndex idx, Slice<char> out) {
+u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) {
   Type *type = types->get(idx);
 
   switch (type->kind) {
   case Type_integer:
-    return snprintf(out.data, out.len(), "%s%d", type->integer.signedness == Signed ? "i" : "u", type->integer.bitwidth);
+    return snprintf(buf, buf_size, "%s%d", type->integer.signedness == Signed ? "i" : "u", type->integer.bitwidth);
   case Type_literal_int:
-    return snprintf(out.data, out.len(), "literal-int");
+    return snprintf(buf, buf_size, "literal-int");
   case Type_boolean:
-    return snprintf(out.data, out.len(), "bool");
+    return snprintf(buf, buf_size, "bool");
   case Type_type:
-    return snprintf(out.data, out.len(), "type");
+    return snprintf(buf, buf_size, "type");
   case Type_nil:
-    return cast<u32>(snprintf(out.data, out.len(), "nil"));
+    return cast<u32>(snprintf(buf, buf_size, "nil"));
   case Type_never:
-    return cast<u32>(snprintf(out.data, out.len(), "never"));
+    return cast<u32>(snprintf(buf, buf_size, "never"));
   case Type_slice: {
     u32 offset = 0;
-    offset += cast<u32>(snprintf(out.data, out.len(), "[]"));
-    offset += type_to_string(types, type->slice.base_type, out.sub(offset, out.len()));
+    offset += cast<u32>(snprintf(buf, buf_size, "[]"));
+    offset += type_to_string(types, type->slice.base_type, buf + offset, buf_size - offset);
     return offset;
   }
   case Type_distinct: {
     u32 offset = 0;
-    offset += cast<u32>(snprintf(out.data, out.len(), "distinct(%d) ", type->distinct.uid));
-    offset += type_to_string(types, type->distinct.base_type, out.sub(offset, out.len()));
+    offset += cast<u32>(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
+    offset += type_to_string(types, type->distinct.base_type, buf + offset, buf_size - offset);
     return offset;
   }
   case Type_function: {
     u32 offset = 0;
-    offset += cast<u32>(snprintf(out.data, out.len(), "fn("));
+    offset += cast<u32>(snprintf(buf, buf_size, "fn("));
     if (type->function.param_count > 0) {
-      offset += type_to_string(types, type->function.param_types[0], out.sub(offset, out.len()));
+      offset += type_to_string(types, type->function.param_types[0], buf + offset, buf_size - offset);
     }
     for (u32 i = 1; i < type->function.param_count; i += 1) {
-      offset += type_to_string(types, type->function.param_types[i], out.sub(offset, out.len()));
+      offset += type_to_string(types, type->function.param_types[i], buf + offset, buf_size - offset);
     }
-    offset += cast<u32>(snprintf(out.data + offset, out.len() - offset, ") "));
-    offset += type_to_string(types, type->function.return_type, out.sub(offset, out.len()));
+    offset += cast<u32>(snprintf(buf + offset, buf_size - offset, ") "));
+    offset += type_to_string(types, type->function.return_type, buf + offset, buf_size - offset);
     return offset;
   }
   }
@@ -191,6 +191,9 @@ void TypeInterner::init(
   Add_type(type.never, Type::make_never());
 
   Add_type(type.literal_int, Type::make_literal_int());
+  Add_type(type.literal_function, ((Type){
+    .kind = Type_literal_function,
+  }));
   // clang-format on
 
 #undef Add_type
@@ -227,4 +230,31 @@ TypeIndex TypeInterner::add_as_distinct(Type *type) {
   distinct_type->distinct.base_type = add(type);
 
   return add(distinct_type);
+}
+
+bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
+  if (src == dst) {
+    return true;
+  }
+
+  auto a = get(src);
+  auto b = get(dst);
+
+  if (a->kind == Type_literal_int) {
+    if (b->kind == Type_integer) {
+      // TODO: make sure value fits in destination integer type
+      return true;
+    }
+  }
+
+  if (a->kind == Type_literal_function) {
+    if (b->kind == Type_function) {
+      // - Make sure the number of parameters match.
+      // The return type is checked at runtime.
+
+      return a->literal_function.param_count == b->function.param_count;
+    }
+  }
+
+  return false;
 }

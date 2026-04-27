@@ -21,6 +21,8 @@ struct Value {
 
   union {
     TypeIndex type;
+    NodeIndex node_index;
+    i64 int64;
   } data;
 };
 
@@ -39,4 +41,8 @@ struct ValueStore {
   }
 
   Value *get(ValueIndex idx) { return values.get(idx.idx); }
+
+  // Returns the number of bytes written to `buf`.
+  u32 value_to_string(TypeInterner *types, ValueIndex idx, char *buf, u32 buf_size);
 };
+

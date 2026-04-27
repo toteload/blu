@@ -79,8 +79,24 @@ int main(i32 arg_count, char const *const *args) {
   ValueStore values;
   values.init();
 
+  EnvManager envs;
+  envs.init(stdlib_alloc, stdlib_alloc);
+
   Interpreter interpreter;
-  interpreter.init(&strings, &types, &values);
+  interpreter.init(&strings, &types, &values, &envs, &work_arena);
+
+  ValueIndex result;
+  ok = interpreter.run(&source, &result);
+  if (!ok) {
+    printf("Interpreter error encountered.\n");
+    return 1;
+  }
+
+  {
+    char buf[512] = {0};
+    u32 len = values.value_to_string(&types, result, buf, 512);
+    printf("%.*s\n", cast<int>(len), buf);
+  }
 
   printf("ok\n");
 

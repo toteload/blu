@@ -78,6 +78,20 @@ void Arena::deinit() {
   memset(this, 0, sizeof(*this));
 }
 
+void Arena::commit(usize commit_size_in_bytes) {
+  u32 page_size = ttld::os::page_size();
+  usize rounded_commit_size = round_up_to_power_of_two<usize>(commit_size_in_bytes, page_size);
+  usize current_commit_size = commit_size();
+
+  if (rounded_commit_size <= current_commit_size) {
+    return;
+  }
+
+  ttld::os::mem_commit(base, rounded_commit_size);
+
+  commit_end = ptr_offset(base, rounded_commit_size);
+}
+
 void *Arena::raw_alloc(usize byte_size, u32 align) {
   void *aligned = ptr_forward_align(at, align);
   void *at_after_alloc = ptr_offset(aligned, byte_size);
@@ -143,4 +157,20 @@ Allocator Arena::as_allocator() {
     arena_alloc_fn,
     this,
   };
+}
+
+i64 parse_i64(Str s) {
+  i64 sign = s[0] == '-' ? -1 : 1;
+
+  if (s[0] == '-') {
+    s = s.sub(1, s.len());
+  }
+
+  i64 acc = 0;
+  for (u32 i = 0; i < s.len(); i++) {
+    acc *= 10;
+    acc += s[i] - '0';
+  }
+
+  return sign * acc;
 }

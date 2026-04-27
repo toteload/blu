@@ -52,7 +52,7 @@ template<typename T>
 u32 ArenaItemPool<T>::reserve_index() {
   if (freelist == nullptr) {
     usize old_commit_size = arena.commit_size();
-    usize commit_size = min<usize>(1, arena.commit_size() * 2);
+    usize commit_size = max<usize>(1, arena.commit_size() * 2);
     arena.commit(commit_size);
 
     Item *item = cast<Item*>(ptr_forward_align(ptr_offset(arena.base, old_commit_size), Align_of(T)));
@@ -71,7 +71,7 @@ u32 ArenaItemPool<T>::reserve_index() {
   Item *item = freelist;
   freelist = freelist->next;
 
-  return cast<u32>(ptr_diff(arena.base, item) / sizeof(T));
+  return cast<u32>(ptr_diff(item, arena.base) / sizeof(T));
 }
 
 template<typename T>
