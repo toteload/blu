@@ -83,7 +83,7 @@ int main(i32 arg_count, char const *const *args) {
   envs.init(stdlib_alloc, stdlib_alloc);
 
   Interpreter interpreter;
-  interpreter.init(&strings, &types, &values, &envs, &work_arena);
+  interpreter.init(&strings, &types, &values, &envs, &work_arena, &messages);
 
   ValueIndex result;
   ok = interpreter.run(&source, &result);

@@ -5,13 +5,15 @@ void Interpreter::init(
   TypeInterner *types,
   ValueStore *values,
   EnvManager *envs,
-  Arena *work_arena
+  Arena *work_arena,
+  Messages *messages
 ) {
   this->strings    = strings;
   this->types      = types;
   this->values     = values;
   this->envs       = envs;
   this->work_arena = work_arena;
+  this->messages = messages;
 
   common.nil = values->add({
     .kind = Val_type,
@@ -85,7 +87,12 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
     ValueIndex decl_value;
     Try(eval_expr(env, decl.value, &decl_value));
 
-    // TODO ensure that the type of the value is coercible to the declared type.
+    {
+      Value *v = values->get(decl_value);
+
+      // TODO: Proper compiler message output.
+      Assert(types->is_coercible_to(v->type, decl_type));
+    }
 
     auto str = source->get_token_str(decl.name);
     auto key = strings->add(str);
@@ -155,20 +162,55 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
       .data = {.node_index = node_index},
     });
   } break;
+  case Ast_identifier: {
+    Try(check_lookup_identifier(env, node_index, result));
+  } break;
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
 
     ValueIndex cond;
     Try(eval_expr(env, if_else.cond, &cond));
+    Try(check_is_of_type(cond, types->type.bool_, if_else.cond));
 
-    // TODO ensure cond is of type bool
-
-
+    auto v = values->get(cond);
+    if (v->kind == Val_true) {
+      Try(eval_expr(env, if_else.then, result));
+    } else if (if_else.otherwise.is_some()) {
+      Try(eval_expr(env, if_else.otherwise.as_index(), result));
+    } else {
+      *result = common.nil;
+    }
   } break;
   default:
     Todo();
     break;
   }
+
+  return true;
+}
+
+b32 Interpreter::check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeIndex location) {
+  auto v = values->get(e);
+  if (v->type != expected_type) {
+    // TODO: Write nice message.
+    return false;
+  }
+
+  return true;
+}
+
+b32 Interpreter::check_lookup_identifier(Env *env, NodeIndex identifier, ValueIndex *value) {
+  auto token_index = source->nodes->data(identifier).identifier.token_index;
+  auto str = source->get_token_str(token_index);
+  auto key = strings->add(str);
+  auto val = env->lookup(key);
+
+  if (!val.is_some()) {
+    // TODO: Write nice message.
+    return false;
+  }
+
+  *value = val.as_index();
 
   return true;
 }

@@ -6,6 +6,7 @@ struct Interpreter {
   ValueStore *values;
   EnvManager *envs;
   Arena *work_arena;
+  Messages *messages;
 
   Source *source;
 
@@ -18,7 +19,8 @@ struct Interpreter {
     TypeInterner *types,
     ValueStore *values,
     EnvManager *envs,
-    Arena *work_arena
+    Arena *work_arena,
+    Messages *messages
   );
   void deinit();
 
@@ -32,4 +34,7 @@ struct Interpreter {
 
   b32 call_function(Env *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result);
   b32 eval_expr(Env *env, NodeIndex node_index, ValueIndex *result);
+
+  b32 check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeIndex location);
+  b32 check_lookup_identifier(Env *env, NodeIndex identifier, ValueIndex *value);
 };
