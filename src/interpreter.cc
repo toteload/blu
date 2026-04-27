@@ -78,25 +78,7 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   auto root = nodes->data(root_idx);
   for (u32 i = 0; i < root.root.items.len(); i++) {
     auto item_idx = root.root.items[i];
-
-    auto decl = nodes->data(item_idx).declaration;
-
-    TypeIndex decl_type;
-    Try(intern_type(env, decl.type, &decl_type));
-
-    ValueIndex decl_value;
-    Try(eval_expr(env, decl.value, &decl_value));
-
-    {
-      Value *v = values->get(decl_value);
-
-      // TODO: Proper compiler message output.
-      Assert(types->is_coercible_to(v->type, decl_type));
-    }
-
-    auto str = source->get_token_str(decl.name);
-    auto key = strings->add(str);
-    env->insert(key, decl_value);
+    Try(add_declaration(env, item_idx));
   }
 
   auto main = values->get(_lookup(env, Str_make("main")).as_index());
@@ -117,6 +99,32 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   Assert(types->is_coercible_to(main->type, main_function_type));
 
   Try(call_function(env, main, {}, result));
+
+  return true;
+}
+
+b32 Interpreter::add_declaration(Env *env, NodeIndex declaration) {
+  Assert(source->nodes->kind(declaration) == Ast_declaration);
+
+  auto decl = source->nodes->data(declaration).declaration;
+
+  TypeIndex decl_type;
+  Try(intern_type(env, decl.type, &decl_type));
+
+  ValueIndex decl_value;
+  Try(eval_expr(env, decl.value, &decl_value));
+
+  {
+    Value *v = values->get(decl_value);
+
+    // TODO: Proper compiler message output.
+    Assert(types->is_coercible_to(v->type, decl_type));
+  }
+
+  auto str = source->get_token_str(decl.name);
+  auto key = strings->add(str);
+
+  env->insert(key, decl_value);
 
   return true;
 }
@@ -181,11 +189,55 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
       *result = common.nil;
     }
   } break;
+  case Ast_declaration: {
+    Try(add_declaration(env, node_index));
+  } break;
+  case Ast_binary_op: {
+    auto binop = source->nodes->data(node_index).binary_op;
+    auto op = binop.kind;
+
+    ValueIndex lhs;
+    Try(eval_expr(env, binop.lhs, &lhs));
+
+    ValueIndex rhs;
+    Try(eval_expr(env, binop.rhs, &rhs));
+
+    Try(eval_binary_op(op, lhs, rhs, node_index, result));
+  } break;
   default:
     Todo();
     break;
   }
 
+  return true;
+}
+
+b32 Interpreter::eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result) {
+  switch (op) {
+  case Mul:
+  case Div:
+  case Add:
+  case Sub: {
+    auto left = values->get(lhs);
+    auto right = values->get(rhs);
+
+    Assert(left->type.is_integer_or_literal_int() && right->type.is_integer_or_literal_int());
+
+    i64 res;
+    switch (op) {
+    case Mul: res = left->data.int64 * right->data.int64; break;
+    case Div: res = left->data.int64 / right->data.int64; break;
+    case Add: res = left->data.int64 + right->data.int64; break;
+    case Sub: res = left->data.int64 - right->data.int64; break;
+    }
+    
+    *result = values->add({
+      .kind = Val_int,
+      .type = 
+    });
+  } break;
+  default: Todo(); break;
+  }
   return true;
 }
 

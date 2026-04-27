@@ -1,0 +1,5 @@
+main: (): i32 = || {
+  defer #print(" world!\n")
+  #print("Hello")
+  0
+}

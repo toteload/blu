@@ -37,4 +37,10 @@ struct Interpreter {
 
   b32 check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeIndex location);
   b32 check_lookup_identifier(Env *env, NodeIndex identifier, ValueIndex *value);
+
+  b32 eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result);
+
+  StrKey intern_identifier(TokenIndex identifier);
+
+  b32 add_declaration(Env *env, NodeIndex declaration);
 };

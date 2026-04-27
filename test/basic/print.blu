@@ -1,0 +1,4 @@
+main: (): i32 = || {
+  #print("hello :)\n")
+  0
+}
