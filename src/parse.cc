@@ -347,7 +347,7 @@ b32 Parser::parse_function(NodeIndex *out) {
   AstFunction function;
   function.param_names.init();
 
-  Try(expect_token(Tok_paren_open));
+  Try(expect_token(Tok_bar));
 
   while (!is_token_index_end(at)) {
     TokenKind tok;
@@ -357,7 +357,7 @@ b32 Parser::parse_function(NodeIndex *out) {
       next(&tok);
     }
 
-    if (tok == Tok_paren_close) {
+    if (tok == Tok_bar) {
       break;
     }
 
@@ -365,7 +365,7 @@ b32 Parser::parse_function(NodeIndex *out) {
     Try(parse_identifier(param));
   }
 
-  Try(expect_token(Tok_paren_close));
+  Try(expect_token(Tok_bar));
 
   Try(parse_block(&function.body));
 
@@ -520,14 +520,15 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
   NodeIndex base;
   switch (tok) {
-    // clang-format off
+  // clang-format off
   case Tok_keyword_while:    Try(parse_while(&base));       break;
   case Tok_keyword_continue: Try(parse_continue(&base));    break;
   case Tok_keyword_break:    Try(parse_break(&base));       break;
   case Tok_keyword_return:   Try(parse_return(&base));      break;
   case Tok_keyword_if:       Try(parse_if_else(&base));     break;
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
-    // clang-format on
+  case Tok_bar:              Try(parse_function(&base));    break;
+  // clang-format on
 
   case Tok_brace_open: {
     Try(parse_expression(&base));
@@ -540,9 +541,6 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
     switch (tok) {
     case Tok_brace_open:
       Try(parse_literal_sequence(&base));
-      break;
-    case Tok_paren_open:
-      Try(parse_function(&base));
       break;
     default:
       return false;
