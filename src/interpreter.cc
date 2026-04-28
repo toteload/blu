@@ -221,7 +221,10 @@ b32 Interpreter::eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs,
     auto left = values->get(lhs);
     auto right = values->get(rhs);
 
-    Assert(left->type.is_integer_or_literal_int() && right->type.is_integer_or_literal_int());
+    auto left_type = types->get(left->type);
+    auto right_type = types->get(right->type);
+
+    Assert(left_type->is_integer_or_literal_int() && right_type->is_integer_or_literal_int());
 
     i64 res;
     switch (op) {
@@ -229,11 +232,22 @@ b32 Interpreter::eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs,
     case Div: res = left->data.int64 / right->data.int64; break;
     case Add: res = left->data.int64 + right->data.int64; break;
     case Sub: res = left->data.int64 - right->data.int64; break;
+    default: Unreachable(); break;
+    }
+
+    TypeIndex result_type;
+    if (types->is_coercible_to(left->type, right->type)) {
+	    result_type = right->type;
+    } else if (types->is_coercible_to(right->type, left->type)) {
+	    result_type = left->type;
+    } else {
+	    Unreachable();
     }
     
     *result = values->add({
       .kind = Val_int,
-      .type = 
+      .type = result_type,
+      .data = { .int64 = res, },
     });
   } break;
   default: Todo(); break;

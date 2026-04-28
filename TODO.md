@@ -11,7 +11,7 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\main.blu`
 - [x] `test\basic\if_else.blu`
   - [ ] Properly cast the literal int to i32 which is the return type of main.
-- [ ] `test\basic\arithmetic.blu`
+- [x] `test\basic\arithmetic.blu`
 - [ ] `test\basic\slice.blu`
   - [ ] Also includes array type and string literal.
 - [ ] `test\basic\print.blu`

@@ -31,30 +31,30 @@ void mem_release(void *p, usize size) {
 #endif
 
 #ifdef __APPLE__
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-
-static u32 macos_page_size = 0;
-
-u32 page_size() {
-  if (macos_page_size == 0) {
-    macos_page_size = getpagesize();
-  }
-
-  return macos_page_size;
-}
-
-void *mem_reserve(usize size) {
-  return mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
-}
-
-b32 mem_commit(void *p, usize size) {
-  return 0 != mprotect(p, size, PROT_READ | PROT_WRITE);
-}
-
-void mem_release(void *p, usize size) {
-  munmap(p, size);
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
+static u32 macos_page_size = 0;
+
+u32 page_size() {
+  if (macos_page_size == 0) {
+    macos_page_size = getpagesize();
+  }
+
+  return macos_page_size;
+}
+
+void *mem_reserve(usize size) {
+  return mmap(nullptr, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+}
+
+b32 mem_commit(void *p, usize size) {
+  return 0 != mprotect(p, size, PROT_READ | PROT_WRITE);
+}
+
+void mem_release(void *p, usize size) {
+  munmap(p, size);
 }
 #endif
 }
@@ -126,6 +126,9 @@ Str Arena::push_format_string(char const *format, ...) {
   va_list vl;
   va_start(vl, format);
   i32 len = vsnprintf(nullptr, 0, format, vl);
+  va_end(vl);
+
+  va_start(vl, format);
   char *s = alloc<char>(len+1);
   vsnprintf(s, len+1, format, vl);
   // vsnprint always writes a null-terminator, but I don't want a null-terminator.
