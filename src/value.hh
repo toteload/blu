@@ -13,6 +13,7 @@ enum ValueKind : u8 {
 
   Val_int,
   Val_function,
+  Value_sequence,
 };
 
 struct Value {
@@ -23,11 +24,16 @@ struct Value {
     TypeIndex type;
     NodeIndex node_index;
     i64 int64;
+
+    struct {
+	    Slice<Value> items;
+    } sequence;
   } data;
 };
 
 struct ValueStore {
   ArenaItemPool<Value> values;
+  Allocator value_blocks; todo
 
   void init() { values.init(MiB(64)); }
 

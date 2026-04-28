@@ -9,7 +9,7 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  Str filename = Str::from_cstr(args[1]);
+  Str filename    = Str::from_cstr(args[1]);
   Str source_text = read_file(filename);
 
   Arena arena;
@@ -52,7 +52,7 @@ int main(i32 arg_count, char const *const *args) {
     work_arena.restore(snapshot);
   }
 
-  source.tokens   = &tokens;
+  source.tokens = &tokens;
 
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
@@ -74,8 +74,8 @@ int main(i32 arg_count, char const *const *args) {
   for (u32 i = 0; i < nodes.kinds.len(); i++) {
     printf("%s\n", ast_kind_string(nodes.kinds[i]));
   }
-  
-  source.nodes    = &nodes;
+
+  source.nodes = &nodes;
 
   ValueStore values;
   values.init();

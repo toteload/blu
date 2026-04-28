@@ -83,7 +83,7 @@ struct AstTypeSlice {
 };
 
 struct AstTypeArray {
-	NodeIndex size;
+  NodeIndex size;
   NodeIndex base;
 };
 
@@ -235,30 +235,12 @@ struct AstNodes {
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",
-  "block",
-  "type-slice",
-  "type-array",
-  "type-function",
-  "declaration",
-  "assign",
-  "literal-sequence",
-  "literal-int",
-  "literal-string",
-  "identifier",
-  "field-access",
-  "call",
-  "index",
-  "cast",
-  "unary-op",
-  "binary-op",
-  "function",
-  "if-else",
-  "while",
-  "break",
-  "continue",
-  "return",
-  "illegal",
+  "root",          "block",          "type-slice", "type-array",
+  "type-function", "declaration",    "assign",     "literal-sequence",
+  "literal-int",   "literal-string", "identifier", "field-access",
+  "call",          "index",          "cast",       "unary-op",
+  "binary-op",     "function",       "if-else",    "while",
+  "break",         "continue",       "return",     "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

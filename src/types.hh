@@ -11,6 +11,7 @@ enum TypeKind : u8 {
   Type_nil,
   Type_never,
   Type_slice,
+  Type_array,
   Type_distinct,
   Type_sequence,
   Type_type,
@@ -37,6 +38,10 @@ struct Type {
     struct {
       TypeIndex base_type;
     } slice;
+    struct {
+      TypeIndex base_type;
+      u64 size;
+    } array;
     struct {
       u32 param_count;
     } literal_function;
@@ -65,6 +70,7 @@ struct Type {
     case Type_nil:
     case Type_never:
     case Type_slice:
+    case Type_array:
     case Type_distinct:
     case Type_type:
     case Type_boolean:
@@ -74,6 +80,9 @@ struct Type {
     } break;
     case Type_sequence:
       return sizeof(*this) + sequence.count * sizeof(TypeIndex);
+    default:
+      Unreachable();
+      return 0;
     }
   }
 
@@ -102,10 +111,13 @@ struct Type {
 };
 
 ttld_inline Type *alloc_type_function(Arena *arena, u32 param_count) {
-  return Cast(
-    Type *,
+  return cast<Type *>(
     arena->raw_alloc(sizeof(Type) + sizeof(TypeIndex) * param_count, Align_of(Type))
   );
+}
+
+ttld_inline Type *alloc_type_sequence(Arena *arena, u32 count) {
+  return cast<Type *>(arena->raw_alloc(sizeof(Type) + sizeof(TypeIndex) * count, Align_of(Type)));
 }
 
 b32 type_eq(void *context, Type *a, Type *b);

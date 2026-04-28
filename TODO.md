@@ -10,11 +10,14 @@ You will still have to write the logic for what the language does, it will "just
 
 - [x] `test\basic\main.blu`
 - [x] `test\basic\if_else.blu`
-  - [ ] Properly cast the literal int to i32 which is the return type of main.
-- [x] `test\basic\arithmetic.blu`
+- [x] `test\basic\arithmetic.blu` 27-04-2026
 - [ ] `test\basic\slice.blu`
-  - [ ] Also includes array type and string literal.
+  - Includes array type and string literal.
+  - Includes coercion of sequence literals to typed slices.
+  - Includes indexing of slices.
+  - Includes coercion of array to slice.
 - [ ] `test\basic\print.blu`
+  - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 
 ### Errors
@@ -24,6 +27,10 @@ You will still have to write the logic for what the language does, it will "just
 - [ ] Add conditional `defer` based on whether the function returned with an error or not.
 
 ### Metaprogramming
+
+### Misc
+- [ ] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
+- [ ] Verify program before interpreting it. At the moment it encounters "compile" errors during execution.
 
 ---
 

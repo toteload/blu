@@ -4,9 +4,9 @@ static constexpr u32 Op_count = BinaryOpKind_max + AssignKind_max;
 
 struct Parser {
   Messages *messages = nullptr;
-  Tokens *tokens           = nullptr;
-  AstNodes *nodes          = nullptr;
-  TokenIndex at            = {0};
+  Tokens *tokens     = nullptr;
+  AstNodes *nodes    = nullptr;
+  TokenIndex at      = {0};
 
   // -
 
@@ -52,7 +52,7 @@ struct Parser {
     if (tok != expected_kind) {
       messages->error(
         "{span} Unexpected token encountered. Expected {tokenkind}, but got {tokenkind}.",
-tokens->span(cur),
+        tokens->span(cur),
         expected_kind,
         tok
       );
@@ -178,33 +178,32 @@ b32 Parser::parse_type(NodeIndex *out) {
     Try(peek(&tok));
 
     if (tok == Tok_bracket_close) {
-	    next();
+      next();
 
-	    AstTypeSlice type_slice;
-	    Try(parse_type(&type_slice.base));
+      AstTypeSlice type_slice;
+      Try(parse_type(&type_slice.base));
 
-	    nodes->set(
-	      node_index,
-	      {
-		Ast_type_slice,
-		{start, at},
-		{.type_slice = type_slice},
-	      }
-	    );
+      nodes->set(
+        node_index,
+        {
+          Ast_type_slice,
+          {start, at},
+          {.type_slice = type_slice},
+        }
+      );
     } else if (tok == Tok_literal_int) {
-	AstTypeArray type_array;
-	    Try(parse_literal_int(&type_array.size))
-	    Try(expect_token(Tok_bracket_close));
-	    Try(parse_type(&type_array.base));
+      AstTypeArray type_array;
+      Try(parse_literal_int(&type_array.size)) Try(expect_token(Tok_bracket_close));
+      Try(parse_type(&type_array.base));
 
-	    nodes->set(
-	      node_index,
-	      {
-		Ast_type_array,
-		{start, at},
-		{.type_array = type_array},
-	      }
-	    );
+      nodes->set(
+        node_index,
+        {
+          Ast_type_array,
+          {start, at},
+          {.type_array = type_array},
+        }
+      );
     }
   } break;
   case Tok_paren_open: {
@@ -664,8 +663,8 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
       Try(parse_expression(&index_at));
 
       AstIndex index = {
-	      .indexable = base,
-	      .index_at = index_at,
+        .indexable = base,
+        .index_at  = index_at,
       };
 
       Try(expect_token(Tok_bracket_close));

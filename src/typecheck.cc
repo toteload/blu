@@ -90,15 +90,18 @@ b32 TypeChecker::determine_unary_op_type(UnaryOpKind op, TypeIndex value, TypeIn
 
   switch (op) {
   case Negate: {
-    if (value == types->integer_constant ||
-        (value_type->kind == Type_integer && value_type->integer.signedness == Signed)) {
+    if (
+      value == types->integer_constant ||
+      (value_type->kind == Type_integer && value_type->integer.signedness == Signed)
+    ) {
       *out = value;
       return true;
     }
   } break;
   case Not: {
-    if (value == types->integer_constant || value_type->kind == Type_integer ||
-        value == types->bool_) {
+    if (
+      value == types->integer_constant || value_type->kind == Type_integer || value == types->bool_
+    ) {
       *out = value;
       return true;
     }

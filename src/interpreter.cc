@@ -13,7 +13,7 @@ void Interpreter::init(
   this->values     = values;
   this->envs       = envs;
   this->work_arena = work_arena;
-  this->messages = messages;
+  this->messages   = messages;
 
   common.nil = values->add({
     .kind = Val_type,
@@ -52,6 +52,28 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
     Assert(val->kind == Val_type);
     *result = val->data.type;
   } break;
+  case Ast_type_slice: {
+    auto slice = source->nodes->data(node_index).type_slice;
+    Type ty    = {
+      .kind = Type_slice,
+    };
+    Try(intern_type(env, slice.base, &ty.slice.base_type));
+    *result = types->add(&ty);
+  } break;
+  case Ast_type_array: {
+    auto array = source->nodes->data(node_index).type_array;
+    Type ty    = {
+      .kind = Type_array,
+    };
+    Try(intern_type(env, array.base, &ty.array.base_type));
+
+    ValueIndex size_result;
+    Try(eval_expr(env, array.size, &size_result));
+
+    Try(get_int_value(size_result, &ty.array.size));
+
+    *result = types->add(&ty);
+  } break;
   default:
     Todo();
     break;
@@ -87,10 +109,10 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   {
     Type *t = alloc_type_function(work_arena, 0);
     *t      = {
-           .kind     = Type_function,
-           .function = {
-             .return_type = types->type.i32_,
-             .param_count = 0,
+      .kind     = Type_function,
+      .function = {
+        .return_type = types->type.i32_,
+        .param_count = 0,
       },
     };
     main_function_type = types->add(t);
@@ -194,7 +216,7 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   } break;
   case Ast_binary_op: {
     auto binop = source->nodes->data(node_index).binary_op;
-    auto op = binop.kind;
+    auto op    = binop.kind;
 
     ValueIndex lhs;
     Try(eval_expr(env, binop.lhs, &lhs));
@@ -204,6 +226,27 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
 
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
   } break;
+  case Ast_literal_sequence: {
+    auto seq   = source->nodes->data(node_index).sequence;
+    auto count = seq.items.len();
+    auto ty    = alloc_type_sequence(work_arena, count);
+
+    *ty = {
+      .kind     = Type_sequence,
+      .sequence = {
+        .count = count,
+      },
+    };
+
+    for (u32 i = 0; i < count; i++) {
+	    ValueIndex res;
+	Try(eval_expr(env, seq.items[i], &res));
+    }
+
+    *result = values->add({
+
+		    });
+  } break;
   default:
     Todo();
     break;
@@ -212,46 +255,74 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   return true;
 }
 
-b32 Interpreter::eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result) {
+b32 Interpreter::eval_binary_op(
+  BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
+) {
   switch (op) {
   case Mul:
   case Div:
   case Add:
   case Sub: {
-    auto left = values->get(lhs);
+    auto left  = values->get(lhs);
     auto right = values->get(rhs);
 
-    auto left_type = types->get(left->type);
+    auto left_type  = types->get(left->type);
     auto right_type = types->get(right->type);
 
     Assert(left_type->is_integer_or_literal_int() && right_type->is_integer_or_literal_int());
 
     i64 res;
     switch (op) {
-    case Mul: res = left->data.int64 * right->data.int64; break;
-    case Div: res = left->data.int64 / right->data.int64; break;
-    case Add: res = left->data.int64 + right->data.int64; break;
-    case Sub: res = left->data.int64 - right->data.int64; break;
-    default: Unreachable(); break;
+    case Mul:
+      res = left->data.int64 * right->data.int64;
+      break;
+    case Div:
+      res = left->data.int64 / right->data.int64;
+      break;
+    case Add:
+      res = left->data.int64 + right->data.int64;
+      break;
+    case Sub:
+      res = left->data.int64 - right->data.int64;
+      break;
+    default:
+      Unreachable();
+      break;
     }
 
     TypeIndex result_type;
     if (types->is_coercible_to(left->type, right->type)) {
-	    result_type = right->type;
+      result_type = right->type;
     } else if (types->is_coercible_to(right->type, left->type)) {
-	    result_type = left->type;
+      result_type = left->type;
     } else {
-	    Unreachable();
+      Unreachable();
     }
-    
+
     *result = values->add({
       .kind = Val_int,
       .type = result_type,
-      .data = { .int64 = res, },
+      .data = {
+        .int64 = res,
+      },
     });
   } break;
-  default: Todo(); break;
+  default:
+    Todo();
+    break;
   }
+  return true;
+}
+
+b32 Interpreter::get_int_value(ValueIndex idx, u64 *i) {
+  Value *v = values->get(idx);
+  auto ty  = types->get(v->type);
+  if (!ty->is_integer_or_literal_int()) {
+    return false;
+  }
+
+  *i = v->data.int64;
+
   return true;
 }
 
@@ -267,9 +338,9 @@ b32 Interpreter::check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeInd
 
 b32 Interpreter::check_lookup_identifier(Env *env, NodeIndex identifier, ValueIndex *value) {
   auto token_index = source->nodes->data(identifier).identifier.token_index;
-  auto str = source->get_token_str(token_index);
-  auto key = strings->add(str);
-  auto val = env->lookup(key);
+  auto str         = source->get_token_str(token_index);
+  auto key         = strings->add(str);
+  auto val         = env->lookup(key);
 
   if (!val.is_some()) {
     // TODO: Write nice message.
