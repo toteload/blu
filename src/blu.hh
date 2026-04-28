@@ -96,6 +96,7 @@ union MessageArg {
   TokenKind token_kind;
   StrKey strkey;
   TypeIndex type;
+  Span<u32> span;
 };
 
 struct Message {
@@ -110,12 +111,15 @@ struct Messages {
   Vector<Message *> messages;
   StringInterner *strings;
   TypeInterner *types;
+  Str source;
 
-  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types) {
+  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types, Str source) {
     arena.init(MiB(16));
     messages.init(list_alloc);
+
     this->strings = strings;
     this->types   = types;
+    this->source  = source;
   }
 
   void deinit();

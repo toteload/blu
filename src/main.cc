@@ -10,7 +10,6 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   Str filename = Str::from_cstr(args[1]);
-
   Str source_text = read_file(filename);
 
   Arena arena;
@@ -25,8 +24,12 @@ int main(i32 arg_count, char const *const *args) {
   StringInterner strings;
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
 
+  Source source;
+  source.filename = filename;
+  source.source   = source_text;
+
   Messages messages;
-  messages.init(stdlib_alloc, &strings, &types);
+  messages.init(stdlib_alloc, &strings, &types, source_text);
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);
@@ -49,6 +52,8 @@ int main(i32 arg_count, char const *const *args) {
     work_arena.restore(snapshot);
   }
 
+  source.tokens   = &tokens;
+
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
   nodes.spans.init(stdlib_alloc);
@@ -69,11 +74,7 @@ int main(i32 arg_count, char const *const *args) {
   for (u32 i = 0; i < nodes.kinds.len(); i++) {
     printf("%s\n", ast_kind_string(nodes.kinds[i]));
   }
-
-  Source source;
-  source.filename = filename;
-  source.source   = source_text;
-  source.tokens   = &tokens;
+  
   source.nodes    = &nodes;
 
   ValueStore values;

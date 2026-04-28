@@ -3,15 +3,18 @@ enum AstKind : u8 {
   Ast_block,
 
   Ast_type_slice,
+  Ast_type_array,
   Ast_type_function,
 
   Ast_declaration,
   Ast_assign,
   Ast_literal_sequence,
   Ast_literal_int,
+  Ast_literal_string,
   Ast_identifier,
   Ast_field_access,
   Ast_call,
+  Ast_index,
   Ast_cast,
   Ast_unary_op,
   Ast_binary_op,
@@ -79,6 +82,11 @@ struct AstTypeSlice {
   NodeIndex base;
 };
 
+struct AstTypeArray {
+	NodeIndex size;
+  NodeIndex base;
+};
+
 struct AstDeclaration {
   TokenIndex name;
   NodeIndex type;
@@ -138,6 +146,11 @@ struct AstCall {
   SegmentList<NodeIndex> args;
 };
 
+struct AstIndex {
+  NodeIndex indexable;
+  NodeIndex index_at;
+};
+
 struct AstCast {
   NodeIndex destination_type;
   NodeIndex value;
@@ -162,13 +175,16 @@ union AstNodeData {
   AstBlock block;
   AstTypeFunction type_function;
   AstTypeSlice type_slice;
+  AstTypeArray type_array;
   AstDeclaration declaration;
   AstAssign assign;
   AstLiteralSequence literal_sequence;
   AstAtom literal_int;
+  AstAtom literal_string;
   AstAtom identifier;
   AstFieldAccess access;
   AstCall call;
+  AstIndex index;
   AstCast cast;
   AstUnaryOp unary_op;
   AstBinaryOp binary_op;
@@ -222,14 +238,17 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",
   "block",
   "type-slice",
+  "type-array",
   "type-function",
   "declaration",
   "assign",
   "literal-sequence",
   "literal-int",
+  "literal-string",
   "identifier",
   "field-access",
   "call",
+  "index",
   "cast",
   "unary-op",
   "binary-op",

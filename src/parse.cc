@@ -15,6 +15,7 @@ struct Parser {
   b32 parse_type(NodeIndex *out);
   b32 parse_declaration(NodeIndex *out);
   b32 parse_literal_int(NodeIndex *out);
+  b32 parse_literal_string(NodeIndex *out);
   b32 parse_literal_sequence(NodeIndex *out);
   b32 parse_function(NodeIndex *out);
   b32 parse_while(NodeIndex *out);
@@ -43,12 +44,15 @@ struct Parser {
   }
 
   b32 expect_token(TokenKind expected_kind, TokenKind *out = nullptr) {
+    auto cur = at;
+
     TokenKind tok;
     Try(next(&tok));
 
     if (tok != expected_kind) {
       messages->error(
-        "Unexpected token encountered. Expected {tokenkind}, but got {tokenkind}.",
+        "{span} Unexpected token encountered. Expected {tokenkind}, but got {tokenkind}.",
+tokens->span(cur),
         expected_kind,
         tok
       );
@@ -170,19 +174,38 @@ b32 Parser::parse_type(NodeIndex *out) {
   switch (tok) {
   case Tok_bracket_open: {
     next();
-    Try(expect_token(Tok_bracket_close));
 
-    AstTypeSlice type_slice;
-    Try(parse_type(&type_slice.base));
+    Try(peek(&tok));
 
-    nodes->set(
-      node_index,
-      {
-        Ast_type_slice,
-        {start, at},
-        {.type_slice = type_slice},
-      }
-    );
+    if (tok == Tok_bracket_close) {
+	    next();
+
+	    AstTypeSlice type_slice;
+	    Try(parse_type(&type_slice.base));
+
+	    nodes->set(
+	      node_index,
+	      {
+		Ast_type_slice,
+		{start, at},
+		{.type_slice = type_slice},
+	      }
+	    );
+    } else if (tok == Tok_literal_int) {
+	AstTypeArray type_array;
+	    Try(parse_literal_int(&type_array.size))
+	    Try(expect_token(Tok_bracket_close));
+	    Try(parse_type(&type_array.base));
+
+	    nodes->set(
+	      node_index,
+	      {
+		Ast_type_array,
+		{start, at},
+		{.type_array = type_array},
+	      }
+	    );
+    }
   } break;
   case Tok_paren_open: {
     next();
@@ -299,6 +322,30 @@ b32 Parser::parse_literal_int(NodeIndex *out) {
   return true;
 }
 
+// NOTE: this function and the parse_literal_int function are basically the same.
+b32 Parser::parse_literal_string(NodeIndex *out) {
+  auto node_index = nodes->alloc();
+  auto start      = at;
+
+  AstAtom literal_string;
+  literal_string.token_index = at;
+
+  Try(expect_token(Tok_literal_string));
+
+  nodes->set(
+    node_index,
+    {
+      Ast_literal_string,
+      {start, at},
+      {.literal_string = literal_string},
+    }
+  );
+
+  *out = node_index;
+
+  return true;
+}
+
 b32 Parser::parse_literal_sequence(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
@@ -313,7 +360,8 @@ b32 Parser::parse_literal_sequence(NodeIndex *out) {
     Try(peek(&tok));
 
     if (tok == Tok_comma) {
-      next(&tok);
+      next();
+      Try(peek(&tok));
     }
 
     if (tok == Tok_brace_close) {
@@ -527,14 +575,18 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_keyword_return:   Try(parse_return(&base));      break;
   case Tok_keyword_if:       Try(parse_if_else(&base));     break;
   case Tok_literal_int:      Try(parse_literal_int(&base)); break;
+  case Tok_literal_string:   Try(parse_literal_string(&base)); break;
   case Tok_bar:              Try(parse_function(&base));    break;
     // clang-format on
 
+#if 0
+  // I don't understand why this case is here...
   case Tok_brace_open: {
     next();
     Try(parse_expression(&base));
     Try(expect_token(Tok_brace_close));
   } break;
+#endif
 
   case Tok_dot: {
     next();
@@ -601,6 +653,36 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   while (!is_token_index_end(at)) {
     TokenKind tok;
     peek(&tok);
+
+    if (tok == Tok_bracket_open) {
+      auto node_index = nodes->alloc();
+      auto start      = at;
+
+      next();
+
+      NodeIndex index_at;
+      Try(parse_expression(&index_at));
+
+      AstIndex index = {
+	      .indexable = base,
+	      .index_at = index_at,
+      };
+
+      Try(expect_token(Tok_bracket_close));
+
+      nodes->set(
+        node_index,
+        {
+          Ast_index,
+          {start, at},
+          {.index = index},
+        }
+      );
+
+      base = node_index;
+
+      continue;
+    }
 
     if (tok == Tok_paren_open) {
       auto node_index = nodes->alloc();

@@ -46,6 +46,24 @@ b32 parse_arg_from(Str *format, Str *arg) {
   return false;
 }
 
+SourceLocation find_source_location(Str source, u32 offset) {
+  u32 line = 1;
+  u32 col = 1;
+
+  Assert(offset < source.len());
+
+  for (u32 i = 0; i < offset; i++) {
+    if (source[i] == '\n') {
+	    line++;
+	    col = 1;
+    } else {
+	    col++;
+    }
+  }
+
+  return { line, col };
+}
+
 void Messages::print_message(Message *msg) {
   switch (msg->severity) {
   case Error:
@@ -89,6 +107,10 @@ void Messages::print_message(Message *msg) {
       StrKey key = msg->args[arg_idx].strkey;
       Str str    = strings->get(key);
       printf("%.*s", cast<int>(str.len()), str.str);
+    } else if (str_eq(arg, Str_make("{span}"))) {
+      Span<u32> span = msg->args[arg_idx].span;
+      auto loc = find_source_location(source, span.start);
+      printf("%d:%d", loc.line, loc.col);
     } else {
       printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);
     }
