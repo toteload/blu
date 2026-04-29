@@ -10,7 +10,13 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
 
   switch (type->kind) {
   case Type_integer:
-    return snprintf(buf, buf_size, "%s%d", type->integer.signedness == Signed ? "i" : "u", type->integer.bitwidth);
+    return snprintf(
+      buf,
+      buf_size,
+      "%s%d",
+      type->integer.signedness == Signed ? "i" : "u",
+      type->integer.bitwidth
+    );
   case Type_literal_int:
     return snprintf(buf, buf_size, "literal-int");
   case Type_boolean:
@@ -22,32 +28,41 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
   case Type_never:
     return cast<u32>(snprintf(buf, buf_size, "never"));
   case Type_slice: {
-    u32 offset = 0;
-    offset += cast<u32>(snprintf(buf, buf_size, "[]"));
-    offset += type_to_string(types, type->slice.base_type, buf + offset, buf_size - offset);
+    u32 offset  = 0;
+    offset     += cast<u32>(snprintf(buf, buf_size, "[]"));
+    offset     += type_to_string(types, type->slice.base_type, buf + offset, buf_size - offset);
     return offset;
   }
   case Type_distinct: {
-    u32 offset = 0;
-    offset += cast<u32>(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
-    offset += type_to_string(types, type->distinct.base_type, buf + offset, buf_size - offset);
+    u32 offset  = 0;
+    offset     += cast<u32>(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
+    offset     += type_to_string(types, type->distinct.base_type, buf + offset, buf_size - offset);
     return offset;
   }
   case Type_function: {
-    u32 offset = 0;
-    offset += cast<u32>(snprintf(buf, buf_size, "("));
+    u32 offset  = 0;
+    offset     += cast<u32>(snprintf(buf, buf_size, "("));
     if (type->function.param_count > 0) {
-      offset += type_to_string(types, type->function.param_types[0], buf + offset, buf_size - offset);
+      offset +=
+        type_to_string(types, type->function.param_types[0], buf + offset, buf_size - offset);
     }
     for (u32 i = 1; i < type->function.param_count; i += 1) {
-      offset += type_to_string(types, type->function.param_types[i], buf + offset, buf_size - offset);
+      offset +=
+        type_to_string(types, type->function.param_types[i], buf + offset, buf_size - offset);
     }
     offset += cast<u32>(snprintf(buf + offset, buf_size - offset, "): "));
     offset += type_to_string(types, type->function.return_type, buf + offset, buf_size - offset);
     return offset;
   }
+  case Type_literal_function: {
+    u32 offset = 0;
+    offset += cast<u32>(snprintf(buf, buf_size, "|%d|: ", type->literal_function.param_count));
+    offset += type_to_string(types, type->literal_function.return_type, buf + offset, buf_size - offset);
+    return offset;
   }
-  Todo();
+  }
+
+  Unreachable();
   return 0;
 }
 
@@ -101,6 +116,13 @@ b32 type_eq(void *context, Type *a, Type *b) {
   case Type_integer:
     return a->integer.signedness == b->integer.signedness &&
            a->integer.bitwidth == b->integer.bitwidth;
+  case Type_literal_function: {
+    return a->literal_function.param_count == b->literal_function.param_count &&
+           a->literal_function.return_type == b->literal_function.return_type;
+  }
+  default:
+    Unreachable();
+    return false;
   }
 }
 
@@ -240,19 +262,14 @@ bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
   auto a = get(src);
   auto b = get(dst);
 
-  if (a->kind == Type_literal_int) {
-    if (b->kind == Type_integer) {
-      // TODO: make sure value fits in destination integer type
-      return true;
-    }
+  if (a->kind == Type_literal_int && b->kind == Type_integer) {
+    // TODO: make sure value fits in destination integer type
+    return true;
   }
 
-  if (a->kind == Type_literal_function) {
-    if (b->kind == Type_function) {
-      // - Make sure the number of parameters match.
-      // The return type is checked at runtime.
-
-      return a->literal_function.param_count == b->function.param_count;
+  if (a->kind == Type_literal_function && b->kind == Type_function) {
+    if (a->literal_function.param_count == b->function.param_count) {
+      return is_coercible_to(a->literal_function.return_type, b->function.return_type);
     }
   }
 

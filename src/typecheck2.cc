@@ -91,6 +91,8 @@ b32 TypeChecker::typecheck() {
 
     Try(check_coercion(value_type, decl.value, declared_type, decl.type));
   }
+
+  return true;
 }
 
 b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result) {
@@ -159,8 +161,14 @@ b32 TypeChecker::check_expression(
     TypeIndex body_type;
     Try(check_expression(env, f.body, nullptr, &body_type));
 
-    auto function_type = types->get(hint->type);
-    Try(check_coercion(body_type, f.body, function_type->function.return_type, hint->location));
+    Type function_type = {
+      .kind             = Type_literal_function,
+      .literal_function = {
+        .return_type = body_type,
+        .param_count = cast<u32>(f.param_names.len()),
+      },
+    };
+    *result = types->add(&function_type);
   } break;
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
@@ -188,21 +196,13 @@ b32 TypeChecker::check_expression(
 }
 
 b32 TypeChecker::check_coercion(
-  TypeIndex typeidx_src, NodeIndex node_src, TypeIndex typeidx_dst, NodeIndex node_dst
+  TypeIndex type_src, NodeIndex node_src, TypeIndex type_dst, NodeIndex node_dst
 ) {
-  if (typeidx_src == typeidx_dst) {
+  if (types->is_coercible_to(type_src, type_dst)) {
     return true;
   }
 
-  auto type_src = types->get(typeidx_src);
-  auto type_dst = types->get(typeidx_dst);
-
-  if (type_src->kind == Type_literal_int && type_dst->kind == Type_integer) {
-    // TODO make sure that the value of the literal fits inside the integer.
-    return true;
-  }
-
-  messages->error(node_dst, "Cannot coerce type {type} to {type}.", typeidx_src, typeidx_dst);
+  messages->error(node_dst, "Cannot coerce type {type} to {type}.", type_src, type_dst);
 
   return false;
 }

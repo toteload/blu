@@ -43,6 +43,7 @@ struct Type {
       u64 size;
     } array;
     struct {
+      TypeIndex return_type;
       u32 param_count;
     } literal_function;
     struct {

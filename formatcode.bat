@@ -8,6 +8,7 @@ clang-format -i src\queue.hh
 clang-format -i src\ast.hh
 clang-format -i src\tokens.hh
 clang-format -i src\types.hh
+clang-format -i src\types.cc
 clang-format -i src\value.hh
 clang-format -i src\value.cc
 clang-format -i src\env.hh
@@ -16,7 +17,7 @@ clang-format -i src\tokenize.cc
 clang-format -i src\parse.cc
 clang-format -i src\main.cc
 clang-format -i src\string_interner.cc
-clang-format -i src\typecheck.cc
+clang-format -i src\typecheck2.cc
 clang-format -i src\interpreter.hh
 clang-format -i src\interpreter.cc
 clang-format -i src\messages.cc
