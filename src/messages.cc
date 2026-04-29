@@ -73,7 +73,7 @@ void Messages::print_message(Message *msg) {
     Todo();
   }
 
-  Str format  = msg->format;
+  Str format  = Str::from_ptr_and_len(msg->format, msg->format_len);
   u32 arg_idx = 0;
   while (true) {
     usize offset = next_arg_offset(format);
@@ -127,26 +127,74 @@ void Messages::print_messages() {
   }
 }
 
-void Messages::error(char const *format, ...) {
-  va_list varargs;
-  va_start(varargs, format);
+void Messages::_error(MessageLocation location, char const *format, va_list varargs) {
+  u32 format_len = strlen(format);
+  usize count    = count_args(Str::from_ptr_and_len(format, format_len));
 
-  Message *msg = arena.alloc<Message>();
+  usize format_byte_size = format_len + 1;
+  // We add 1 to the count to ensure we have enough for alignment of the args.
+  usize byte_size = sizeof(Message) + format_byte_size + (count + 1) * sizeof(MessageArg);
 
-  msg->severity = Error;
+  Message *msg = cast<Message *>(arena.raw_alloc(byte_size, Align_of(Message)));
 
-  Str fmt     = Str::from_cstr(format);
-  msg->format = fmt;
+  char *fmt_buf    = cast<char *>(msg + 1);
+  MessageArg *args = cast<MessageArg *>(
+    ptr_forward_align(ptr_offset(fmt_buf, format_byte_size), Align_of(MessageArg))
+  );
 
-  usize count = count_args(fmt);
+  *msg = {
+    .severity   = Error,
+    .location   = location,
+    .format_len = format_len,
+    .format     = fmt_buf,
+    .args       = args,
+  };
 
-  MessageArg *args = arena.alloc<MessageArg>(count);
+  memcpy(fmt_buf, format, format_byte_size);
 
   for (usize i = 0; i < count; i++) {
     args[i] = va_arg(varargs, MessageArg);
   }
 
-  va_end(varargs);
-
   messages.push(msg);
+}
+
+void Messages::error(char const *format, ...) {
+  va_list varargs;
+  va_start(varargs, format);
+  _error(
+    {
+      .kind = MessageLocation_none,
+    },
+    format,
+    varargs
+  );
+  va_end(varargs);
+}
+
+void Messages::error(TokenIndex location, char const *format, ...) {
+  va_list varargs;
+  va_start(varargs, format);
+  _error(
+    {
+      .kind        = MessageLocation_token_index,
+      .token_index = location,
+    },
+    format,
+    varargs
+  );
+  va_end(varargs);
+}
+void Messages::error(NodeIndex location, char const *format, ...) {
+  va_list varargs;
+  va_start(varargs, format);
+  _error(
+    {
+      .kind       = MessageLocation_node_index,
+      .node_index = location,
+    },
+    format,
+    varargs
+  );
+  va_end(varargs);
 }

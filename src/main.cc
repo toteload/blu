@@ -98,6 +98,7 @@ int main(i32 arg_count, char const *const *args) {
   ok = typecheck(&typecheck_context, &source);
   if (!ok) {
     printf("Typecheck error\n");
+    messages.print_messages();
     return 1;
   }
 

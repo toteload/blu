@@ -146,9 +146,6 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 #define ForEachIndex(i, count) for (usize i = 0; i < (count); i += 1)
 
 // ---
-
-struct CStr {};
-
 struct Str {
   char const *str = nullptr;
   usize _len      = 0;
@@ -162,6 +159,8 @@ struct Str {
   usize len() { return _len; }
 
   static Str empty() { return {}; }
+
+  static Str from_ptr_and_len(char const *p, usize l) { return {p, l}; }
 
   static Str from_cstr(char const *s) {
     // We don't include the null terminator in the length

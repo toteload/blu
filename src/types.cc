@@ -35,14 +35,14 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
   }
   case Type_function: {
     u32 offset = 0;
-    offset += cast<u32>(snprintf(buf, buf_size, "fn("));
+    offset += cast<u32>(snprintf(buf, buf_size, "("));
     if (type->function.param_count > 0) {
       offset += type_to_string(types, type->function.param_types[0], buf + offset, buf_size - offset);
     }
     for (u32 i = 1; i < type->function.param_count; i += 1) {
       offset += type_to_string(types, type->function.param_types[i], buf + offset, buf_size - offset);
     }
-    offset += cast<u32>(snprintf(buf + offset, buf_size - offset, ") "));
+    offset += cast<u32>(snprintf(buf + offset, buf_size - offset, "): "));
     offset += type_to_string(types, type->function.return_type, buf + offset, buf_size - offset);
     return offset;
   }

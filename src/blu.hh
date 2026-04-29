@@ -97,14 +97,17 @@ b32 typecheck(TypeCheckContext *context, Source *source);
 
 // -[ Message ]-
 
-struct MessageSourceLocation {
-  enum Kind : u32 {
-    Location_none,
-    Location_token_index,
-  } kind;
+enum MessageLocationKind : u32 {
+  MessageLocation_none,
+  MessageLocation_token_index,
+  MessageLocation_node_index,
+};
 
+struct MessageLocation {
+  MessageLocationKind kind;
   union {
     TokenIndex token_index;
+    NodeIndex node_index;
   };
 };
 
@@ -122,9 +125,11 @@ union MessageArg {
 };
 
 struct Message {
+  MessageLocation location;
   MessageSeverity severity;
-  Str format;
-  MessageArg args[0];
+  u32 format_len;     // excluding null terminator
+  char const *format; // null terminated
+  MessageArg *args;
 };
 
 struct Messages {
@@ -149,9 +154,11 @@ struct Messages {
 
   void print_messages();
 
-  // It is assumed that format will be a constant string and thus does not need to be copied.
   void error(char const *format, ...);
   void error(TokenIndex location, char const *format, ...);
+  void error(NodeIndex location, char const *format, ...);
+
+  void _error(MessageLocation location, char const *format, va_list varargs);
 };
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
