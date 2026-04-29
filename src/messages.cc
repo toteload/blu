@@ -127,7 +127,6 @@ void Messages::print_messages() {
   }
 }
 
-// It is assumed that format will be a constant string and thus does not need to be copied.
 void Messages::error(char const *format, ...) {
   va_list varargs;
   va_start(varargs, format);

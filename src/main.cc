@@ -78,7 +78,7 @@ int main(i32 arg_count, char const *const *args) {
   source.nodes = &nodes;
 
   ValueStore values;
-  values.init();
+  values.init(stdlib_alloc);
 
   EnvManager envs;
   envs.init(stdlib_alloc, stdlib_alloc);
@@ -86,6 +86,22 @@ int main(i32 arg_count, char const *const *args) {
   Interpreter interpreter;
   interpreter.init(&strings, &types, &values, &envs, &work_arena, &messages);
 
+  TypeCheckContext typecheck_context = {
+    .messages   = &messages,
+    .envs       = &envs,
+    .types      = &types,
+    .strings    = &strings,
+    .values     = &values,
+    .work_arena = &work_arena,
+  };
+
+  ok = typecheck(&typecheck_context, &source);
+  if (!ok) {
+    printf("Typecheck error\n");
+    return 1;
+  }
+
+#if 0
   ValueIndex result;
   ok = interpreter.run(&source, &result);
   if (!ok) {
@@ -98,6 +114,7 @@ int main(i32 arg_count, char const *const *args) {
     u32 len       = values.value_to_string(&types, result, buf, 512);
     printf("%.*s\n", cast<int>(len), buf);
   }
+#endif
 
   printf("ok\n");
 

@@ -45,7 +45,5 @@ struct Interpreter {
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
 
-  StrKey intern_identifier(TokenIndex identifier);
-
   b32 add_declaration(Env *env, NodeIndex declaration);
 };

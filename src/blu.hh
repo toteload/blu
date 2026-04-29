@@ -82,9 +82,31 @@ struct Source {
   }
 };
 
+struct TypeCheckContext {
+  Messages *messages;
+  EnvManager *envs;
+  TypeInterner *types;
+  StringInterner *strings;
+  ValueStore *values;
+  Arena *work_arena;
+};
+
+b32 typecheck(TypeCheckContext *context, Source *source);
+
 #include "interpreter.hh"
 
 // -[ Message ]-
+
+struct MessageSourceLocation {
+  enum Kind : u32 {
+    Location_none,
+    Location_token_index,
+  } kind;
+
+  union {
+    TokenIndex token_index;
+  };
+};
 
 enum MessageSeverity : u8 {
   Error,
@@ -101,7 +123,6 @@ union MessageArg {
 
 struct Message {
   MessageSeverity severity;
-
   Str format;
   MessageArg args[0];
 };
@@ -128,7 +149,9 @@ struct Messages {
 
   void print_messages();
 
+  // It is assumed that format will be a constant string and thus does not need to be copied.
   void error(char const *format, ...);
+  void error(TokenIndex location, char const *format, ...);
 };
 
 void debug_print_type(TypeInterner *types, TypeIndex type);

@@ -1,14 +1,15 @@
 #include "blu.hh"
 
 struct TypeChecker {
-  MessageManager *messages;
-  Arena *work_arena;
+  Messages *messages;
   EnvManager *envs;
   TypeInterner *types;
   StringInterner *strings;
-  Source *source;
-  AstNodes *nodes;
   ValueStore *values;
+
+  Source *source;
+  Arena *work_arena;
+
   TypeAnnotations *type_annotations;
 
   OptionalTypeIndex return_type_of_current_function = OptionalTypeIndex::none();

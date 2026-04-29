@@ -14,6 +14,8 @@ enum ValueKind : u8 {
   Val_int,
   Val_function,
   Value_sequence,
+
+  Value_declaration,
 };
 
 struct Value {
@@ -26,18 +28,19 @@ struct Value {
     i64 int64;
 
     struct {
-	    Slice<Value> items;
+      Slice<Value> items;
     } sequence;
   } data;
 };
 
 struct ValueStore {
   ArenaItemPool<Value> values;
-  Allocator value_blocks; todo
+  Allocator blocks_allocator;
 
-  void init() { values.init(MiB(64)); }
-
-  void deinit();
+  void init(Allocator blocks_allocator) {
+    values.init(MiB(64));
+    this->blocks_allocator = blocks_allocator;
+  }
 
   ValueIndex add(Value const &val) {
     ValueIndex idx = {values.reserve_index()};

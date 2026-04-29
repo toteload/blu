@@ -227,20 +227,20 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
   } break;
   case Ast_literal_sequence: {
-    auto seq   = source->nodes->data(node_index).sequence;
+    auto seq   = source->nodes->data(node_index).literal_sequence;
     auto count = seq.items.len();
     auto ty    = alloc_type_sequence(work_arena, count);
 
     *ty = {
       .kind     = Type_sequence,
       .sequence = {
-        .count = count,
+        .count = cast<u32>(count),
       },
     };
 
     for (u32 i = 0; i < count; i++) {
-	    ValueIndex res;
-	Try(eval_expr(env, seq.items[i], &res));
+      ValueIndex res;
+      Try(eval_expr(env, seq.items[i], &res));
     }
 
     *result = values->add({
