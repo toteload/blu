@@ -1,7 +1,0 @@
-sum := fn(xs: []i32) i32 {
-  s : i32 = 0
-  for xs do x {
-    s = s + x
-  }
-  return s
-}
