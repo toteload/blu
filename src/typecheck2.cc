@@ -1,13 +1,76 @@
 #include "blu.hh"
 
-struct ExpectedType {
+enum DeclarationKind {
+  Declaration_of_type,
+  Declaration_of_value,
+  Declaration_of_undetermined,
+};
+
+struct Declaration {
+  DeclarationKind kind;
+  union {
+    TypeIndex type;
+    NodeIndex node_index;
+  };
+};
+
+struct TypeEnv {
+  TypeEnv *parent;
+  HashMap<StrKey, Declaration, str_key_eq, str_key_hash> map;
+
+  void insert(StrKey identifier, Declaration decl) { map.insert(identifier, decl); }
+
+  bool lookup(StrKey identifier, Declaration *decl) {
+    Declaration *p = map.get_ptr(identifier);
+    if (p) {
+      *decl = *p;
+      return true;
+    }
+
+    if (parent) {
+      return parent->lookup(identifier, decl);
+    }
+
+    return false;
+  }
+};
+
+void populate_root_env(TypeEnv *env, StringInterner *strings, TypeInterner *types) {
+#define Add(Kind, Identifier, Type)                                                                \
+  do {                                                                                             \
+    auto key = strings->add(Str_make((Identifier)));                                               \
+    env->insert(key, {.kind = (Kind), .type = (Type)});                                            \
+  } while (false)
+
+  Add(Declaration_of_type, "i8", types->type.i8_);
+  Add(Declaration_of_type, "i16", types->type.i16_);
+  Add(Declaration_of_type, "i32", types->type.i32_);
+  Add(Declaration_of_type, "i64", types->type.i64_);
+
+  Add(Declaration_of_type, "u8", types->type.u8_);
+  Add(Declaration_of_type, "u16", types->type.u16_);
+  Add(Declaration_of_type, "u32", types->type.u32_);
+  Add(Declaration_of_type, "u64", types->type.u64_);
+
+  Add(Declaration_of_type, "bool", types->type.bool_);
+
+  Add(Declaration_of_type, "nil", types->type.nil);
+  Add(Declaration_of_type, "never", types->type.never);
+  Add(Declaration_of_type, "type", types->type.type);
+
+  Add(Declaration_of_value, "true", types->type.bool_);
+  Add(Declaration_of_value, "false", types->type.bool_);
+
+#undef Add
+}
+
+struct TypeHint {
   TypeIndex type;
   NodeIndex location;
 };
 
 struct TypeChecker {
   Messages *messages;
-  EnvManager *envs;
   TypeInterner *types;
   StringInterner *strings;
   ValueStore *values;
@@ -19,7 +82,7 @@ struct TypeChecker {
   b32 typecheck();
 
   b32 eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result);
-  b32 check_expression(Env *env, NodeIndex node_index, ExpectedType *hint, TypeIndex *result);
+  b32 check_expression(Env *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result);
 
   b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
 
@@ -28,7 +91,7 @@ struct TypeChecker {
 
   StrKey intern_identifier(TokenIndex identifier);
 
-  b32 find_identifier(Env *env, TokenIndex identifier, ValueIndex *result);
+  b32 find_identifier(Env *env, TokenIndex identifier, Declaration *result);
 };
 
 u32 string_literal_byte_size(Str s) {
@@ -38,13 +101,13 @@ u32 string_literal_byte_size(Str s) {
 
 b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
-    .messages   = context->messages,
-    .envs       = context->envs,
-    .types      = context->types,
-    .strings    = context->strings,
-    .values     = context->values,
-    .work_arena = context->work_arena,
-    .source     = source,
+    .messages    = context->messages,
+    .envs        = context->envs,
+    .types       = context->types,
+    .strings     = context->strings,
+    .values      = context->values,
+    .work_arena  = context->work_arena,
+    .source      = source,
     .annotations = annotations,
   };
 
@@ -52,13 +115,6 @@ b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annota
 }
 
 b32 TypeChecker::typecheck() {
-  auto env_global = envs->create_global_env(strings, types, values);
-  auto env        = envs->alloc(env_global);
-  defer({
-    envs->dealloc(env_global);
-    envs->dealloc(env);
-  });
-
   NodeIndex root_idx = {0};
   Assert(source->nodes->kind(root_idx) == Ast_root);
 
@@ -73,12 +129,12 @@ b32 TypeChecker::typecheck() {
 
     env->insert(
       key,
-      values->add({
-        .kind = Value_declaration,
+      {
+        .kind = Declaration_of_undetermined,
         .data = {
           .node_index = root.items[i],
         },
-      })
+      }
     );
   }
 
@@ -88,13 +144,13 @@ b32 TypeChecker::typecheck() {
     TypeIndex declared_type;
     Try(eval_type_expression(env, decl.type, &declared_type));
 
-    ExpectedType expect_type = {
+    TypeHint hint = {
       .type     = declared_type,
       .location = decl.type,
     };
 
     TypeIndex value_type;
-    Try(check_expression(env, decl.value, &expect_type, &value_type));
+    Try(check_expression(env, decl.value, &hint, &value_type));
 
     Try(check_coercion(decl.value, value_type, declared_type));
   }
@@ -130,7 +186,6 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
     result = types->add(ty);
   } break;
   case Ast_type_slice: {
-
     auto slice = source->nodes->data(node_index).type_slice;
     TypeIndex base_type;
     Try(eval_type_expression(env, slice.base, &base_type));
@@ -167,9 +222,8 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
   } break;
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
-    ValueIndex val_idx;
-    Try(find_identifier(env, token_index, &val_idx));
-    auto val = values->get(val_idx);
+    Declaration decl;
+    Try(find_identifier(env, token_index, &decl));
     Try(check_is_type(val->type, node_index));
     result = val->data.type;
   } break;
@@ -197,7 +251,7 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
   }
 
   annotations[node_index.idx] = result;
-  *out = result;
+  *out                        = result;
 
   return true;
 }
@@ -252,7 +306,7 @@ b32 TypeChecker::check_expression(
     ValueIndex val_idx;
     Try(find_identifier(env, token_index, &val_idx));
     auto val = values->get(val_idx);
-    result  = val->type;
+    result   = val->type;
   } break;
   case Ast_function: {
     auto f = source->nodes->data(node_index).function;
@@ -386,14 +440,16 @@ b32 TypeChecker::check_expression(
     result = base_type;
   } break;
 
-  case Ast_assign: case Ast_call:
+  case Ast_assign:
+  case Ast_call:
   case Ast_unary_op:
   case Ast_binary_op:
   case Ast_while:
   case Ast_break:
   case Ast_continue:
   case Ast_return:
-                  Todo(); return false;
+    Todo();
+    return false;
 
   case Ast_kind_max:
   case Ast_root:
@@ -402,7 +458,7 @@ b32 TypeChecker::check_expression(
   }
 
   annotations[node_index.idx] = result;
-  *out = result;
+  *out                        = result;
 
   return true;
 }

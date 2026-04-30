@@ -134,19 +134,25 @@ struct TypeInterner {
 
   struct {
     TypeIndex bool_;
+
     TypeIndex u8_;
     TypeIndex u16_;
     TypeIndex u32_;
     TypeIndex u64_;
+
     TypeIndex i8_;
     TypeIndex i16_;
     TypeIndex i32_;
     TypeIndex i64_;
+
     TypeIndex uint;
+
     TypeIndex literal_int;
     TypeIndex literal_string;
+
     TypeIndex nil;
     TypeIndex never;
+
     TypeIndex type;
   } type;
 

@@ -5,22 +5,7 @@ struct ValueIndexTag {};
 using ValueIndex         = Index<u32, ValueIndexTag>;
 using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
 
-enum ValueKind : u8 {
-  Val_true,
-  Val_false,
-
-  Val_type,
-
-  Val_int,
-  Val_function,
-  Value_sequence,
-  Value_array,
-
-  Value_declaration,
-};
-
 struct Value {
-  ValueKind kind;
   TypeIndex type;
 
   union {

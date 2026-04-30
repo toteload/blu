@@ -144,8 +144,8 @@ b32 type_eq(void *context, Type *a, Type *b) {
            a->literal_function.return_type == b->literal_function.return_type;
   }
   case Type_array: {
-                     return a->array.size == b->array.size && a->array.base_type == b->array.base_type;
-                   }
+    return a->array.size == b->array.size && a->array.base_type == b->array.base_type;
+  }
   }
 
   return false;

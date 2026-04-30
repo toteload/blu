@@ -370,6 +370,4 @@ b32 Interpreter::call_function(
   return true;
 }
 
-TypeIndex Interpreter::get_type(NodeIndex node_index) {
-  return type_annotations[node_index.idx];
-}
+TypeIndex Interpreter::get_type(NodeIndex node_index) { return type_annotations[node_index.idx]; }

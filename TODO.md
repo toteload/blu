@@ -11,7 +11,7 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\main.blu`
 - [x] `test\basic\if_else.blu`
 - [x] `test\basic\arithmetic.blu` 27-04-2026
-- [x] `test\basic\slice.blu` 30-04-2026
+- [x] `test\basic\slice.blu` 30-04-2026
   - Includes array type and string literal.
   - Includes coercion of sequence literals to typed slices.
   - Includes indexing of slices.
@@ -28,9 +28,12 @@ You will still have to write the logic for what the language does, it will "just
 
 ### Metaprogramming
 
+- [ ] Add `#run` builtin.
+
 ### Misc
-- [ ] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
-- [ ] Verify program before interpreting it. At the moment it encounters "compile" errors during execution.
+
+- [-] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
+- [-] Verify program before interpreting it. At the moment it encounters "compile" errors during execution.
 
 ---
 
