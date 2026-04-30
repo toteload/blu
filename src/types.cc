@@ -143,10 +143,12 @@ b32 type_eq(void *context, Type *a, Type *b) {
     return a->literal_function.param_count == b->literal_function.param_count &&
            a->literal_function.return_type == b->literal_function.return_type;
   }
-  default:
-    Unreachable();
-    return false;
+  case Type_array: {
+                     return a->array.size == b->array.size && a->array.base_type == b->array.base_type;
+                   }
   }
+
+  return false;
 }
 
 u32 push_type_data(Arena *arena, Type *x) {
@@ -239,14 +241,15 @@ void TypeInterner::init(
   Add_type(type.i32_, Type::make_integer(Signed, 32));
   Add_type(type.i64_, Type::make_integer(Signed, 64));
 
+  // TODO this actually depends on the platform. not every platform is 64 bit :)
+  Add_type(type.uint, ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth = 64 }}));
+
   Add_type(type.bool_, Type::make_bool());
   Add_type(type.nil,   Type::make_nil());
   Add_type(type.never, Type::make_never());
 
   Add_type(type.literal_int, Type::make_literal_int());
-  Add_type(type.literal_function, ((Type){
-    .kind = Type_literal_function,
-  }));
+  Add_type(type.literal_function, ((Type){ .kind = Type_literal_function, }));
   // clang-format on
 
 #undef Add_type
@@ -296,6 +299,33 @@ bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
   if (a->kind == Type_literal_int && b->kind == Type_integer) {
     // TODO: make sure value fits in destination integer type
     return true;
+  }
+
+  if (a->kind == Type_sequence) {
+    TypeIndex base_type;
+    if (b->kind == Type_array) {
+      base_type = b->array.base_type;
+    } else if (b->kind == Type_slice) {
+      base_type = b->slice.base_type;
+    } else {
+      return false;
+    }
+
+    if (b->kind == Type_array && a->sequence.count != b->array.size) {
+      return false;
+    }
+
+    for (u32 i = 0; i < a->sequence.count; i++) {
+      if (!is_coercible_to(a->sequence.item_types[i], base_type)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  if (a->kind == Type_array && b->kind == Type_slice) {
+    return a->array.base_type == b->slice.base_type;
   }
 
   if (a->kind == Type_literal_function && b->kind == Type_function) {

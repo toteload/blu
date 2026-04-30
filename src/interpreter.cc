@@ -314,7 +314,7 @@ b32 Interpreter::eval_binary_op(
   return true;
 }
 
-b32 Interpreter::get_int_value(ValueIndex idx, u64 *i) {
+b32 Interpreter::get_int_value(ValueIndex idx, i64 *i) {
   Value *v = values->get(idx);
   auto ty  = types->get(v->type);
   if (!ty->is_integer_or_literal_int()) {

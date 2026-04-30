@@ -73,6 +73,22 @@ void Messages::print_message(Message *msg) {
     Todo();
   }
 
+  switch (msg->location.kind) {
+  case MessageLocation_none:
+    break;
+  case MessageLocation_node_index: {
+    auto token_span = source->nodes->span(msg->location.node_index);
+    auto span       = source->tokens->span(token_span.start);
+    auto loc        = find_source_location(source->source, span.start);
+    printf("%d:%d: ", loc.line, loc.col);
+  } break;
+  case MessageLocation_token_index: {
+    auto span = source->tokens->span(msg->location.token_index);
+    auto loc  = find_source_location(source->source, span.start);
+    printf("%d:%d: ", loc.line, loc.col);
+  } break;
+  }
+
   Str format  = Str::from_ptr_and_len(msg->format, msg->format_len);
   u32 arg_idx = 0;
   while (true) {
@@ -109,7 +125,7 @@ void Messages::print_message(Message *msg) {
       printf("%.*s", cast<int>(str.len()), str.str);
     } else if (str_eq(arg, Str_make("{span}"))) {
       Span<u32> span = msg->args[arg_idx].span;
-      auto loc       = find_source_location(source, span.start);
+      auto loc       = find_source_location(source->source, span.start);
       printf("%d:%d", loc.line, loc.col);
     } else {
       printf("<UNRECOGNIZED %.*s>", cast<int>(arg.len()), arg.str);

@@ -67,8 +67,8 @@ ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); 
 struct Source {
   Str filename;
   Str source;
-  Tokens *tokens;
-  AstNodes *nodes;
+  Tokens *tokens  = nullptr;
+  AstNodes *nodes = nullptr;
 
   Str get_token_str(TokenIndex idx) {
     auto span = tokens->span(idx);
@@ -137,15 +137,14 @@ struct Messages {
   Vector<Message *> messages;
   StringInterner *strings;
   TypeInterner *types;
-  Str source;
+  Source *source = nullptr;
 
-  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types, Str source) {
+  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types) {
     arena.init(MiB(16));
     messages.init(list_alloc);
 
     this->strings = strings;
     this->types   = types;
-    this->source  = source;
   }
 
   void deinit();

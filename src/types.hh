@@ -40,7 +40,7 @@ struct Type {
     } slice;
     struct {
       TypeIndex base_type;
-      u64 size;
+      i64 size;
     } array;
     struct {
       TypeIndex return_type;
@@ -142,8 +142,10 @@ struct TypeInterner {
     TypeIndex i16_;
     TypeIndex i32_;
     TypeIndex i64_;
+    TypeIndex uint;
     TypeIndex literal_int;
     TypeIndex literal_function;
+    TypeIndex literal_string;
     TypeIndex nil;
     TypeIndex never;
     TypeIndex type;

@@ -29,7 +29,8 @@ int main(i32 arg_count, char const *const *args) {
   source.source   = source_text;
 
   Messages messages;
-  messages.init(stdlib_alloc, &strings, &types, source_text);
+  messages.source = &source;
+  messages.init(stdlib_alloc, &strings, &types);
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);
@@ -37,6 +38,8 @@ int main(i32 arg_count, char const *const *args) {
 
   b32 ok;
   ok = tokenize(&messages, source_text, &tokens);
+
+  source.tokens = &tokens;
 
   if (!ok) {
     printf("Tokenization error\n");
@@ -52,8 +55,6 @@ int main(i32 arg_count, char const *const *args) {
     work_arena.restore(snapshot);
   }
 
-  source.tokens = &tokens;
-
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
   nodes.spans.init(stdlib_alloc);
@@ -65,6 +66,9 @@ int main(i32 arg_count, char const *const *args) {
   parse_context.tokens   = &tokens;
 
   ok = parse(&parse_context, &nodes);
+
+  source.nodes = &nodes;
+
   if (!ok) {
     printf("Parse error\n");
     messages.print_messages();
@@ -74,8 +78,6 @@ int main(i32 arg_count, char const *const *args) {
   for (u32 i = 0; i < nodes.kinds.len(); i++) {
     printf("%s\n", ast_kind_string(nodes.kinds[i]));
   }
-
-  source.nodes = &nodes;
 
   ValueStore values;
   values.init(stdlib_alloc);

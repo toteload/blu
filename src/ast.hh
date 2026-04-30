@@ -12,10 +12,8 @@ enum AstKind : u8 {
   Ast_literal_int,
   Ast_literal_string,
   Ast_identifier,
-  Ast_field_access,
   Ast_call,
   Ast_index,
-  Ast_cast,
   Ast_unary_op,
   Ast_binary_op,
   Ast_function,
@@ -237,10 +235,10 @@ struct AstNodes {
 constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",          "block",          "type-slice", "type-array",
   "type-function", "declaration",    "assign",     "literal-sequence",
-  "literal-int",   "literal-string", "identifier", "field-access",
-  "call",          "index",          "cast",       "unary-op",
-  "binary-op",     "function",       "if-else",    "while",
-  "break",         "continue",       "return",     "illegal",
+  "literal-int",   "literal-string", "identifier", "call",
+  "index",         "unary-op",       "binary-op",  "function",
+  "if-else",       "while",          "break",      "continue",
+  "return",        "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

@@ -200,8 +200,8 @@ i32 main(i32 arg_count, char const *const *args) {
   arena.init(MiB(8));
 
   Str filename = Str::from_cstr(args[1]);
-  Str source = read_file(filename);
-  if (source.is_empty()) {
+  Str text = read_file(filename);
+  if (text.is_empty()) {
     printf("Problem occured reading file\n");
     return 1;
   }
@@ -215,19 +215,24 @@ i32 main(i32 arg_count, char const *const *args) {
   TypeInterner types;
   types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
 
+Source source;
+source.filename = filename;
+source.source = text;
   Messages messages;
-  messages.init(stdlib_alloc, &strings, &types, source);
+  messages.init(stdlib_alloc, &strings, &types);
+  messages.source = &source;
 
   Tokens tokens;
   tokens.kinds.init(stdlib_alloc);
   tokens.spans.init(stdlib_alloc);
-  b32 ok = tokenize(&messages, source, &tokens);
+  b32 ok = tokenize(&messages, text, &tokens);
+  source.tokens = &tokens;
   if (!ok) {
     printf("Error while tokenizing\n");
     return 1;
   }
 
-  Str html = build_token_html_view(source, &tokens);
+  Str html = build_token_html_view(text, &tokens);
   write_file(Str_make("tokens.html"), html);
 
   return 0;
