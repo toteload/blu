@@ -19,9 +19,7 @@ struct TypeChecker {
   b32 eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result);
   b32 check_expression(Env *env, NodeIndex node_index, ExpectedType *hint, TypeIndex *result);
 
-  b32 check_coercion(
-    TypeIndex type_src, NodeIndex node_src, TypeIndex type_dst, NodeIndex node_dst
-  );
+  b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
 
   b32 check_is_type(TypeIndex type, NodeIndex at);
 
@@ -89,7 +87,7 @@ b32 TypeChecker::typecheck() {
     TypeIndex value_type;
     Try(check_expression(env, decl.value, &expect_type, &value_type));
 
-    Try(check_coercion(value_type, decl.value, declared_type, decl.type));
+    Try(check_coercion(decl.value, value_type, declared_type));
   }
 
   return true;
@@ -187,6 +185,35 @@ b32 TypeChecker::check_expression(
 
     Try(check_expression(env_block, block.items[block.items.len() - 1], nullptr, result));
   } break;
+  case Ast_if_else: {
+    auto if_else = source->nodes->data(node_index).if_else;
+
+    TypeIndex cond_type;
+    Try(check_expression(env, if_else.cond, nullptr, &cond_type));
+    Try(check_coercion(if_else.cond, cond_type, types->type.bool_));
+
+    TypeIndex then_type;
+    Try(check_expression(env, if_else.then, nullptr, &then_type));
+
+    if (if_else.otherwise.is_none()) {
+      *result = types->type.nil;
+      break;
+    }
+
+    TypeIndex otherwise_type;
+    Try(check_expression(env, if_else.otherwise.as_index(), nullptr, &otherwise_type));
+
+    TypeIndex final_type;
+    if (types->is_coercible_to(then_type, otherwise_type)) {
+      final_type = otherwise_type;
+    } else if (types->is_coercible_to(otherwise_type, then_type)) {
+      final_type = then_type;
+    } else {
+      Todo();
+    }
+
+    *result = final_type;
+  } break;
   default:
     Todo();
     break;
@@ -195,14 +222,12 @@ b32 TypeChecker::check_expression(
   return true;
 }
 
-b32 TypeChecker::check_coercion(
-  TypeIndex type_src, NodeIndex node_src, TypeIndex type_dst, NodeIndex node_dst
-) {
+b32 TypeChecker::check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst) {
   if (types->is_coercible_to(type_src, type_dst)) {
     return true;
   }
 
-  messages->error(node_dst, "Cannot coerce type {type} to {type}.", type_src, type_dst);
+  messages->error(location, "Cannot coerce type {type} to {type}.", type_src, type_dst);
 
   return false;
 }

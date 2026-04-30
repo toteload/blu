@@ -6,64 +6,87 @@
 // Should this Slice<char> be a Str?
 // Should Str be a subtype of Slice?
 u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) {
+  u32 buf_size_start = buf_size;
+
   Type *type = types->get(idx);
+
+#define Update(Code)                                                                               \
+  do {                                                                                             \
+    u32 _offset = (Code);                                                                          \
+    if (_offset >= buf_size) {                                                                     \
+      buf_size  = 0;                                                                               \
+      buf      += buf_size;                                                                        \
+    } else {                                                                                       \
+      buf_size -= _offset;                                                                         \
+      buf      += _offset;                                                                         \
+    }                                                                                              \
+  } while (false)
 
   switch (type->kind) {
   case Type_integer:
-    return snprintf(
+    Update(snprintf(
       buf,
       buf_size,
       "%s%d",
       type->integer.signedness == Signed ? "i" : "u",
       type->integer.bitwidth
-    );
+    ));
+    break;
+  case Type_array:
+    Update(snprintf(buf, buf_size, "[%llu]", type->array.size));
+    Update(type_to_string(types, type->array.base_type, buf, buf_size));
+    break;
+  case Type_sequence:
+    Update(snprintf(buf, buf_size, ".{ "));
+    for (u32 i = 0; i < type->sequence.count; i++) {
+      Update(type_to_string(types, type->sequence.item_types[i], buf, buf_size));
+      Update(snprintf(buf, buf_size, ", "));
+    }
+    Update(snprintf(buf, buf_size, "}"));
+    break;
   case Type_literal_int:
-    return snprintf(buf, buf_size, "literal-int");
+    Update(snprintf(buf, buf_size, "literal-int"));
+    break;
   case Type_boolean:
-    return snprintf(buf, buf_size, "bool");
+    Update(snprintf(buf, buf_size, "bool"));
+    break;
   case Type_type:
-    return snprintf(buf, buf_size, "type");
+    Update(snprintf(buf, buf_size, "type"));
+    break;
   case Type_nil:
-    return cast<u32>(snprintf(buf, buf_size, "nil"));
+    Update(snprintf(buf, buf_size, "nil"));
+    break;
   case Type_never:
-    return cast<u32>(snprintf(buf, buf_size, "never"));
+    Update(snprintf(buf, buf_size, "never"));
+    break;
   case Type_slice: {
-    u32 offset  = 0;
-    offset     += cast<u32>(snprintf(buf, buf_size, "[]"));
-    offset     += type_to_string(types, type->slice.base_type, buf + offset, buf_size - offset);
-    return offset;
-  }
+    Update(snprintf(buf, buf_size, "[]"));
+    Update(type_to_string(types, type->slice.base_type, buf, buf_size));
+  } break;
   case Type_distinct: {
-    u32 offset  = 0;
-    offset     += cast<u32>(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
-    offset     += type_to_string(types, type->distinct.base_type, buf + offset, buf_size - offset);
-    return offset;
-  }
+    Update(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
+    Update(type_to_string(types, type->distinct.base_type, buf, buf_size));
+  } break;
   case Type_function: {
-    u32 offset  = 0;
-    offset     += cast<u32>(snprintf(buf, buf_size, "("));
+    Update(snprintf(buf, buf_size, "("));
     if (type->function.param_count > 0) {
-      offset +=
-        type_to_string(types, type->function.param_types[0], buf + offset, buf_size - offset);
+      Update(type_to_string(types, type->function.param_types[0], buf, buf_size));
     }
     for (u32 i = 1; i < type->function.param_count; i += 1) {
-      offset +=
-        type_to_string(types, type->function.param_types[i], buf + offset, buf_size - offset);
+      Update(type_to_string(types, type->function.param_types[i], buf, buf_size));
     }
-    offset += cast<u32>(snprintf(buf + offset, buf_size - offset, "): "));
-    offset += type_to_string(types, type->function.return_type, buf + offset, buf_size - offset);
-    return offset;
-  }
+    Update(snprintf(buf, buf_size, "): "));
+    Update(type_to_string(types, type->function.return_type, buf, buf_size));
+  } break;
   case Type_literal_function: {
-    u32 offset = 0;
-    offset += cast<u32>(snprintf(buf, buf_size, "|%d|: ", type->literal_function.param_count));
-    offset += type_to_string(types, type->literal_function.return_type, buf + offset, buf_size - offset);
-    return offset;
-  }
+    Update(snprintf(buf, buf_size, "|%d|: ", type->literal_function.param_count));
+    Update(type_to_string(types, type->literal_function.return_type, buf, buf_size));
+  } break;
   }
 
-  Unreachable();
-  return 0;
+#undef Update
+
+  return buf_size_start - buf_size;
 }
 
 b32 type_eq(void *context, Type *a, Type *b) {
@@ -163,6 +186,14 @@ u32 push_type_data(Arena *arena, Type *x) {
   case Type_sequence: {
     Push_data(x->sequence.count);
     ForEachIndex(i, x->sequence.count) { Push_data(x->sequence.item_types[i]); }
+  } break;
+  case Type_literal_function: {
+    Push_data(x->function.param_count);
+    Push_data(x->literal_function.return_type);
+  } break;
+  case Type_array: {
+    Push_data(x->array.size);
+    Push_data(x->array.base_type);
   } break;
   }
 

@@ -42,6 +42,7 @@ def create_build_ninja():
                   #'-O2 -S -mllvm --x86-asm-syntax=intel',
                   '-fansi-escape-codes -fcolor-diagnostics',
                   '-march=native -std=c++17',
+                  '-Werror=switch', # Enforce all enum values are handled
                   '-DTTLD_DEBUG',
                   '-g' if is_macos else '',
                   '-g -gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',

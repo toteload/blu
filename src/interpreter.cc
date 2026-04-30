@@ -55,7 +55,7 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
   case Ast_type_slice: {
     auto slice = source->nodes->data(node_index).type_slice;
     Type ty    = {
-         .kind = Type_slice,
+      .kind = Type_slice,
     };
     Try(intern_type(env, slice.base, &ty.slice.base_type));
     *result = types->add(&ty);
@@ -63,7 +63,7 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
   case Ast_type_array: {
     auto array = source->nodes->data(node_index).type_array;
     Type ty    = {
-         .kind = Type_array,
+      .kind = Type_array,
     };
     Try(intern_type(env, array.base, &ty.array.base_type));
 
@@ -109,10 +109,10 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   {
     Type *t = alloc_type_function(work_arena, 0);
     *t      = {
-           .kind     = Type_function,
-           .function = {
-             .return_type = types->type.i32_,
-             .param_count = 0,
+      .kind     = Type_function,
+      .function = {
+        .return_type = types->type.i32_,
+        .param_count = 0,
       },
     };
     main_function_type = types->add(t);

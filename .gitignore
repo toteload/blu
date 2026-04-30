@@ -9,3 +9,5 @@ out
 build.ninja
 __pycache__/
 build.ninja
+.DS_Store
+**/.DS_Store

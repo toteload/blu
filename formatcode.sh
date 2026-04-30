@@ -6,6 +6,7 @@ clang-format -i src/queue.hh
 clang-format -i src/ast.hh
 clang-format -i src/tokens.hh
 clang-format -i src/types.hh
+clang-format -i src/types.cc
 clang-format -i src/value.hh
 clang-format -i src/value.cc
 clang-format -i src/env.hh
