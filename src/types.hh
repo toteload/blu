@@ -144,7 +144,6 @@ struct TypeInterner {
     TypeIndex i64_;
     TypeIndex uint;
     TypeIndex literal_int;
-    TypeIndex literal_function;
     TypeIndex literal_string;
     TypeIndex nil;
     TypeIndex never;

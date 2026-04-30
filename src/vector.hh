@@ -16,6 +16,7 @@ template<typename T> struct Vector {
 
   void ensure_free_capacity(usize min_free_cap);
   void ensure_capacity(usize min_cap);
+  void set_size(usize size);
   void grow();
 
   void push(T x) { *push_empty() = x; }
@@ -75,6 +76,11 @@ template<typename T> void Vector<T>::ensure_capacity(usize minimum_capacity) {
 template<typename T> void Vector<T>::ensure_free_capacity(usize minimum_free_capacity) {
   usize new_capacity = round_up_to_nearest_power_of_two(_len + minimum_free_capacity);
   ensure_capacity(new_capacity);
+}
+
+template<typename T> void Vector<T>::set_size(usize size) {
+  ensure_capacity(size);
+  _len = size;
 }
 
 template<typename T> T *Vector<T>::push_empty(u32 amount) {

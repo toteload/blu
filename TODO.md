@@ -11,7 +11,7 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\main.blu`
 - [x] `test\basic\if_else.blu`
 - [x] `test\basic\arithmetic.blu` 27-04-2026
-- [ ] `test\basic\slice.blu`
+- [x] `test\basic\slice.blu` 30-04-2026
   - Includes array type and string literal.
   - Includes coercion of sequence literals to typed slices.
   - Includes indexing of slices.

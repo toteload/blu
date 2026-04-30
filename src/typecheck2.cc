@@ -14,6 +14,8 @@ struct TypeChecker {
   Arena *work_arena;
   Source *source;
 
+  Slice<TypeIndex> annotations;
+
   b32 typecheck();
 
   b32 eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result);
@@ -34,7 +36,7 @@ u32 string_literal_byte_size(Str s) {
   return s.len() - 2;
 }
 
-b32 typecheck(TypeCheckContext *context, Source *source) {
+b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
     .messages   = context->messages,
     .envs       = context->envs,
@@ -43,6 +45,7 @@ b32 typecheck(TypeCheckContext *context, Source *source) {
     .values     = context->values,
     .work_arena = context->work_arena,
     .source     = source,
+    .annotations = annotations,
   };
 
   return checker.typecheck();
@@ -99,8 +102,10 @@ b32 TypeChecker::typecheck() {
   return true;
 }
 
-b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result) {
+b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *out) {
   auto kind = source->nodes->kind(node_index);
+
+  TypeIndex result;
 
   switch (kind) {
   case Ast_type_function: {
@@ -122,7 +127,7 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
       Try(eval_type_expression(env, f.param_types[i], &ty->function.param_types[i]));
     }
 
-    *result = types->add(ty);
+    result = types->add(ty);
   } break;
   case Ast_type_slice: {
 
@@ -133,7 +138,7 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
       .kind  = Type_slice,
       .slice = {.base_type = base_type},
     };
-    *result = types->add(&type);
+    result = types->add(&type);
   } break;
   case Ast_type_array: {
     auto array = source->nodes->data(node_index).type_array;
@@ -158,7 +163,7 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
         .size      = size,
       },
     };
-    *result = types->add(&type);
+    result = types->add(&type);
   } break;
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
@@ -166,71 +171,43 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
     Try(find_identifier(env, token_index, &val_idx));
     auto val = values->get(val_idx);
     Try(check_is_type(val->type, node_index));
-    *result = val->data.type;
+    result = val->data.type;
   } break;
 
   case Ast_block:
-    Todo();
-    return false;
   case Ast_declaration:
-    Todo();
-    return false;
   case Ast_literal_int:
-    Todo();
-    return false;
   case Ast_function:
-    Todo();
-    return false;
   case Ast_if_else:
-    Todo();
-    return false;
   case Ast_assign:
-    Todo();
-    return false;
   case Ast_literal_sequence:
-    Todo();
-    return false;
   case Ast_literal_string:
-    Todo();
-    return false;
   case Ast_call:
-    Todo();
-    return false;
   case Ast_index:
-    Todo();
-    return false;
   case Ast_unary_op:
-    Todo();
-    return false;
   case Ast_binary_op:
-    Todo();
-    return false;
   case Ast_while:
-    Todo();
-    return false;
   case Ast_break:
-    Todo();
-    return false;
   case Ast_continue:
-    Todo();
-    return false;
   case Ast_return:
-    Todo();
-    return false;
-
   case Ast_kind_max:
   case Ast_root:
     Unreachable();
     return false;
   }
 
+  annotations[node_index.idx] = result;
+  *out = result;
+
   return true;
 }
 
 b32 TypeChecker::check_expression(
-  Env *env, NodeIndex node_index, ExpectedType *hint, TypeIndex *result
+  Env *env, NodeIndex node_index, ExpectedType *hint, TypeIndex *out
 ) {
   auto kind = source->nodes->kind(node_index);
+
+  TypeIndex result;
 
   switch (kind) {
   case Ast_type_function: {
@@ -246,16 +223,16 @@ b32 TypeChecker::check_expression(
       Try(check_is_type(param_type, f.param_types[i]));
     }
 
-    *result = types->type.type;
+    result = types->type.type;
   } break;
   case Ast_type_slice: {
-    *result = types->type.type;
+    result = types->type.type;
   } break;
   case Ast_type_array: {
-    *result = types->type.type;
+    result = types->type.type;
   } break;
   case Ast_literal_int: {
-    *result = types->type.literal_int;
+    result = types->type.literal_int;
   } break;
   case Ast_literal_string: {
     auto token_index = source->nodes->data(node_index).literal_string.token_index;
@@ -268,14 +245,14 @@ b32 TypeChecker::check_expression(
         .base_type = types->type.u8_,
       },
     };
-    *result = types->add(&type);
+    result = types->add(&type);
   } break;
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
     ValueIndex val_idx;
     Try(find_identifier(env, token_index, &val_idx));
     auto val = values->get(val_idx);
-    *result  = val->type;
+    result  = val->type;
   } break;
   case Ast_function: {
     auto f = source->nodes->data(node_index).function;
@@ -291,12 +268,12 @@ b32 TypeChecker::check_expression(
         .param_count = cast<u32>(f.param_names.len()),
       },
     };
-    *result = types->add(&function_type);
+    result = types->add(&function_type);
   } break;
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
     if (block.items.len() == 0) {
-      *result = types->type.nil;
+      result = types->type.nil;
       break;
     }
 
@@ -308,7 +285,7 @@ b32 TypeChecker::check_expression(
       Try(check_expression(env_block, block.items[i], nullptr, &e));
     }
 
-    Try(check_expression(env_block, block.items[block.items.len() - 1], nullptr, result));
+    Try(check_expression(env_block, block.items[block.items.len() - 1], nullptr, &result));
   } break;
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
@@ -321,7 +298,7 @@ b32 TypeChecker::check_expression(
     Try(check_expression(env, if_else.then, nullptr, &then_type));
 
     if (if_else.otherwise.is_none()) {
-      *result = types->type.nil;
+      result = types->type.nil;
       break;
     }
 
@@ -337,7 +314,7 @@ b32 TypeChecker::check_expression(
       Todo();
     }
 
-    *result = final_type;
+    result = final_type;
   } break;
   case Ast_declaration: {
     auto decl = source->nodes->data(node_index).declaration;
@@ -364,6 +341,8 @@ b32 TypeChecker::check_expression(
         .data.node_index = node_index,
       })
     );
+
+    result = types->type.nil;
   } break;
   case Ast_literal_sequence: {
     auto seq = source->nodes->data(node_index).literal_sequence;
@@ -377,14 +356,9 @@ b32 TypeChecker::check_expression(
       Try(check_expression(env, seq.items[i], nullptr, &type->sequence.item_types[i]));
     }
 
-    *result = types->add(type);
+    result = types->add(type);
   } break;
-  case Ast_assign:
-    Todo();
-    return false;
-  case Ast_call:
-    Todo();
-    return false;
+
   case Ast_index: {
     auto node = source->nodes->data(node_index).index;
 
@@ -409,32 +383,26 @@ b32 TypeChecker::check_expression(
       Unreachable();
     }
 
-    *result = base_type;
+    result = base_type;
   } break;
+
+  case Ast_assign: case Ast_call:
   case Ast_unary_op:
-    Todo();
-    return false;
   case Ast_binary_op:
-    Todo();
-    return false;
   case Ast_while:
-    Todo();
-    return false;
   case Ast_break:
-    Todo();
-    return false;
   case Ast_continue:
-    Todo();
-    return false;
   case Ast_return:
-    Todo();
-    return false;
+                  Todo(); return false;
 
   case Ast_kind_max:
   case Ast_root:
     Unreachable();
     return false;
   }
+
+  annotations[node_index.idx] = result;
+  *out = result;
 
   return true;
 }

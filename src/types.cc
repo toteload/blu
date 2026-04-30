@@ -249,7 +249,6 @@ void TypeInterner::init(
   Add_type(type.never, Type::make_never());
 
   Add_type(type.literal_int, Type::make_literal_int());
-  Add_type(type.literal_function, ((Type){ .kind = Type_literal_function, }));
   // clang-format on
 
 #undef Add_type

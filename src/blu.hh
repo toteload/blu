@@ -91,7 +91,7 @@ struct TypeCheckContext {
   Arena *work_arena;
 };
 
-b32 typecheck(TypeCheckContext *context, Source *source);
+b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations);
 
 #include "interpreter.hh"
 

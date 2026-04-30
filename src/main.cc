@@ -85,9 +85,6 @@ int main(i32 arg_count, char const *const *args) {
   EnvManager envs;
   envs.init(stdlib_alloc, stdlib_alloc);
 
-  Interpreter interpreter;
-  interpreter.init(&strings, &types, &values, &envs, &work_arena, &messages);
-
   TypeCheckContext typecheck_context = {
     .messages   = &messages,
     .envs       = &envs,
@@ -97,18 +94,28 @@ int main(i32 arg_count, char const *const *args) {
     .work_arena = &work_arena,
   };
 
-  ok = typecheck(&typecheck_context, &source);
+  Vector<TypeIndex> type_annotations;
+  type_annotations.init(stdlib_alloc);
+  type_annotations.set_size(nodes.kinds.len());
+  memset(type_annotations.data, 0xff, nodes.kinds.len() * sizeof(TypeIndex));
+
+  ok = typecheck(&typecheck_context, &source, type_annotations.slice());
   if (!ok) {
     printf("Typecheck error\n");
     messages.print_messages();
     return 1;
   }
 
-#if 0
+#if 1
+  Interpreter interpreter;
+  interpreter.init(&strings, &types, &values, &envs, &work_arena, &messages);
+  interpreter.type_annotations = type_annotations.slice();
+
   ValueIndex result;
   ok = interpreter.run(&source, &result);
   if (!ok) {
     printf("Interpreter error encountered.\n");
+    messages.print_messages();
     return 1;
   }
 

@@ -22,6 +22,7 @@ void Interpreter::init(
   });
 }
 
+#if 0
 b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) {
   auto kind = source->nodes->kind(node_index);
   switch (kind) {
@@ -81,6 +82,7 @@ b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) 
 
   return true;
 }
+#endif
 
 b32 Interpreter::run(Source *source, ValueIndex *result) {
   this->source = source;
@@ -130,18 +132,12 @@ b32 Interpreter::add_declaration(Env *env, NodeIndex declaration) {
 
   auto decl = source->nodes->data(declaration).declaration;
 
-  TypeIndex decl_type;
-  Try(intern_type(env, decl.type, &decl_type));
+  TypeIndex decl_type = get_type(decl.type);
 
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
 
-  {
-    Value *v = values->get(decl_value);
-
-    // TODO: Proper compiler message output.
-    Assert(types->is_coercible_to(v->type, decl_type));
-  }
+  // TODO: Should the value be coerced to the declared type??
 
   auto str = source->get_token_str(decl.name);
   auto key = strings->add(str);
@@ -188,20 +184,20 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   case Ast_function: {
     *result = values->add({
       .kind = Val_function,
-      .type = types->type.literal_function,
+      .type = get_type(node_index),
       .data = {.node_index = node_index},
     });
   } break;
   case Ast_identifier: {
-    Try(check_lookup_identifier(env, node_index, result));
+    *result = lookup_identifier(env, node_index);
   } break;
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
 
     ValueIndex cond;
     Try(eval_expr(env, if_else.cond, &cond));
-    Try(check_is_of_type(cond, types->type.bool_, if_else.cond));
 
+    // TODO: Double check this code. I think it's wrong.
     auto v = values->get(cond);
     if (v->kind == Val_true) {
       Try(eval_expr(env, if_else.then, result));
@@ -247,9 +243,24 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
 
 		    });
   } break;
-  default:
-    Todo();
-    break;
+
+  case Ast_literal_string:
+
+  case Ast_assign:
+  case Ast_type_slice:
+  case Ast_type_array:
+  case Ast_type_function:
+  case Ast_call:
+  case Ast_index:
+  case Ast_unary_op:
+  case Ast_while:
+  case Ast_break:
+  case Ast_continue:
+  case Ast_return:
+  case Ast_kind_max:
+  case Ast_root:
+    Unreachable();
+    return false;
   }
 
   return true;
@@ -336,20 +347,15 @@ b32 Interpreter::check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeInd
   return true;
 }
 
-b32 Interpreter::check_lookup_identifier(Env *env, NodeIndex identifier, ValueIndex *value) {
+ValueIndex Interpreter::lookup_identifier(Env *env, NodeIndex identifier) {
   auto token_index = source->nodes->data(identifier).identifier.token_index;
   auto str         = source->get_token_str(token_index);
   auto key         = strings->add(str);
   auto val         = env->lookup(key);
 
-  if (!val.is_some()) {
-    // TODO: Write nice message.
-    return false;
-  }
+  Assert(val.is_some());
 
-  *value = val.as_index();
-
-  return true;
+  return val.as_index();
 }
 
 b32 Interpreter::call_function(
@@ -362,4 +368,8 @@ b32 Interpreter::call_function(
   Try(eval_expr(env, function_node.body, result));
 
   return true;
+}
+
+TypeIndex Interpreter::get_type(NodeIndex node_index) {
+  return type_annotations[node_index.idx];
 }

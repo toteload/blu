@@ -14,6 +14,7 @@ enum ValueKind : u8 {
   Val_int,
   Val_function,
   Value_sequence,
+  Value_array,
 
   Value_declaration,
 };
@@ -26,10 +27,7 @@ struct Value {
     TypeIndex type;
     NodeIndex node_index;
     i64 int64;
-
-    struct {
-      Slice<Value> items;
-    } sequence;
+    Slice<Value> items;
   } data;
 };
 
