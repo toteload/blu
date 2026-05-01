@@ -82,9 +82,23 @@ struct Source {
   }
 };
 
+enum DeclarationKind {
+  Declaration_of_type,
+  Declaration_of_value,
+  Declaration_of_undetermined,
+};
+
+struct Declaration {
+  DeclarationKind kind;
+  union {
+    TypeIndex type;
+    NodeIndex node_index;
+  };
+};
+
 struct TypeCheckContext {
   Messages *messages;
-  EnvManager *envs;
+  EnvManager<Declaration> *envs;
   TypeInterner *types;
   StringInterner *strings;
   ValueStore *values;

@@ -138,7 +138,7 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 #define Panic() abort()
 #define Unreachable() Panic()
-#define Todo() Assert(!"TODO")
+#define Todo(Comment) Assert(!"TODO" Comment)
 #define Unimplemented() Assert(!"Unimplemented")
 
 // ---
@@ -149,6 +149,9 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 struct Str {
   char const *str = nullptr;
   usize _len      = 0;
+
+  // template<usize N>
+  // Str(char const s[N]): str(s), _len(N) {}
 
   bool is_ok() { return str && _len; }
   bool is_empty() { return _len == 0; }
@@ -180,6 +183,9 @@ struct Str {
     s,                                                                                             \
     (sizeof(s) - 1),                                                                               \
   }
+
+// Shorter, and more convenient alternative.
+#define STR(s) Str_make(s)
 
 ttld_inline b32 str_eq(Str a, Str b) {
   b32 is_same_len     = a.len() == b.len();

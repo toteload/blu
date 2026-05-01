@@ -1,41 +1,6 @@
 #include "blu.hh"
 
-enum DeclarationKind {
-  Declaration_of_type,
-  Declaration_of_value,
-  Declaration_of_undetermined,
-};
-
-struct Declaration {
-  DeclarationKind kind;
-  union {
-    TypeIndex type;
-    NodeIndex node_index;
-  };
-};
-
-struct TypeEnv {
-  TypeEnv *parent;
-  HashMap<StrKey, Declaration, str_key_eq, str_key_hash> map;
-
-  void insert(StrKey identifier, Declaration decl) { map.insert(identifier, decl); }
-
-  bool lookup(StrKey identifier, Declaration *decl) {
-    Declaration *p = map.get_ptr(identifier);
-    if (p) {
-      *decl = *p;
-      return true;
-    }
-
-    if (parent) {
-      return parent->lookup(identifier, decl);
-    }
-
-    return false;
-  }
-};
-
-void populate_root_env(TypeEnv *env, StringInterner *strings, TypeInterner *types) {
+void populate_root_env(Env<Declaration> *env, StringInterner *strings, TypeInterner *types) {
 #define Add(Kind, Identifier, Type)                                                                \
   do {                                                                                             \
     auto key = strings->add(Str_make((Identifier)));                                               \
@@ -72,6 +37,7 @@ struct TypeHint {
 struct TypeChecker {
   Messages *messages;
   TypeInterner *types;
+  EnvManager<Declaration> *envs;
   StringInterner *strings;
   ValueStore *values;
   Arena *work_arena;
@@ -81,17 +47,20 @@ struct TypeChecker {
 
   b32 typecheck();
 
-  b32 eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *result);
-  b32 check_expression(Env *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result);
+  b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
+  b32 check_expression(
+    Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
+  );
 
   b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
 
   b32 check_is_type(TypeIndex type, NodeIndex at);
+  b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
   b32 check_is_indexable(TypeIndex type, NodeIndex at);
 
   StrKey intern_identifier(TokenIndex identifier);
 
-  b32 find_identifier(Env *env, TokenIndex identifier, Declaration *result);
+  b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
 };
 
 u32 string_literal_byte_size(Str s) {
@@ -118,6 +87,10 @@ b32 TypeChecker::typecheck() {
   NodeIndex root_idx = {0};
   Assert(source->nodes->kind(root_idx) == Ast_root);
 
+  auto env_base = envs->alloc(nullptr);
+  populate_root_env(env_base, strings, types);
+  auto env = envs->alloc(env_base);
+
   // Add all root level declarations to the environment.
   auto root = source->nodes->data(root_idx).root;
   for (u32 i = 0; i < root.items.len(); i++) {
@@ -130,10 +103,8 @@ b32 TypeChecker::typecheck() {
     env->insert(
       key,
       {
-        .kind = Declaration_of_undetermined,
-        .data = {
-          .node_index = root.items[i],
-        },
+        .kind       = Declaration_of_undetermined,
+        .node_index = root.items[i],
       }
     );
   }
@@ -158,7 +129,7 @@ b32 TypeChecker::typecheck() {
   return true;
 }
 
-b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex *out) {
+b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *out) {
   auto kind = source->nodes->kind(node_index);
 
   TypeIndex result;
@@ -224,8 +195,8 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
     auto token_index = source->nodes->data(node_index).identifier.token_index;
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
-    Try(check_is_type(val->type, node_index));
-    result = val->data.type;
+    Try(check_is_declaration_of_type(decl, node_index));
+    result = decl.type;
   } break;
 
   case Ast_block:
@@ -257,7 +228,7 @@ b32 TypeChecker::eval_type_expression(Env *env, NodeIndex node_index, TypeIndex 
 }
 
 b32 TypeChecker::check_expression(
-  Env *env, NodeIndex node_index, ExpectedType *hint, TypeIndex *out
+  Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *out
 ) {
   auto kind = source->nodes->kind(node_index);
 
@@ -293,20 +264,30 @@ b32 TypeChecker::check_expression(
     auto s           = source->get_token_str(token_index);
     auto size        = string_literal_byte_size(s);
     Type type        = {
-      .kind  = Type_array,
-      .array = {
-        .size      = size,
-        .base_type = types->type.u8_,
+             .kind  = Type_array,
+             .array = {
+               .size      = size,
+               .base_type = types->type.u8_,
       },
     };
     result = types->add(&type);
   } break;
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
-    ValueIndex val_idx;
-    Try(find_identifier(env, token_index, &val_idx));
-    auto val = values->get(val_idx);
-    result   = val->type;
+    Declaration decl;
+    Try(find_identifier(env, token_index, &decl));
+
+    switch (decl.kind) {
+    case Declaration_of_value:
+      result = decl.type;
+      break;
+    case Declaration_of_type:
+      result = types->type.type;
+      break;
+    case Declaration_of_undetermined: {
+      Todo("recurse and find type of undetermined declaration");
+    } break;
+    }
   } break;
   case Ast_function: {
     auto f = source->nodes->data(node_index).function;
@@ -377,24 +358,32 @@ b32 TypeChecker::check_expression(
     TypeIndex declared_type;
     Try(eval_type_expression(env, decl.type, &declared_type));
 
-    ExpectedType expect_type = {
+    TypeHint hint = {
       .type     = declared_type,
       .location = decl.type,
     };
 
     TypeIndex value_type;
-    Try(check_expression(env, decl.value, &expect_type, &value_type));
+    Try(check_expression(env, decl.value, &hint, &value_type));
 
     Try(check_coercion(decl.value, value_type, declared_type));
 
-    env->insert(
-      key,
-      values->add({
-        .kind            = Value_declaration,
-        .type            = declared_type,
-        .data.node_index = node_index,
-      })
-    );
+    // TODO: You probably want a unification of the declared type and the actual type here.
+
+    Declaration d;
+    if (declared_type == types->type.type) {
+      d = {
+        .kind = Declaration_of_type,
+        .type = value_type,
+      };
+    } else {
+      d = {
+        .kind = Declaration_of_value,
+        .type = declared_type,
+      };
+    }
+
+    env->insert(key, d);
 
     result = types->type.nil;
   } break;
@@ -403,8 +392,8 @@ b32 TypeChecker::check_expression(
 
     auto type = alloc_type_sequence(work_arena, seq.items.len());
     *type     = {
-      .kind     = Type_sequence,
-      .sequence = {.count = cast<u32>(seq.items.len())},
+          .kind     = Type_sequence,
+          .sequence = {.count = cast<u32>(seq.items.len())},
     };
     for (u32 i = 0; i < seq.items.len(); i++) {
       Try(check_expression(env, seq.items[i], nullptr, &type->sequence.item_types[i]));
@@ -483,6 +472,16 @@ b32 TypeChecker::check_is_type(TypeIndex type, NodeIndex at) {
   return false;
 }
 
+b32 TypeChecker::check_is_declaration_of_type(Declaration decl, NodeIndex at) {
+  if (decl.kind == Declaration_of_type) {
+    return true;
+  }
+
+  messages->error(at, "Expected type, but got {type}.", decl.type);
+
+  return false;
+}
+
 b32 TypeChecker::check_is_indexable(TypeIndex type, NodeIndex at) {
   auto ty = types->get(type);
 
@@ -500,14 +499,16 @@ StrKey TypeChecker::intern_identifier(TokenIndex identifier) {
   return strings->add(s);
 }
 
-b32 TypeChecker::find_identifier(Env *env, TokenIndex identifier, ValueIndex *result) {
+b32 TypeChecker::find_identifier(
+  Env<Declaration> *env, TokenIndex identifier, Declaration *result
+) {
   auto key = intern_identifier(identifier);
-  auto idx = env->lookup(key);
-  if (!idx.is_some()) {
+
+  auto found = env->lookup(key, result);
+
+  if (!found) {
     messages->error(identifier, "Could not find identifier '{strkey}'.", key);
-    return false;
   }
 
-  *result = idx.as_index();
-  return true;
+  return found;
 }

@@ -12,7 +12,7 @@ struct Value {
     TypeIndex type;
     NodeIndex node_index;
     i64 int64;
-    Slice<Value> items;
+    u8 *memory;
   } data;
 };
 
@@ -31,6 +31,8 @@ struct ValueStore {
     *p             = val;
     return idx;
   }
+
+  ValueIndex add_with_memory(TypeIndex type, u32 byte_size, u32 align, u8 **out);
 
   Value *get(ValueIndex idx) { return values.get(idx.idx); }
 

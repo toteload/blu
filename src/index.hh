@@ -27,6 +27,7 @@ struct Index {
 template<typename T, typename Tag>
 struct OptionalIndex {
   static constexpr T none_idx = std::numeric_limits<T>::max();
+  static constexpr OptionalIndex some(T x) { return { x }; }
   static constexpr OptionalIndex none() { return { none_idx }; }
 
   T idx;

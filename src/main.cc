@@ -82,7 +82,7 @@ int main(i32 arg_count, char const *const *args) {
   ValueStore values;
   values.init(stdlib_alloc);
 
-  EnvManager envs;
+  EnvManager<Declaration> envs;
   envs.init(stdlib_alloc, stdlib_alloc);
 
   TypeCheckContext typecheck_context = {
@@ -106,9 +106,11 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-#if 1
+  EnvManager<ValueIndex> value_envs;
+  value_envs.init(stdlib_alloc, stdlib_alloc);
+
   Interpreter interpreter;
-  interpreter.init(&strings, &types, &values, &envs, &work_arena, &messages);
+  interpreter.init(&strings, &types, &values, &value_envs, &work_arena, &messages);
   interpreter.type_annotations = type_annotations.slice();
 
   ValueIndex result;
@@ -124,7 +126,6 @@ int main(i32 arg_count, char const *const *args) {
     u32 len       = values.value_to_string(&types, result, buf, 512);
     printf("%.*s\n", cast<int>(len), buf);
   }
-#endif
 
   printf("ok\n");
 

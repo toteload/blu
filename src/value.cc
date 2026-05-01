@@ -21,15 +21,30 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   buf_size -= offset;
   written  += offset;
 
-  switch (v->kind) {
-  case Val_int: {
+  auto t = types->get(v->type);
+
+  switch (t->kind) {
+  case Type_literal_int: {
+
     offset    = snprintf(buf, buf_size, "%lld", v->data.int64);
     buf      += offset;
     buf_size -= offset;
     written  += offset;
+
   } break;
-  default:
+  case Type_literal_function:
+  case Type_integer:
+  case Type_boolean:
+  case Type_function:
+  case Type_nil:
+  case Type_never:
+  case Type_slice:
+  case Type_array:
+  case Type_distinct:
+  case Type_sequence:
+  case Type_type:
     Todo();
+    break;
   }
 
   return written;

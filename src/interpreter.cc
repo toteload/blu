@@ -4,7 +4,7 @@ void Interpreter::init(
   StringInterner *strings,
   TypeInterner *types,
   ValueStore *values,
-  EnvManager *envs,
+  EnvManager<ValueIndex> *envs,
   Arena *work_arena,
   Messages *messages
 ) {
@@ -16,81 +16,69 @@ void Interpreter::init(
   this->messages   = messages;
 
   common.nil = values->add({
-    .kind = Val_type,
     .type = types->type.type,
     .data = {.type = types->type.nil},
   });
 }
 
-#if 0
-b32 Interpreter::intern_type(Env *env, NodeIndex node_index, TypeIndex *result) {
-  auto kind = source->nodes->kind(node_index);
-  switch (kind) {
-  case Ast_type_function: {
-    auto f = source->nodes->data(node_index).type_function;
+struct PopulateRootEnv {
+  StringInterner *strings;
+  TypeInterner *types;
+  ValueStore *values;
+  Env<ValueIndex> *env;
 
-    u32 param_count = f.param_types.len();
-    auto ty         = alloc_type_function(work_arena, param_count);
+  void insert(Str key, Value val);
+  void insert_type(Str key, TypeIndex type);
+  void populate();
+};
 
-    *ty = {
-      .kind     = Type_function,
-      .function = {
-        .param_count = param_count,
-      },
-    };
-
-    Try(intern_type(env, f.return_type, &ty->function.return_type));
-
-    for (u32 i = 0; i < param_count; i++) {
-      Try(intern_type(env, f.param_types[i], &ty->function.param_types[i]));
-    }
-
-    *result = types->add(ty);
-  } break;
-  case Ast_identifier: {
-    auto str = source->get_token_str(source->nodes->data(node_index).identifier.token_index);
-    auto val = values->get(_lookup(env, str).as_index());
-    Assert(val->kind == Val_type);
-    *result = val->data.type;
-  } break;
-  case Ast_type_slice: {
-    auto slice = source->nodes->data(node_index).type_slice;
-    Type ty    = {
-      .kind = Type_slice,
-    };
-    Try(intern_type(env, slice.base, &ty.slice.base_type));
-    *result = types->add(&ty);
-  } break;
-  case Ast_type_array: {
-    auto array = source->nodes->data(node_index).type_array;
-    Type ty    = {
-      .kind = Type_array,
-    };
-    Try(intern_type(env, array.base, &ty.array.base_type));
-
-    ValueIndex size_result;
-    Try(eval_expr(env, array.size, &size_result));
-
-    Try(get_int_value(size_result, &ty.array.size));
-
-    *result = types->add(&ty);
-  } break;
-  default:
-    Todo();
-    break;
-  }
-
-  return true;
+void PopulateRootEnv::insert(Str s, Value val) {
+  auto key = strings->add(s);
+  auto idx = values->add(val);
+  env->insert(key, idx);
 }
-#endif
+
+void PopulateRootEnv::insert_type(Str s, TypeIndex type) {
+  insert(s, {.type = types->type.type, .data = {.type = type}});
+}
+
+void PopulateRootEnv::populate() {
+  insert_type(STR("i8"), types->type.i8_);
+  insert_type(STR("i16"), types->type.i16_);
+  insert_type(STR("i32"), types->type.i32_);
+  insert_type(STR("i64"), types->type.i64_);
+
+  insert_type(STR("u8"), types->type.u8_);
+  insert_type(STR("u16"), types->type.u16_);
+  insert_type(STR("u32"), types->type.u32_);
+  insert_type(STR("u64"), types->type.u64_);
+
+  insert_type(STR("nil"), types->type.nil);
+  insert_type(STR("never"), types->type.never);
+  insert_type(STR("type"), types->type.type);
+  insert_type(STR("bool"), types->type.bool_);
+
+  insert(STR("true"), {.type = types->type.bool_, .data = {.int64 = 1}});
+  insert(STR("false"), {.type = types->type.bool_, .data = {.int64 = 0}});
+}
 
 b32 Interpreter::run(Source *source, ValueIndex *result) {
   this->source = source;
 
   auto nodes = source->nodes;
 
-  auto env_global = envs->create_global_env(strings, types, values);
-  auto env        = envs->alloc(env_global);
+  Env<ValueIndex> *env_global = envs->alloc(nullptr);
+  {
+    PopulateRootEnv populate = {
+      .strings = strings,
+      .types   = types,
+      .values  = values,
+      .env     = env_global,
+    };
+
+    populate.populate();
+  }
+  auto env = envs->alloc(env_global);
   defer({
     envs->dealloc(env_global);
     envs->dealloc(env);
@@ -111,10 +99,10 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   {
     Type *t = alloc_type_function(work_arena, 0);
     *t      = {
-      .kind     = Type_function,
-      .function = {
-        .return_type = types->type.i32_,
-        .param_count = 0,
+           .kind     = Type_function,
+           .function = {
+             .return_type = types->type.i32_,
+             .param_count = 0,
       },
     };
     main_function_type = types->add(t);
@@ -127,7 +115,7 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   return true;
 }
 
-b32 Interpreter::add_declaration(Env *env, NodeIndex declaration) {
+b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Assert(source->nodes->kind(declaration) == Ast_declaration);
 
   auto decl = source->nodes->data(declaration).declaration;
@@ -147,7 +135,7 @@ b32 Interpreter::add_declaration(Env *env, NodeIndex declaration) {
   return true;
 }
 
-b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
+b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result) {
   auto kind = source->nodes->kind(node_index);
 
   switch (kind) {
@@ -157,7 +145,6 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
     auto i           = parse_i64(str);
 
     *result = values->add({
-      .kind = Val_int,
       .type = types->type.literal_int,
       .data = {
         .int64 = i,
@@ -183,7 +170,6 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   } break;
   case Ast_function: {
     *result = values->add({
-      .kind = Val_function,
       .type = get_type(node_index),
       .data = {.node_index = node_index},
     });
@@ -197,9 +183,9 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
     ValueIndex cond;
     Try(eval_expr(env, if_else.cond, &cond));
 
-    // TODO: Double check this code. I think it's wrong.
     auto v = values->get(cond);
-    if (v->kind == Val_true) {
+
+    if (v->data.int64 == 1) {
       Try(eval_expr(env, if_else.then, result));
     } else if (if_else.otherwise.is_some()) {
       Try(eval_expr(env, if_else.otherwise.as_index(), result));
@@ -239,19 +225,26 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
       Try(eval_expr(env, seq.items[i], &res));
     }
 
-    *result = values->add({
-
-		    });
+    Todo("add literal sequence");
   } break;
+  case Ast_index: {
+    auto node = source->nodes->data(node_index).index;
 
-  case Ast_literal_string:
+    ValueIndex indexable;
+    Try(eval_expr(env, node.indexable, &indexable));
+
+    ValueIndex index_at;
+    Try(eval_expr(env, node.index_at, &index_at));
+
+    Todo("implement indexing");
+  } break;
+  case Ast_literal_string: { Todo(); } break;
 
   case Ast_assign:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
   case Ast_call:
-  case Ast_index:
   case Ast_unary_op:
   case Ast_while:
   case Ast_break:
@@ -259,7 +252,7 @@ b32 Interpreter::eval_expr(Env *env, NodeIndex node_index, ValueIndex *result) {
   case Ast_return:
   case Ast_kind_max:
   case Ast_root:
-    Unreachable();
+    Todo();
     return false;
   }
 
@@ -311,7 +304,6 @@ b32 Interpreter::eval_binary_op(
     }
 
     *result = values->add({
-      .kind = Val_int,
       .type = result_type,
       .data = {
         .int64 = res,
@@ -347,19 +339,21 @@ b32 Interpreter::check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeInd
   return true;
 }
 
-ValueIndex Interpreter::lookup_identifier(Env *env, NodeIndex identifier) {
+ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier) {
   auto token_index = source->nodes->data(identifier).identifier.token_index;
   auto str         = source->get_token_str(token_index);
   auto key         = strings->add(str);
-  auto val         = env->lookup(key);
 
-  Assert(val.is_some());
+  ValueIndex val;
+  auto found = env->lookup(key, &val);
 
-  return val.as_index();
+  Assert(found);
+
+  return val;
 }
 
 b32 Interpreter::call_function(
-  Env *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
+  Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
 ) {
   // TODO: make sure the arguments match the expected parameters
   // TODO: add parameters to env
