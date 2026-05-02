@@ -53,6 +53,7 @@ struct Interpreter {
   b32 get_int_value(ValueIndex v, i64 *i);
 
   b32 add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
+  ValueIndex coerce_value(TypeIndex type_dst, ValueIndex src);
 
   void populate_root_env(Env<ValueIndex> *env);
 };

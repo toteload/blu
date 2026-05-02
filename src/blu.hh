@@ -122,7 +122,7 @@ struct MessageLocation {
   union {
     TokenIndex token_index;
     NodeIndex node_index;
-  };
+  } data;
 };
 
 enum MessageSeverity : u8 {

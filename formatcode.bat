@@ -12,7 +12,6 @@ clang-format -i src\types.cc
 clang-format -i src\value.hh
 clang-format -i src\value.cc
 clang-format -i src\env.hh
-clang-format -i src\compiler.cc
 clang-format -i src\tokenize.cc
 clang-format -i src\parse.cc
 clang-format -i src\main.cc

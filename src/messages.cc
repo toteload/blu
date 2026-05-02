@@ -77,13 +77,13 @@ void Messages::print_message(Message *msg) {
   case MessageLocation_none:
     break;
   case MessageLocation_node_index: {
-    auto token_span = source->nodes->span(msg->location.node_index);
+    auto token_span = source->nodes->span(msg->location.data.node_index);
     auto span       = source->tokens->span(token_span.start);
     auto loc        = find_source_location(source->source, span.start);
     printf("%d:%d: ", loc.line, loc.col);
   } break;
   case MessageLocation_token_index: {
-    auto span = source->tokens->span(msg->location.token_index);
+    auto span = source->tokens->span(msg->location.data.token_index);
     auto loc  = find_source_location(source->source, span.start);
     printf("%d:%d: ", loc.line, loc.col);
   } break;
@@ -159,8 +159,8 @@ void Messages::_error(MessageLocation location, char const *format, va_list vara
   );
 
   *msg = {
-    .severity   = Error,
     .location   = location,
+    .severity   = Error,
     .format_len = format_len,
     .format     = fmt_buf,
     .args       = args,
@@ -181,6 +181,7 @@ void Messages::error(char const *format, ...) {
   _error(
     {
       .kind = MessageLocation_none,
+      .data = {},
     },
     format,
     varargs
@@ -194,7 +195,7 @@ void Messages::error(TokenIndex location, char const *format, ...) {
   _error(
     {
       .kind        = MessageLocation_token_index,
-      .token_index = location,
+      .data = { .token_index = location, },
     },
     format,
     varargs
@@ -207,7 +208,7 @@ void Messages::error(NodeIndex location, char const *format, ...) {
   _error(
     {
       .kind       = MessageLocation_node_index,
-      .node_index = location,
+      .data = { .node_index = location},
     },
     format,
     varargs

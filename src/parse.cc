@@ -578,15 +578,6 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_bar:              Try(parse_function(&base));    break;
     // clang-format on
 
-#if 0
-  // I don't understand why this case is here...
-  case Tok_brace_open: {
-    next();
-    Try(parse_expression(&base));
-    Try(expect_token(Tok_brace_close));
-  } break;
-#endif
-
   case Tok_dot: {
     next();
     Try(peek(&tok));
@@ -622,14 +613,14 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
 
     AstUnaryOp unary_op;
 
+    // clang-format off
     switch (tok) {
-      // clang-format off
     case Tok_exclamation: unary_op.kind = Not;    break;
     case Tok_minus:       unary_op.kind = Negate; break;
 
     default: { Unreachable(); } break;
-      // clang-format on
     }
+    // clang-format on
 
     Try(parse_expression(&unary_op.value));
 

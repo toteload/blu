@@ -103,6 +103,7 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
            .function = {
              .return_type = types->type.i32_,
              .param_count = 0,
+             .param_types = {},
       },
     };
     main_function_type = types->add(t);
@@ -115,6 +116,34 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   return true;
 }
 
+// Assume: The coercion is always possible.
+ValueIndex Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src) {
+  auto v = values->get(src);
+
+  if (type_dst == v->type) {
+    return src;
+  }
+
+  auto ty_dst = types->get(type_dst);
+  auto ty_src = types->get(v->type);
+
+  if (ty_src->kind == Type_sequence && ty_dst->kind == Type_slice) {
+    u32 count = ty_src->sequence.count;
+    ValueIndex *items;
+    auto res = values->alloc_slice(type_dst, count, &items);
+
+    for (u32 i = 0; i < count; i++) {
+      items[i] = coerce_value(ty_dst->slice.base_type, v->data.sequence[i]);
+    }
+
+    return res;
+  }
+
+  Todo();
+
+  return {};
+}
+
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Assert(source->nodes->kind(declaration) == Ast_declaration);
 
@@ -125,12 +154,12 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
 
-  // TODO: Should the value be coerced to the declared type??
+  ValueIndex val = coerce_value(decl_type, decl_value);
 
   auto str = source->get_token_str(decl.name);
   auto key = strings->add(str);
 
-  env->insert(key, decl_value);
+  env->insert(key, val);
 
   return true;
 }
@@ -209,36 +238,51 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
   } break;
   case Ast_literal_sequence: {
-    auto seq   = source->nodes->data(node_index).literal_sequence;
+    auto seq = source->nodes->data(node_index).literal_sequence;
     auto count = seq.items.len();
-    auto ty    = alloc_type_sequence(work_arena, count);
 
-    *ty = {
-      .kind     = Type_sequence,
-      .sequence = {
-        .count = cast<u32>(count),
-      },
-    };
+    ValueIndex *value_items;
+    auto seq_type = get_type(node_index);
+    auto res = values->alloc_sequence(seq_type, count, &value_items);
 
     for (u32 i = 0; i < count; i++) {
-      ValueIndex res;
-      Try(eval_expr(env, seq.items[i], &res));
+      Try(eval_expr(env, seq.items[i], &value_items[i]));
     }
 
-    Todo("add literal sequence");
+    *result = res;
   } break;
   case Ast_index: {
     auto node = source->nodes->data(node_index).index;
 
-    ValueIndex indexable;
-    Try(eval_expr(env, node.indexable, &indexable));
+    ValueIndex idx_indexable;
+    Try(eval_expr(env, node.indexable, &idx_indexable));
 
-    ValueIndex index_at;
-    Try(eval_expr(env, node.index_at, &index_at));
+    ValueIndex idx_index_at;
+    Try(eval_expr(env, node.index_at, &idx_index_at));
+
+    auto indexable = values->get(idx_indexable);
+    auto at = values->get(idx_index_at);
 
     Todo("implement indexing");
   } break;
-  case Ast_literal_string: { Todo(); } break;
+  case Ast_literal_string: {
+    auto ty = get_type(node_index);
+    auto t = types->get(ty);
+
+
+    u32 byte_count = t->array.size;
+
+    u8 *bytes;
+    auto res = values->alloc_with_memory(ty, byte_count, 1, &bytes);
+
+    auto token_index = source->nodes->data(node_index).literal_string.token_index;
+    auto s = source->get_token_str(token_index);
+
+    // TODO handle escape codes
+    memcpy(bytes, s.str, byte_count);
+
+    *result = res;
+  } break;
 
   case Ast_assign:
   case Ast_type_slice:

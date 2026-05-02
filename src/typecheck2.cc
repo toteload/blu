@@ -71,8 +71,8 @@ u32 string_literal_byte_size(Str s) {
 b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
     .messages    = context->messages,
-    .envs        = context->envs,
     .types       = context->types,
+    .envs        = context->envs,
     .strings     = context->strings,
     .values      = context->values,
     .work_arena  = context->work_arena,
@@ -144,7 +144,9 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     *ty = {
       .kind     = Type_function,
       .function = {
+        .return_type = {},
         .param_count = param_count,
+        .param_types = {},
       },
     };
 
@@ -217,7 +219,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_return:
   case Ast_kind_max:
   case Ast_root:
-    Unreachable();
+    Todo();
     return false;
   }
 
@@ -266,8 +268,8 @@ b32 TypeChecker::check_expression(
     Type type        = {
              .kind  = Type_array,
              .array = {
-               .size      = size,
                .base_type = types->type.u8_,
+               .size      = size,
       },
     };
     result = types->add(&type);
@@ -393,8 +395,9 @@ b32 TypeChecker::check_expression(
     auto type = alloc_type_sequence(work_arena, seq.items.len());
     *type     = {
           .kind     = Type_sequence,
-          .sequence = {.count = cast<u32>(seq.items.len())},
+          .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
     };
+
     for (u32 i = 0; i < seq.items.len(); i++) {
       Try(check_expression(env, seq.items[i], nullptr, &type->sequence.item_types[i]));
     }
@@ -437,12 +440,9 @@ b32 TypeChecker::check_expression(
   case Ast_break:
   case Ast_continue:
   case Ast_return:
-    Todo();
-    return false;
-
-  case Ast_kind_max:
   case Ast_root:
-    Unreachable();
+  case Ast_kind_max:
+    Todo();
     return false;
   }
 

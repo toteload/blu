@@ -184,7 +184,7 @@ struct Str {
     (sizeof(s) - 1),                                                                               \
   }
 
-// Shorter, and more convenient alternative.
+// Shorter, and more convenient alternative to Str_make. Prefer this over Str_make.
 #define STR(s) Str_make(s)
 
 ttld_inline b32 str_eq(Str a, Str b) {

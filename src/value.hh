@@ -13,6 +13,19 @@ struct Value {
     NodeIndex node_index;
     i64 int64;
     u8 *memory;
+
+    struct {
+      i64 len;
+      ValueIndex *items;
+    } slice;
+
+    // The length of the sequence is stored in the type.
+    ValueIndex *sequence;
+
+    struct {
+      TypeIndex type;
+      u8 *memory;
+    } any;
   } data;
 };
 
@@ -32,9 +45,12 @@ struct ValueStore {
     return idx;
   }
 
-  ValueIndex add_with_memory(TypeIndex type, u32 byte_size, u32 align, u8 **out);
-
   Value *get(ValueIndex idx) { return values.get(idx.idx); }
+
+  ValueIndex alloc_sequence(TypeIndex seq_type, u32 sequence_length, ValueIndex **items);
+  ValueIndex alloc_slice(TypeIndex slice_type, u32 length, ValueIndex **items);
+
+  ValueIndex alloc_with_memory(TypeIndex type, u32 byte_count, u32 align, u8 **out);
 
   // Returns the number of bytes written to `buf`.
   u32 value_to_string(TypeInterner *types, ValueIndex idx, char *buf, u32 buf_size);
