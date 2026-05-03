@@ -5,28 +5,31 @@ struct ValueIndexTag {};
 using ValueIndex         = Index<u32, ValueIndexTag>;
 using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
 
-struct Value {
+union ValuePayload {
   TypeIndex type;
+  NodeIndex node_index;
+  i64 int64;
 
-  union {
+  // Used by array.
+  void *memory;
+
+  struct {
+    i64 len;
+    void *items;
+  } slice;
+
+  // The length of the sequence is stored in the type.
+  ValueIndex *items;
+
+  struct {
     TypeIndex type;
-    NodeIndex node_index;
-    i64 int64;
     u8 *memory;
+  } any;
+};
 
-    struct {
-      i64 len;
-      ValueIndex *items;
-    } slice;
-
-    // The length of the sequence is stored in the type.
-    ValueIndex *sequence;
-
-    struct {
-      TypeIndex type;
-      u8 *memory;
-    } any;
-  } data;
+struct Value {
+  TypeIndex    type;
+  ValuePayload data;
 };
 
 struct ValueStore {
@@ -47,8 +50,8 @@ struct ValueStore {
 
   Value *get(ValueIndex idx) { return values.get(idx.idx); }
 
-  ValueIndex alloc_sequence(TypeIndex seq_type, u32 sequence_length, ValueIndex **items);
-  ValueIndex alloc_slice(TypeIndex slice_type, u32 length, ValueIndex **items);
+  ValueIndex alloc_sequence(TypeIndex type, u32 length, ValueIndex **items);
+  ValueIndex alloc_slice(TypeIndex type, u32 length, ValueIndex **items);
 
   ValueIndex alloc_with_memory(TypeIndex type, u32 byte_count, u32 align, u8 **out);
 

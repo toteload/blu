@@ -1,8 +1,8 @@
 #include "blu.hh"
 
-ValueIndex ValueStore::alloc_sequence(TypeIndex seq_type, u32 sequence_length, ValueIndex **items) {
-  auto p = blocks_allocator.alloc<ValueIndex>(sequence_length);
-  auto idx = add({ .type = seq_type, .data = { .sequence = p, }, });
+ValueIndex ValueStore::alloc_with_items(TypeIndex type, u32 count, ValueIndex **items) {
+  auto p = blocks_allocator.alloc<ValueIndex>(count);
+  auto idx = add({ .type = type, .data = { .items = p, }, });
   *items = p;
   return idx;
 }

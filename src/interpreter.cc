@@ -93,7 +93,7 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
     Try(add_declaration(env, item_idx));
   }
 
-  auto main = values->get(_lookup(env, Str_make("main")).as_index());
+  auto main = values->get(_lookup(env, STR("main")).as_index());
 
   TypeIndex main_function_type;
   {
@@ -127,16 +127,56 @@ ValueIndex Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src) {
   auto ty_dst = types->get(type_dst);
   auto ty_src = types->get(v->type);
 
-  if (ty_src->kind == Type_sequence && ty_dst->kind == Type_slice) {
-    u32 count = ty_src->sequence.count;
+  if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
+    return values->add({.type = type_dst, .data = {.int64 = v->data.int64}});
+  }
+
+  if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
+    u32 count = ty_src->array.size;
+
     ValueIndex *items;
     auto res = values->alloc_slice(type_dst, count, &items);
 
     for (u32 i = 0; i < count; i++) {
-      items[i] = coerce_value(ty_dst->slice.base_type, v->data.sequence[i]);
+      items[i] = coerce_value(ty_dst->slice.base_type, v->data.items[i]);
     }
 
     return res;
+  }
+
+  if (ty_src->kind == Type_sequence) {
+    if (ty_dst->kind == Type_slice) {
+      u32 count = ty_src->sequence.count;
+
+      ValueIndex *items;
+      auto res = values->alloc_slice(type_dst, count, &items);
+
+      for (u32 i = 0; i < count; i++) {
+        items[i] = coerce_value(ty_dst->slice.base_type, v->data.items[i]);
+      }
+
+      return res;
+    }
+
+    if (ty_dst->kind == Type_array) {
+      u32 count = ty_src->sequence.count;
+
+      ValueIndex *items;
+      auto res = values->alloc_with_items(type_dst, count, &items);
+
+      for (u32 i = 0; i < count; i++) {
+        items[i] = coerce_value(ty_dst->array.base_type, v->data.items[i]);
+      }
+
+      return res;
+    }
+  }
+
+  if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
+    return values->add({
+        .type = type_dst,
+        .data = {.node_index = v->data.node_index,}
+        });
   }
 
   Todo();
@@ -243,7 +283,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     ValueIndex *value_items;
     auto seq_type = get_type(node_index);
-    auto res = values->alloc_sequence(seq_type, count, &value_items);
+    auto res = values->alloc_with_items(seq_type, count, &value_items);
 
     for (u32 i = 0; i < count; i++) {
       Try(eval_expr(env, seq.items[i], &value_items[i]));
