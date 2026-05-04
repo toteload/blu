@@ -9,8 +9,6 @@ template<typename T> struct Vector {
   void init(Allocator alloc);
   void deinit();
 
-  ~Vector() { deinit(); }
-
   bool is_empty() { return _len == 0; }
   usize len() { return _len; }
 

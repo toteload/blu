@@ -19,8 +19,8 @@ void Interpreter::init(
     Value *v;
     common.nil = values->add(&v);
     *v         = {
-      .type = types->type.type,
-      .data = {.type = types->type.nil},
+              .type = types->type.type,
+              .data = {.type = types->type.nil},
     };
   }
 }
@@ -86,8 +86,8 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   }
   auto env = envs->alloc(env_global);
   defer({
-    envs->dealloc(env_global);
     envs->dealloc(env);
+    envs->dealloc(env_global);
   });
 
   NodeIndex root_idx = {0};
@@ -105,11 +105,11 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   {
     Type *t = alloc_type_function(work_arena, 0);
     *t      = {
-      .kind     = Type_function,
-      .function = {
-        .return_type = types->type.i32_,
-        .param_count = 0,
-        .param_types = {},
+           .kind     = Type_function,
+           .function = {
+             .return_type = types->type.i32_,
+             .param_count = 0,
+             .param_types = {},
       },
     };
     main_function_type = types->add(t);
@@ -148,9 +148,9 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, ValuePayload 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
     u32 count = ty_src->array.size;
     *out      = {
-      .slice = {
-        .len   = count,
-        .items = v->data.items,
+           .slice = {
+             .len   = count,
+             .items = v->data.items,
       },
     };
     return;
@@ -161,9 +161,9 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, ValuePayload 
       u32 count  = ty_src->sequence.count;
       auto items = values->alloc_data(count);
       *out       = {
-        .slice = {
-          .len   = count,
-          .items = items,
+              .slice = {
+                .len   = count,
+                .items = items,
         },
       };
 
@@ -230,9 +230,9 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Value *v;
     *result = values->add(&v);
     *v      = {
-      .type = types->type.literal_int,
-      .data = {
-        .int64 = i,
+           .type = types->type.literal_int,
+           .data = {
+             .int64 = i,
       },
     };
   } break;
@@ -257,8 +257,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Value *v;
     *result = values->add(&v);
     *v      = {
-      .type = get_type(node_index),
-      .data = {.node_index = node_index},
+           .type = get_type(node_index),
+           .data = {.node_index = node_index},
     };
   } break;
   case Ast_identifier: {
@@ -340,8 +340,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       Value *vout;
       *result = values->add(&vout);
       *vout   = {
-        .type = type_indexable->slice.base_type,
-        .data = indexable->data.slice.items[i],
+          .type = type_indexable->slice.base_type,
+          .data = indexable->data.slice.items[i],
       };
       break;
     }
@@ -365,7 +365,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     };
 
     auto token_index = source->nodes->data(node_index).literal_string.token_index;
-    auto s           = source->get_token_str(token_index);
+    auto literal     = source->get_token_str(token_index);
+    auto s           = literal.sub(1, literal.len() - 1);
 
     // TODO handle escape codes
     for (u32 i = 0; i < s.len(); i++) {
@@ -441,9 +442,9 @@ b32 Interpreter::eval_binary_op(
     Value *v;
     *result = values->add(&v);
     *v      = {
-      .type = result_type,
-      .data = {
-        .int64 = res,
+           .type = result_type,
+           .data = {
+             .int64 = res,
       },
     };
   } break;

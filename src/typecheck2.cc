@@ -266,10 +266,10 @@ b32 TypeChecker::check_expression(
     auto s           = source->get_token_str(token_index);
     auto size        = string_literal_byte_size(s);
     Type type        = {
-      .kind  = Type_array,
-      .array = {
-        .base_type = types->type.u8_,
-        .size      = size,
+             .kind  = Type_array,
+             .array = {
+               .base_type = types->type.u8_,
+               .size      = size,
       },
     };
     result = types->add(&type);
@@ -394,8 +394,8 @@ b32 TypeChecker::check_expression(
 
     auto type = alloc_type_sequence(work_arena, seq.items.len());
     *type     = {
-      .kind     = Type_sequence,
-      .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
+          .kind     = Type_sequence,
+          .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
     };
 
     for (u32 i = 0; i < seq.items.len(); i++) {
