@@ -47,13 +47,12 @@ struct Interpreter {
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
 
-  b32 check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeIndex location);
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
-  b32 get_int_value(ValueIndex v, i64 *i);
+  i64 get_int_value(ValueIndex v);
 
   b32 add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
-  ValueIndex coerce_value(TypeIndex type_dst, ValueIndex src);
+  void coerce_value(TypeIndex type_dst, ValueIndex src, ValuePayload *out);
 
   void populate_root_env(Env<ValueIndex> *env);
 };

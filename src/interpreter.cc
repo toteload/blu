@@ -15,10 +15,14 @@ void Interpreter::init(
   this->work_arena = work_arena;
   this->messages   = messages;
 
-  common.nil = values->add({
-    .type = types->type.type,
-    .data = {.type = types->type.nil},
-  });
+  {
+    Value *v;
+    common.nil = values->add(&v);
+    *v         = {
+      .type = types->type.type,
+      .data = {.type = types->type.nil},
+    };
+  }
 }
 
 struct PopulateRootEnv {
@@ -34,7 +38,9 @@ struct PopulateRootEnv {
 
 void PopulateRootEnv::insert(Str s, Value val) {
   auto key = strings->add(s);
-  auto idx = values->add(val);
+  Value *v;
+  auto idx = values->add(&v);
+  *v       = val;
   env->insert(key, idx);
 }
 
@@ -99,11 +105,11 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
   {
     Type *t = alloc_type_function(work_arena, 0);
     *t      = {
-           .kind     = Type_function,
-           .function = {
-             .return_type = types->type.i32_,
-             .param_count = 0,
-             .param_types = {},
+      .kind     = Type_function,
+      .function = {
+        .return_type = types->type.i32_,
+        .param_count = 0,
+        .param_types = {},
       },
     };
     main_function_type = types->add(t);
@@ -117,71 +123,75 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
 }
 
 // Assume: The coercion is always possible.
-ValueIndex Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src) {
+void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, ValuePayload *out) {
   auto v = values->get(src);
 
   if (type_dst == v->type) {
-    return src;
+    *out = v->data;
+    return;
   }
 
   auto ty_dst = types->get(type_dst);
   auto ty_src = types->get(v->type);
 
-  if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
-    return values->add({.type = type_dst, .data = {.int64 = v->data.int64}});
+  bool can_pass_value_unchanged = false;
+  // clang-format off
+  can_pass_value_unchanged |= ty_src->kind == Type_literal_int      && ty_dst->kind == Type_integer;
+  can_pass_value_unchanged |= ty_src->kind == Type_literal_function && ty_dst->kind == Type_function;
+  // clang-format on
+
+  if (can_pass_value_unchanged) {
+    *out = v->data;
+    return;
   }
 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
     u32 count = ty_src->array.size;
-
-    ValueIndex *items;
-    auto res = values->alloc_slice(type_dst, count, &items);
-
-    for (u32 i = 0; i < count; i++) {
-      items[i] = coerce_value(ty_dst->slice.base_type, v->data.items[i]);
-    }
-
-    return res;
+    *out      = {
+      .slice = {
+        .len   = count,
+        .items = v->data.items,
+      },
+    };
+    return;
   }
 
   if (ty_src->kind == Type_sequence) {
     if (ty_dst->kind == Type_slice) {
-      u32 count = ty_src->sequence.count;
-
-      ValueIndex *items;
-      auto res = values->alloc_slice(type_dst, count, &items);
+      u32 count  = ty_src->sequence.count;
+      auto items = values->alloc_data(count);
+      *out       = {
+        .slice = {
+          .len   = count,
+          .items = items,
+        },
+      };
 
       for (u32 i = 0; i < count; i++) {
-        items[i] = coerce_value(ty_dst->slice.base_type, v->data.items[i]);
+        coerce_value(ty_dst->slice.base_type, v->data.items[i].any, &items[i]);
       }
 
-      return res;
+      return;
     }
 
     if (ty_dst->kind == Type_array) {
       u32 count = ty_src->sequence.count;
 
-      ValueIndex *items;
-      auto res = values->alloc_with_items(type_dst, count, &items);
+      auto items = values->alloc_data(count);
+
+      *out = {
+        .items = items,
+      };
 
       for (u32 i = 0; i < count; i++) {
-        items[i] = coerce_value(ty_dst->array.base_type, v->data.items[i]);
+        coerce_value(ty_dst->array.base_type, v->data.items[i].any, &items[i]);
       }
 
-      return res;
+      return;
     }
   }
 
-  if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
-    return values->add({
-        .type = type_dst,
-        .data = {.node_index = v->data.node_index,}
-        });
-  }
-
   Todo();
-
-  return {};
 }
 
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
@@ -194,7 +204,11 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
 
-  ValueIndex val = coerce_value(decl_type, decl_value);
+  Value *v;
+  auto val = values->add(&v);
+  v->type  = decl_type;
+
+  coerce_value(decl_type, decl_value, &v->data);
 
   auto str = source->get_token_str(decl.name);
   auto key = strings->add(str);
@@ -213,12 +227,14 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto str         = source->get_token_str(token_index);
     auto i           = parse_i64(str);
 
-    *result = values->add({
+    Value *v;
+    *result = values->add(&v);
+    *v      = {
       .type = types->type.literal_int,
       .data = {
         .int64 = i,
       },
-    });
+    };
   } break;
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
@@ -238,10 +254,12 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(eval_expr(env_block, block.items[block.items.len() - 1], result));
   } break;
   case Ast_function: {
-    *result = values->add({
+    Value *v;
+    *result = values->add(&v);
+    *v      = {
       .type = get_type(node_index),
       .data = {.node_index = node_index},
-    });
+    };
   } break;
   case Ast_identifier: {
     *result = lookup_identifier(env, node_index);
@@ -261,6 +279,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     } else {
       *result = common.nil;
     }
+
+    values->drop(cond);
   } break;
   case Ast_declaration: {
     Try(add_declaration(env, node_index));
@@ -276,17 +296,28 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(eval_expr(env, binop.rhs, &rhs));
 
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
+
+    values->drop(lhs);
+    values->drop(rhs);
   } break;
   case Ast_literal_sequence: {
-    auto seq = source->nodes->data(node_index).literal_sequence;
+    auto seq   = source->nodes->data(node_index).literal_sequence;
     auto count = seq.items.len();
 
-    ValueIndex *value_items;
-    auto seq_type = get_type(node_index);
-    auto res = values->alloc_with_items(seq_type, count, &value_items);
+    Value *v;
+    auto res            = values->add(&v);
+    ValuePayload *items = values->alloc_data(count);
+    auto ty             = get_type(node_index);
+
+    *v = {
+      .type = ty,
+      .data = {
+        .items = items,
+      },
+    };
 
     for (u32 i = 0; i < count; i++) {
-      Try(eval_expr(env, seq.items[i], &value_items[i]));
+      Try(eval_expr(env, seq.items[i], &items[i].any));
     }
 
     *result = res;
@@ -300,26 +331,46 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     ValueIndex idx_index_at;
     Try(eval_expr(env, node.index_at, &idx_index_at));
 
-    auto indexable = values->get(idx_indexable);
-    auto at = values->get(idx_index_at);
+    i64 i = get_int_value(idx_index_at);
+
+    auto indexable      = values->get(idx_indexable);
+    auto type_indexable = types->get(indexable->type);
+
+    if (type_indexable->kind == Type_slice) {
+      Value *vout;
+      *result = values->add(&vout);
+      *vout   = {
+        .type = type_indexable->slice.base_type,
+        .data = indexable->data.slice.items[i],
+      };
+      break;
+    }
 
     Todo("implement indexing");
   } break;
   case Ast_literal_string: {
-    auto ty = get_type(node_index);
-    auto t = types->get(ty);
+    auto ty   = get_type(node_index);
+    auto t    = types->get(ty);
+    u32 count = t->array.size;
 
+    Value *v;
+    auto res            = values->add(&v);
+    ValuePayload *bytes = values->alloc_data(count);
 
-    u32 byte_count = t->array.size;
-
-    u8 *bytes;
-    auto res = values->alloc_with_memory(ty, byte_count, 1, &bytes);
+    *v = {
+      .type = ty,
+      .data = {
+        .items = bytes,
+      },
+    };
 
     auto token_index = source->nodes->data(node_index).literal_string.token_index;
-    auto s = source->get_token_str(token_index);
+    auto s           = source->get_token_str(token_index);
 
     // TODO handle escape codes
-    memcpy(bytes, s.str, byte_count);
+    for (u32 i = 0; i < s.len(); i++) {
+      bytes[i] = {.int64 = s[i]};
+    }
 
     *result = res;
   } break;
@@ -387,12 +438,14 @@ b32 Interpreter::eval_binary_op(
       Unreachable();
     }
 
-    *result = values->add({
+    Value *v;
+    *result = values->add(&v);
+    *v      = {
       .type = result_type,
       .data = {
         .int64 = res,
       },
-    });
+    };
   } break;
   default:
     Todo();
@@ -401,26 +454,9 @@ b32 Interpreter::eval_binary_op(
   return true;
 }
 
-b32 Interpreter::get_int_value(ValueIndex idx, i64 *i) {
+i64 Interpreter::get_int_value(ValueIndex idx) {
   Value *v = values->get(idx);
-  auto ty  = types->get(v->type);
-  if (!ty->is_integer_or_literal_int()) {
-    return false;
-  }
-
-  *i = v->data.int64;
-
-  return true;
-}
-
-b32 Interpreter::check_is_of_type(ValueIndex e, TypeIndex expected_type, NodeIndex location) {
-  auto v = values->get(e);
-  if (v->type != expected_type) {
-    // TODO: Write nice message.
-    return false;
-  }
-
-  return true;
+  return v->data.int64;
 }
 
 ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier) {

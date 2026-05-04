@@ -194,8 +194,11 @@ void Messages::error(TokenIndex location, char const *format, ...) {
   va_start(varargs, format);
   _error(
     {
-      .kind        = MessageLocation_token_index,
-      .data = { .token_index = location, },
+      .kind = MessageLocation_token_index,
+      .data =
+        {
+          .token_index = location,
+        },
     },
     format,
     varargs
@@ -207,8 +210,8 @@ void Messages::error(NodeIndex location, char const *format, ...) {
   va_start(varargs, format);
   _error(
     {
-      .kind       = MessageLocation_node_index,
-      .data = { .node_index = location},
+      .kind = MessageLocation_node_index,
+      .data = {.node_index = location},
     },
     format,
     varargs
