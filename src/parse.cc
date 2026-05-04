@@ -578,6 +578,12 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_bar:              Try(parse_function(&base));    break;
     // clang-format on
 
+  case Tok_brace_open: {
+    next();
+    Try(parse_expression(&base));
+    Try(expect_token(Tok_brace_close));
+  } break;
+
   case Tok_dot: {
     next();
     Try(peek(&tok));

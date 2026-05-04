@@ -46,6 +46,7 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+#if 0
   {
     auto snapshot = work_arena.take_snapshot();
 
@@ -54,6 +55,7 @@ int main(i32 arg_count, char const *const *args) {
 
     work_arena.restore(snapshot);
   }
+#endif
 
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
