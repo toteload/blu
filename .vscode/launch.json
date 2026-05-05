@@ -9,7 +9,7 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceRoot}/out/blu",
-            "args": ["test.blu"],
+            "args": ["test/basic/print.blu"],
             "cwd": "${workspaceRoot}"
         }
     ]
