@@ -249,6 +249,8 @@ void TypeInterner::init(
   Add_type(type.never, Type::make_never());
 
   Add_type(type.literal_int, Type::make_literal_int());
+
+  Add_type(type.slice_u8, ((Type){.kind = Type_slice, .slice = { .base_type = type.u8_ }}));
   // clang-format on
 
 #undef Add_type

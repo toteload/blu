@@ -53,7 +53,9 @@ struct TypeChecker {
   );
 
   b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
-  b32 check_unification(NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result);
+  b32 check_unification(
+    NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
+  );
 
   b32 check_is_type(TypeIndex type, NodeIndex at);
   b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
@@ -203,6 +205,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   } break;
 
   case Ast_block:
+  case Ast_builtin:
   case Ast_declaration:
   case Ast_literal_int:
   case Ast_function:
@@ -267,10 +270,10 @@ b32 TypeChecker::check_expression(
     auto s           = source->get_token_str(token_index);
     auto size        = string_literal_byte_size(s);
     Type type        = {
-             .kind  = Type_array,
-             .array = {
-               .base_type = types->type.u8_,
-               .size      = size,
+      .kind  = Type_array,
+      .array = {
+        .base_type = types->type.u8_,
+        .size      = size,
       },
     };
     result = types->add(&type);
@@ -395,8 +398,8 @@ b32 TypeChecker::check_expression(
 
     auto type = alloc_type_sequence(work_arena, seq.items.len());
     *type     = {
-          .kind     = Type_sequence,
-          .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
+      .kind     = Type_sequence,
+      .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
     };
 
     for (u32 i = 0; i < seq.items.len(); i++) {
@@ -435,7 +438,7 @@ b32 TypeChecker::check_expression(
 
   case Ast_binary_op: {
     auto node = source->nodes->data(node_index).binary_op;
-    
+
     TypeIndex type_lhs;
     Try(check_expression(env, node.lhs, nullptr, &type_lhs));
 
@@ -443,6 +446,25 @@ b32 TypeChecker::check_expression(
     Try(check_expression(env, node.rhs, nullptr, &type_rhs));
 
     Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &result));
+  } break;
+
+  case Ast_builtin: {
+    auto builtin = source->nodes->data(node_index).builtin;
+
+    switch (builtin.kind) {
+    case Builtin_print: {
+      if (builtin.args.len() == 0) {
+        messages->error(node_index, "#print needs at least one argument.");
+        return false;
+      }
+
+      TypeIndex arg_type;
+      Try(check_expression(env, builtin.args[0], nullptr, &arg_type));
+      Try(check_coercion(builtin.args[0], arg_type, types->type.slice_u8));
+
+      result = types->type.nil;
+    } break;
+    }
   } break;
 
   case Ast_assign:
@@ -474,7 +496,9 @@ b32 TypeChecker::check_coercion(NodeIndex location, TypeIndex type_src, TypeInde
   return false;
 }
 
-b32 TypeChecker::check_unification(NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result) {
+b32 TypeChecker::check_unification(
+  NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
+) {
   if (types->is_coercible_to(type_lhs, type_rhs)) {
     *result = type_rhs;
     return true;

@@ -46,7 +46,7 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-#if 0
+#if 1
   {
     auto snapshot = work_arena.take_snapshot();
 
@@ -67,7 +67,7 @@ int main(i32 arg_count, char const *const *args) {
   parse_context.messages = &messages;
   parse_context.tokens   = &tokens;
 
-  ok = parse(&parse_context, &nodes);
+  ok = parse(&parse_context, source_text, &nodes);
 
   source.nodes = &nodes;
 

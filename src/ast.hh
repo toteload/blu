@@ -6,6 +6,8 @@ enum AstKind : u8 {
   Ast_type_array,
   Ast_type_function,
 
+  Ast_builtin,
+
   Ast_declaration,
   Ast_assign,
   Ast_literal_sequence,
@@ -23,6 +25,10 @@ enum AstKind : u8 {
   Ast_continue,
   Ast_return,
   Ast_kind_max,
+};
+
+enum BuiltinKind : u8 {
+  Builtin_print,
 };
 
 enum BinaryOpKind : u8 {
@@ -70,6 +76,13 @@ struct AstNodeTag {};
 
 using NodeIndex         = Index<u32, AstNodeTag>;
 using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
+
+struct AstBuiltin {
+  BuiltinKind kind;
+  union {
+    SegmentList<NodeIndex> args;
+  };
+};
 
 struct AstTypeFunction {
   NodeIndex return_type;
@@ -171,6 +184,7 @@ struct AstAssign {
 union AstNodeData {
   AstRoot root;
   AstBlock block;
+  AstBuiltin builtin;
   AstTypeFunction type_function;
   AstTypeSlice type_slice;
   AstTypeArray type_array;
@@ -233,12 +247,10 @@ struct AstNodes {
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",          "block",          "type-slice", "type-array",
-  "type-function", "declaration",    "assign",     "literal-sequence",
-  "literal-int",   "literal-string", "identifier", "call",
-  "index",         "unary-op",       "binary-op",  "function",
-  "if-else",       "while",          "break",      "continue",
-  "return",        "illegal",
+  "root",        "block",  "type-slice",       "type-array",  "type-function",  "builtin",
+  "declaration", "assign", "literal-sequence", "literal-int", "literal-string", "identifier",
+  "call",        "index",  "unary-op",         "binary-op",   "function",       "if-else",
+  "while",       "break",  "continue",         "return",      "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

@@ -16,7 +16,7 @@ You will still have to write the logic for what the language does, it will "just
   - Includes coercion of sequence literals to typed slices.
   - Includes indexing of slices.
   - Includes coercion of array to slice.
-- [ ] `test\basic\print.blu`
+- [-] `test\basic\print.blu`
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 
@@ -33,7 +33,7 @@ You will still have to write the logic for what the language does, it will "just
 ### Misc
 
 - [-] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
-- [-] Verify program before interpreting it. At the moment it encounters "compile" errors during execution.
+- [x] Verify program before interpreting it. At the moment it encounters "compile" errors during execution.
 
 ---
 

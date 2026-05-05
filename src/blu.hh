@@ -56,7 +56,7 @@ struct ParseContext {
   Tokens *tokens;
 };
 
-b32 parse(ParseContext *ctx, AstNodes *nodes);
+b32 parse(ParseContext *ctx, Str source, AstNodes *nodes);
 
 ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
 ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); }

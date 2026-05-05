@@ -178,6 +178,14 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_token(Tok_literal_int);
   }
 
+  if (c == '#') {
+    while (!is_at_end() && is_identifier_rest(*at)) {
+      step();
+    }
+
+    Return_token(Tok_builtin);
+  }
+
   if (is_identifier_start(c)) {
     while (!is_at_end() && is_identifier_rest(*at)) {
       step();

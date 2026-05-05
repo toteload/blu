@@ -154,6 +154,8 @@ struct TypeInterner {
     TypeIndex never;
 
     TypeIndex type;
+
+    TypeIndex slice_u8;
   } type;
 
   void init(
