@@ -7,25 +7,12 @@ using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
 
 struct ValueSlice {
   u64 len;
-  void *memory;
-};
-
-union ValuePayload {
-  TypeIndex type;
-  NodeIndex node_index;
-  ValueIndex any;
-
-  i64 int64;
-  i32 int32;
-  i16 int16;
-  i8 int8;
-
-  void *ptr;
+  void *items;
 };
 
 struct Value {
   TypeIndex type;
-  ValuePayload data;
+  void *data;
 };
 
 struct ValueStore {
@@ -54,7 +41,7 @@ struct ValueStore {
     return payload_allocator.raw_alloc(byte_size, info.align);
   }
 
-  template<typename T> T *alloc_data(u32 count) {
+  template<typename T> T *alloc_data(u32 count = 1) {
     return cast<T *>(alloc_memory(TypeSizeInfo::of_type<T>(), count));
   }
 

@@ -49,10 +49,10 @@ struct Interpreter {
 
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
-  i64 get_int_value(ValueIndex v);
-
   b32 add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
   void coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
+
+  u64 get_uint(ValueIndex idx);
 
   void populate_root_env(Env<ValueIndex> *env);
 };

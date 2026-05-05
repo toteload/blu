@@ -26,7 +26,8 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   switch (t->kind) {
   case Type_integer:
   case Type_literal_int: {
-    offset    = snprintf(buf, buf_size, "%lld", v->data.int64);
+    i64 i     = *cast<i64 *>(v->data);
+    offset    = snprintf(buf, buf_size, "%lld", i);
     buf      += offset;
     buf_size -= offset;
     written  += offset;
