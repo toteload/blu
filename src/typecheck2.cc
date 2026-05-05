@@ -53,6 +53,7 @@ struct TypeChecker {
   );
 
   b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
+  b32 check_unification(NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result);
 
   b32 check_is_type(TypeIndex type, NodeIndex at);
   b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
@@ -432,10 +433,21 @@ b32 TypeChecker::check_expression(
     result = base_type;
   } break;
 
+  case Ast_binary_op: {
+    auto node = source->nodes->data(node_index).binary_op;
+    
+    TypeIndex type_lhs;
+    Try(check_expression(env, node.lhs, nullptr, &type_lhs));
+
+    TypeIndex type_rhs;
+    Try(check_expression(env, node.rhs, nullptr, &type_rhs));
+
+    Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &result));
+  } break;
+
   case Ast_assign:
   case Ast_call:
   case Ast_unary_op:
-  case Ast_binary_op:
   case Ast_while:
   case Ast_break:
   case Ast_continue:
@@ -458,6 +470,22 @@ b32 TypeChecker::check_coercion(NodeIndex location, TypeIndex type_src, TypeInde
   }
 
   messages->error(location, "Cannot coerce type {type} to {type}.", type_src, type_dst);
+
+  return false;
+}
+
+b32 TypeChecker::check_unification(NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result) {
+  if (types->is_coercible_to(type_lhs, type_rhs)) {
+    *result = type_rhs;
+    return true;
+  }
+
+  if (types->is_coercible_to(type_rhs, type_lhs)) {
+    *result = type_lhs;
+    return true;
+  }
+
+  messages->error(lhs, "Cannot unify types {type} and {type}.", type_lhs, type_rhs);
 
   return false;
 }
