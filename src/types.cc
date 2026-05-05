@@ -231,24 +231,24 @@ void TypeInterner::init(
   }
 
   // clang-format off
-  Add_type(type.u8_,  Type::make_integer(Unsigned, 8));
-  Add_type(type.u16_, Type::make_integer(Unsigned, 16));
-  Add_type(type.u32_, Type::make_integer(Unsigned, 32));
-  Add_type(type.u64_, Type::make_integer(Unsigned, 64));
+  Add_type(type.u8_,  ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth =  8 }}));
+  Add_type(type.u16_, ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth = 16 }}));
+  Add_type(type.u32_, ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth = 32 }}));
+  Add_type(type.u64_, ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth = 64 }}));
 
-  Add_type(type.i8_,  Type::make_integer(Signed,  8));
-  Add_type(type.i16_, Type::make_integer(Signed, 16));
-  Add_type(type.i32_, Type::make_integer(Signed, 32));
-  Add_type(type.i64_, Type::make_integer(Signed, 64));
+  Add_type(type.i8_,  ((Type){ .kind = Type_integer, .integer = { .signedness = Signed, .bitwidth =  8 }}));
+  Add_type(type.i16_, ((Type){ .kind = Type_integer, .integer = { .signedness = Signed, .bitwidth = 16 }}));
+  Add_type(type.i32_, ((Type){ .kind = Type_integer, .integer = { .signedness = Signed, .bitwidth = 32 }}));
+  Add_type(type.i64_, ((Type){ .kind = Type_integer, .integer = { .signedness = Signed, .bitwidth = 64 }}));
 
   // TODO this actually depends on the platform. not every platform is 64 bit :)
   Add_type(type.uint, ((Type){ .kind = Type_integer, .integer = { .signedness = Unsigned, .bitwidth = 64 }}));
 
-  Add_type(type.bool_, Type::make_bool());
-  Add_type(type.nil,   Type::make_nil());
-  Add_type(type.never, Type::make_never());
+  Add_type(type.bool_, ((Type){ .kind = Type_boolean, }));
+  Add_type(type.nil,   ((Type){ .kind = Type_nil, }));
+  Add_type(type.never, ((Type){ .kind = Type_never, }));
 
-  Add_type(type.literal_int, Type::make_literal_int());
+  Add_type(type.literal_int, ((Type){ .kind = Type_literal_int, }));
 
   Add_type(type.slice_u8, ((Type){.kind = Type_slice, .slice = { .base_type = type.u8_ }}));
   // clang-format on

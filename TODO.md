@@ -33,6 +33,7 @@ You will still have to write the logic for what the language does, it will "just
 ### Misc
 
 - [-] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
+- [ ] Properly free values that are no longer used in the interpreter.
 - [ ] Rework values to be more memory accurate.
   - For example, currently if you have an array of u8, then the payload will be an array of ValuePayload.
     So each u8 will be 'boxed' as a ValuePayload.

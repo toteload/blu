@@ -17,7 +17,7 @@ void Interpreter::init(
 
   {
     Value *v;
-    common.nil = values->add(&v);
+    common.nil = values->alloc_value(&v);
     *v         = {
       .type = types->type.type,
       .data = {.type = types->type.nil},
@@ -39,7 +39,7 @@ struct PopulateRootEnv {
 void PopulateRootEnv::insert(Str s, Value val) {
   auto key = strings->add(s);
   Value *v;
-  auto idx = values->add(&v);
+  auto idx = values->alloc_value(&v);
   *v       = val;
   env->insert(key, idx);
 }
@@ -123,72 +123,79 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
 }
 
 // Assume: The coercion is always possible.
-void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, ValuePayload *out) {
-  auto v = values->get(src);
+void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
+  auto v      = values->get(src);
+  auto ty_src = types->get(v->type);
 
   if (type_dst == v->type) {
-    *out = v->data;
+    memcpy(out, &v->data, ty_src->size_info().size);
     return;
   }
 
   auto ty_dst = types->get(type_dst);
-  auto ty_src = types->get(v->type);
 
-  bool can_pass_value_unchanged = false;
-  // clang-format off
-  can_pass_value_unchanged |= ty_src->kind == Type_literal_int      && ty_dst->kind == Type_integer;
-  can_pass_value_unchanged |= ty_src->kind == Type_literal_function && ty_dst->kind == Type_function;
-  // clang-format on
+  if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
+    *cast<ValuePayload *>(out) = v->data;
+    return;
+  }
 
-  if (can_pass_value_unchanged) {
-    *out = v->data;
+  if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
+    if (ty_dst->integer.signedness == Signed && ty_dst->integer.bitwidth == 32) {
+      *cast<i32 *>(out) = cast<i32>(v->data.int64);
+      return;
+    }
+    Todo();
     return;
   }
 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
-    u32 count = ty_src->array.size;
-    *out      = {
+    Todo();
+    u32 count                  = ty_src->array.size;
+    *cast<ValuePayload *>(out) = {
       .slice = {
-        .len   = count,
-        .items = v->data.items,
+        .len    = count,
+        .memory = v->data.memory,
       },
     };
     return;
   }
 
   if (ty_src->kind == Type_sequence) {
+    TypeIndex base_type_idx;
     if (ty_dst->kind == Type_slice) {
-      u32 count  = ty_src->sequence.count;
-      auto items = values->alloc_data(count);
-      *out       = {
+      base_type_idx = ty_dst->slice.base_type;
+    } else if (ty_dst->kind == Type_array) {
+      base_type_idx = ty_dst->array.base_type;
+    } else {
+      Unreachable();
+    }
+
+    auto base_type = types->get(base_type_idx);
+
+    u32 count      = ty_src->sequence.count;
+    auto size_info = base_type->size_info();
+    auto items     = values->alloc_memory(size_info, count);
+
+    ValuePayload *sequence_items = cast<ValuePayload *>(v->data.memory);
+
+    for (u32 i = 0; i < count; i++) {
+      coerce_value(base_type_idx, sequence_items[i].any, ptr_offset(items, size_info.stride * i));
+    }
+
+    if (ty_dst->kind == Type_slice) {
+      *cast<ValuePayload *>(out) = {
         .slice = {
-          .len   = count,
-          .items = items,
-        },
+          .len    = count,
+          .memory = items,
+        }
       };
-
-      for (u32 i = 0; i < count; i++) {
-        coerce_value(ty_dst->slice.base_type, v->data.items[i].any, &items[i]);
-      }
-
-      return;
+    } else if (ty_dst->kind == Type_array) {
+      *cast<ValuePayload *>(out) = {.ptr = items};
+    } else {
+      Unreachable();
     }
 
-    if (ty_dst->kind == Type_array) {
-      u32 count = ty_src->sequence.count;
-
-      auto items = values->alloc_data(count);
-
-      *out = {
-        .items = items,
-      };
-
-      for (u32 i = 0; i < count; i++) {
-        coerce_value(ty_dst->array.base_type, v->data.items[i].any, &items[i]);
-      }
-
-      return;
-    }
+    return;
   }
 
   Todo();
@@ -205,7 +212,7 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Try(eval_expr(env, decl.value, &decl_value));
 
   Value *v;
-  auto val = values->add(&v);
+  auto val = values->alloc_value(&v);
   v->type  = decl_type;
 
   coerce_value(decl_type, decl_value, &v->data);
@@ -228,7 +235,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto i           = parse_i64(str);
 
     Value *v;
-    *result = values->add(&v);
+    *result = values->alloc_value(&v);
     *v      = {
       .type = types->type.literal_int,
       .data = {
@@ -240,7 +247,14 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto builtin = source->nodes->data(node_index).builtin;
     switch (builtin.kind) {
     case Builtin_print: {
-      printf("#print was called. i can't tell what with :)\n");
+      ValueIndex arg_format;
+      Try(eval_expr(env, builtin.args[0], &arg_format));
+
+      ValuePayload payload;
+      coerce_value(types->type.slice_u8, arg_format, &payload);
+
+      printf("%.*s\n", cast<int>(payload.slice.len), cast<char const *>(payload.slice.memory));
+
       *result = common.nil;
     } break;
     }
@@ -264,7 +278,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
   case Ast_function: {
     Value *v;
-    *result = values->add(&v);
+    *result = values->alloc_value(&v);
     *v      = {
       .type = get_type(node_index),
       .data = {.node_index = node_index},
@@ -314,15 +328,13 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto count = seq.items.len();
 
     Value *v;
-    auto res            = values->add(&v);
-    ValuePayload *items = values->alloc_data(count);
+    auto res            = values->alloc_value(&v);
+    ValuePayload *items = values->alloc_data<ValuePayload>(count);
     auto ty             = get_type(node_index);
 
     *v = {
       .type = ty,
-      .data = {
-        .items = items,
-      },
+      .data = {.memory = items},
     };
 
     for (u32 i = 0; i < count; i++) {
@@ -346,30 +358,38 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto type_indexable = types->get(indexable->type);
 
     if (type_indexable->kind == Type_slice) {
+      auto size_info = types->get(type_indexable->slice.base_type)->size_info();
+      auto offset    = i * size_info.stride;
+      auto p         = ptr_offset(indexable->data.slice.memory, offset);
+
       Value *vout;
-      *result = values->add(&vout);
-      *vout   = {
-        .type = type_indexable->slice.base_type,
-        .data = indexable->data.slice.items[i],
-      };
+      *result = values->alloc_value(&vout);
+
+      Todo(":)");
+
+      //*vout   = {
+      //  .type = type_indexable->slice.base_type,
+      //  .data = indexable->data.slice.items[i],
+      //};
       break;
     }
 
     Todo("implement indexing");
   } break;
   case Ast_literal_string: {
-    auto ty   = get_type(node_index);
-    auto t    = types->get(ty);
-    u32 count = t->array.size;
+    auto ty        = get_type(node_index);
+    auto t         = types->get(ty);
+    auto base_type = types->get(t->array.base_type);
+    u32 count      = t->array.size;
 
     Value *v;
-    auto res            = values->add(&v);
-    ValuePayload *bytes = values->alloc_data(count);
+    auto res    = values->alloc_value(&v);
+    void *bytes = values->alloc_memory(base_type->size_info(), count);
 
     *v = {
       .type = ty,
       .data = {
-        .items = bytes,
+        .memory = bytes,
       },
     };
 
@@ -378,9 +398,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto s           = literal.sub(1, literal.len() - 1);
 
     // TODO handle escape codes
-    for (u32 i = 0; i < s.len(); i++) {
-      bytes[i] = {.int64 = s[i]};
-    }
+    memcpy(bytes, s.str, s.len());
 
     *result = res;
   } break;
@@ -449,7 +467,7 @@ b32 Interpreter::eval_binary_op(
     }
 
     Value *v;
-    *result = values->add(&v);
+    *result = values->alloc_value(&v);
     *v      = {
       .type = result_type,
       .data = {

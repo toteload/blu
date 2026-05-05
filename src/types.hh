@@ -27,6 +27,20 @@ struct TypeIndexTag {};
 using TypeIndex         = Index<u32, TypeIndexTag>;
 using OptionalTypeIndex = OptionalIndex<u32, TypeIndexTag>;
 
+struct TypeSizeInfo {
+  u32 size;
+  u32 stride;
+  u32 align;
+
+  template<typename T> static TypeSizeInfo of_type() {
+    return {
+      .size   = sizeof(T),
+      .stride = sizeof(T),
+      .align  = Align_of(T),
+    };
+  }
+};
+
 struct Type {
   TypeKind kind;
 
@@ -61,6 +75,30 @@ struct Type {
     } sequence;
   };
 
+  TypeSizeInfo size_info() const {
+    switch (kind) {
+    case Type_integer:
+      return (TypeSizeInfo){
+        .size   = integer.bitwidth / cast<u32>(8),
+        .stride = integer.bitwidth / cast<u32>(8),
+        .align  = integer.bitwidth / cast<u32>(8),
+      };
+    case Type_literal_int:
+    case Type_literal_function:
+    case Type_nil:
+    case Type_never:
+    case Type_slice:
+    case Type_array:
+    case Type_distinct:
+    case Type_type:
+    case Type_boolean:
+    case Type_function:
+    case Type_sequence:
+      Todo();
+      break;
+    }
+  }
+
   b32 is_sized_type() { return kind != Type_nil && kind != Type_never; }
 
   u32 byte_size() {
@@ -88,27 +126,6 @@ struct Type {
   }
 
   bool is_integer_or_literal_int() { return kind == Type_integer || kind == Type_literal_int; }
-
-  static Type make_slice(TypeIndex base_type) {
-    Type t            = {};
-    t.kind            = Type_slice;
-    t.slice.base_type = base_type;
-    return t;
-  }
-  static Type make_nil() { return {Type_nil, {}}; }
-  static Type make_bool() { return {Type_boolean, {}}; }
-  static Type make_never() { return {Type_never, {}}; }
-  static Type make_type() { return {Type_type, {}}; }
-  static Type make_literal_int() { return {Type_literal_int, {}}; }
-  static Type make_integer(Signedness s, u16 width) {
-    return {
-      Type_integer,
-      {{
-        s,
-        width,
-      }},
-    };
-  }
 };
 
 ttld_inline Type *alloc_type_function(Arena *arena, u32 param_count) {
