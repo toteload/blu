@@ -499,13 +499,7 @@ b32 TypeChecker::check_coercion(NodeIndex location, TypeIndex type_src, TypeInde
 b32 TypeChecker::check_unification(
   NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
 ) {
-  if (types->is_coercible_to(type_lhs, type_rhs)) {
-    *result = type_rhs;
-    return true;
-  }
-
-  if (types->is_coercible_to(type_rhs, type_lhs)) {
-    *result = type_lhs;
+  if (types->unify(lhs, rhs, result)) {
     return true;
   }
 

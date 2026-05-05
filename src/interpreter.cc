@@ -435,23 +435,60 @@ b32 Interpreter::eval_binary_op(
     auto left_type  = types->get(left->type);
     auto right_type = types->get(right->type);
 
-    i64 res;
-    switch (op) {
-    case Mul:
-      res = left->data.int64 * right->data.int64;
-      break;
-    case Div:
-      res = left->data.int64 / right->data.int64;
-      break;
-    case Add:
-      res = left->data.int64 + right->data.int64;
-      break;
-    case Sub:
-      res = left->data.int64 - right->data.int64;
-      break;
-    default:
-      Unreachable();
-      break;
+    Assert(left_type->is_integer_or_literal_int() && right_type->is_integer_or_literal_int());
+
+    auto signedness = left_type->integer.signedness;
+
+    if (signedness == Signed) {
+      i64 a = get_as_i64(lhs);
+      i64 b = get_as_i64(rhs);
+      bool overflow = false;
+      i64 res;
+
+      // clang-format off
+      switch (op) {
+      case Div: res = a / b; break;
+      case Add: overflow = __builtin_add_overflow(a, b, &res); break;
+      case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
+      case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
+      default: Unreachable(); break;
+      // clang-format on
+      }
+
+      if (overflow) {
+        Todo();
+      }
+
+      TypeIndex result_type_idx;
+      types->unify(left->type, right->type, &result_type_idx);
+
+      auto result_type = types->get(result_type_idx);
+
+      i64 min_value = int_min_value(result_type->integer.bitwidth);
+      i64 max_value = int_max_value(result_type->integer.bitwidth);
+
+      if (res > max_value || res < min_value) {
+        Todo();
+      }
+
+      Todo();
+    } else {
+      u64 a = get_as_u64(lhs);
+      u64 b = get_as_u64(rhs);
+      bool overflow = false;
+      u64 res;
+
+      // clang-format off
+      switch (op) {
+      case Div: res = a / b; break;
+      case Add: overflow = __builtin_add_overflow(a, b, &res); break;
+      case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
+      case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
+      default: Unreachable(); break;
+      // clang-format on
+      }
+
+      Todo("make sure nothing overflowed");
     }
 
     TypeIndex result_type;

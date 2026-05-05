@@ -41,6 +41,15 @@ struct TypeSizeInfo {
   }
 };
 
+i64 int_min_value(u16 bitwidth) {
+  switch (bitwidth) {
+    case 8: return INT8_MIN;
+    case 16: return INT16_MIN;
+    case 32: return INT32_MIN;
+    case 64: return INT64_MIN;
+  }
+}
+
 struct Type {
   TypeKind kind;
 
@@ -200,6 +209,7 @@ struct TypeInterner {
   Type *get(TypeIndex idx) { return list[idx.idx]; }
 
   bool is_coercible_to(TypeIndex src, TypeIndex dst);
+  bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);
 };
 
 u32 type_to_string(TypeInterner *types, TypeIndex type, char *buf, u32 buf_size);
