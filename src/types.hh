@@ -36,28 +36,37 @@ struct TypeSizeInfo {
   }
 };
 
-ttld_inline
-i64 int_value_min(u16 bitwidth) {
+ttld_inline i64 int_value_min(u16 bitwidth) {
   switch (bitwidth) {
-    case 8: return INT8_MIN;
-    case 16: return INT16_MIN;
-    case 32: return INT32_MIN;
-    case 64: return INT64_MIN;
-    default: Unreachable(); return 0;
+  case 8:
+    return INT8_MIN;
+  case 16:
+    return INT16_MIN;
+  case 32:
+    return INT32_MIN;
+  case 64:
+    return INT64_MIN;
+  default:
+    Unreachable();
+    return 0;
   }
 }
 
-ttld_inline
-i64 int_value_max(u16 bitwidth) {
+ttld_inline i64 int_value_max(u16 bitwidth) {
   switch (bitwidth) {
-    case 8: return INT8_MAX;
-    case 16: return INT16_MAX;
-    case 32: return INT32_MAX;
-    case 64: return INT64_MAX;
-    default: Unreachable(); return 0;
+  case 8:
+    return INT8_MAX;
+  case 16:
+    return INT16_MAX;
+  case 32:
+    return INT32_MAX;
+  case 64:
+    return INT64_MAX;
+  default:
+    Unreachable();
+    return 0;
   }
 }
-
 
 struct Type {
   TypeKind kind;

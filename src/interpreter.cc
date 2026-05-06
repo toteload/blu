@@ -40,7 +40,7 @@ struct PopulateRootEnv {
     auto idx  = values->alloc_value(&v);
     auto data = values->alloc_data<T>();
     *data     = val;
-    *v = {
+    *v        = {
       .type = type,
       .data = data,
     };
@@ -233,9 +233,9 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Type *decl_type = types->get(decl_type_idx);
 
   Value *v;
-  auto val = values->alloc_value(&v);
+  auto val  = values->alloc_value(&v);
   auto data = values->alloc_memory(decl_type->size_info());
-  *v = {
+  *v        = {
     .type = decl_type_idx,
     .data = data,
   };
@@ -467,8 +467,8 @@ b32 Interpreter::eval_binary_op(
     auto signedness = left_type->integer.signedness;
 
     if (signedness == Signed) {
-      i64 a = get_as_i64(lhs);
-      i64 b = get_as_i64(rhs);
+      i64 a         = get_as_i64(lhs);
+      i64 b         = get_as_i64(rhs);
       bool overflow = false;
       i64 res;
 
@@ -479,7 +479,7 @@ b32 Interpreter::eval_binary_op(
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
       default: Unreachable(); break;
-      // clang-format on
+        // clang-format on
       }
 
       if (overflow) {
@@ -499,8 +499,8 @@ b32 Interpreter::eval_binary_op(
       }
 
       Value *v;
-      auto idx = values->alloc_value(&v);
-      void *data = values->alloc_memory(result_type->size_info());
+      auto idx      = values->alloc_value(&v);
+      void *data    = values->alloc_memory(result_type->size_info());
       u32 byte_size = result_type->integer.bitwidth / 8;
       memcpy(data, &res, byte_size);
       *v = {
@@ -512,8 +512,8 @@ b32 Interpreter::eval_binary_op(
 
       return true;
     } else {
-      u64 a = get_as_u64(lhs);
-      u64 b = get_as_u64(rhs);
+      u64 a         = get_as_u64(lhs);
+      u64 b         = get_as_u64(rhs);
       bool overflow = false;
       u64 res;
 
@@ -524,7 +524,7 @@ b32 Interpreter::eval_binary_op(
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
       default: Unreachable(); break;
-      // clang-format on
+        // clang-format on
       }
 
       Todo("unsigned int op: make sure nothing overflowed");
@@ -558,7 +558,19 @@ b32 Interpreter::call_function(
 
   auto node_index    = *cast<NodeIndex *>(function->data);
   auto function_node = source->nodes->data(node_index).function;
-  Try(eval_expr(env, function_node.body, result));
+
+  ValueIndex body_result;
+  Try(eval_expr(env, function_node.body, &body_result));
+
+  TypeIndex return_type_idx = types->get(function->type)->function.return_type;
+  auto return_type          = types->get(return_type_idx);
+
+  Value *v;
+  *result   = values->alloc_value(&v);
+  auto data = values->alloc_memory(return_type->size_info());
+  *v        = {.type = return_type_idx, .data = data};
+
+  coerce_value(return_type_idx, body_result, data);
 
   return true;
 }

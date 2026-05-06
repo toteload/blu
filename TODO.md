@@ -19,6 +19,7 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\print.blu`
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
+- [ ] Add `const`.
 
 ### Errors
 

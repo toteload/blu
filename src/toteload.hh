@@ -147,8 +147,8 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 // ---
 struct Str {
-  char const *str = nullptr;
-  usize _len      = 0;
+  char const *str;
+  usize _len;
 
   // template<usize N>
   // Str(char const s[N]): str(s), _len(N) {}
@@ -161,7 +161,7 @@ struct Str {
 
   usize len() { return _len; }
 
-  static Str empty() { return {}; }
+  static Str empty() { return {.str = nullptr, ._len = 0}; }
 
   static Str from_ptr_and_len(char const *p, usize l) { return {p, l}; }
 

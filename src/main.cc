@@ -3,13 +3,44 @@
 #include "blu.hh"
 #include "utils/stdlib.hh"
 
-int main(i32 arg_count, char const *const *args) {
-  if (arg_count < 2) {
+struct CLISettings {
+  bool verbose;
+  Str source_file;
+};
+
+b32 parse_cli_settings(CLISettings *settings, i32 arg_count, char const *const *args) {
+  *settings = {
+    .verbose     = false,
+    .source_file = Str::empty(),
+  };
+
+  for (i32 i = 1; i < arg_count; i++) {
+    Str arg = Str::from_cstr(args[i]);
+    if (str_eq(arg, STR("-v"))) {
+      settings->verbose = true;
+    } else if (settings->source_file.is_empty()) {
+      settings->source_file = arg;
+    } else {
+      printf("Unexpected argument: %s\n", args[i]);
+      return false;
+    }
+  }
+
+  if (settings->source_file.is_empty()) {
     printf("Please provide an input file\n");
+    return false;
+  }
+
+  return true;
+}
+
+int main(i32 arg_count, char const *const *args) {
+  CLISettings settings;
+  if (!parse_cli_settings(&settings, arg_count, args)) {
     return 1;
   }
 
-  Str filename    = Str::from_cstr(args[1]);
+  Str filename    = settings.source_file;
   Str source_text = read_file(filename);
 
   Arena arena;
@@ -46,8 +77,7 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-#if 1
-  {
+  if (settings.verbose) {
     auto snapshot = work_arena.take_snapshot();
 
     write_tokens(&tokens, source_text, &work_arena);
@@ -55,7 +85,6 @@ int main(i32 arg_count, char const *const *args) {
 
     work_arena.restore(snapshot);
   }
-#endif
 
   AstNodes nodes;
   nodes.kinds.init(stdlib_alloc);
@@ -77,8 +106,10 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  for (u32 i = 0; i < nodes.kinds.len(); i++) {
-    printf("%s\n", ast_kind_string(nodes.kinds[i]));
+  if (settings.verbose) {
+    for (u32 i = 0; i < nodes.kinds.len(); i++) {
+      printf("%s\n", ast_kind_string(nodes.kinds[i]));
+    }
   }
 
   ValueStore values;
@@ -128,8 +159,6 @@ int main(i32 arg_count, char const *const *args) {
     u32 len       = values.value_to_string(&types, result, buf, 512);
     printf("%.*s\n", cast<int>(len), buf);
   }
-
-  printf("ok\n");
 
   return 0;
 }
