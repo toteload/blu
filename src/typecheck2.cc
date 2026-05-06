@@ -7,7 +7,7 @@ struct RootEnvPopulator {
 
   void insert(DeclarationKind kind, Str s, TypeIndex type) {
     auto key = strings->add(s);
-    env->insert(key, { .kind = kind, .type = type });
+    env->insert(key, {.kind = kind, .type = type});
   }
 
   void populate();
@@ -99,9 +99,9 @@ b32 TypeChecker::typecheck() {
   auto env_root = envs->alloc(nullptr);
   {
     RootEnvPopulator populator = {
-      .env = env_root,
+      .env     = env_root,
       .strings = strings,
-      .types = types,
+      .types   = types,
     };
 
     populator.populate();

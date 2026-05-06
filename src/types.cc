@@ -97,6 +97,36 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
   return buf_size_start - buf_size;
 }
 
+TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
+  auto t = get(idx);
+  switch (t->kind) {
+  case Type_integer:
+    return (TypeSizeInfo){
+      .size   = t->integer.bitwidth / cast<u32>(8),
+      .stride = t->integer.bitwidth / cast<u32>(8),
+      .align  = t->integer.bitwidth / cast<u32>(8),
+    };
+  case Type_literal_function:
+  case Type_function:
+    return TypeSizeInfo::of_type<NodeIndex>();
+  case Type_type:
+    return TypeSizeInfo::of_type<TypeIndex>();
+  case Type_slice:
+    return TypeSizeInfo::of_type<ValueSlice>();
+  case Type_boolean:
+    return TypeSizeInfo::of_type<u8>();
+  case Type_array:
+    return TypeSizeInfo::of_type<void *>();
+  case Type_sequence:
+  case Type_literal_int:
+  case Type_nil:
+  case Type_never:
+  case Type_distinct:
+    Todo();
+    break;
+  }
+}
+
 b32 type_eq(void *context, Type *a, Type *b) {
   if (a->kind != b->kind) {
     return false;
@@ -307,7 +337,6 @@ bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
   auto b = get(dst);
 
   if (a->kind == Type_literal_int && b->kind == Type_integer) {
-    // TODO: make sure value fits in destination integer type
     return true;
   }
 
@@ -364,4 +393,3 @@ bool TypeInterner::unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result) {
 
   return false;
 }
-

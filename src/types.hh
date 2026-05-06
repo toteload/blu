@@ -71,6 +71,21 @@ ttld_inline i64 int_value_max(u16 bitwidth) {
   }
 }
 
+ttld_inline u64 uint_value_max(u16 bitwidth) {
+  switch (bitwidth) {
+  case 8:
+    return UINT8_MAX;
+  case 16:
+    return UINT16_MAX;
+  case 32:
+    return UINT32_MAX;
+  case 64:
+    return UINT64_MAX;
+  default:
+    Unreachable();
+  }
+}
+
 struct Type {
   TypeKind kind;
 
@@ -101,34 +116,6 @@ struct Type {
       TypeIndex item_types[0];
     } sequence;
   };
-
-  TypeSizeInfo size_info() const {
-    switch (kind) {
-    case Type_integer:
-      return (TypeSizeInfo){
-        .size   = integer.bitwidth / cast<u32>(8),
-        .stride = integer.bitwidth / cast<u32>(8),
-        .align  = integer.bitwidth / cast<u32>(8),
-      };
-    case Type_literal_function:
-    case Type_function:
-      return TypeSizeInfo::of_type<NodeIndex>();
-
-    case Type_type:
-      return TypeSizeInfo::of_type<TypeIndex>();
-
-    case Type_sequence:
-    case Type_literal_int:
-    case Type_nil:
-    case Type_never:
-    case Type_slice:
-    case Type_array:
-    case Type_distinct:
-    case Type_boolean:
-      Todo();
-      break;
-    }
-  }
 
   u32 byte_size() {
     switch (kind) {
@@ -227,6 +214,8 @@ struct TypeInterner {
   TypeIndex add_as_distinct(Type *type);
 
   Type *get(TypeIndex idx) { return list[idx.idx]; }
+
+  TypeSizeInfo size_info(TypeIndex idx);
 
   bool is_coercible_to(TypeIndex src, TypeIndex dst);
   bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);

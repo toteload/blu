@@ -136,7 +136,13 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 #define Debug_assert(cond) Cast(void, cond)
 #endif
 
-#define Panic(Reason) do { fprintf(stderr, "PANIC: "); fprintf(stderr, (Reason)); fprintf(stderr, "\n"); abort(); } while (0)
+#define Panic(Reason)                                                                              \
+  do {                                                                                             \
+    fprintf(stderr, "PANIC: ");                                                                    \
+    fprintf(stderr, (Reason));                                                                     \
+    fprintf(stderr, "\n");                                                                         \
+    abort();                                                                                       \
+  } while (0)
 #define Unreachable() Panic("Unreachable code encountered")
 #define Todo(Comment) Assert(!"TODO" Comment)
 #define Unimplemented() Assert(!"Unimplemented")

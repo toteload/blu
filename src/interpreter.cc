@@ -130,46 +130,53 @@ b32 Interpreter::run(Source *source, ValueIndex *result) {
 }
 
 // Assume: The coercion is always possible.
-void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
+bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   auto v      = values->get(src);
   auto ty_src = types->get(v->type);
 
   if (type_dst == v->type) {
-    memcpy(out, v->data, ty_src->size_info().size);
-    return;
+    memcpy(out, v->data, types->size_info(v->type).size);
+    return true;
   }
 
   auto ty_dst = types->get(type_dst);
 
   if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
     memcpy(out, v->data, sizeof(NodeIndex));
-    return;
+    return true;
   }
 
   if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
-    if (ty_dst->integer.signedness == Signed) {
-    if (ty_dst->integer.bitwidth == 8) {
-      *cast<i8 *>(out) = cast<i8>(*cast<i64 *>(v->data));
-      return;
+    i64 val         = *cast<i64 *>(v->data);
+    auto signedness = ty_dst->integer.signedness;
+    auto bitwidth = ty_dst->integer.bitwidth;
+
+    if (signedness == Signed) {
+      i64 min_value = int_value_min(bitwidth);
+      i64 max_value = int_value_max(bitwidth);
+      if (val < min_value || val > max_value) {
+        messages->error("integer constant out of range of destination type.");
+        return false;
+      }
+    } else {
+      u64 max_value = uint_value_max(bitwidth);
+      if (val < 0 || cast<u64>(val) > max_value) {
+        messages->error("integer constant out of range of destination type.");
+        return false;
+      }
     }
 
-    if (ty_dst->integer.bitwidth == 16) {
-      *cast<i16 *>(out) = cast<i16>(*cast<i64 *>(v->data));
-      return;
+    // clang-format off
+    switch (ty_dst->integer.bitwidth) {
+    case  8: signedness == Signed ? (*cast<i8  *>(out) = cast<i8 >(val)) : (*cast<u8  *>(out) = cast<u8 >(val)); break;
+    case 16: signedness == Signed ? (*cast<i16 *>(out) = cast<i16>(val)) : (*cast<u16 *>(out) = cast<u16>(val)); break;
+    case 32: signedness == Signed ? (*cast<i32 *>(out) = cast<i32>(val)) : (*cast<u32 *>(out) = cast<u32>(val)); break;
+    case 64: signedness == Signed ? (*cast<i64 *>(out) = cast<i64>(val)) : (*cast<u64 *>(out) = cast<u64>(val)); break;
+    default: Unreachable();
     }
+    // clang-format on
 
-    if (ty_dst->integer.bitwidth == 32) {
-      *cast<i32 *>(out) = cast<i32>(*cast<i64 *>(v->data));
-      return;
-    }
-
-    if (ty_dst->integer.bitwidth == 64) {
-      *cast<i64 *>(out) = cast<i64>(*cast<i64 *>(v->data));
-      return;
-    }
-    }
-
-    Todo();
+    return true;
   }
 
   if (ty_src->kind == Type_integer && ty_dst->kind == Type_integer) {
@@ -177,64 +184,63 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
     if (signedness == Signed) {
       if (ty_src->integer.bitwidth == 8 && ty_dst->integer.bitwidth == 32) {
         *cast<i32 *>(out) = cast<i32>(*cast<i8 *>(v->data));
-        return;
+        return true;
       }
 
       if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
         *cast<i64 *>(out) = cast<i64>(*cast<i32 *>(v->data));
-        return;
+        return true;
       }
     }
 
     Todo();
+
+    return false;
   }
 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
     u32 count                = ty_src->array.size;
+
     *cast<ValueSlice *>(out) = {
       .len   = count,
       .items = v->data,
     };
-    return;
+
+    return true;
   }
 
   if (ty_src->kind == Type_sequence) {
-    TypeIndex base_type_idx;
+    TypeIndex base_type;
     if (ty_dst->kind == Type_slice) {
-      base_type_idx = ty_dst->slice.base_type;
+      base_type = ty_dst->slice.base_type;
     } else if (ty_dst->kind == Type_array) {
-      base_type_idx = ty_dst->array.base_type;
+      base_type = ty_dst->array.base_type;
     } else {
       Unreachable();
     }
 
-    auto base_type = types->get(base_type_idx);
-
     u32 count      = ty_src->sequence.count;
-    auto size_info = base_type->size_info();
-    auto items     = values->alloc_memory(size_info, count);
+    auto size_info = types->size_info(base_type);
 
     ValueIndex *sequence_items = cast<ValueIndex *>(v->data);
 
+    auto items = values->alloc_memory(size_info, count);
     for (u32 i = 0; i < count; i++) {
-      coerce_value(base_type_idx, sequence_items[i], ptr_offset(items, size_info.stride * i));
+      Try(coerce_value(base_type, sequence_items[i], ptr_offset(items, size_info.stride * i)));
     }
 
-    if (ty_dst->kind == Type_slice) {
-      *cast<ValueSlice *>(out) = {
-        .len   = count,
-        .items = items,
-      };
-    } else if (ty_dst->kind == Type_array) {
+    if (ty_dst->kind == Type_array) {
       *cast<void **>(out) = items;
     } else {
-      Unreachable();
+      *cast<ValueSlice *>(out) = {.len = count, .items = items};
     }
 
-    return;
+    return true;
   }
 
   Todo();
+
+  return false;
 }
 
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
@@ -242,22 +248,20 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 
   auto decl = source->nodes->data(declaration).declaration;
 
-  TypeIndex decl_type_idx = get_type(decl.type);
+  TypeIndex decl_type = get_type(decl.type);
 
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
 
-  Type *decl_type = types->get(decl_type_idx);
-
   Value *v;
   auto val  = values->alloc_value(&v);
-  auto data = values->alloc_memory(decl_type->size_info());
+  auto data = values->alloc_memory(types->size_info(decl_type));
   *v        = {
-    .type = decl_type_idx,
+    .type = decl_type,
     .data = data,
   };
 
-  coerce_value(decl_type_idx, decl_value, data);
+  Try(coerce_value(decl_type, decl_value, data));
 
   auto str = source->get_token_str(decl.name);
   auto key = strings->add(str);
@@ -294,7 +298,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       Try(eval_expr(env, builtin.args[0], &arg_format));
 
       ValueSlice slice;
-      coerce_value(types->type.slice_u8, arg_format, &slice);
+      Try(coerce_value(types->type.slice_u8, arg_format, &slice));
 
       printf("%.*s\n", cast<int>(slice.len), cast<char const *>(slice.items));
 
@@ -419,35 +423,37 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto indexable      = values->get(idx_indexable);
     auto type_indexable = types->get(indexable->type);
 
+    TypeIndex base_type;
+    void *elem_ptr;
+
     if (type_indexable->kind == Type_slice) {
-      auto size_info = types->get(type_indexable->slice.base_type)->size_info();
-      auto offset    = i * size_info.stride;
-      auto slice     = cast<ValueSlice *>(indexable->data);
-      auto p         = ptr_offset(slice->items, offset);
-
-      Value *vout;
-      *result = values->alloc_value(&vout);
-
-      Todo("return some sort of L-value");
-
-      //*vout   = {
-      //  .type = type_indexable->slice.base_type,
-      //  .data = indexable->data.slice.items[i],
-      //};
+      base_type  = type_indexable->slice.base_type;
+      auto slice = cast<ValueSlice *>(indexable->data);
+      elem_ptr   = ptr_offset(slice->items, i * types->size_info(base_type).stride);
+    } else if (type_indexable->kind == Type_array) {
+      base_type = type_indexable->array.base_type;
+      elem_ptr  = ptr_offset(indexable->data, i * types->size_info(base_type).stride);
+    } else {
+      Todo("implement indexing for other types");
       break;
     }
 
-    Todo("implement indexing");
+    auto elem_size_info = types->size_info(base_type);
+    auto data           = values->alloc_memory(elem_size_info);
+    memcpy(data, elem_ptr, elem_size_info.size);
+
+    Value *vout;
+    *result = values->alloc_value(&vout);
+    *vout   = {.type = base_type, .data = data};
   } break;
   case Ast_literal_string: {
-    auto ty        = get_type(node_index);
-    auto t         = types->get(ty);
-    auto base_type = types->get(t->array.base_type);
-    u32 count      = t->array.size;
+    auto ty   = get_type(node_index);
+    auto t    = types->get(ty);
+    u32 count = t->array.size;
 
     Value *v;
     auto res    = values->alloc_value(&v);
-    void *bytes = values->alloc_memory(base_type->size_info(), count);
+    void *bytes = values->alloc_memory(types->size_info(t->array.base_type), count);
 
     *v = {
       .type = ty,
@@ -465,8 +471,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_defer: {
-    // Normally collected by the enclosing Ast_block before eval_expr is called.
-    // Evaluate immediately if encountered outside a block context.
     auto defer_ = source->nodes->data(node_index).defer;
     ValueIndex e;
     Try(eval_expr(env, defer_.value, &e));
@@ -524,7 +528,7 @@ b32 Interpreter::eval_binary_op(
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
       default: Unreachable(); break;
       }
-        // clang-format on
+      // clang-format on
 
       if (overflow) {
         Todo();
@@ -544,7 +548,7 @@ b32 Interpreter::eval_binary_op(
 
       Value *v;
       auto idx      = values->alloc_value(&v);
-      void *data    = values->alloc_memory(result_type->size_info());
+      void *data    = values->alloc_memory(types->size_info(result_type_idx));
       u32 byte_size = result_type->integer.bitwidth / 8;
       memcpy(data, &res, byte_size);
       *v = {
@@ -607,14 +611,13 @@ b32 Interpreter::call_function(
   Try(eval_expr(env, function_node.body, &body_result));
 
   TypeIndex return_type_idx = types->get(function->type)->function.return_type;
-  auto return_type          = types->get(return_type_idx);
 
   Value *v;
   *result   = values->alloc_value(&v);
-  auto data = values->alloc_memory(return_type->size_info());
+  auto data = values->alloc_memory(types->size_info(return_type_idx));
   *v        = {.type = return_type_idx, .data = data};
 
-  coerce_value(return_type_idx, body_result, data);
+  Try(coerce_value(return_type_idx, body_result, data));
 
   return true;
 }
@@ -623,6 +626,6 @@ TypeIndex Interpreter::get_type(NodeIndex node_index) { return type_annotations[
 
 u64 Interpreter::get_uint(ValueIndex idx) {
   u64 res;
-  coerce_value(types->type.uint, idx, &res);
+  Try(coerce_value(types->type.uint, idx, &res));
   return res;
 }

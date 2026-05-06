@@ -50,7 +50,7 @@ struct Interpreter {
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
   b32 add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
-  void coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
+  bool coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
 
   u64 get_uint(ValueIndex idx);
 
