@@ -1,32 +1,38 @@
 #include "blu.hh"
 
-void populate_root_env(Env<Declaration> *env, StringInterner *strings, TypeInterner *types) {
-#define Add(Kind, Identifier, Type)                                                                \
-  do {                                                                                             \
-    auto key = strings->add(Str_make((Identifier)));                                               \
-    env->insert(key, {.kind = (Kind), .type = (Type)});                                            \
-  } while (false)
+struct RootEnvPopulator {
+  Env<Declaration> *env;
+  StringInterner *strings;
+  TypeInterner *types;
 
-  Add(Declaration_of_type, "i8", types->type.i8_);
-  Add(Declaration_of_type, "i16", types->type.i16_);
-  Add(Declaration_of_type, "i32", types->type.i32_);
-  Add(Declaration_of_type, "i64", types->type.i64_);
+  void insert(DeclarationKind kind, Str s, TypeIndex type) {
+    auto key = strings->add(s);
+    env->insert(key, { .kind = kind, .type = type });
+  }
 
-  Add(Declaration_of_type, "u8", types->type.u8_);
-  Add(Declaration_of_type, "u16", types->type.u16_);
-  Add(Declaration_of_type, "u32", types->type.u32_);
-  Add(Declaration_of_type, "u64", types->type.u64_);
+  void populate();
+};
 
-  Add(Declaration_of_type, "bool", types->type.bool_);
+void RootEnvPopulator::populate() {
+  // clang-format off
+  insert(Declaration_of_type, STR("i8"),  types->type.i8_);
+  insert(Declaration_of_type, STR("i16"), types->type.i16_);
+  insert(Declaration_of_type, STR("i32"), types->type.i32_);
+  insert(Declaration_of_type, STR("i64"), types->type.i64_);
 
-  Add(Declaration_of_type, "nil", types->type.nil);
-  Add(Declaration_of_type, "never", types->type.never);
-  Add(Declaration_of_type, "type", types->type.type);
+  insert(Declaration_of_type, STR("u8"),  types->type.u8_);
+  insert(Declaration_of_type, STR("u16"), types->type.u16_);
+  insert(Declaration_of_type, STR("u32"), types->type.u32_);
+  insert(Declaration_of_type, STR("u64"), types->type.u64_);
 
-  Add(Declaration_of_value, "true", types->type.bool_);
-  Add(Declaration_of_value, "false", types->type.bool_);
+  insert(Declaration_of_type, STR("bool"),  types->type.bool_);
+  insert(Declaration_of_type, STR("nil"),   types->type.nil);
+  insert(Declaration_of_type, STR("never"), types->type.never);
+  insert(Declaration_of_type, STR("type"),  types->type.type);
 
-#undef Add
+  insert(Declaration_of_value, STR("true"),  types->type.bool_);
+  insert(Declaration_of_value, STR("false"), types->type.bool_);
+  // clang-format on
 }
 
 struct TypeHint {
@@ -90,9 +96,17 @@ b32 TypeChecker::typecheck() {
   NodeIndex root_idx = {0};
   Assert(source->nodes->kind(root_idx) == Ast_root);
 
-  auto env_base = envs->alloc(nullptr);
-  populate_root_env(env_base, strings, types);
-  auto env = envs->alloc(env_base);
+  auto env_root = envs->alloc(nullptr);
+  {
+    RootEnvPopulator populator = {
+      .env = env_root,
+      .strings = strings,
+      .types = types,
+    };
+
+    populator.populate();
+  }
+  auto env = envs->alloc(env_root);
 
   // Add all root level declarations to the environment.
   auto root = source->nodes->data(root_idx).root;
@@ -200,6 +214,22 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     auto token_index = source->nodes->data(node_index).identifier.token_index;
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
+
+    if (decl.kind == Declaration_of_undetermined) {
+      auto node = source->nodes->data(decl.node_index).declaration;
+
+      TypeIndex declared_type;
+      Try(eval_type_expression(env, node.type, &declared_type));
+      Try(check_is_type(declared_type, node.type));
+
+      TypeIndex value_type;
+      Try(eval_type_expression(env, node.value, &value_type));
+
+      decl = {.kind = Declaration_of_type, .type = value_type};
+
+      env->insert(intern_identifier(token_index), decl);
+    }
+
     Try(check_is_declaration_of_type(decl, node_index));
     result = decl.type;
   } break;
@@ -531,7 +561,7 @@ b32 TypeChecker::check_is_declaration_of_type(Declaration decl, NodeIndex at) {
     return true;
   }
 
-  messages->error(at, "Expected type, but got {type}.", decl.type);
+  messages->error(at, "Expected type, but got something else.");
 
   return false;
 }

@@ -3,6 +3,14 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
+bool is_int_coercible(IntInfo from, IntInfo to) {
+  if (from.signedness != to.signedness) {
+    return false;
+  }
+
+  return from.bitwidth <= to.bitwidth;
+}
+
 // Should this Slice<char> be a Str?
 // Should Str be a subtype of Slice?
 u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) {
@@ -247,6 +255,7 @@ void TypeInterner::init(
   Add_type(type.bool_, ((Type){ .kind = Type_boolean, }));
   Add_type(type.nil,   ((Type){ .kind = Type_nil, }));
   Add_type(type.never, ((Type){ .kind = Type_never, }));
+  Add_type(type.type,  ((Type){ .kind = Type_type, }));
 
   Add_type(type.literal_int, ((Type){ .kind = Type_literal_int, }));
 
@@ -302,6 +311,10 @@ bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
     return true;
   }
 
+  if (a->kind == Type_integer && b->kind == Type_integer) {
+    return is_int_coercible(a->integer, b->integer);
+  }
+
   if (a->kind == Type_sequence) {
     TypeIndex base_type;
     if (b->kind == Type_array) {
@@ -351,3 +364,4 @@ bool TypeInterner::unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result) {
 
   return false;
 }
+

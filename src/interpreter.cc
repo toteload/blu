@@ -147,14 +147,26 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   }
 
   if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
-    if (ty_dst->integer.signedness == Signed && ty_dst->integer.bitwidth == 32) {
+    if (ty_dst->integer.signedness == Signed) {
+    if (ty_dst->integer.bitwidth == 8) {
+      *cast<i8 *>(out) = cast<i8>(*cast<i64 *>(v->data));
+      return;
+    }
+
+    if (ty_dst->integer.bitwidth == 16) {
+      *cast<i16 *>(out) = cast<i16>(*cast<i64 *>(v->data));
+      return;
+    }
+
+    if (ty_dst->integer.bitwidth == 32) {
       *cast<i32 *>(out) = cast<i32>(*cast<i64 *>(v->data));
       return;
     }
 
-    if (ty_dst->integer.signedness == Signed && ty_dst->integer.bitwidth == 64) {
+    if (ty_dst->integer.bitwidth == 64) {
       *cast<i64 *>(out) = cast<i64>(*cast<i64 *>(v->data));
       return;
+    }
     }
 
     Todo();
@@ -163,6 +175,11 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   if (ty_src->kind == Type_integer && ty_dst->kind == Type_integer) {
     auto signedness = ty_dst->integer.signedness;
     if (signedness == Signed) {
+      if (ty_src->integer.bitwidth == 8 && ty_dst->integer.bitwidth == 32) {
+        *cast<i32 *>(out) = cast<i32>(*cast<i8 *>(v->data));
+        return;
+      }
+
       if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
         *cast<i64 *>(out) = cast<i64>(*cast<i32 *>(v->data));
         return;
@@ -506,8 +523,8 @@ b32 Interpreter::eval_binary_op(
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
       default: Unreachable(); break;
-        // clang-format on
       }
+        // clang-format on
 
       if (overflow) {
         Todo();
@@ -551,8 +568,8 @@ b32 Interpreter::eval_binary_op(
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
       default: Unreachable(); break;
-        // clang-format on
       }
+      // clang-format on
 
       Todo("unsigned int op: make sure nothing overflowed");
     }

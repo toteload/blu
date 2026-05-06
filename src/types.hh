@@ -22,6 +22,11 @@ enum Signedness : u8 {
   Unsigned,
 };
 
+struct IntInfo {
+  Signedness signedness;
+  u16 bitwidth;
+};
+
 struct TypeSizeInfo {
   u32 size;
   u32 stride;
@@ -48,7 +53,6 @@ ttld_inline i64 int_value_min(u16 bitwidth) {
     return INT64_MIN;
   default:
     Unreachable();
-    return 0;
   }
 }
 
@@ -64,7 +68,6 @@ ttld_inline i64 int_value_max(u16 bitwidth) {
     return INT64_MAX;
   default:
     Unreachable();
-    return 0;
   }
 }
 
@@ -72,10 +75,7 @@ struct Type {
   TypeKind kind;
 
   union {
-    struct {
-      Signedness signedness;
-      u16 bitwidth;
-    } integer;
+    IntInfo integer;
     struct {
       TypeIndex base_type;
     } slice;
@@ -114,21 +114,21 @@ struct Type {
     case Type_function:
       return TypeSizeInfo::of_type<NodeIndex>();
 
+    case Type_type:
+      return TypeSizeInfo::of_type<TypeIndex>();
+
+    case Type_sequence:
     case Type_literal_int:
     case Type_nil:
     case Type_never:
     case Type_slice:
     case Type_array:
     case Type_distinct:
-    case Type_type:
     case Type_boolean:
-    case Type_sequence:
       Todo();
       break;
     }
   }
-
-  b32 is_sized_type() { return kind != Type_nil && kind != Type_never; }
 
   u32 byte_size() {
     switch (kind) {
