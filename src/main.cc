@@ -43,27 +43,27 @@ int main(i32 arg_count, char const *const *args) {
   Str filename    = settings.source_file;
   Str source_text = read_file(filename);
 
-  Arena arena;
+  Arena arena{};
   arena.init(MiB(2));
 
-  Arena work_arena;
+  Arena work_arena{};
   work_arena.init(MiB(8));
 
-  TypeInterner types;
+  TypeInterner types{};
   types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
 
-  StringInterner strings;
+  StringInterner strings{};
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
 
-  Source source;
+  Source source{};
   source.filename = filename;
   source.source   = source_text;
 
-  Messages messages;
+  Messages messages{};
   messages.source = &source;
   messages.init(stdlib_alloc, &strings, &types);
 
-  Tokens tokens;
+  Tokens tokens{};
   tokens.kinds.init(stdlib_alloc);
   tokens.spans.init(stdlib_alloc);
 
@@ -123,7 +123,6 @@ int main(i32 arg_count, char const *const *args) {
     .envs       = &envs,
     .types      = &types,
     .strings    = &strings,
-    .values     = &values,
     .work_arena = &work_arena,
   };
 

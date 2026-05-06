@@ -109,7 +109,6 @@ struct TypeCheckContext {
   EnvManager<Declaration> *envs;
   TypeInterner *types;
   StringInterner *strings;
-  ValueStore *values;
   Arena *work_arena;
 };
 
@@ -183,3 +182,27 @@ struct Messages {
 };
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
+
+// ---
+
+struct Program {
+  Arena arena;
+  Arena work_arena;
+
+  Messages messages;
+
+  TypeInterner types;
+  StringInterner strings;
+
+  Tokens tokens;
+  AstNodes nodes;
+
+  ValueStore values;
+  Vector<TypeIndex> type_annotations;
+  Interpreter interpreter;
+
+  void init();
+  void deinit();
+
+  bool interpret(Str source, ValueIndex *result);
+};

@@ -220,6 +220,9 @@ struct AstNodes {
 
   Allocator segment_allocator;
 
+  void init();
+  void deinit();
+
   NodeIndex alloc() {
     NodeIndex res = {cast<u32>(kinds.len())};
     kinds.push_empty();

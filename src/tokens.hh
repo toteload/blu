@@ -64,6 +64,16 @@ struct Tokens {
   // Each span denotes what bytes in the source the token spans.
   Vector<Span<u32>> spans;
 
+  void init(Allocator kinds_allocator, Allocator spans_allocator) {
+    kinds.init(kinds_allocator);
+    spans.init(spans_allocator);
+  }
+
+  void deinit() {
+    kinds.deinit();
+    spans.deinit();
+  }
+
   u32 len() { return kinds.len(); }
   TokenIndex end() { return {cast<u32>(kinds.len())}; }
 

@@ -45,7 +45,6 @@ struct TypeChecker {
   TypeInterner *types;
   EnvManager<Declaration> *envs;
   StringInterner *strings;
-  ValueStore *values;
   Arena *work_arena;
   Source *source;
 
@@ -83,7 +82,6 @@ b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annota
     .types       = context->types,
     .envs        = context->envs,
     .strings     = context->strings,
-    .values      = context->values,
     .work_arena  = context->work_arena,
     .source      = source,
     .annotations = annotations,

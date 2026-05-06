@@ -6,6 +6,12 @@ It is not compiled ahead of time.
 All checks are performed at runtime.
 You will still have to write the logic for what the language does, it will "just" be done at a different time compared to an AOT compiler.
 
+### Currently
+
+- [ ] Properly cleanup resources and free memory.
+  - This is as preparation for running tests, where we can start up new instances of the interpreter
+    to test programs with.
+
 ### Basic
 
 - [x] `test\basic\main.blu`
