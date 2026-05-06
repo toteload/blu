@@ -24,6 +24,7 @@ enum AstKind : u8 {
   Ast_break,
   Ast_continue,
   Ast_return,
+  Ast_defer,
   Ast_kind_max,
 };
 
@@ -166,6 +167,10 @@ struct AstReturn {
   NodeIndex value;
 };
 
+struct AstDefer {
+  NodeIndex value;
+};
+
 struct AstAtom {
   TokenIndex token_index;
 };
@@ -199,6 +204,7 @@ union AstNodeData {
   AstIfElse if_else;
   AstWhile while_;
   AstReturn return_;
+  AstDefer defer;
 };
 
 struct AstNode {
@@ -245,7 +251,7 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",        "block",  "type-slice",       "type-array",  "type-function",  "builtin",
   "declaration", "assign", "literal-sequence", "literal-int", "literal-string", "identifier",
   "call",        "index",  "unary-op",         "binary-op",   "function",       "if-else",
-  "while",       "break",  "continue",         "return",      "illegal",
+  "while",       "break",  "continue",         "return",      "defer",          "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

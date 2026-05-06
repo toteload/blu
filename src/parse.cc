@@ -24,6 +24,7 @@ struct Parser {
   b32 parse_break(NodeIndex *out);
   b32 parse_continue(NodeIndex *out);
   b32 parse_return(NodeIndex *out);
+  b32 parse_defer(NodeIndex *out);
   b32 parse_if_else(NodeIndex *out);
   b32 parse_base_expression(NodeIndex *out);
   b32 parse_expression(NodeIndex *out, u32 prev_op = Op_count);
@@ -537,6 +538,29 @@ b32 Parser::parse_return(NodeIndex *out) {
   return true;
 }
 
+b32 Parser::parse_defer(NodeIndex *out) {
+  auto node_index = nodes->alloc();
+  auto start      = at;
+
+  Try(expect_token(Tok_keyword_defer));
+
+  AstDefer defer;
+  Try(parse_expression(&defer.value));
+
+  nodes->set(
+    node_index,
+    {
+      Ast_defer,
+      {start, at},
+      {.defer = defer},
+    }
+  );
+
+  *out = node_index;
+
+  return true;
+}
+
 b32 Parser::parse_if_else(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
@@ -600,6 +624,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_keyword_continue: Try(parse_continue(&base));       break;
   case Tok_keyword_break:    Try(parse_break(&base));          break;
   case Tok_keyword_return:   Try(parse_return(&base));         break;
+  case Tok_keyword_defer:    Try(parse_defer(&base));          break;
   case Tok_keyword_if:       Try(parse_if_else(&base));        break;
   case Tok_literal_int:      Try(parse_literal_int(&base));    break;
   case Tok_literal_string:   Try(parse_literal_string(&base)); break;

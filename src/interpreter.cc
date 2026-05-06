@@ -295,12 +295,30 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto env_block = envs->alloc(env);
     defer(envs->dealloc(env_block));
 
-    for (u32 i = 0; i < block.items.len() - 1; i++) {
-      ValueIndex e;
-      Try(eval_expr(env_block, block.items[i], &e));
+    auto snapshot = work_arena->take_snapshot();
+    defer(work_arena->restore(snapshot));
+
+    NodeIndex *defers = work_arena->alloc<NodeIndex>(block.items.len());
+    u32 defer_count   = 0;
+
+    ValueIndex last = common.nil;
+
+    for (u32 i = 0; i < block.items.len(); i++) {
+      auto item = block.items[i];
+      if (source->nodes->kind(item) == Ast_defer) {
+        defers[defer_count++] = source->nodes->data(item).defer.value;
+        last                  = common.nil;
+      } else {
+        Try(eval_expr(env_block, item, &last));
+      }
     }
 
-    Try(eval_expr(env_block, block.items[block.items.len() - 1], result));
+    *result = last;
+
+    for (u32 i = defer_count; i > 0; i--) {
+      ValueIndex e;
+      Try(eval_expr(env_block, defers[i - 1], &e));
+    }
   } break;
   case Ast_function: {
     Value *v;
@@ -427,6 +445,15 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     memcpy(bytes, s.str, s.len());
 
     *result = res;
+  } break;
+
+  case Ast_defer: {
+    // Normally collected by the enclosing Ast_block before eval_expr is called.
+    // Evaluate immediately if encountered outside a block context.
+    auto defer_ = source->nodes->data(node_index).defer;
+    ValueIndex e;
+    Try(eval_expr(env, defer_.value, &e));
+    *result = common.nil;
   } break;
 
   case Ast_assign:

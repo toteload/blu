@@ -200,6 +200,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_if_match("continue", Tok_keyword_continue);
     Return_if_match("and",      Tok_keyword_and);
     Return_if_match("or",       Tok_keyword_or);
+    Return_if_match("defer",    Tok_keyword_defer);
     // clang-format on
 
     Return_token(Tok_identifier);

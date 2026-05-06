@@ -43,6 +43,7 @@ enum TokenKind : u8 {
   Tok_keyword_return,
   Tok_keyword_and,
   Tok_keyword_or,
+  Tok_keyword_defer,
 
   Tok_identifier,
   Tok_builtin,
@@ -78,15 +79,15 @@ struct Tokens {
 };
 
 constexpr char const *token_string[Tok_kind_max] = {
-  "colon",          "semicolon",     "comma",        "dot",        "equals",
-  "minus",          "plus",          "star",         "slash",      "percent",
-  "plus_equals",    "exclamation",   "ampersand",    "bar",        "caret",
-  "tilde",          "left-shift",    "right-shift",  "cmp-eq",     "cmp-ne",
-  "cmp-gt",         "cmp-ge",        "cmp-lt",       "cmp-le",     "literal-int",
-  "literal-string", "brace-open",    "brace-close",  "paren-open", "paren-close",
-  "bracket-open",   "bracket-close", "if",           "else",       "while",
-  "break",          "continue",      "return",       "and",        "or",
-  "identifier",     "builtin",       "line-comment",
+  "colon",          "semicolon",     "comma",       "dot",          "equals",
+  "minus",          "plus",          "star",        "slash",        "percent",
+  "plus_equals",    "exclamation",   "ampersand",   "bar",          "caret",
+  "tilde",          "left-shift",    "right-shift", "cmp-eq",       "cmp-ne",
+  "cmp-gt",         "cmp-ge",        "cmp-lt",      "cmp-le",       "literal-int",
+  "literal-string", "brace-open",    "brace-close", "paren-open",   "paren-close",
+  "bracket-open",   "bracket-close", "if",          "else",         "while",
+  "break",          "continue",      "return",      "and",          "or",
+  "defer",          "identifier",    "builtin",     "line-comment",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {

@@ -221,6 +221,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_break:
   case Ast_continue:
   case Ast_return:
+  case Ast_defer:
   case Ast_kind_max:
   case Ast_root:
     Todo();
@@ -465,6 +466,13 @@ b32 TypeChecker::check_expression(
       result = types->type.nil;
     } break;
     }
+  } break;
+
+  case Ast_defer: {
+    auto defer_ = source->nodes->data(node_index).defer;
+    TypeIndex deferred_type;
+    Try(check_expression(env, defer_.value, nullptr, &deferred_type));
+    result = types->type.nil;
   } break;
 
   case Ast_assign:
