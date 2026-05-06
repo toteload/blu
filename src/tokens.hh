@@ -52,6 +52,7 @@ enum TokenKind : u8 {
   Tok_kind_max,
 };
 
+// TODO: use Index type.
 struct TokenIndex {
   u32 idx;
 };

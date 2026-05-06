@@ -30,7 +30,9 @@ struct ValueStore {
     return {idx};
   }
 
-  void *alloc_memory(TypeSizeInfo info, u32 count) {
+  // TODO: maybe it doesn't make sense that this function has a count parameter and that information
+  // should just be encoded in the TypeSizeInfo.
+  void *alloc_memory(TypeSizeInfo info, u32 count=1) {
     usize byte_size;
     if (count == 1) {
       byte_size = info.size;

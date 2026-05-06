@@ -40,6 +40,10 @@ struct PopulateRootEnv {
     auto idx  = values->alloc_value(&v);
     auto data = values->alloc_data<T>();
     *data     = val;
+    *v = {
+      .type = type,
+      .data = data,
+    };
 
     env->insert(key, idx);
   }
@@ -131,14 +135,14 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   auto ty_src = types->get(v->type);
 
   if (type_dst == v->type) {
-    memcpy(out, &v->data, ty_src->size_info().size);
+    memcpy(out, v->data, ty_src->size_info().size);
     return;
   }
 
   auto ty_dst = types->get(type_dst);
 
   if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
-    Todo();
+    memcpy(out, v->data, sizeof(NodeIndex));
     return;
   }
 
@@ -147,8 +151,25 @@ void Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
       *cast<i32 *>(out) = cast<i32>(*cast<i64 *>(v->data));
       return;
     }
+
+    if (ty_dst->integer.signedness == Signed && ty_dst->integer.bitwidth == 64) {
+      *cast<i64 *>(out) = cast<i64>(*cast<i64 *>(v->data));
+      return;
+    }
+
     Todo();
-    return;
+  }
+
+  if (ty_src->kind == Type_integer && ty_dst->kind == Type_integer) {
+    auto signedness = ty_dst->integer.signedness;
+    if (signedness == Signed) {
+      if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
+        *cast<i64 *>(out) = cast<i64>(*cast<i32 *>(v->data));
+        return;
+      }
+    }
+
+    Todo();
   }
 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
@@ -204,16 +225,22 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 
   auto decl = source->nodes->data(declaration).declaration;
 
-  TypeIndex decl_type = get_type(decl.type);
+  TypeIndex decl_type_idx = get_type(decl.type);
 
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
 
+  Type *decl_type = types->get(decl_type_idx);
+
   Value *v;
   auto val = values->alloc_value(&v);
-  v->type  = decl_type;
+  auto data = values->alloc_memory(decl_type->size_info());
+  *v = {
+    .type = decl_type_idx,
+    .data = data,
+  };
 
-  coerce_value(decl_type, decl_value, &v->data);
+  coerce_value(decl_type_idx, decl_value, data);
 
   auto str = source->get_token_str(decl.name);
   auto key = strings->add(str);
@@ -366,7 +393,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       Value *vout;
       *result = values->alloc_value(&vout);
 
-      Todo(":)");
+      Todo("return some sort of L-value");
 
       //*vout   = {
       //  .type = type_indexable->slice.base_type,
@@ -464,14 +491,26 @@ b32 Interpreter::eval_binary_op(
 
       auto result_type = types->get(result_type_idx);
 
-      i64 min_value = int_min_value(result_type->integer.bitwidth);
-      i64 max_value = int_max_value(result_type->integer.bitwidth);
+      i64 min_value = int_value_min(result_type->integer.bitwidth);
+      i64 max_value = int_value_max(result_type->integer.bitwidth);
 
       if (res > max_value || res < min_value) {
         Todo();
       }
 
-      Todo();
+      Value *v;
+      auto idx = values->alloc_value(&v);
+      void *data = values->alloc_memory(result_type->size_info());
+      u32 byte_size = result_type->integer.bitwidth / 8;
+      memcpy(data, &res, byte_size);
+      *v = {
+        .type = result_type_idx,
+        .data = data,
+      };
+
+      *result = idx;
+
+      return true;
     } else {
       u64 a = get_as_u64(lhs);
       u64 b = get_as_u64(rhs);
@@ -488,26 +527,8 @@ b32 Interpreter::eval_binary_op(
       // clang-format on
       }
 
-      Todo("make sure nothing overflowed");
+      Todo("unsigned int op: make sure nothing overflowed");
     }
-
-    TypeIndex result_type;
-    if (types->is_coercible_to(left->type, right->type)) {
-      result_type = right->type;
-    } else if (types->is_coercible_to(right->type, left->type)) {
-      result_type = left->type;
-    } else {
-      Unreachable();
-    }
-
-    Value *v;
-    *result = values->alloc_value(&v);
-    *v      = {
-      .type = result_type,
-      .data = {
-        .int64 = res,
-      },
-    };
   } break;
   default:
     Todo();

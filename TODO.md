@@ -16,7 +16,7 @@ You will still have to write the logic for what the language does, it will "just
   - Includes coercion of sequence literals to typed slices.
   - Includes indexing of slices.
   - Includes coercion of array to slice.
-- [-] `test\basic\print.blu`
+- [x] `test\basic\print.blu`
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 
@@ -34,7 +34,7 @@ You will still have to write the logic for what the language does, it will "just
 
 - [-] Properly cast the literal int to i32 which is the return type of main. This happens e.g. in `test/basic/main.blu`.
 - [ ] Properly free values that are no longer used in the interpreter.
-- [ ] Rework values to be more memory accurate.
+- [-] Rework values to be more memory accurate.
   - For example, currently if you have an array of u8, then the payload will be an array of ValuePayload.
     So each u8 will be 'boxed' as a ValuePayload.
     What I want is that the payload will be an array of u8. No boxing.

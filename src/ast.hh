@@ -72,11 +72,6 @@ enum UnaryOpKind : u8 {
   UnaryOpKind_max,
 };
 
-struct AstNodeTag {};
-
-using NodeIndex         = Index<u32, AstNodeTag>;
-using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
-
 struct AstBuiltin {
   BuiltinKind kind;
   union {

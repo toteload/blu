@@ -13,6 +13,14 @@
 
 typedef u32 SourceIdx;
 
+struct AstNodeTag {};
+using NodeIndex         = Index<u32, AstNodeTag>;
+using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
+
+struct TypeIndexTag {};
+using TypeIndex         = Index<u32, TypeIndexTag>;
+using OptionalTypeIndex = OptionalIndex<u32, TypeIndexTag>;
+
 // -[ Source location ]-
 
 struct SourceLocation {

@@ -339,13 +339,13 @@ bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {
 }
 
 bool TypeInterner::unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result) {
-  if (types->is_coercible_to(type_lhs, type_rhs)) {
-    *result = type_rhs;
+  if (is_coercible_to(lhs, rhs)) {
+    *result = rhs;
     return true;
   }
 
-  if (types->is_coercible_to(type_rhs, type_lhs)) {
-    *result = type_lhs;
+  if (is_coercible_to(rhs, lhs)) {
+    *result = lhs;
     return true;
   }
 

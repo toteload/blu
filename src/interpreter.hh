@@ -55,10 +55,18 @@ struct Interpreter {
   u64 get_uint(ValueIndex idx);
 
   // Can read any signed integer type and convert it to i64.
-  i64 get_as_i64(ValueIndex idx);
+  i64 get_as_i64(ValueIndex idx) {
+    i64 res;
+    coerce_value(types->type.i64_, idx, &res);
+    return res;
+  }
 
   // Can read any unsigned integer type and convert it to u64.
-  u64 get_as_u64(ValueIndex idx);
+  u64 get_as_u64(ValueIndex idx) {
+    i64 res;
+    coerce_value(types->type.u64_, idx, &res);
+    return res;
+  }
 
   void populate_root_env(Env<ValueIndex> *env);
 };

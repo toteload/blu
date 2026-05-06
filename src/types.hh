@@ -22,11 +22,6 @@ enum Signedness : u8 {
   Unsigned,
 };
 
-struct TypeIndexTag {};
-
-using TypeIndex         = Index<u32, TypeIndexTag>;
-using OptionalTypeIndex = OptionalIndex<u32, TypeIndexTag>;
-
 struct TypeSizeInfo {
   u32 size;
   u32 stride;
@@ -41,14 +36,28 @@ struct TypeSizeInfo {
   }
 };
 
-i64 int_min_value(u16 bitwidth) {
+ttld_inline
+i64 int_value_min(u16 bitwidth) {
   switch (bitwidth) {
     case 8: return INT8_MIN;
     case 16: return INT16_MIN;
     case 32: return INT32_MIN;
     case 64: return INT64_MIN;
+    default: Unreachable(); return 0;
   }
 }
+
+ttld_inline
+i64 int_value_max(u16 bitwidth) {
+  switch (bitwidth) {
+    case 8: return INT8_MAX;
+    case 16: return INT16_MAX;
+    case 32: return INT32_MAX;
+    case 64: return INT64_MAX;
+    default: Unreachable(); return 0;
+  }
+}
+
 
 struct Type {
   TypeKind kind;
@@ -92,8 +101,11 @@ struct Type {
         .stride = integer.bitwidth / cast<u32>(8),
         .align  = integer.bitwidth / cast<u32>(8),
       };
-    case Type_literal_int:
     case Type_literal_function:
+    case Type_function:
+      return TypeSizeInfo::of_type<NodeIndex>();
+
+    case Type_literal_int:
     case Type_nil:
     case Type_never:
     case Type_slice:
@@ -101,7 +113,6 @@ struct Type {
     case Type_distinct:
     case Type_type:
     case Type_boolean:
-    case Type_function:
     case Type_sequence:
       Todo();
       break;

@@ -1,4 +1,4 @@
 main: (): i32 = || {
-  #print("hello :)\n")
+  #print("hello :)")
   0
 }
