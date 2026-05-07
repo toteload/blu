@@ -1,5 +1,5 @@
 main : (): i32 = || {
-  a : SmolNumber = 16
+  a : SmolNumber = 0
   a
 }
 

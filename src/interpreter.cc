@@ -7,7 +7,7 @@ void Interpreter::init() {
   envs.init(stdlib_alloc, stdlib_alloc);
 }
 
-void Interpreter::deinit() { 
+void Interpreter::deinit() {
   if (env_root) {
     auto at = env_root;
     while (at) {
@@ -313,7 +313,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       ValueSlice slice;
       Try(coerce_value(types->type.slice_u8, arg_format, &slice));
 
-      printf("%.*s\n", cast<int>(slice.len), cast<char const *>(slice.items));
+      printf("%.*s", cast<int>(slice.len), cast<char const *>(slice.items));
 
       *result = common.nil;
     } break;
@@ -475,10 +475,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     auto token_index = nodes->data(node_index).literal_string.token_index;
     auto literal     = get_token_str(token_index);
-    auto s           = literal.sub(1, literal.len() - 1);
 
-    // TODO handle escape codes
-    memcpy(bytes, s.str, s.len());
+    decode_string_literal(literal, cast<char*>(bytes));
 
     *result = res;
   } break;

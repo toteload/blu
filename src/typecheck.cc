@@ -71,11 +71,6 @@ struct TypeChecker {
   b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
 };
 
-u32 string_literal_byte_size(Str s) {
-  // FIXME does not take into account escape codes :)
-  return s.len() - 2;
-}
-
 b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
     .messages    = context->messages,
@@ -577,7 +572,7 @@ b32 TypeChecker::check_is_indexable(TypeIndex type, NodeIndex at) {
 }
 
 StrKey TypeChecker::intern_identifier(TokenIndex identifier) {
-  auto s         = get_token_str(source->text, source->tokens, identifier);
+  auto s = get_token_str(source->text, source->tokens, identifier);
   return strings->add(s);
 }
 

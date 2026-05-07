@@ -154,8 +154,7 @@ struct ParsedSource {
   AstNodes *nodes;
 };
 
-ttld_inline
-Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
+ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
   auto span = tokens->span(idx);
   return text.sub(span.start, span.end);
 }
@@ -221,3 +220,5 @@ b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> 
 #include "interpreter.hh"
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
+u32 string_literal_byte_size(Str literal);
+u32 decode_string_literal(Str literal, char *out);

@@ -16,6 +16,29 @@ void write_tokens(Tokens *tokens, Str source, Arena *out) {
   }
 }
 
+u32 string_literal_byte_size(Str literal) {
+  u32 size = 0;
+  for (usize i = 1; i < literal.len() - 1; i += 1) {
+    if (literal[i] != '\\') {
+      size += 1;
+      continue;
+    }
+
+    i += 1;
+    switch (literal[i]) {
+    case 'n': case 't': case 'r': case '0':
+    case '\\': case '\'': case '"':
+    case 'a': case 'b': case 'f': case 'v':
+      size += 1;
+      break;
+    default:
+      size += 2;
+      break;
+    }
+  }
+  return size;
+}
+
 // Assume: the string literal is wellformed.
 // Unrecognized escape codes are written as is.
 u32 decode_string_literal(Str literal, char *out) {

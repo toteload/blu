@@ -101,6 +101,6 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  i32 result_code = *cast<i32*>(interpreter.values.get(result)->data);
+  i32 result_code = *cast<i32 *>(interpreter.values.get(result)->data);
   return result_code;
 }

@@ -1,2 +1,0 @@
-main: (): i32 = || { times_two(21) }
-times_two: (i32): i32 = |a| { 2 * a }

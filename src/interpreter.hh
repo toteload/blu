@@ -60,7 +60,5 @@ struct Interpreter {
 
   void populate_root_env(Env<ValueIndex> *env);
 
-  Str get_token_str(TokenIndex idx) {
-    return ::get_token_str(source->text, &source->tokens, idx);
-  }
+  Str get_token_str(TokenIndex idx) { return ::get_token_str(source->text, &source->tokens, idx); }
 };

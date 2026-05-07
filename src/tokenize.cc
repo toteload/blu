@@ -155,6 +155,12 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
 
   if (c == '"') {
     while (!is_at_end() && *at != '"') {
+      if (*at == '\\') {
+        step();
+        if (is_at_end()) {
+          break;
+        }
+      }
       step();
     }
 
