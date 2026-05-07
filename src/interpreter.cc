@@ -1,46 +1,41 @@
 #include "blu.hh"
+#include "utils/stdlib.hh"
 
-void Interpreter::init(
-  StringInterner *strings,
-  TypeInterner *types,
-  ValueStore *values,
-  EnvManager<ValueIndex> *envs,
-  Arena *work_arena,
-  Messages *messages
-) {
-  this->strings    = strings;
-  this->types      = types;
-  this->values     = values;
-  this->envs       = envs;
-  this->work_arena = work_arena;
-  this->messages   = messages;
+void Interpreter::init() {
+  work_arena.init(MiB(1));
+  values.init(stdlib_alloc);
+  envs.init(stdlib_alloc, stdlib_alloc);
+}
 
-  {
-    Value *v;
-    common.nil = values->alloc_value(&v);
-    auto data  = values->alloc_data<TypeIndex>();
-    *data      = types->type.nil;
-    *v         = {
-      .type = types->type.type,
-      .data = data,
-    };
+void Interpreter::deinit() { 
+  if (env_root) {
+    auto at = env_root;
+    while (at) {
+      auto parent = at->parent;
+      envs.dealloc(at);
+      at = parent;
+    }
   }
+
+  envs.deinit();
+  values.deinit();
+  work_arena.deinit();
 }
 
 struct PopulateRootEnv {
-  StringInterner *strings;
-  TypeInterner *types;
-  ValueStore *values;
+  StringInterner  *strings;
+  TypeInterner    *types;
+  ValueStore      *values;
   Env<ValueIndex> *env;
 
   template<typename T> void insert(Str s, TypeIndex type, T val) {
     auto key = strings->add(s);
 
     Value *v;
-    auto idx  = values->alloc_value(&v);
-    auto data = values->alloc_data<T>();
-    *data     = val;
-    *v        = {
+    auto   idx  = values->alloc_value(&v);
+    auto   data = values->alloc_data<T>();
+    *data       = val;
+    *v          = {
       .type = type,
       .data = data,
     };
@@ -75,63 +70,78 @@ void PopulateRootEnv::populate() {
   // clang-format on
 }
 
-b32 Interpreter::run(Source *source, ValueIndex *result) {
+bool Interpreter::load_root(SourceUnit *source) {
   this->source = source;
 
-  auto nodes = source->nodes;
+  {
+    Value *v;
+    common.nil = values.alloc_value(&v);
+    auto data  = values.alloc_data<TypeIndex>();
+    *data      = source->types.type.nil;
+    *v         = {
+      .type = source->types.type.type,
+      .data = data,
+    };
+  }
 
-  Env<ValueIndex> *env_global = envs->alloc(nullptr);
+  Env<ValueIndex> *env_builtin = envs.alloc(nullptr);
   {
     PopulateRootEnv populate = {
-      .strings = strings,
-      .types   = types,
-      .values  = values,
-      .env     = env_global,
+      .strings = &source->strings,
+      .types   = &source->types,
+      .values  = &values,
+      .env     = env_builtin,
     };
 
     populate.populate();
   }
-  auto env = envs->alloc(env_global);
-  defer({
-    envs->dealloc(env);
-    envs->dealloc(env_global);
-  });
+
+  env_root = envs.alloc(env_builtin);
 
   NodeIndex root_idx = {0};
-  Assert(nodes->kind(root_idx) == Ast_root);
+  Assert(source->nodes.kind(root_idx) == Ast_root);
 
-  auto root = nodes->data(root_idx);
+  auto root = source->nodes.data(root_idx);
   for (u32 i = 0; i < root.root.items.len(); i++) {
     auto item_idx = root.root.items[i];
-    Try(add_declaration(env, item_idx));
+    Try(add_declaration(env_root, item_idx));
   }
 
-  auto main = values->get(_lookup(env, STR("main")).as_index());
+  return true;
+}
+
+bool Interpreter::run_main(ValueIndex *result) {
+  auto main = values.get(_lookup(env_root, STR("main")).as_index());
 
   TypeIndex main_function_type;
   {
-    Type *t = alloc_type_function(work_arena, 0);
-    *t      = {
+    auto snapshot = work_arena.take_snapshot();
+    defer(work_arena.restore(snapshot));
+
+    Type *t = alloc_type_function(&work_arena, 0);
+
+    *t = {
       .kind     = Type_function,
       .function = {
-        .return_type = types->type.i32_,
+        .return_type = source->types.type.i32_,
         .param_count = 0,
         .param_types = {},
       },
     };
-    main_function_type = types->add(t);
+
+    main_function_type = source->types.add(t);
   }
 
-  Assert(types->is_coercible_to(main->type, main_function_type));
-
-  Try(call_function(env, main, {}, result));
+  Try(call_function(env_root, main, {}, result));
 
   return true;
 }
 
 // Assume: The coercion is always possible.
 bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
-  auto v      = values->get(src);
+  auto types = &source->types;
+
+  auto v      = values.get(src);
   auto ty_src = types->get(v->type);
 
   if (type_dst == v->type) {
@@ -147,21 +157,21 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   }
 
   if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
-    i64 val         = *cast<i64 *>(v->data);
+    i64  val        = *cast<i64 *>(v->data);
     auto signedness = ty_dst->integer.signedness;
-    auto bitwidth = ty_dst->integer.bitwidth;
+    auto bitwidth   = ty_dst->integer.bitwidth;
 
     if (signedness == Signed) {
       i64 min_value = int_value_min(bitwidth);
       i64 max_value = int_value_max(bitwidth);
       if (val < min_value || val > max_value) {
-        messages->error("integer constant out of range of destination type.");
+        source->messages.error("integer constant out of range of destination type.");
         return false;
       }
     } else {
       u64 max_value = uint_value_max(bitwidth);
       if (val < 0 || cast<u64>(val) > max_value) {
-        messages->error("integer constant out of range of destination type.");
+        source->messages.error("integer constant out of range of destination type.");
         return false;
       }
     }
@@ -199,7 +209,7 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   }
 
   if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
-    u32 count                = ty_src->array.size;
+    u32 count = ty_src->array.size;
 
     *cast<ValueSlice *>(out) = {
       .len   = count,
@@ -219,12 +229,12 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
       Unreachable();
     }
 
-    u32 count      = ty_src->sequence.count;
+    u32  count     = ty_src->sequence.count;
     auto size_info = types->size_info(base_type);
 
     ValueIndex *sequence_items = cast<ValueIndex *>(v->data);
 
-    auto items = values->alloc_memory(size_info, count);
+    auto items = values.alloc_memory(size_info, count);
     for (u32 i = 0; i < count; i++) {
       Try(coerce_value(base_type, sequence_items[i], ptr_offset(items, size_info.stride * i)));
     }
@@ -244,9 +254,9 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
 }
 
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
-  Assert(source->nodes->kind(declaration) == Ast_declaration);
+  Assert(source->nodes.kind(declaration) == Ast_declaration);
 
-  auto decl = source->nodes->data(declaration).declaration;
+  auto decl = source->nodes.data(declaration).declaration;
 
   TypeIndex decl_type = get_type(decl.type);
 
@@ -254,17 +264,17 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Try(eval_expr(env, decl.value, &decl_value));
 
   Value *v;
-  auto val  = values->alloc_value(&v);
-  auto data = values->alloc_memory(types->size_info(decl_type));
-  *v        = {
+  auto   val  = values.alloc_value(&v);
+  auto   data = values.alloc_memory(source->types.size_info(decl_type));
+  *v          = {
     .type = decl_type,
     .data = data,
   };
 
   Try(coerce_value(decl_type, decl_value, data));
 
-  auto str = source->get_token_str(decl.name);
-  auto key = strings->add(str);
+  auto str = get_token_str(decl.name);
+  auto key = source->strings.add(str);
 
   env->insert(key, val);
 
@@ -272,17 +282,20 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 }
 
 b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result) {
-  auto kind = source->nodes->kind(node_index);
+  auto nodes = &source->nodes;
+  auto types = &source->types;
+
+  auto kind = nodes->kind(node_index);
 
   switch (kind) {
   case Ast_literal_int: {
-    auto token_index = source->nodes->data(node_index).literal_int.token_index;
-    auto str         = source->get_token_str(token_index);
+    auto token_index = nodes->data(node_index).literal_int.token_index;
+    auto str         = get_token_str(token_index);
     auto i           = parse_i64(str);
 
     Value *v;
-    *result   = values->alloc_value(&v);
-    auto data = values->alloc_data<i64>();
+    *result   = values.alloc_value(&v);
+    auto data = values.alloc_data<i64>();
     *data     = i;
 
     *v = {
@@ -291,7 +304,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     };
   } break;
   case Ast_builtin: {
-    auto builtin = source->nodes->data(node_index).builtin;
+    auto builtin = nodes->data(node_index).builtin;
     switch (builtin.kind) {
     case Builtin_print: {
       ValueIndex arg_format;
@@ -307,27 +320,27 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     }
   } break;
   case Ast_block: {
-    auto block = source->nodes->data(node_index).block;
+    auto block = nodes->data(node_index).block;
     if (block.items.len() == 0) {
       *result = common.nil;
       break;
     }
 
-    auto env_block = envs->alloc(env);
-    defer(envs->dealloc(env_block));
+    auto env_block = envs.alloc(env);
+    defer(envs.dealloc(env_block));
 
-    auto snapshot = work_arena->take_snapshot();
-    defer(work_arena->restore(snapshot));
+    auto snapshot = work_arena.take_snapshot();
+    defer(work_arena.restore(snapshot));
 
-    NodeIndex *defers = work_arena->alloc<NodeIndex>(block.items.len());
-    u32 defer_count   = 0;
+    NodeIndex *defers      = work_arena.alloc<NodeIndex>(block.items.len());
+    u32        defer_count = 0;
 
     ValueIndex last = common.nil;
 
     for (u32 i = 0; i < block.items.len(); i++) {
       auto item = block.items[i];
-      if (source->nodes->kind(item) == Ast_defer) {
-        defers[defer_count++] = source->nodes->data(item).defer.value;
+      if (nodes->kind(item) == Ast_defer) {
+        defers[defer_count++] = nodes->data(item).defer.value;
         last                  = common.nil;
       } else {
         Try(eval_expr(env_block, item, &last));
@@ -343,8 +356,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
   case Ast_function: {
     Value *v;
-    *result   = values->alloc_value(&v);
-    auto data = values->alloc_data<NodeIndex>();
+    *result   = values.alloc_value(&v);
+    auto data = values.alloc_data<NodeIndex>();
     *data     = node_index;
     *v        = {
       .type = get_type(node_index),
@@ -355,12 +368,12 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = lookup_identifier(env, node_index);
   } break;
   case Ast_if_else: {
-    auto if_else = source->nodes->data(node_index).if_else;
+    auto if_else = source->nodes.data(node_index).if_else;
 
     ValueIndex cond;
     Try(eval_expr(env, if_else.cond, &cond));
 
-    auto v = values->get(cond);
+    auto v = values.get(cond);
 
     if (*cast<u8 *>(v->data) == 1) {
       Try(eval_expr(env, if_else.then, result));
@@ -370,13 +383,13 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       *result = common.nil;
     }
 
-    values->drop(cond);
+    values.drop(cond);
   } break;
   case Ast_declaration: {
     Try(add_declaration(env, node_index));
   } break;
   case Ast_binary_op: {
-    auto binop = source->nodes->data(node_index).binary_op;
+    auto binop = source->nodes.data(node_index).binary_op;
     auto op    = binop.kind;
 
     ValueIndex lhs;
@@ -387,16 +400,16 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
 
-    values->drop(lhs);
-    values->drop(rhs);
+    values.drop(lhs);
+    values.drop(rhs);
   } break;
   case Ast_literal_sequence: {
-    auto seq   = source->nodes->data(node_index).literal_sequence;
+    auto seq   = source->nodes.data(node_index).literal_sequence;
     auto count = seq.items.len();
 
-    Value *v;
-    auto res          = values->alloc_value(&v);
-    ValueIndex *items = values->alloc_data<ValueIndex>(count);
+    Value      *v;
+    auto        res   = values.alloc_value(&v);
+    ValueIndex *items = values.alloc_data<ValueIndex>(count);
 
     *v = {
       .type = get_type(node_index),
@@ -410,7 +423,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = res;
   } break;
   case Ast_index: {
-    auto node = source->nodes->data(node_index).index;
+    auto node = source->nodes.data(node_index).index;
 
     ValueIndex idx_indexable;
     Try(eval_expr(env, node.indexable, &idx_indexable));
@@ -420,11 +433,11 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     u64 i = get_uint(idx_index_at);
 
-    auto indexable      = values->get(idx_indexable);
+    auto indexable      = values.get(idx_indexable);
     auto type_indexable = types->get(indexable->type);
 
     TypeIndex base_type;
-    void *elem_ptr;
+    void     *elem_ptr;
 
     if (type_indexable->kind == Type_slice) {
       base_type  = type_indexable->slice.base_type;
@@ -439,29 +452,29 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     }
 
     auto elem_size_info = types->size_info(base_type);
-    auto data           = values->alloc_memory(elem_size_info);
+    auto data           = values.alloc_memory(elem_size_info);
     memcpy(data, elem_ptr, elem_size_info.size);
 
     Value *vout;
-    *result = values->alloc_value(&vout);
+    *result = values.alloc_value(&vout);
     *vout   = {.type = base_type, .data = data};
   } break;
   case Ast_literal_string: {
-    auto ty   = get_type(node_index);
-    auto t    = types->get(ty);
-    u32 count = t->array.size;
+    auto ty    = get_type(node_index);
+    auto t     = types->get(ty);
+    u32  count = t->array.size;
 
     Value *v;
-    auto res    = values->alloc_value(&v);
-    void *bytes = values->alloc_memory(types->size_info(t->array.base_type), count);
+    auto   res   = values.alloc_value(&v);
+    void  *bytes = values.alloc_memory(types->size_info(t->array.base_type), count);
 
     *v = {
       .type = ty,
       .data = bytes,
     };
 
-    auto token_index = source->nodes->data(node_index).literal_string.token_index;
-    auto literal     = source->get_token_str(token_index);
+    auto token_index = nodes->data(node_index).literal_string.token_index;
+    auto literal     = get_token_str(token_index);
     auto s           = literal.sub(1, literal.len() - 1);
 
     // TODO handle escape codes
@@ -471,7 +484,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_defer: {
-    auto defer_ = source->nodes->data(node_index).defer;
+    auto       defer_ = nodes->data(node_index).defer;
     ValueIndex e;
     Try(eval_expr(env, defer_.value, &e));
     *result = common.nil;
@@ -499,13 +512,15 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 b32 Interpreter::eval_binary_op(
   BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
 ) {
+  auto types = &source->types;
+
   switch (op) {
   case Mul:
   case Div:
   case Add:
   case Sub: {
-    auto left  = values->get(lhs);
-    auto right = values->get(rhs);
+    auto left  = values.get(lhs);
+    auto right = values.get(rhs);
 
     auto left_type  = types->get(left->type);
     auto right_type = types->get(right->type);
@@ -515,10 +530,10 @@ b32 Interpreter::eval_binary_op(
     auto signedness = left_type->integer.signedness;
 
     if (signedness == Signed) {
-      i64 a         = get_as_i64(lhs);
-      i64 b         = get_as_i64(rhs);
+      i64  a        = get_as_i64(lhs);
+      i64  b        = get_as_i64(rhs);
       bool overflow = false;
-      i64 res;
+      i64  res;
 
       // clang-format off
       switch (op) {
@@ -547,9 +562,9 @@ b32 Interpreter::eval_binary_op(
       }
 
       Value *v;
-      auto idx      = values->alloc_value(&v);
-      void *data    = values->alloc_memory(types->size_info(result_type_idx));
-      u32 byte_size = result_type->integer.bitwidth / 8;
+      auto   idx       = values.alloc_value(&v);
+      void  *data      = values.alloc_memory(types->size_info(result_type_idx));
+      u32    byte_size = result_type->integer.bitwidth / 8;
       memcpy(data, &res, byte_size);
       *v = {
         .type = result_type_idx,
@@ -560,10 +575,10 @@ b32 Interpreter::eval_binary_op(
 
       return true;
     } else {
-      u64 a         = get_as_u64(lhs);
-      u64 b         = get_as_u64(rhs);
+      u64  a        = get_as_u64(lhs);
+      u64  b        = get_as_u64(rhs);
       bool overflow = false;
-      u64 res;
+      u64  res;
 
       // clang-format off
       switch (op) {
@@ -586,12 +601,12 @@ b32 Interpreter::eval_binary_op(
 }
 
 ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier) {
-  auto token_index = source->nodes->data(identifier).identifier.token_index;
-  auto str         = source->get_token_str(token_index);
-  auto key         = strings->add(str);
+  auto token_index = source->nodes.data(identifier).identifier.token_index;
+  auto str         = get_token_str(token_index);
+  auto key         = source->strings.add(str);
 
   ValueIndex val;
-  auto found = env->lookup(key, &val);
+  auto       found = env->lookup(key, &val);
 
   Assert(found);
 
@@ -605,16 +620,16 @@ b32 Interpreter::call_function(
   // TODO: add parameters to env
 
   auto node_index    = *cast<NodeIndex *>(function->data);
-  auto function_node = source->nodes->data(node_index).function;
+  auto function_node = source->nodes.data(node_index).function;
 
   ValueIndex body_result;
   Try(eval_expr(env, function_node.body, &body_result));
 
-  TypeIndex return_type_idx = types->get(function->type)->function.return_type;
+  TypeIndex return_type_idx = source->types.get(function->type)->function.return_type;
 
   Value *v;
-  *result   = values->alloc_value(&v);
-  auto data = values->alloc_memory(types->size_info(return_type_idx));
+  *result   = values.alloc_value(&v);
+  auto data = values.alloc_memory(source->types.size_info(return_type_idx));
   *v        = {.type = return_type_idx, .data = data};
 
   Try(coerce_value(return_type_idx, body_result, data));
@@ -622,10 +637,10 @@ b32 Interpreter::call_function(
   return true;
 }
 
-TypeIndex Interpreter::get_type(NodeIndex node_index) { return type_annotations[node_index.idx]; }
+TypeIndex Interpreter::get_type(NodeIndex node_index) { return source->node_types[node_index.idx]; }
 
 u64 Interpreter::get_uint(ValueIndex idx) {
   u64 res;
-  Try(coerce_value(types->type.uint, idx, &res));
+  Try(coerce_value(source->types.type.uint, idx, &res));
   return res;
 }

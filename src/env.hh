@@ -4,7 +4,7 @@ ttld_inline b32 str_key_eq(void *context, StrKey a, StrKey b) { return a.idx == 
 ttld_inline u32 str_key_hash(void *context, StrKey x) { return x.idx; }
 
 template<typename T> struct Env {
-  Env *parent;
+  Env                                         *parent;
   HashMap<StrKey, T, str_key_eq, str_key_hash> map;
 
   void init(Allocator allocator, Env *parent = nullptr) {
@@ -44,7 +44,10 @@ template<typename T> struct EnvManager {
     this->env_allocator = env_allocator;
   }
 
-  void deinit();
+  void deinit() {
+    pool.deinit();
+    memset(this, 0, sizeof(*this));
+  }
 
   Env<T> *alloc(Env<T> *parent) {
     Env<T> *env = pool.alloc();

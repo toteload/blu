@@ -8,6 +8,7 @@ AlignConsecutiveAssignments:
   Enabled: true
   AlignCompound: true
   PadOperators: true
+AlignConsecutiveDeclarations: true
 AlignOperands: AlignAfterOperator
 AlignTrailingComments: Always
 AlignAfterOpenBracket: BlockIndent

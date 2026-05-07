@@ -45,7 +45,7 @@ void ArenaItemPool<T>::init(u32 reserve_count) {
 template<typename T>
 void ArenaItemPool<T>::deinit() {
   arena.deinit();
-  memset(*this, 0, sizeof(*this));
+  memset(this, 0, sizeof(*this));
 }
 
 template<typename T>

@@ -54,17 +54,22 @@ template<typename T> struct Span {
 
 #include "tokens.hh"
 
-b32 tokenize(Messages *messages, Str source, Tokens *output);
+struct TokenizeContext {
+  Messages *messages;
+};
+
+b32 tokenize(TokenizeContext *context, Str source, Tokens *out);
+
 void write_tokens(Tokens *tokens, Str source, Arena *out);
 
 #include "ast.hh"
 
 struct ParseContext {
   Messages *messages;
-  Tokens *tokens;
+  Str       source;
 };
 
-b32 parse(ParseContext *ctx, Str source, AstNodes *nodes);
+b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *out);
 
 ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
 ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); }
@@ -72,22 +77,121 @@ ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); 
 #include "value.hh"
 #include "env.hh"
 
-struct Source {
+// -[ Message ]-
+
+enum MessageLocationKind : u32 {
+  MessageLocation_none,
+  MessageLocation_token_index,
+  MessageLocation_node_index,
+};
+
+struct MessageLocation {
+  MessageLocationKind kind;
+  union {
+    TokenIndex token_index;
+    NodeIndex  node_index;
+  } data;
+};
+
+enum MessageSeverity : u8 {
+  Error,
+  Warning,
+  Info,
+};
+
+union MessageArg {
+  TokenKind token_kind;
+  StrKey    strkey;
+  TypeIndex type;
+  Span<u32> span;
+};
+
+struct Message {
+  MessageLocation location;
+  MessageSeverity severity;
+  u32             format_len; // excluding null terminator
+  char const     *format;     // null terminated
+  MessageArg     *args;
+};
+
+struct MessageContext {
+  Str             text;
+  Tokens         *tokens;
+  AstNodes       *nodes;
+  TypeInterner   *types;
+  StringInterner *strings;
+};
+
+struct Messages {
+  Arena             arena;
+  Vector<Message *> messages;
+
+  void init(Allocator vector_alloc) {
+    arena.init(MiB(16));
+    messages.init(vector_alloc);
+  }
+
+  void deinit() {
+    messages.deinit();
+    arena.deinit();
+  }
+
+  void print_message(MessageContext *context, Message *message);
+  void print_messages(MessageContext *context);
+
+  void error(char const *format, ...);
+  void error(TokenIndex location, char const *format, ...);
+  void error(NodeIndex location, char const *format, ...);
+
+  void _error(MessageLocation location, char const *format, va_list varargs);
+};
+
+// ---
+
+struct ParsedSource {
+  Str       text;
+  Tokens   *tokens;
+  AstNodes *nodes;
+};
+
+ttld_inline
+Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
+  auto span = tokens->span(idx);
+  return text.sub(span.start, span.end);
+}
+
+enum SourceUnitStage : u8 {
+  Stage_init = 0,
+  Stage_tokenize,
+  Stage_parse,
+  Stage_typecheck,
+  Stage_done,
+};
+
+struct SourceUnit {
+  SourceUnitStage stage;
+
   Str filename;
-  Str source;
-  Tokens *tokens  = nullptr;
-  AstNodes *nodes = nullptr;
+  Str text;
 
-  Str get_token_str(TokenIndex idx) {
-    auto span = tokens->span(idx);
-    return source.sub(span.start, span.end);
-  }
+  Arena arena;
+  Arena work_arena;
 
-  NodeIndex root_node_index() {
-    NodeIndex idx = {0};
-    Debug_assert(nodes->kind(idx) == Ast_root);
-    return idx;
-  }
+  Messages messages;
+
+  StringInterner strings;
+  TypeInterner   types;
+
+  Tokens            tokens;
+  AstNodes          nodes;
+  Vector<TypeIndex> node_types;
+
+  void init(Str filename, Str text);
+  void deinit();
+
+  bool tokenize();
+  bool parse();
+  bool typecheck();
 };
 
 enum DeclarationKind {
@@ -105,104 +209,15 @@ struct Declaration {
 };
 
 struct TypeCheckContext {
-  Messages *messages;
+  Messages                *messages;
   EnvManager<Declaration> *envs;
-  TypeInterner *types;
-  StringInterner *strings;
-  Arena *work_arena;
+  TypeInterner            *types;
+  StringInterner          *strings;
+  Arena                   *work_arena;
 };
 
-b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations);
+b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> node_types);
 
 #include "interpreter.hh"
 
-// -[ Message ]-
-
-enum MessageLocationKind : u32 {
-  MessageLocation_none,
-  MessageLocation_token_index,
-  MessageLocation_node_index,
-};
-
-struct MessageLocation {
-  MessageLocationKind kind;
-  union {
-    TokenIndex token_index;
-    NodeIndex node_index;
-  } data;
-};
-
-enum MessageSeverity : u8 {
-  Error,
-  Warning,
-  Info,
-};
-
-union MessageArg {
-  TokenKind token_kind;
-  StrKey strkey;
-  TypeIndex type;
-  Span<u32> span;
-};
-
-struct Message {
-  MessageLocation location;
-  MessageSeverity severity;
-  u32 format_len;     // excluding null terminator
-  char const *format; // null terminated
-  MessageArg *args;
-};
-
-struct Messages {
-  Arena arena;
-  Vector<Message *> messages;
-  StringInterner *strings;
-  TypeInterner *types;
-  Source *source = nullptr;
-
-  void init(Allocator list_alloc, StringInterner *strings, TypeInterner *types) {
-    arena.init(MiB(16));
-    messages.init(list_alloc);
-
-    this->strings = strings;
-    this->types   = types;
-  }
-
-  void deinit();
-
-  void print_message(Message *message);
-
-  void print_messages();
-
-  void error(char const *format, ...);
-  void error(TokenIndex location, char const *format, ...);
-  void error(NodeIndex location, char const *format, ...);
-
-  void _error(MessageLocation location, char const *format, va_list varargs);
-};
-
 void debug_print_type(TypeInterner *types, TypeIndex type);
-
-// ---
-
-struct Program {
-  Arena arena;
-  Arena work_arena;
-
-  Messages messages;
-
-  TypeInterner types;
-  StringInterner strings;
-
-  Tokens tokens;
-  AstNodes nodes;
-
-  ValueStore values;
-  Vector<TypeIndex> type_annotations;
-  Interpreter interpreter;
-
-  void init();
-  void deinit();
-
-  bool interpret(Str source, ValueIndex *result);
-};

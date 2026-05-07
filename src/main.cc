@@ -5,7 +5,7 @@
 
 struct CLISettings {
   bool verbose;
-  Str source_file;
+  Str  source_file;
 };
 
 b32 parse_cli_settings(CLISettings *settings, i32 arg_count, char const *const *args) {
@@ -43,121 +43,64 @@ int main(i32 arg_count, char const *const *args) {
   Str filename    = settings.source_file;
   Str source_text = read_file(filename);
 
-  Arena arena{};
-  arena.init(MiB(2));
-
-  Arena work_arena{};
-  work_arena.init(MiB(8));
-
-  TypeInterner types{};
-  types.init(&work_arena, stdlib_alloc, stdlib_alloc, stdlib_alloc);
-
-  StringInterner strings{};
-  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
-
-  Source source{};
-  source.filename = filename;
-  source.source   = source_text;
-
-  Messages messages{};
-  messages.source = &source;
-  messages.init(stdlib_alloc, &strings, &types);
-
-  Tokens tokens{};
-  tokens.kinds.init(stdlib_alloc);
-  tokens.spans.init(stdlib_alloc);
-
-  b32 ok;
-  ok = tokenize(&messages, source_text, &tokens);
-
-  source.tokens = &tokens;
-
-  if (!ok) {
-    printf("Tokenization error\n");
+  if (source_text.is_empty()) {
+    printf("Invalid source file provided.\n");
     return 1;
   }
 
-  if (settings.verbose) {
-    auto snapshot = work_arena.take_snapshot();
+  SourceUnit unit{};
+  unit.init(filename, source_text);
+  defer(unit.deinit());
 
-    write_tokens(&tokens, source_text, &work_arena);
-    printf("%.*s", (int)snapshot.size(), (char *)snapshot.at);
-
-    work_arena.restore(snapshot);
+  bool ok;
+  ok = unit.tokenize();
+  if (!ok) {
+    printf("Tokenize error\n");
+    return 1;
   }
 
-  AstNodes nodes;
-  nodes.kinds.init(stdlib_alloc);
-  nodes.spans.init(stdlib_alloc);
-  nodes.datas.init(stdlib_alloc);
-  nodes.segment_allocator = arena.as_allocator();
+  //  if (settings.verbose) {
+  //    auto snapshot = work_arena.take_snapshot();
+  //
+  //    write_tokens(&tokens, source_text, &work_arena);
+  //    printf("%.*s", (int)snapshot.size(), (char *)snapshot.at);
+  //
+  //    work_arena.restore(snapshot);
+  //  }
 
-  ParseContext parse_context;
-  parse_context.messages = &messages;
-  parse_context.tokens   = &tokens;
-
-  ok = parse(&parse_context, source_text, &nodes);
-
-  source.nodes = &nodes;
-
+  ok = unit.parse();
   if (!ok) {
     printf("Parse error\n");
-    messages.print_messages();
     return 1;
   }
 
-  if (settings.verbose) {
-    for (u32 i = 0; i < nodes.kinds.len(); i++) {
-      printf("%s\n", ast_kind_string(nodes.kinds[i]));
-    }
-  }
+  //  if (settings.verbose) {
+  //    for (u32 i = 0; i < nodes.kinds.len(); i++) {
+  //      printf("%s\n", ast_kind_string(nodes.kinds[i]));
+  //    }
+  //  }
 
-  ValueStore values;
-  values.init(stdlib_alloc);
-
-  EnvManager<Declaration> envs;
-  envs.init(stdlib_alloc, stdlib_alloc);
-
-  TypeCheckContext typecheck_context = {
-    .messages   = &messages,
-    .envs       = &envs,
-    .types      = &types,
-    .strings    = &strings,
-    .work_arena = &work_arena,
-  };
-
-  Vector<TypeIndex> type_annotations;
-  type_annotations.init(stdlib_alloc);
-  type_annotations.set_size(nodes.kinds.len());
-  memset(type_annotations.data, 0xff, nodes.kinds.len() * sizeof(TypeIndex));
-
-  ok = typecheck(&typecheck_context, &source, type_annotations.slice());
+  ok = unit.typecheck();
   if (!ok) {
     printf("Typecheck error\n");
-    messages.print_messages();
     return 1;
   }
 
-  EnvManager<ValueIndex> value_envs;
-  value_envs.init(stdlib_alloc, stdlib_alloc);
+  Interpreter interpreter{};
+  interpreter.init();
+  defer(interpreter.deinit());
 
-  Interpreter interpreter;
-  interpreter.init(&strings, &types, &values, &value_envs, &work_arena, &messages);
-  interpreter.type_annotations = type_annotations.slice();
+  ok = interpreter.load_root(&unit);
+  if (!ok) {
+    return 1;
+  }
 
   ValueIndex result;
-  ok = interpreter.run(&source, &result);
+  ok = interpreter.run_main(&result);
   if (!ok) {
-    printf("Interpreter error encountered.\n");
-    messages.print_messages();
     return 1;
   }
 
-  {
-    char buf[512] = {0};
-    u32 len       = values.value_to_string(&types, result, buf, 512);
-    printf("%.*s\n", cast<int>(len), buf);
-  }
-
-  return 0;
+  i32 result_code = *cast<i32*>(interpreter.values.get(result)->data);
+  return result_code;
 }

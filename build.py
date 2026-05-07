@@ -66,11 +66,11 @@ def create_build_ninja():
         'value.cc',
         'string_interner.cc',
         'interpreter.cc',
+        'source_unit.cc',
         'types.cc',
         'typecheck2.cc',
         'messages.cc',
         'utils.cc',
-        join('tools', 'tokenviewer.cc'),
         join('utils', 'stdlib.cc'),
     ]
 
@@ -98,6 +98,7 @@ def create_build_ninja():
                 'interpreter.cc',
                 'value.cc',
                 'parse.cc',
+                'source_unit.cc',
                 'string_interner.cc',
                 'types.cc',
                 'typecheck2.cc',
@@ -107,18 +108,18 @@ def create_build_ninja():
         ]],
         )
 
-    out.build(
-        outputs = outd(exe('tokenviewer')),
-        rule    = 'build_binary',
-        inputs  = [outd(f'{f}.o') for f in [
-                'toteload.cc',
-                'tokenize.cc',
-                'types.cc',
-                'string_interner.cc',
-                join('tools', 'tokenviewer.cc'),
-                join('utils', 'stdlib.cc'),
-        ]],
-        )
+    #out.build(
+    #    outputs = outd(exe('tokenviewer')),
+    #    rule    = 'build_binary',
+    #    inputs  = [outd(f'{f}.o') for f in [
+    #            'toteload.cc',
+    #            'tokenize.cc',
+    #            'types.cc',
+    #            'string_interner.cc',
+    #            join('tools', 'tokenviewer.cc'),
+    #            join('utils', 'stdlib.cc'),
+    #    ]],
+    #    )
 
 if __name__ == '__main__':
     create_build_ninja()

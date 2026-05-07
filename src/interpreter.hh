@@ -1,35 +1,25 @@
 #pragma once
 
 struct Interpreter {
-  StringInterner *strings;
-  TypeInterner *types;
-  ValueStore *values;
-  EnvManager<ValueIndex> *envs;
-  Arena *work_arena;
-  Messages *messages;
-
-  Source *source;
-  Slice<TypeIndex> type_annotations;
+  EnvManager<ValueIndex> envs;
+  ValueStore             values;
+  Arena                  work_arena;
+  Env<ValueIndex>       *env_root;
+  SourceUnit            *source;
 
   struct {
     ValueIndex nil;
   } common;
 
-  void init(
-    StringInterner *strings,
-    TypeInterner *types,
-    ValueStore *values,
-    EnvManager<ValueIndex> *envs,
-    Arena *work_arena,
-    Messages *messages
-  );
+  void init();
   void deinit();
 
-  b32 run(Source *source, ValueIndex *result);
+  bool load_root(SourceUnit *source);
+  bool run_main(ValueIndex *result);
 
   OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {
     ValueIndex idx;
-    b32 found = env->lookup(strings->add(identifier), &idx);
+    b32        found = env->lookup(source->strings.add(identifier), &idx);
     if (!found) {
       return OptionalValueIndex::none();
     }
@@ -49,7 +39,7 @@ struct Interpreter {
 
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
-  b32 add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
+  b32  add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
   bool coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
 
   u64 get_uint(ValueIndex idx);
@@ -57,16 +47,20 @@ struct Interpreter {
   // Can read any signed integer type and convert it to i64.
   i64 get_as_i64(ValueIndex idx) {
     i64 res;
-    coerce_value(types->type.i64_, idx, &res);
+    coerce_value(source->types.type.i64_, idx, &res);
     return res;
   }
 
   // Can read any unsigned integer type and convert it to u64.
   u64 get_as_u64(ValueIndex idx) {
     i64 res;
-    coerce_value(types->type.u64_, idx, &res);
+    coerce_value(source->types.type.u64_, idx, &res);
     return res;
   }
 
   void populate_root_env(Env<ValueIndex> *env);
+
+  Str get_token_str(TokenIndex idx) {
+    return ::get_token_str(source->text, &source->tokens, idx);
+  }
 };

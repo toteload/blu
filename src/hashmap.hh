@@ -15,18 +15,18 @@ template<typename K, typename V> struct Bucket {
 };
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct HashMap {
-  Allocator alloc;
-  u32 len;
-  u32 mask;
-  u32 *meta;
+  Allocator     alloc;
+  u32           len;
+  u32           mask;
+  u32          *meta;
   Bucket<K, V> *buckets;
-  void *context;
+  void         *context;
 
   void init(Allocator alloc, void *context = nullptr, u32 size = min_map_size);
   void deinit();
 
   void insert(K key, V val);
-  V *get_ptr(K key) {
+  V   *get_ptr(K key) {
     Bucket<K, V> *bucket = get_bucket(key);
     if (bucket == nullptr) {
       return nullptr;
@@ -35,7 +35,7 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
     return &bucket->val;
   }
 
-  V get(K key) { return *get_ptr(key); }
+  V   get(K key) { return *get_ptr(key); }
   b32 has(K key) { return get_bucket(key) != nullptr; }
 
   Bucket<K, V> *insert_key_and_get_bucket(K key, b32 *was_occupied);
@@ -43,8 +43,8 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
   Bucket<K, V> *get_bucket(K key);
 
   void grow_and_rehash(u32 size);
-  u32 get_occupied_index(K key);
-  u32 get_insert_index(u32 hash, K key);
+  u32  get_occupied_index(K key);
+  u32  get_insert_index(u32 hash, K key);
 };
 
 constexpr u32 mask_is_occupied  = 0x00000001;
@@ -74,7 +74,7 @@ void HashMap<K, V, cmp_key, hash_key>::init(Allocator alloc, void *context, u32 
   u32 byte_size = size * (sizeof(u32) + sizeof(Bucket<K, V>));
 
   Bucket<K, V> *_buckets = cast<Bucket<K, V> *>(alloc.raw_alloc(byte_size));
-  u32 *_meta             = cast<u32 *>(_buckets + size);
+  u32          *_meta    = cast<u32 *>(_buckets + size);
 
   memset(_meta, 0, size * sizeof(u32));
 
@@ -204,7 +204,7 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
 void HashMap<K, V, cmp_key, hash_key>::insert(K key, V val) {
-  b32 was_occupied;
+  b32  was_occupied;
   auto bucket = insert_key_and_get_bucket(key, &was_occupied);
   bucket->val = val;
 }

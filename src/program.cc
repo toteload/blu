@@ -18,6 +18,47 @@ void Program::deinit() {
   types.deinit();
 }
 
+bool Program::load(Str source) {
+  bool ok = true;
+
+  // - Tokenize
+
+  tokens.init(stdlib_alloc, stdlib_alloc);
+
+  ok = tokenize(&messages, source, &tokens);
+
+  // - Parse
+
+  nodes.init();
+
+  // - Typecheck
+
+  Vector<TypeIndex> type_annotations;
+
+  type_annotations.init(stdlib_alloc);
+  type_annotations.set_size(nodes.kinds.len());
+  memset(type_annotations.data, 0xff, nodes.kinds.len() * sizeof(TypeIndex));
+
+  {
+    EnvManager<Declaration> envs;
+    envs.init(stdlib_alloc, stdlib_alloc);
+    defer(envs.deinit());
+
+    TypeCheckContext typecheck_context = {
+      .messages   = &messages,
+      .envs       = &envs,
+      .types      = &types,
+      .strings    = &strings,
+      .values     = &values,
+      .work_arena = &work_arena,
+    };
+
+    ok = typecheck(&typecheck_context, &source, type_annotations.slice());
+  }
+
+  return ok;
+}
+
 bool Program::interpret(Str source_name, Str source, ValueIndex *result) {
   bool ok = true;
 

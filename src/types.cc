@@ -13,10 +13,10 @@ bool is_int_coercible(IntInfo from, IntInfo to) {
 
 // Should this Slice<char> be a Str?
 // Should Str be a subtype of Slice?
-u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) {
+u32 TypeInterner::type_to_string(TypeIndex idx, char *buf, u32 buf_size) {
   u32 buf_size_start = buf_size;
 
-  Type *type = types->get(idx);
+  Type *type = get(idx);
 
 #define Update(Code)                                                                               \
   do {                                                                                             \
@@ -42,12 +42,12 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
     break;
   case Type_array:
     Update(snprintf(buf, buf_size, "[%llu]", type->array.size));
-    Update(type_to_string(types, type->array.base_type, buf, buf_size));
+    Update(type_to_string(type->array.base_type, buf, buf_size));
     break;
   case Type_sequence:
     Update(snprintf(buf, buf_size, ".{ "));
     for (u32 i = 0; i < type->sequence.count; i++) {
-      Update(type_to_string(types, type->sequence.item_types[i], buf, buf_size));
+      Update(type_to_string(type->sequence.item_types[i], buf, buf_size));
       Update(snprintf(buf, buf_size, ", "));
     }
     Update(snprintf(buf, buf_size, "}"));
@@ -69,26 +69,26 @@ u32 type_to_string(TypeInterner *types, TypeIndex idx, char *buf, u32 buf_size) 
     break;
   case Type_slice: {
     Update(snprintf(buf, buf_size, "[]"));
-    Update(type_to_string(types, type->slice.base_type, buf, buf_size));
+    Update(type_to_string(type->slice.base_type, buf, buf_size));
   } break;
   case Type_distinct: {
     Update(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
-    Update(type_to_string(types, type->distinct.base_type, buf, buf_size));
+    Update(type_to_string(type->distinct.base_type, buf, buf_size));
   } break;
   case Type_function: {
     Update(snprintf(buf, buf_size, "("));
     if (type->function.param_count > 0) {
-      Update(type_to_string(types, type->function.param_types[0], buf, buf_size));
+      Update(type_to_string(type->function.param_types[0], buf, buf_size));
     }
     for (u32 i = 1; i < type->function.param_count; i += 1) {
-      Update(type_to_string(types, type->function.param_types[i], buf, buf_size));
+      Update(type_to_string(type->function.param_types[i], buf, buf_size));
     }
     Update(snprintf(buf, buf_size, "): "));
-    Update(type_to_string(types, type->function.return_type, buf, buf_size));
+    Update(type_to_string(type->function.return_type, buf, buf_size));
   } break;
   case Type_literal_function: {
     Update(snprintf(buf, buf_size, "|%d|: ", type->literal_function.param_count));
-    Update(type_to_string(types, type->literal_function.return_type, buf, buf_size));
+    Update(type_to_string(type->literal_function.return_type, buf, buf_size));
   } break;
   }
 
@@ -243,12 +243,12 @@ u32 push_type_data(Arena *arena, Type *x) {
 }
 
 u32 type_hash(void *context, Type *x) {
-  Arena *arena  = cast<Arena *>(context);
-  auto snapshot = arena->take_snapshot();
+  Arena *arena    = cast<Arena *>(context);
+  auto   snapshot = arena->take_snapshot();
 
   void *data = snapshot.at;
-  u32 size   = push_type_data(arena, x);
-  u32 hash   = XXH32(data, size, 0);
+  u32   size = push_type_data(arena, x);
+  u32   hash = XXH32(data, size, 0);
 
   arena->restore(snapshot);
 
@@ -298,14 +298,14 @@ void TypeInterner::init(
 void TypeInterner::deinit() {}
 
 TypeIndex TypeInterner::add(Type *type) {
-  b32 was_occupied;
+  b32  was_occupied;
   auto bucket = map.insert_key_and_get_bucket(type, &was_occupied);
   if (was_occupied) {
     return bucket->val;
   }
 
-  u32 byte_size = type->byte_size();
-  Type *intern  = cast<Type *>(storage.raw_alloc(byte_size, Align_of(Type)));
+  u32   byte_size = type->byte_size();
+  Type *intern    = cast<Type *>(storage.raw_alloc(byte_size, Align_of(Type)));
   memcpy(intern, type, byte_size);
 
   TypeIndex index = {cast<u32>(list.len())};

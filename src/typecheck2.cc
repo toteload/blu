@@ -2,8 +2,8 @@
 
 struct RootEnvPopulator {
   Env<Declaration> *env;
-  StringInterner *strings;
-  TypeInterner *types;
+  StringInterner   *strings;
+  TypeInterner     *types;
 
   void insert(DeclarationKind kind, Str s, TypeIndex type) {
     auto key = strings->add(s);
@@ -41,12 +41,12 @@ struct TypeHint {
 };
 
 struct TypeChecker {
-  Messages *messages;
-  TypeInterner *types;
+  Messages                *messages;
+  TypeInterner            *types;
   EnvManager<Declaration> *envs;
-  StringInterner *strings;
-  Arena *work_arena;
-  Source *source;
+  StringInterner          *strings;
+  Arena                   *work_arena;
+  ParsedSource            *source;
 
   Slice<TypeIndex> annotations;
 
@@ -76,7 +76,7 @@ u32 string_literal_byte_size(Str s) {
   return s.len() - 2;
 }
 
-b32 typecheck(TypeCheckContext *context, Source *source, Slice<TypeIndex> annotations) {
+b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
     .messages    = context->messages,
     .types       = context->types,
@@ -153,8 +153,8 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_type_function: {
     auto f = source->nodes->data(node_index).type_function;
 
-    u32 param_count = f.param_types.len();
-    auto ty         = alloc_type_function(work_arena, param_count);
+    u32  param_count = f.param_types.len();
+    auto ty          = alloc_type_function(work_arena, param_count);
 
     *ty = {
       .kind     = Type_function,
@@ -174,7 +174,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     result = types->add(ty);
   } break;
   case Ast_type_slice: {
-    auto slice = source->nodes->data(node_index).type_slice;
+    auto      slice = source->nodes->data(node_index).type_slice;
     TypeIndex base_type;
     Try(eval_type_expression(env, slice.base, &base_type));
     Type type = {
@@ -196,7 +196,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     Try(eval_type_expression(env, array.base, &base_type));
 
     auto token_index = source->nodes->data(array.size).literal_int.token_index;
-    auto str         = source->get_token_str(token_index);
+    auto str         = get_token_str(source->text, source->tokens, token_index);
     auto size        = parse_i64(str);
 
     Type type = {
@@ -209,7 +209,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     result = types->add(&type);
   } break;
   case Ast_identifier: {
-    auto token_index = source->nodes->data(node_index).identifier.token_index;
+    auto        token_index = source->nodes->data(node_index).identifier.token_index;
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
 
@@ -296,7 +296,7 @@ b32 TypeChecker::check_expression(
   } break;
   case Ast_literal_string: {
     auto token_index = source->nodes->data(node_index).literal_string.token_index;
-    auto s           = source->get_token_str(token_index);
+    auto s           = get_token_str(source->text, source->tokens, token_index);
     auto size        = string_literal_byte_size(s);
     Type type        = {
       .kind  = Type_array,
@@ -308,7 +308,7 @@ b32 TypeChecker::check_expression(
     result = types->add(&type);
   } break;
   case Ast_identifier: {
-    auto token_index = source->nodes->data(node_index).identifier.token_index;
+    auto        token_index = source->nodes->data(node_index).identifier.token_index;
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
 
@@ -497,7 +497,7 @@ b32 TypeChecker::check_expression(
   } break;
 
   case Ast_defer: {
-    auto defer_ = source->nodes->data(node_index).defer;
+    auto      defer_ = source->nodes->data(node_index).defer;
     TypeIndex deferred_type;
     Try(check_expression(env, defer_.value, nullptr, &deferred_type));
     result = types->type.nil;
@@ -577,7 +577,7 @@ b32 TypeChecker::check_is_indexable(TypeIndex type, NodeIndex at) {
 }
 
 StrKey TypeChecker::intern_identifier(TokenIndex identifier) {
-  Str s = source->get_token_str(identifier);
+  auto s         = get_token_str(source->text, source->tokens, identifier);
   return strings->add(s);
 }
 

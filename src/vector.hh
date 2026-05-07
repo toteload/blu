@@ -2,14 +2,14 @@
 
 template<typename T> struct Vector {
   Allocator alloc;
-  usize _len;
-  usize cap;
-  T *data;
+  usize     _len;
+  usize     cap;
+  T        *data;
 
   void init(Allocator alloc);
   void deinit();
 
-  bool is_empty() { return _len == 0; }
+  bool  is_empty() { return _len == 0; }
   usize len() { return _len; }
 
   void ensure_free_capacity(usize min_free_cap);
@@ -18,7 +18,7 @@ template<typename T> struct Vector {
   void grow();
 
   void push(T x) { *push_empty() = x; }
-  T *push_empty(u32 amount = 1);
+  T   *push_empty(u32 amount = 1);
 
   T &operator[](usize idx) { return data[idx]; }
 

@@ -21,7 +21,7 @@ void StringInterner::deinit() {
 }
 
 StrKey StringInterner::add(Str s) {
-  b32 was_occupied;
+  b32  was_occupied;
   auto bucket = map.insert_key_and_get_bucket(s, &was_occupied);
   if (was_occupied) {
     return bucket->val;
@@ -30,7 +30,7 @@ StrKey StringInterner::add(Str s) {
   char *intern = storage.alloc<char>(s.len());
   memcpy(intern, s.str, s.len());
 
-  Str owns{intern, s.len()};
+  Str    owns{intern, s.len()};
   StrKey key{cast<u32>(list.len())};
 
   bucket->key = owns;

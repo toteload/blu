@@ -7,20 +7,20 @@
 
 // ---
 
-typedef float f32;
+typedef float  f32;
 typedef double f64;
 
-typedef int8_t i8;
-typedef uint8_t u8;
-typedef int16_t i16;
+typedef int8_t   i8;
+typedef uint8_t  u8;
+typedef int16_t  i16;
 typedef uint16_t u16;
-typedef int32_t i32;
+typedef int32_t  i32;
 typedef uint32_t u32;
-typedef int64_t i64;
+typedef int64_t  i64;
 typedef uint64_t u64;
 
 typedef uintptr_t usize;
-typedef intptr_t isize;
+typedef intptr_t  isize;
 
 typedef uint32_t b32;
 
@@ -155,13 +155,13 @@ template<typename T> constexpr void *ptr_offset(T *p, isize d) { return cast<u8 
 
 struct Str {
   char const *str;
-  usize _len;
+  usize       _len;
 
   // template<usize N>
   // Str(char const s[N]): str(s), _len(N) {}
 
-  bool is_ok() { return str && _len; }
-  bool is_empty() { return _len == 0; }
+  bool        is_ok() { return str && _len; }
+  bool        is_empty() { return _len == 0; }
   char const *end() { return str + _len; }
 
   char operator[](usize idx) { return str[idx]; }
@@ -201,12 +201,12 @@ ttld_inline b32 str_eq(Str a, Str b) {
 }
 
 template<typename T> struct Slice {
-  T *data    = nullptr;
+  T    *data = nullptr;
   usize _len = 0;
 
-  T &operator[](usize idx) { return data[idx]; }
-  usize len() { return _len; }
-  T *end() { return data + _len; }
+  T       &operator[](usize idx) { return data[idx]; }
+  usize    len() { return _len; }
+  T       *end() { return data + _len; }
   Slice<T> sub(usize start, usize end) {
     Debug_assert(start <= _len);
     Debug_assert(end <= _len);
@@ -223,8 +223,8 @@ namespace ttld::os
 u32 page_size();
 
 void *mem_reserve(usize size);
-b32 mem_commit(void *p, usize size);
-void mem_release(void *p, usize size);
+b32   mem_commit(void *p, usize size);
+void  mem_release(void *p, usize size);
 } // namespace ttld::os
 
 // @allocator
@@ -237,7 +237,7 @@ constexpr u32 default_align = 8;
 
 struct Allocator {
   AllocatorFunction fn;
-  void *ctx;
+  void             *ctx;
 
   ttld_inline void *raw_alloc(usize byte_size, u32 align = default_align);
   ttld_inline void *
@@ -277,7 +277,7 @@ struct Arena;
 
 struct ArenaSnapshot {
   Arena *owner;
-  void *at;
+  void  *at;
 
   ttld_inline usize size();
 };
@@ -298,7 +298,7 @@ struct Arena {
 
   usize size() { return ptr_diff(at, base); }
 
-  void *raw_alloc(usize byte_size, u32 align);
+  void                   *raw_alloc(usize byte_size, u32 align);
   template<typename T> T *alloc(usize count = 1) {
     return cast<T *>(raw_alloc(count * sizeof(T), Align_of(T)));
   }
@@ -306,7 +306,7 @@ struct Arena {
   Str push_format_string(char const *format, ...);
 
   ttld_inline ArenaSnapshot take_snapshot();
-  void restore(ArenaSnapshot snapshot);
+  void                      restore(ArenaSnapshot snapshot);
 
   Allocator as_allocator();
 };
@@ -324,20 +324,20 @@ ttld_inline void Arena::restore(ArenaSnapshot snapshot) {
 
 template<typename T> struct ObjectPool {
   union Item {
-    T item;
+    T     item;
     Item *next;
   };
 
   struct Block {
     Block *next = nullptr;
-    u32 count;
-    Item items[0];
+    u32    count;
+    Item   items[0];
   };
 
   Allocator backing;
-  Block *blocks  = nullptr;
-  Item *freelist = nullptr;
-  u32 allocation_count;
+  Block    *blocks   = nullptr;
+  Item     *freelist = nullptr;
+  u32       allocation_count;
 
   void init(Allocator allocator) { backing = allocator; }
   void deinit();
@@ -365,9 +365,8 @@ template<typename T> void ObjectPool<T>::deinit() {
   Block *at = blocks;
 
   while (at != nullptr) {
+    backing.raw_free(at, sizeof(Block) + at->count * sizeof(Item));
     at = at->next;
-
-    backing.free(at);
   }
 
   blocks   = nullptr;

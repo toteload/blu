@@ -3,11 +3,16 @@
 static constexpr u32 Op_count = BinaryOpKind_max + AssignKind_max;
 
 struct Parser {
-  Messages *messages = nullptr;
-  Tokens *tokens     = nullptr;
-  AstNodes *nodes    = nullptr;
+  Messages  *messages;
+  Tokens    *tokens;
+  AstNodes  *nodes;
+  TokenIndex at;
+
+  // The only reason that `source` is needed here is to get the string value for a builtin.
+  // It would be cleaner to not need the source text here and instead encode in the tokens what
+  // kind of builtin it is.
+  // TODO: get rid of this dependency on the source text.
   Str source;
-  TokenIndex at = {0};
 
   // -
 
@@ -810,7 +815,7 @@ b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
 
   while (true) {
     TokenKind tok;
-    b32 has_peeked = peek(&tok);
+    b32       has_peeked = peek(&tok);
     if (!has_peeked) {
       *out = lhs;
       return true;
@@ -918,12 +923,13 @@ b32 Parser::parse_identifier(NodeIndex *out) {
   return true;
 }
 
-b32 parse(ParseContext *ctx, Str source, AstNodes *nodes) {
-  Parser parser;
+b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *nodes) {
+  Parser parser{};
   parser.messages = ctx->messages;
-  parser.tokens   = ctx->tokens;
+  parser.source   = ctx->source;
+  parser.tokens   = tokens;
   parser.nodes    = nodes;
-  parser.source   = source;
+  parser.at       = {0};
 
   NodeIndex root;
   return parser.parse_root(&root);

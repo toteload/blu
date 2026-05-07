@@ -24,7 +24,7 @@ enum Signedness : u8 {
 
 struct IntInfo {
   Signedness signedness;
-  u16 bitwidth;
+  u16        bitwidth;
 };
 
 struct TypeSizeInfo {
@@ -96,23 +96,23 @@ struct Type {
     } slice;
     struct {
       TypeIndex base_type;
-      i64 size;
+      i64       size;
     } array;
     struct {
       TypeIndex return_type;
-      u32 param_count;
+      u32       param_count;
     } literal_function;
     struct {
       TypeIndex return_type;
-      u32 param_count;
+      u32       param_count;
       TypeIndex param_types[0];
     } function;
     struct {
-      u32 uid;
+      u32       uid;
       TypeIndex base_type;
     } distinct;
     struct {
-      u32 count;
+      u32       count;
       TypeIndex item_types[0];
     } sequence;
   };
@@ -158,10 +158,10 @@ b32 type_eq(void *context, Type *a, Type *b);
 u32 type_hash(void *context, Type *x);
 
 struct TypeInterner {
-  Allocator storage;
+  Allocator                                      storage;
   HashMap<Type *, TypeIndex, type_eq, type_hash> map;
-  Vector<Type *> list;
-  u32 distinct_uid_gen = 1;
+  Vector<Type *>                                 list;
+  u32                                            distinct_uid_gen = 1;
 
   // Often used and always available types
 
@@ -192,10 +192,10 @@ struct TypeInterner {
   } type;
 
   void init(
-    Arena *work_arena,
+    Arena    *work_arena,
     Allocator storage_allocator,
     Allocator map_allocator,
-    Allocator list_allocator
+    Allocator vector_allocator
   );
   void deinit();
 
@@ -219,6 +219,6 @@ struct TypeInterner {
 
   bool is_coercible_to(TypeIndex src, TypeIndex dst);
   bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);
-};
 
-u32 type_to_string(TypeInterner *types, TypeIndex type, char *buf, u32 buf_size);
+  u32 type_to_string(TypeIndex type, char *buf, u32 buf_size);
+};

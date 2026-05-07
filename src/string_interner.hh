@@ -23,7 +23,7 @@ struct StringInterner {
   HashMap<Str, StrKey, str_eq_with_context, str_hash> map;
   Vector<Str> list;
 
-  void init(Allocator storage_allocator, Allocator map_allocator, Allocator list_allocator);
+  void init(Allocator storage_allocator, Allocator map_allocator, Allocator vector_allocator);
   void deinit();
 
   StrKey add(Str s);

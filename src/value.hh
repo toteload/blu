@@ -6,22 +6,27 @@ using ValueIndex         = Index<u32, ValueIndexTag>;
 using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
 
 struct ValueSlice {
-  u64 len;
+  u64   len;
   void *items;
 };
 
 struct Value {
   TypeIndex type;
-  void *data;
+  void     *data;
 };
 
 struct ValueStore {
   ArenaItemPool<Value> pool;
-  Allocator payload_allocator;
+  Allocator            payload_allocator;
 
   void init(Allocator payload_allocator) {
     pool.init(MiB(64));
     this->payload_allocator = payload_allocator;
+  }
+
+  void deinit() {
+    pool.deinit();
+    memset(this, 0, sizeof(*this));
   }
 
   ValueIndex alloc_value(Value **out) {

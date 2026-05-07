@@ -7,13 +7,11 @@ enum TokenizerResult : u32 {
 };
 
 struct Tokenizer {
-  Messages *messages;
-
   char const *start;
   char const *at;
   char const *end;
 
-  void init(Messages *messages, Str source);
+  void init(Str source);
 
   TokenizerResult next(TokenKind *kind, Span<u32> *span);
 
@@ -42,11 +40,10 @@ void Tokenizer::step_until_new_line() {
   }
 }
 
-void Tokenizer::init(Messages *messages, Str source) {
-  this->messages = messages;
-  this->start    = source.str;
-  this->at       = source.str;
-  this->end      = source.end();
+void Tokenizer::init(Str source) {
+  start = source.str;
+  at    = source.str;
+  end   = source.end();
 }
 
 #define Return_token(Kind)                                                                         \
@@ -69,7 +66,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     return TokResult_end;
   }
 
-  char c                  = *at;
+  char        c           = *at;
   char const *token_start = at;
 
   step();
@@ -209,9 +206,9 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
   return TokResult_unrecognized_token;
 }
 
-b32 tokenize(Messages *messages, Str source, Tokens *tokens) {
+b32 tokenize(TokenizeContext *context, Str source, Tokens *tokens) {
   Tokenizer tokenizer;
-  tokenizer.init(messages, source);
+  tokenizer.init(source);
 
   TokenizerResult res;
   while (true) {

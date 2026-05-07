@@ -81,7 +81,7 @@ struct AstBuiltin {
 };
 
 struct AstTypeFunction {
-  NodeIndex return_type;
+  NodeIndex              return_type;
   SegmentList<NodeIndex> param_types;
 };
 
@@ -96,8 +96,8 @@ struct AstTypeArray {
 
 struct AstDeclaration {
   TokenIndex name;
-  NodeIndex type;
-  NodeIndex value;
+  NodeIndex  type;
+  NodeIndex  value;
 };
 
 struct AstRoot {
@@ -122,8 +122,8 @@ struct AstFunction {
 };
 
 struct AstIfElse {
-  NodeIndex cond;
-  NodeIndex then;
+  NodeIndex         cond;
+  NodeIndex         then;
   OptionalNodeIndex otherwise;
 };
 
@@ -134,13 +134,13 @@ struct AstWhile {
 
 struct AstUnaryOp {
   UnaryOpKind kind;
-  NodeIndex value;
+  NodeIndex   value;
 };
 
 struct AstBinaryOp {
   BinaryOpKind kind;
-  NodeIndex lhs;
-  NodeIndex rhs;
+  NodeIndex    lhs;
+  NodeIndex    rhs;
 };
 
 struct AstFieldAccess {
@@ -149,7 +149,7 @@ struct AstFieldAccess {
 };
 
 struct AstCall {
-  NodeIndex callee;
+  NodeIndex              callee;
   SegmentList<NodeIndex> args;
 };
 
@@ -177,51 +177,66 @@ struct AstAtom {
 
 struct AstAssign {
   AssignKind kind;
-  NodeIndex lhs;
-  NodeIndex value;
+  NodeIndex  lhs;
+  NodeIndex  value;
 };
 
 union AstNodeData {
-  AstRoot root;
-  AstBlock block;
-  AstBuiltin builtin;
-  AstTypeFunction type_function;
-  AstTypeSlice type_slice;
-  AstTypeArray type_array;
-  AstDeclaration declaration;
-  AstAssign assign;
+  AstRoot            root;
+  AstBlock           block;
+  AstBuiltin         builtin;
+  AstTypeFunction    type_function;
+  AstTypeSlice       type_slice;
+  AstTypeArray       type_array;
+  AstDeclaration     declaration;
+  AstAssign          assign;
   AstLiteralSequence literal_sequence;
-  AstAtom literal_int;
-  AstAtom literal_string;
-  AstAtom identifier;
-  AstFieldAccess access;
-  AstCall call;
-  AstIndex index;
-  AstCast cast;
-  AstUnaryOp unary_op;
-  AstBinaryOp binary_op;
-  AstFunction function;
-  AstIfElse if_else;
-  AstWhile while_;
-  AstReturn return_;
-  AstDefer defer;
+  AstAtom            literal_int;
+  AstAtom            literal_string;
+  AstAtom            identifier;
+  AstFieldAccess     access;
+  AstCall            call;
+  AstIndex           index;
+  AstCast            cast;
+  AstUnaryOp         unary_op;
+  AstBinaryOp        binary_op;
+  AstFunction        function;
+  AstIfElse          if_else;
+  AstWhile           while_;
+  AstReturn          return_;
+  AstDefer           defer;
 };
 
 struct AstNode {
-  AstKind kind;
+  AstKind          kind;
   Span<TokenIndex> span;
-  AstNodeData data;
+  AstNodeData      data;
 };
 
 struct AstNodes {
-  Vector<AstKind> kinds;
+  Vector<AstKind>          kinds;
   Vector<Span<TokenIndex>> spans;
-  Vector<AstNodeData> datas;
+  Vector<AstNodeData>      datas;
 
   Allocator segment_allocator;
 
-  void init();
-  void deinit();
+  void init(Allocator vector_allocator, Allocator segment_allocator) {
+    kinds.init(vector_allocator);
+    spans.init(vector_allocator);
+    datas.init(vector_allocator);
+
+    this->segment_allocator = segment_allocator;
+  }
+
+  void deinit() {
+    kinds.deinit();
+    spans.deinit();
+    datas.deinit();
+
+    memset(this, 0, sizeof(*this));
+  }
+
+  usize len() { return kinds.len(); }
 
   NodeIndex alloc() {
     NodeIndex res = {cast<u32>(kinds.len())};
@@ -245,9 +260,9 @@ struct AstNodes {
     return res;
   }
 
-  AstKind kind(NodeIndex idx) { return kinds[idx.idx]; }
+  AstKind          kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
-  AstNodeData data(NodeIndex idx) { return datas[idx.idx]; }
+  AstNodeData      data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {

@@ -11,7 +11,7 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   buf_size -= offset;
   written  += offset;
 
-  offset    = type_to_string(types, v->type, buf, buf_size);
+  offset    = types->type_to_string(v->type, buf, buf_size);
   buf      += offset;
   buf_size -= offset;
   written  += offset;
