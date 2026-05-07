@@ -236,5 +236,7 @@ b32 tokenize(TokenizeContext *context, Str source, Tokens *tokens) {
     tokens->span(i) = span;
   }
 
+  // TODO add message of unrecognized token if necessary
+
   return res == TokResult_end;
 }

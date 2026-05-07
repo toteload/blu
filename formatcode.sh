@@ -13,8 +13,9 @@ clang-format -i src/env.hh
 clang-format -i src/tokenize.cc
 clang-format -i src/parse.cc
 clang-format -i src/main.cc
+clang-format -i src/source_unit.cc
 clang-format -i src/string_interner.cc
-clang-format -i src/typecheck2.cc
+clang-format -i src/typecheck.cc
 clang-format -i src/interpreter.hh
 clang-format -i src/interpreter.cc
 clang-format -i src/messages.cc

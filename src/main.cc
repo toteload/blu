@@ -56,6 +56,7 @@ int main(i32 arg_count, char const *const *args) {
   ok = unit.tokenize();
   if (!ok) {
     printf("Tokenize error\n");
+    unit.print_messages();
     return 1;
   }
 
@@ -71,6 +72,7 @@ int main(i32 arg_count, char const *const *args) {
   ok = unit.parse();
   if (!ok) {
     printf("Parse error\n");
+    unit.print_messages();
     return 1;
   }
 
@@ -83,6 +85,7 @@ int main(i32 arg_count, char const *const *args) {
   ok = unit.typecheck();
   if (!ok) {
     printf("Typecheck error\n");
+    unit.print_messages();
     return 1;
   }
 

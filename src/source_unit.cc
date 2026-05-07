@@ -10,7 +10,7 @@ void SourceUnit::init(Str filename, Str text) {
   messages.init(stdlib_alloc);
 
   this->filename = filename;
-  this->text = text;
+  this->text     = text;
 }
 
 void SourceUnit::deinit() {
@@ -61,7 +61,7 @@ bool SourceUnit::parse() {
 
   ParseContext context{};
   context.messages = &messages;
-  context.source = text;
+  context.source   = text;
 
   b32 ok = parse_root(&context, &tokens, &nodes);
   if (!ok) {
@@ -88,16 +88,16 @@ bool SourceUnit::typecheck() {
   memset(node_types.data, 0xff, nodes.len() * sizeof(TypeIndex));
 
   TypeCheckContext context{};
-  context.messages = &messages;
-  context.envs = &envs;
-  context.types = &types;
-  context.strings = &strings;
+  context.messages   = &messages;
+  context.envs       = &envs;
+  context.types      = &types;
+  context.strings    = &strings;
   context.work_arena = &work_arena;
 
   ParsedSource source = {
-    .text = text,
+    .text   = text,
     .tokens = &tokens,
-    .nodes = &nodes,
+    .nodes  = &nodes,
   };
 
   bool ok = ::typecheck(&context, &source, node_types.slice());
@@ -108,4 +108,15 @@ bool SourceUnit::typecheck() {
   stage = Stage_done;
 
   return true;
+}
+
+void SourceUnit::print_messages() {
+  MessageContext context;
+  context.text    = text;
+  context.tokens  = &tokens;
+  context.nodes   = &nodes;
+  context.types   = &types;
+  context.strings = &strings;
+
+  messages.print_messages(&context);
 }

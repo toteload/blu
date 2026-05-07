@@ -476,7 +476,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto token_index = nodes->data(node_index).literal_string.token_index;
     auto literal     = get_token_str(token_index);
 
-    decode_string_literal(literal, cast<char*>(bytes));
+    decode_string_literal(literal, cast<char *>(bytes));
 
     *result = res;
   } break;

@@ -191,6 +191,8 @@ struct SourceUnit {
   bool tokenize();
   bool parse();
   bool typecheck();
+
+  void print_messages();
 };
 
 enum DeclarationKind {
@@ -220,5 +222,5 @@ b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> 
 #include "interpreter.hh"
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
-u32 string_literal_byte_size(Str literal);
-u32 decode_string_literal(Str literal, char *out);
+u32  string_literal_byte_size(Str literal);
+u32  decode_string_literal(Str literal, char *out);
