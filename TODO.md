@@ -21,12 +21,30 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\defer.blu`
 - [x] User functions
 - [x] Add assign of variables.
-- [x] `for` loop
-- [ ] Add `const` qualifier.
+- [ ] `enum` definitions.
+  - I think something like `Direction := enum { north, east, south, west }` is good.
+  - Effectively, the enum values are named integer constants. So `Direction` does not have a size.
+  - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
+- [ ] `match` expression.
+  - Can match on integer values.
+  - Can match on enums.
+- [ ] Some form of encapsulation of declarations.
+
+### Control flow
+
+- [ ] `break`/`continue`
 - [ ] Add `return` expression.
+- [x] `for` loop
+
+### Types
+
+- [ ] `struct` type
+- [ ] Allow type annotations on params on function literals and a return type annotation.
+- [ ] Update declaration syntax to allow optional omission of declaration type.
 
 ### Metaprogramming
 
+- [ ] Add `const` qualifier.
 - [ ] Add `#run` builtin.
 
 ### Misc
@@ -47,7 +65,6 @@ Maybe not implement this in the language itself.
 
 - [ ] Floating point type
 - [ ] Pointer type. Is not allowed to be nil
-- [ ] struct type
 
 - [ ] Bounds checking
 - [ ] Integer overflow checks

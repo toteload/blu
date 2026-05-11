@@ -917,41 +917,27 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
       case Type_integer: {
         if (t->integer.signedness == Signed) {
           i64 val;
+          // clang-format off
           switch (t->integer.bitwidth) {
-          case 8:
-            val = *cast<i8 *>(v->data);
-            break;
-          case 16:
-            val = *cast<i16 *>(v->data);
-            break;
-          case 32:
-            val = *cast<i32 *>(v->data);
-            break;
-          case 64:
-            val = *cast<i64 *>(v->data);
-            break;
-          default:
-            Unreachable();
+          case 8:  val = *cast<i8 *>(v->data); break;
+          case 16: val = *cast<i16 *>(v->data); break;
+          case 32: val = *cast<i32 *>(v->data); break;
+          case 64: val = *cast<i64 *>(v->data); break;
+          default: Unreachable();
           }
+          // clang-format on
           printf("%lld", cast<long long>(val));
         } else {
           u64 val;
+          // clang-format off
           switch (t->integer.bitwidth) {
-          case 8:
-            val = *cast<u8 *>(v->data);
-            break;
-          case 16:
-            val = *cast<u16 *>(v->data);
-            break;
-          case 32:
-            val = *cast<u32 *>(v->data);
-            break;
-          case 64:
-            val = *cast<u64 *>(v->data);
-            break;
-          default:
-            Unreachable();
+          case 8:  val = *cast<u8 *>(v->data); break;
+          case 16: val = *cast<u16 *>(v->data); break;
+          case 32: val = *cast<u32 *>(v->data); break;
+          case 64: val = *cast<u64 *>(v->data); break;
+          default: Unreachable();
           }
+          // clang-format on
           printf("%llu", cast<unsigned long long>(val));
         }
       } break;
