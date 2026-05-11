@@ -66,7 +66,6 @@ void write_tokens(Tokens *tokens, Str source, Arena *out);
 
 struct ParseContext {
   Messages *messages;
-  Str       source;
 };
 
 b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *out);

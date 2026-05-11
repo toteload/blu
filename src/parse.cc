@@ -8,16 +8,10 @@ struct Parser {
   AstNodes  *nodes;
   TokenIndex at;
 
-  // The only reason that `source` is needed here is to get the string value for a builtin.
-  // It would be cleaner to not need the source text here and instead encode in the tokens what
-  // kind of builtin it is.
-  // TODO: get rid of this dependency on the source text.
-  Str source;
-
   // -
 
   b32 parse_root(NodeIndex *out);
-  b32 parse_builtin(NodeIndex *out);
+  b32 parse_builtin_print(NodeIndex *out);
   b32 parse_block(NodeIndex *out);
   b32 parse_type(NodeIndex *out);
   b32 parse_declaration(NodeIndex *out);
@@ -130,11 +124,6 @@ struct Parser {
 
     return {idx.idx + 1};
   }
-
-  Str text_at(TokenIndex idx) {
-    auto span = tokens->span(idx);
-    return source.sub(span.start, span.end);
-  }
 };
 
 b32 Parser::parse_root(NodeIndex *out) {
@@ -163,38 +152,29 @@ b32 Parser::parse_root(NodeIndex *out) {
   return true;
 }
 
-b32 Parser::parse_builtin(NodeIndex *out) {
+b32 Parser::parse_builtin_print(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
 
-  Try(expect_token(Tok_builtin));
+  Try(expect_token(Tok_builtin_print));
 
-  auto s    = text_at(start);
-  auto name = s.sub(1, s.len());
+  AstBuiltin builtin;
+  builtin.kind = Builtin_print;
+  builtin.args.init();
 
-  if (str_eq(name, STR("print"))) {
-    AstBuiltin builtin;
-    builtin.kind = Builtin_print;
-    builtin.args.init();
+  Try(expect_token(Tok_paren_open));
+  Try(parse_comma_separated_items_until(
+    &builtin.args,
+    [this](NodeIndex *out) { return parse_expression(out); },
+    Tok_paren_close
+  ));
+  Try(expect_token(Tok_paren_close));
 
-    Try(expect_token(Tok_paren_open));
-    Try(parse_comma_separated_items_until(
-      &builtin.args,
-      [this](NodeIndex *out) { return parse_expression(out); },
-      Tok_paren_close
-    ));
-    Try(expect_token(Tok_paren_close));
+  nodes->set(node_index, {Ast_builtin, {start, at}, {.builtin = builtin}});
 
-    nodes->set(node_index, {Ast_builtin, {start, at}, {.builtin = builtin}});
+  *out = node_index;
 
-    *out = node_index;
-
-    return true;
-  }
-
-  Todo("proper error message. i am lazy");
-
-  return false;
+  return true;
 }
 
 b32 Parser::parse_block(NodeIndex *out) {
@@ -636,8 +616,8 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_bar:              Try(parse_function(&base));       break;
     // clang-format on
 
-  case Tok_builtin: {
-    Try(parse_builtin(&base));
+  case Tok_builtin_print: {
+    Try(parse_builtin_print(&base));
   } break;
 
   case Tok_brace_open: {
@@ -926,7 +906,6 @@ b32 Parser::parse_identifier(NodeIndex *out) {
 b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *nodes) {
   Parser parser{};
   parser.messages = ctx->messages;
-  parser.source   = ctx->source;
   parser.tokens   = tokens;
   parser.nodes    = nodes;
   parser.at       = {0};

@@ -61,7 +61,6 @@ bool SourceUnit::parse() {
 
   ParseContext context{};
   context.messages = &messages;
-  context.source   = text;
 
   b32 ok = parse_root(&context, &tokens, &nodes);
   if (!ok) {

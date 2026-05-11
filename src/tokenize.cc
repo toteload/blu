@@ -181,15 +181,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_token(Tok_literal_int);
   }
 
-  if (c == '#') {
-    while (!is_at_end() && is_identifier_rest(*at)) {
-      step();
-    }
-
-    Return_token(Tok_builtin);
-  }
-
-  if (is_identifier_start(c)) {
+  if (is_identifier_start(c) || c == '#') {
     while (!is_at_end() && is_identifier_rest(*at)) {
       step();
     }
@@ -204,6 +196,8 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_if_match("and",      Tok_keyword_and);
     Return_if_match("or",       Tok_keyword_or);
     Return_if_match("defer",    Tok_keyword_defer);
+
+    Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
     Return_token(Tok_identifier);

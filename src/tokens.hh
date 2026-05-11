@@ -46,7 +46,8 @@ enum TokenKind : u8 {
   Tok_keyword_defer,
 
   Tok_identifier,
-  Tok_builtin,
+
+  Tok_builtin_print,
 
   Tok_line_comment,
 
@@ -97,7 +98,7 @@ constexpr char const *token_string[Tok_kind_max] = {
   "literal-string", "brace-open",    "brace-close", "paren-open",   "paren-close",
   "bracket-open",   "bracket-close", "if",          "else",         "while",
   "break",          "continue",      "return",      "and",          "or",
-  "defer",          "identifier",    "builtin",     "line-comment",
+  "defer",          "identifier",    "#print",     "line-comment",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {
