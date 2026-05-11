@@ -52,6 +52,8 @@ struct TypeChecker {
 
   b32 typecheck();
 
+  b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
+
   b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
   b32 check_expression(
     Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
@@ -62,7 +64,8 @@ struct TypeChecker {
     NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
   );
 
-  b32 check_is_type(TypeIndex type, NodeIndex at);
+  b32 check_is_of_type(NodeIndex at, TypeIndex type, TypeIndex expected_type);
+
   b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
   b32 check_is_indexable(TypeIndex type, NodeIndex at);
 
@@ -120,21 +123,43 @@ b32 TypeChecker::typecheck() {
   }
 
   for (u32 i = 0; i < root.items.len(); i++) {
-    auto decl = source->nodes->data(root.items[i]).declaration;
-
-    TypeIndex declared_type;
-    Try(eval_type_expression(env, decl.type, &declared_type));
-
-    TypeHint hint = {
-      .type     = declared_type,
-      .location = decl.type,
-    };
-
-    TypeIndex value_type;
-    Try(check_expression(env, decl.value, &hint, &value_type));
-
-    Try(check_coercion(decl.value, value_type, declared_type));
+    Try(resolve_declaration(env, root.items[i]));
   }
+
+  return true;
+}
+
+b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex decl_node) {
+  auto decl = source->nodes->data(decl_node).declaration;
+  auto key  = intern_identifier(decl.name);
+
+  Declaration existing;
+  if (env->lookup(key, &existing) && existing.kind != Declaration_of_undetermined) {
+    return true;
+  }
+
+  TypeIndex declared_type;
+  Try(eval_type_expression(env, decl.type, &declared_type));
+
+  if (declared_type == types->type.type) {
+    TypeIndex value_type;
+    Try(eval_type_expression(env, decl.value, &value_type));
+    env->insert(key, {.kind = Declaration_of_type, .type = value_type});
+    return true;
+  }
+
+  // Insert with the declared type up front so that recursive references
+  // inside the value expression can be resolved.
+  env->insert(key, {.kind = Declaration_of_value, .type = declared_type});
+
+  TypeHint hint = {
+    .type     = declared_type,
+    .location = decl.type,
+  };
+
+  TypeIndex value_type;
+  Try(check_expression(env, decl.value, &hint, &value_type));
+  Try(check_coercion(decl.value, value_type, declared_type));
 
   return true;
 }
@@ -205,22 +230,13 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   } break;
   case Ast_identifier: {
     auto        token_index = source->nodes->data(node_index).identifier.token_index;
+
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
 
     if (decl.kind == Declaration_of_undetermined) {
-      auto node = source->nodes->data(decl.node_index).declaration;
-
-      TypeIndex declared_type;
-      Try(eval_type_expression(env, node.type, &declared_type));
-      Try(check_is_type(declared_type, node.type));
-
-      TypeIndex value_type;
-      Try(eval_type_expression(env, node.value, &value_type));
-
-      decl = {.kind = Declaration_of_type, .type = value_type};
-
-      env->insert(intern_identifier(token_index), decl);
+      Try(resolve_declaration(env, decl.node_index));
+      Try(find_identifier(env, token_index, &decl));
     }
 
     Try(check_is_declaration_of_type(decl, node_index));
@@ -270,12 +286,12 @@ b32 TypeChecker::check_expression(
 
     TypeIndex return_type;
     Try(check_expression(env, f.return_type, nullptr, &return_type));
-    Try(check_is_type(return_type, f.return_type));
+    Try(check_is_of_type(f.return_type, return_type, types->type.type));
 
     for (u32 i = 0; i < f.param_types.len(); i++) {
       TypeIndex param_type;
       Try(check_expression(env, f.param_types[i], nullptr, &param_type));
-      Try(check_is_type(param_type, f.param_types[i]));
+      Try(check_is_of_type(f.param_types[i], param_type, types->type.type));
     }
 
     result = types->type.type;
@@ -304,8 +320,14 @@ b32 TypeChecker::check_expression(
   } break;
   case Ast_identifier: {
     auto        token_index = source->nodes->data(node_index).identifier.token_index;
+
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
+
+    if (decl.kind == Declaration_of_undetermined) {
+      Try(resolve_declaration(env, decl.node_index));
+      Try(find_identifier(env, token_index, &decl));
+    }
 
     switch (decl.kind) {
     case Declaration_of_value:
@@ -314,26 +336,66 @@ b32 TypeChecker::check_expression(
     case Declaration_of_type:
       result = types->type.type;
       break;
-    case Declaration_of_undetermined: {
-      Todo("recurse and find type of undetermined declaration");
-    } break;
+    case Declaration_of_undetermined:
+      Unreachable();
+      break;
     }
   } break;
   case Ast_function: {
-    auto f = source->nodes->data(node_index).function;
-    Assert(f.param_names.len() == 0);
+    auto f           = source->nodes->data(node_index).function;
+    u32  param_count = cast<u32>(f.param_names.len());
+
+    Type *hint_type = nullptr;
+    if (hint) {
+      auto ht = types->get(hint->type);
+      if (ht->kind == Type_function) {
+        hint_type = ht;
+      }
+    }
+
+    if (param_count > 0 && !hint_type) {
+      messages->error(
+        node_index, "Cannot infer function parameter types without a function-type annotation."
+      );
+      return false;
+    }
+
+    if (hint_type && hint_type->function.param_count != param_count) {
+      messages->error(
+        node_index, "Function literal has wrong number of parameters for type {type}.", hint->type
+      );
+      return false;
+    }
+
+    auto env_params = envs->alloc(env);
+    defer(envs->dealloc(env_params));
+
+    for (u32 i = 0; i < param_count; i++) {
+      auto param_node  = f.param_names[i];
+      auto token_index = source->nodes->data(param_node).identifier.token_index;
+      auto key         = intern_identifier(token_index);
+      auto param_type  = hint_type->function.param_types[i];
+
+      env_params->insert(key, {.kind = Declaration_of_value, .type = param_type});
+      annotations[param_node.idx] = param_type;
+    }
 
     TypeIndex body_type;
-    Try(check_expression(env, f.body, nullptr, &body_type));
+    Try(check_expression(env_params, f.body, nullptr, &body_type));
 
-    Type function_type = {
-      .kind             = Type_literal_function,
-      .literal_function = {
-        .return_type = body_type,
-        .param_count = cast<u32>(f.param_names.len()),
-      },
-    };
-    result = types->add(&function_type);
+    if (hint_type) {
+      Try(check_coercion(f.body, body_type, hint_type->function.return_type));
+      result = hint->type;
+    } else {
+      Type function_type = {
+        .kind             = Type_literal_function,
+        .literal_function = {
+          .return_type = body_type,
+          .param_count = param_count,
+        },
+      };
+      result = types->add(&function_type);
+    }
   } break;
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
@@ -469,7 +531,39 @@ b32 TypeChecker::check_expression(
     TypeIndex type_rhs;
     Try(check_expression(env, node.rhs, nullptr, &type_rhs));
 
-    Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &result));
+    switch (node.kind) {
+    case Logical_and:
+    case Logical_or:
+      Try(check_is_of_type(node.lhs, type_lhs, types->type.bool_));
+      Try(check_is_of_type(node.rhs, type_lhs, types->type.bool_));
+      result = types->type.bool_;
+      break;
+    case Cmp_equal:
+    case Cmp_not_equal:
+    case Cmp_less_than:
+    case Cmp_less_equal:
+    case Cmp_greater_than:
+    case Cmp_greater_equal: {
+      TypeIndex unified;
+      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &unified));
+      result = types->type.bool_;
+    } break;
+    case Mul:
+    case Div:
+    case Mod:
+    case Sub:
+    case Add:
+    case Bit_shift_left:
+    case Bit_shift_right:
+    case Bit_and:
+    case Bit_or:
+    case Bit_xor:
+      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &result));
+      break;
+    case BinaryOpKind_max:
+      Unreachable();
+      return false;
+    }
   } break;
 
   case Ast_builtin: {
@@ -498,8 +592,43 @@ b32 TypeChecker::check_expression(
     result = types->type.nil;
   } break;
 
+  case Ast_call: {
+    auto node = source->nodes->data(node_index).call;
+
+    TypeIndex callee_type;
+    Try(check_expression(env, node.callee, nullptr, &callee_type));
+
+    auto ty = types->get(callee_type);
+
+    if (ty->kind != Type_function && ty->kind != Type_literal_function) {
+      messages->error(node.callee, "Cannot call value of type {type}.", callee_type);
+      return false;
+    }
+
+    u32 expected_param_count = ty->kind == Type_function ? ty->function.param_count
+                                                         : ty->literal_function.param_count;
+
+    if (node.args.len() != expected_param_count) {
+      messages->error(
+        node_index, "Wrong number of arguments to function of type {type}.", callee_type
+      );
+      return false;
+    }
+
+    for (u32 i = 0; i < node.args.len(); i++) {
+      TypeIndex arg_type;
+      Try(check_expression(env, node.args[i], nullptr, &arg_type));
+
+      if (ty->kind == Type_function) {
+        Try(check_coercion(node.args[i], arg_type, ty->function.param_types[i]));
+      }
+    }
+
+    result = ty->kind == Type_function ? ty->function.return_type
+                                       : ty->literal_function.return_type;
+  } break;
+
   case Ast_assign:
-  case Ast_call:
   case Ast_unary_op:
   case Ast_while:
   case Ast_break:
@@ -539,8 +668,8 @@ b32 TypeChecker::check_unification(
   return false;
 }
 
-b32 TypeChecker::check_is_type(TypeIndex type, NodeIndex at) {
-  if (type == types->type.type) {
+b32 TypeChecker::check_is_of_type(NodeIndex at, TypeIndex type, TypeIndex expected_type) {
+  if (type == expected_type) {
     return true;
   }
 

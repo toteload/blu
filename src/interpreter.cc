@@ -488,11 +488,30 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = common.nil;
   } break;
 
+  case Ast_call: {
+    auto call = source->nodes.data(node_index).call;
+
+    ValueIndex callee_idx;
+    Try(eval_expr(env, call.callee, &callee_idx));
+
+    u32 arg_count = cast<u32>(call.args.len());
+
+    auto snapshot = work_arena.take_snapshot();
+    defer(work_arena.restore(snapshot));
+
+    ValueIndex *args = work_arena.alloc<ValueIndex>(arg_count);
+    for (u32 i = 0; i < arg_count; i++) {
+      Try(eval_expr(env, call.args[i], &args[i]));
+    }
+
+    auto callee = values.get(callee_idx);
+    Try(call_function(env, callee, {args, arg_count}, result));
+  } break;
+
   case Ast_assign:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
-  case Ast_call:
   case Ast_unary_op:
   case Ast_while:
   case Ast_break:
@@ -513,6 +532,56 @@ b32 Interpreter::eval_binary_op(
   auto types = &source->types;
 
   switch (op) {
+  case Cmp_equal:
+  case Cmp_not_equal:
+  case Cmp_less_than:
+  case Cmp_less_equal:
+  case Cmp_greater_than:
+  case Cmp_greater_equal: {
+    auto left      = values.get(lhs);
+    auto left_type = types->get(left->type);
+
+    Assert(left_type->is_integer_or_literal_int());
+
+    bool is_unsigned =
+      left_type->kind == Type_integer && left_type->integer.signedness == Unsigned;
+
+    bool res;
+    if (is_unsigned) {
+      u64 a = get_as_u64(lhs);
+      u64 b = get_as_u64(rhs);
+      switch (op) {
+      case Cmp_equal:         res = a == b; break;
+      case Cmp_not_equal:     res = a != b; break;
+      case Cmp_less_than:     res = a < b;  break;
+      case Cmp_less_equal:    res = a <= b; break;
+      case Cmp_greater_than:  res = a > b;  break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
+      }
+    } else {
+      i64 a = get_as_i64(lhs);
+      i64 b = get_as_i64(rhs);
+      switch (op) {
+      case Cmp_equal:         res = a == b; break;
+      case Cmp_not_equal:     res = a != b; break;
+      case Cmp_less_than:     res = a < b;  break;
+      case Cmp_less_equal:    res = a <= b; break;
+      case Cmp_greater_than:  res = a > b;  break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
+      }
+    }
+
+    Value *v;
+    auto   idx  = values.alloc_value(&v);
+    auto   data = cast<u8 *>(values.alloc_memory(types->size_info(types->type.bool_)));
+    *data       = res ? 1 : 0;
+    *v          = {.type = types->type.bool_, .data = data};
+    *result     = idx;
+
+    return true;
+  } break;
   case Mul:
   case Div:
   case Add:
@@ -614,16 +683,37 @@ ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identi
 b32 Interpreter::call_function(
   Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
 ) {
-  // TODO: make sure the arguments match the expected parameters
-  // TODO: add parameters to env
-
   auto node_index    = *cast<NodeIndex *>(function->data);
   auto function_node = source->nodes.data(node_index).function;
+  auto function_type = source->types.get(function->type);
+
+  Assert(function_type->kind == Type_function);
+  Assert(arguments.len() == function_type->function.param_count);
+
+  auto env_args = envs.alloc(env_root);
+  defer(envs.dealloc(env_args));
+
+  for (u32 i = 0; i < arguments.len(); i++) {
+    auto param_type = function_type->function.param_types[i];
+
+    Value *pv;
+    auto   param_value_idx = values.alloc_value(&pv);
+    auto   data            = values.alloc_memory(source->types.size_info(param_type));
+    *pv                    = {.type = param_type, .data = data};
+    Try(coerce_value(param_type, arguments[i], data));
+
+    auto param_node  = function_node.param_names[i];
+    auto token_index = source->nodes.data(param_node).identifier.token_index;
+    auto str         = get_token_str(token_index);
+    auto key         = source->strings.add(str);
+
+    env_args->insert(key, param_value_idx);
+  }
 
   ValueIndex body_result;
-  Try(eval_expr(env, function_node.body, &body_result));
+  Try(eval_expr(env_args, function_node.body, &body_result));
 
-  TypeIndex return_type_idx = source->types.get(function->type)->function.return_type;
+  TypeIndex return_type_idx = function_type->function.return_type;
 
   Value *v;
   *result   = values.alloc_value(&v);

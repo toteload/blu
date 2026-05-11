@@ -19,16 +19,11 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\print.blu`
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [x] `test\basic\defer.blu`
+- [ ] User functions
 - [ ] Add assign of variables.
 - [ ] Add `const` qualifier.
 - [ ] Add `return` expression.
 - [ ] `for` loop
-
-### Errors
-
-- [ ] Add error type and add syntax for functions to return errors.
-- [ ] Add `try` and `catch`.
-- [ ] Add conditional `defer` based on whether the function returned with an error or not.
 
 ### Metaprogramming
 
@@ -37,6 +32,14 @@ You will still have to write the logic for what the language does, it will "just
 ### Misc
 
 - [ ] Properly free values that are no longer used in the interpreter.
+
+### Errors
+
+Maybe not implement this in the language itself.
+
+- [ ] Add error type and add syntax for functions to return errors.
+- [ ] Add `try` and `catch`.
+- [ ] Add conditional `defer` based on whether the function returned with an error or not.
 
 ---
 
