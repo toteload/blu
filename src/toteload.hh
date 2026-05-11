@@ -157,9 +157,6 @@ struct Str {
   char const *str;
   usize       _len;
 
-  // template<usize N>
-  // Str(char const s[N]): str(s), _len(N) {}
-
   bool        is_ok() { return str && _len; }
   bool        is_empty() { return _len == 0; }
   char const *end() { return str + _len; }
@@ -301,6 +298,11 @@ struct Arena {
   void                   *raw_alloc(usize byte_size, u32 align);
   template<typename T> T *alloc(usize count = 1) {
     return cast<T *>(raw_alloc(count * sizeof(T), Align_of(T)));
+  }
+
+  template<typename T> Slice<T> alloc_slice(usize count) {
+    auto p = alloc<T>(count); 
+    return Slice<T>::from_ptr_and_len(p, count);
   }
 
   Str push_format_string(char const *format, ...);

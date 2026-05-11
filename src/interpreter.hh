@@ -37,6 +37,8 @@ struct Interpreter {
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
 
+  void builtin_print(Str format, Slice<ValueIndex> args);
+
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
   b32  add_declaration(Env<ValueIndex> *env, NodeIndex declaration);

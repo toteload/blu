@@ -37,7 +37,8 @@ enum TokenKind : u8 {
 
   Tok_keyword_if,
   Tok_keyword_else,
-  Tok_keyword_while,
+  Tok_keyword_for,
+  Tok_keyword_do,
   Tok_keyword_break,
   Tok_keyword_continue,
   Tok_keyword_return,
@@ -96,7 +97,8 @@ constexpr char const *token_string[Tok_kind_max] = {
   "tilde",          "left-shift",    "right-shift", "cmp-eq",       "cmp-ne",
   "cmp-gt",         "cmp-ge",        "cmp-lt",      "cmp-le",       "literal-int",
   "literal-string", "brace-open",    "brace-close", "paren-open",   "paren-close",
-  "bracket-open",   "bracket-close", "if",          "else",         "while",
+  "bracket-open",   "bracket-close", "if",          "else",         "for",
+  "do",
   "break",          "continue",      "return",      "and",          "or",
   "defer",          "identifier",    "#print",     "line-comment",
 };

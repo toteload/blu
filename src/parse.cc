@@ -19,7 +19,7 @@ struct Parser {
   b32 parse_literal_string(NodeIndex *out);
   b32 parse_literal_sequence(NodeIndex *out);
   b32 parse_function(NodeIndex *out);
-  b32 parse_while(NodeIndex *out);
+  b32 parse_for(NodeIndex *out);
   b32 parse_break(NodeIndex *out);
   b32 parse_continue(NodeIndex *out);
   b32 parse_return(NodeIndex *out);
@@ -444,25 +444,29 @@ b32 Parser::parse_function(NodeIndex *out) {
   return true;
 }
 
-b32 Parser::parse_while(NodeIndex *out) {
+b32 Parser::parse_for(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
 
   TokenKind tok;
-  Try(expect_token(Tok_keyword_while, &tok));
+  Try(expect_token(Tok_keyword_for, &tok));
 
-  AstWhile while_;
+  AstFor for_;
 
-  Try(parse_expression(&while_.cond));
+  Try(parse_expression(&for_.iterable));
 
-  Try(parse_block(&while_.body));
+  Try(expect_token(Tok_keyword_do, &tok));
+
+  Try(parse_identifier(&for_.iterator));
+
+  Try(parse_block(&for_.body));
 
   nodes->set(
     node_index,
     {
-      Ast_while,
+      Ast_for,
       {start, at},
-      {.while_ = while_},
+      {.for_ = for_},
     }
   );
 
@@ -605,7 +609,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   NodeIndex base;
   switch (tok) {
     // clang-format off
-  case Tok_keyword_while:    Try(parse_while(&base));          break;
+  case Tok_keyword_for:      Try(parse_for(&base));          break;
   case Tok_keyword_continue: Try(parse_continue(&base));       break;
   case Tok_keyword_break:    Try(parse_break(&base));          break;
   case Tok_keyword_return:   Try(parse_return(&base));         break;

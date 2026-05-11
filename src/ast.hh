@@ -20,7 +20,7 @@ enum AstKind : u8 {
   Ast_binary_op,
   Ast_function,
   Ast_if_else,
-  Ast_while,
+  Ast_for,
   Ast_break,
   Ast_continue,
   Ast_return,
@@ -127,8 +127,9 @@ struct AstIfElse {
   OptionalNodeIndex otherwise;
 };
 
-struct AstWhile {
-  NodeIndex cond;
+struct AstFor {
+  NodeIndex iterable;
+  NodeIndex iterator;
   NodeIndex body;
 };
 
@@ -202,7 +203,7 @@ union AstNodeData {
   AstBinaryOp        binary_op;
   AstFunction        function;
   AstIfElse          if_else;
-  AstWhile           while_;
+  AstFor             for_;
   AstReturn          return_;
   AstDefer           defer;
 };

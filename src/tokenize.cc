@@ -190,7 +190,8 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_if_match("return",   Tok_keyword_return);
     Return_if_match("if",       Tok_keyword_if);
     Return_if_match("else",     Tok_keyword_else);
-    Return_if_match("while",    Tok_keyword_while);
+    Return_if_match("for",      Tok_keyword_for);
+    Return_if_match("do",       Tok_keyword_do);
     Return_if_match("break",    Tok_keyword_break);
     Return_if_match("continue", Tok_keyword_continue);
     Return_if_match("and",      Tok_keyword_and);

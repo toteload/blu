@@ -313,7 +313,17 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       ValueSlice slice;
       Try(coerce_value(types->type.slice_u8, arg_format, &slice));
 
-      printf("%.*s", cast<int>(slice.len), cast<char const *>(slice.items));
+      auto snapshot = work_arena.take_snapshot();
+      defer(work_arena.restore(snapshot));
+
+      auto args = work_arena.alloc_slice<ValueIndex>(builtin.args.len() - 1);
+      for (u32 i = 1; i < builtin.args.len(); i++) {
+        Try(eval_expr(env, builtin.args[i], &args[i - 1]));
+      }
+
+      Str format = Str::from_ptr_and_len(cast<char const *>(slice.items), slice.len);
+
+      builtin_print(format, args);
 
       *result = common.nil;
     } break;
@@ -513,7 +523,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_type_array:
   case Ast_type_function:
   case Ast_unary_op:
-  case Ast_while:
+  case Ast_for:
   case Ast_break:
   case Ast_continue:
   case Ast_return:
@@ -756,4 +766,89 @@ u64 Interpreter::get_uint(ValueIndex idx) {
   u64 res;
   Try(coerce_value(source->types.type.uint, idx, &res));
   return res;
+}
+
+void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
+  auto types = &source->types;
+
+  usize i         = 0;
+  u32   arg_index = 0;
+  while (i < format.len()) {
+    char c = format[i];
+
+    // "{{}}" — emit a verbatim "{}"
+    if (c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
+        format[i + 3] == '}') {
+      fputs("{}", stdout);
+      i += 4;
+      continue;
+    }
+
+    // "{}" — interpolate the next argument
+    if (c == '{' && i + 1 < format.len() && format[i + 1] == '}') {
+      Assert(arg_index < args.len());
+
+      Value *v = values.get(args[arg_index]);
+      Type  *t = types->get(v->type);
+
+      switch (t->kind) {
+      case Type_literal_int:
+        printf("%lld", *cast<i64 *>(v->data));
+        break;
+      case Type_integer: {
+        if (t->integer.signedness == Signed) {
+          i64 val;
+          switch (t->integer.bitwidth) {
+          case  8: val = *cast<i8 *>(v->data);  break;
+          case 16: val = *cast<i16 *>(v->data); break;
+          case 32: val = *cast<i32 *>(v->data); break;
+          case 64: val = *cast<i64 *>(v->data); break;
+          default: Unreachable();
+          }
+          printf("%lld", cast<long long>(val));
+        } else {
+          u64 val;
+          switch (t->integer.bitwidth) {
+          case  8: val = *cast<u8 *>(v->data);  break;
+          case 16: val = *cast<u16 *>(v->data); break;
+          case 32: val = *cast<u32 *>(v->data); break;
+          case 64: val = *cast<u64 *>(v->data); break;
+          default: Unreachable();
+          }
+          printf("%llu", cast<unsigned long long>(val));
+        }
+      } break;
+      case Type_boolean: {
+        u8 val = *cast<u8 *>(v->data);
+        fputs(val ? "true" : "false", stdout);
+      } break;
+      case Type_slice: {
+        if (types->get(t->slice.base_type)->kind == Type_integer &&
+            types->get(t->slice.base_type)->integer.bitwidth == 8) {
+          auto s = cast<ValueSlice *>(v->data);
+          printf("%.*s", cast<int>(s->len), cast<char const *>(s->items));
+        } else {
+          Todo();
+        }
+      } break;
+      case Type_array:
+      case Type_sequence:
+      case Type_function:
+      case Type_literal_function:
+      case Type_distinct:
+      case Type_nil:
+      case Type_never:
+      case Type_type:
+        Todo();
+        break;
+      }
+
+      arg_index += 1;
+      i         += 2;
+      continue;
+    }
+
+    putchar(c);
+    i += 1;
+  }
 }

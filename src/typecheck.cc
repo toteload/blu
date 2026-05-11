@@ -262,7 +262,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_index:
   case Ast_unary_op:
   case Ast_binary_op:
-  case Ast_while:
+  case Ast_for:
   case Ast_break:
   case Ast_continue:
   case Ast_return:
@@ -639,9 +639,12 @@ b32 TypeChecker::check_expression(
       ty->kind == Type_function ? ty->function.return_type : ty->literal_function.return_type;
   } break;
 
+  case Ast_for: {
+                  Todo();
+                } break;
+
   case Ast_assign:
   case Ast_unary_op:
-  case Ast_while:
   case Ast_break:
   case Ast_continue:
   case Ast_return:
