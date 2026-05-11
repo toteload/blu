@@ -263,7 +263,7 @@ b32 Parser::parse_type(NodeIndex *out) {
     Try(parse_comma_separated_items_until(
       &type_function.param_types,
 
-      [this](NodeIndex *out) { return parse_expression(out); },
+      [this](NodeIndex *out) { return parse_type(out); },
       Tok_paren_close
     ));
     Try(expect_token(Tok_paren_close));

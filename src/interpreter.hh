@@ -41,6 +41,8 @@ struct Interpreter {
 
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
+  b32 eval_place(Env<ValueIndex> *env, NodeIndex node, void **out_ptr, TypeIndex *out_type);
+
   b32  add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
   bool coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
 

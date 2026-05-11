@@ -569,7 +569,23 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = common.nil;
   } break;
 
-  case Ast_assign:
+  case Ast_assign: {
+    auto node = source->nodes.data(node_index).assign;
+
+    Assert(node.kind == Assign_normal);
+
+    void     *lhs_ptr;
+    TypeIndex lhs_type;
+    Try(eval_place(env, node.lhs, &lhs_ptr, &lhs_type));
+
+    ValueIndex value_idx;
+    Try(eval_expr(env, node.value, &value_idx));
+
+    Try(coerce_value(lhs_type, value_idx, lhs_ptr));
+
+    *result = common.nil;
+  } break;
+
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
@@ -669,6 +685,7 @@ b32 Interpreter::eval_binary_op(
   } break;
   case Mul:
   case Div:
+  case Mod:
   case Add:
   case Sub: {
     auto left  = values.get(lhs);
@@ -690,6 +707,7 @@ b32 Interpreter::eval_binary_op(
       // clang-format off
       switch (op) {
       case Div: res = a / b; break;
+      case Mod: res = a % b; break;
       case Add: overflow = __builtin_add_overflow(a, b, &res); break;
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
@@ -735,6 +753,7 @@ b32 Interpreter::eval_binary_op(
       // clang-format off
       switch (op) {
       case Div: res = a / b; break;
+      case Mod: res = a % b; break;
       case Add: overflow = __builtin_add_overflow(a, b, &res); break;
       case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
       case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
@@ -763,6 +782,54 @@ ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identi
   Assert(found);
 
   return val;
+}
+
+b32 Interpreter::eval_place(
+  Env<ValueIndex> *env, NodeIndex node, void **out_ptr, TypeIndex *out_type
+) {
+  auto kind = source->nodes.kind(node);
+
+  if (kind == Ast_identifier) {
+    auto val  = lookup_identifier(env, node);
+    auto v    = values.get(val);
+    *out_ptr  = v->data;
+    *out_type = v->type;
+    return true;
+  }
+
+  if (kind == Ast_index) {
+    auto inode = source->nodes.data(node).index;
+
+    void     *base_ptr;
+    TypeIndex base_type;
+    Try(eval_place(env, inode.indexable, &base_ptr, &base_type));
+
+    ValueIndex idx_value;
+    Try(eval_expr(env, inode.index_at, &idx_value));
+    u64 i = get_uint(idx_value);
+
+    auto      bt = source->types.get(base_type);
+    TypeIndex elem_type;
+    void     *items;
+    if (bt->kind == Type_array) {
+      elem_type = bt->array.base_type;
+      items     = base_ptr;
+    } else if (bt->kind == Type_slice) {
+      auto slice = cast<ValueSlice *>(base_ptr);
+      elem_type  = bt->slice.base_type;
+      items      = slice->items;
+    } else {
+      Unreachable();
+    }
+
+    auto elem_size_info = source->types.size_info(elem_type);
+    *out_ptr            = ptr_offset(items, i * elem_size_info.stride);
+    *out_type           = elem_type;
+    return true;
+  }
+
+  Unreachable();
+  return false;
 }
 
 b32 Interpreter::call_function(
@@ -827,8 +894,10 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
     char c = format[i];
 
     // "{{}}" — emit a verbatim "{}"
-    if (c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
-        format[i + 3] == '}') {
+    if (
+      c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
+      format[i + 3] == '}'
+    ) {
       fputs("{}", stdout);
       i += 4;
       continue;
@@ -849,21 +918,39 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
         if (t->integer.signedness == Signed) {
           i64 val;
           switch (t->integer.bitwidth) {
-          case  8: val = *cast<i8 *>(v->data);  break;
-          case 16: val = *cast<i16 *>(v->data); break;
-          case 32: val = *cast<i32 *>(v->data); break;
-          case 64: val = *cast<i64 *>(v->data); break;
-          default: Unreachable();
+          case 8:
+            val = *cast<i8 *>(v->data);
+            break;
+          case 16:
+            val = *cast<i16 *>(v->data);
+            break;
+          case 32:
+            val = *cast<i32 *>(v->data);
+            break;
+          case 64:
+            val = *cast<i64 *>(v->data);
+            break;
+          default:
+            Unreachable();
           }
           printf("%lld", cast<long long>(val));
         } else {
           u64 val;
           switch (t->integer.bitwidth) {
-          case  8: val = *cast<u8 *>(v->data);  break;
-          case 16: val = *cast<u16 *>(v->data); break;
-          case 32: val = *cast<u32 *>(v->data); break;
-          case 64: val = *cast<u64 *>(v->data); break;
-          default: Unreachable();
+          case 8:
+            val = *cast<u8 *>(v->data);
+            break;
+          case 16:
+            val = *cast<u16 *>(v->data);
+            break;
+          case 32:
+            val = *cast<u32 *>(v->data);
+            break;
+          case 64:
+            val = *cast<u64 *>(v->data);
+            break;
+          default:
+            Unreachable();
           }
           printf("%llu", cast<unsigned long long>(val));
         }
@@ -873,8 +960,10 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
         fputs(val ? "true" : "false", stdout);
       } break;
       case Type_slice: {
-        if (types->get(t->slice.base_type)->kind == Type_integer &&
-            types->get(t->slice.base_type)->integer.bitwidth == 8) {
+        if (
+          types->get(t->slice.base_type)->kind == Type_integer &&
+          types->get(t->slice.base_type)->integer.bitwidth == 8
+        ) {
           auto s = cast<ValueSlice *>(v->data);
           printf("%.*s", cast<int>(s->len), cast<char const *>(s->items));
         } else {

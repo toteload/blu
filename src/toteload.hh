@@ -301,7 +301,7 @@ struct Arena {
   }
 
   template<typename T> Slice<T> alloc_slice(usize count) {
-    auto p = alloc<T>(count); 
+    auto p = alloc<T>(count);
     return Slice<T>::from_ptr_and_len(p, count);
   }
 

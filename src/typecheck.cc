@@ -34,6 +34,7 @@ struct TypeChecker {
   b32 check_is_declaration_resolved(Declaration decl, NodeIndex at);
   b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
   b32 check_is_indexable(TypeIndex type, NodeIndex at);
+  b32 check_is_assignable(NodeIndex node_index);
 
   StrKey intern_identifier(TokenIndex identifier);
 
@@ -64,6 +65,8 @@ void RootEnvPopulator::populate() {
   insert(Declaration_of_type, STR("u16"), types->type.u16_);
   insert(Declaration_of_type, STR("u32"), types->type.u32_);
   insert(Declaration_of_type, STR("u64"), types->type.u64_);
+
+  insert(Declaration_of_type, STR("uint"), types->type.uint);
 
   insert(Declaration_of_type, STR("bool"),  types->type.bool_);
   insert(Declaration_of_type, STR("nil"),   types->type.nil);
@@ -612,7 +615,13 @@ b32 TypeChecker::check_expression(
 
     auto ty = types->get(callee_type);
 
-    if (ty->kind != Type_function && ty->kind != Type_literal_function) {
+    if (ty->kind == Type_literal_function) {
+      // This simplifies some of the type checking, but will likely change in the future.
+      messages->error(node.callee, "Function literals may not be called directly");
+      return false;
+    }
+
+    if (ty->kind != Type_function) {
       messages->error(node.callee, "Cannot call value of type {type}.", callee_type);
       return false;
     }
@@ -627,8 +636,13 @@ b32 TypeChecker::check_expression(
     }
 
     for (u32 i = 0; i < node.args.len(); i++) {
+      TypeHint type_hint_arg = {
+        .type = ty->function.param_types[i],
+        .location = node.callee, // TODO improve this location
+      };
+
       TypeIndex arg_type;
-      Try(check_expression(env, node.args[i], nullptr, &arg_type));
+      Try(check_expression(env, node.args[i], &type_hint_arg, &arg_type));
 
       if (ty->kind == Type_function) {
         Try(check_coercion(node.args[i], arg_type, ty->function.param_types[i]));
@@ -672,7 +686,22 @@ b32 TypeChecker::check_expression(
     result = types->type.nil;
   } break;
 
-  case Ast_assign:
+  case Ast_assign: {
+    auto node = source->nodes->data(node_index).assign;
+
+    Assert(node.kind == Assign_normal);
+
+    TypeIndex lhs_type;
+    Try(check_expression(env, node.lhs, nullptr, &lhs_type));
+    Try(check_is_assignable(node.lhs));
+
+    TypeIndex value_type;
+    Try(check_expression(env, node.value, nullptr, &value_type));
+
+    Try(check_coercion(node_index, value_type, lhs_type));
+
+    result = types->type.nil;
+  } break;
   case Ast_unary_op:
   case Ast_break:
   case Ast_continue:
@@ -749,6 +778,22 @@ b32 TypeChecker::check_is_declaration_resolved(Declaration decl, NodeIndex at) {
   }
 
   messages->error(at, "Circular declaration detected");
+  return false;
+}
+
+b32 TypeChecker::check_is_assignable(NodeIndex node_index) {
+  auto kind = source->nodes->kind(node_index);
+
+  if (kind == Ast_identifier) {
+    return true;
+  }
+
+  if (kind == Ast_index) {
+    return check_is_assignable(source->nodes->data(node_index).index.indexable);
+  }
+
+  messages->error(node_index, "Cannot assign");
+
   return false;
 }
 

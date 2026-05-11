@@ -19,11 +19,11 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\print.blu`
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [x] `test\basic\defer.blu`
-- [ ] User functions
-- [ ] Add assign of variables.
+- [x] User functions
+- [x] Add assign of variables.
+- [x] `for` loop
 - [ ] Add `const` qualifier.
 - [ ] Add `return` expression.
-- [ ] `for` loop
 
 ### Metaprogramming
 
@@ -32,6 +32,8 @@ You will still have to write the logic for what the language does, it will "just
 ### Misc
 
 - [ ] Properly free values that are no longer used in the interpreter.
+- [ ] Currently `coerce_value` in `interpreter.cc` can fail if the value of the integer constant is too big for the destination type.
+      This should be checked at an earlier stage. The coercion in the interpreter is expected to never fail.
 
 ### Errors
 
