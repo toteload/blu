@@ -640,8 +640,37 @@ b32 TypeChecker::check_expression(
   } break;
 
   case Ast_for: {
-                  Todo();
-                } break;
+    auto node = source->nodes->data(node_index).for_;
+
+    TypeIndex iterable_type;
+    Try(check_expression(env, node.iterable, nullptr, &iterable_type));
+    Try(check_is_indexable(iterable_type, node.iterable));
+
+    auto ty = types->get(iterable_type);
+
+    TypeIndex element_type;
+    if (ty->kind == Type_array) {
+      element_type = ty->array.base_type;
+    } else if (ty->kind == Type_slice) {
+      element_type = ty->slice.base_type;
+    } else {
+      Assert(ty->kind == Type_sequence);
+      Todo();
+    }
+
+    auto env_loop = envs->alloc(env);
+    defer(envs->dealloc(env_loop));
+
+    auto iterator_token = source->nodes->data(node.iterator).identifier.token_index;
+    auto key            = intern_identifier(iterator_token);
+    env_loop->insert(key, {.kind = Declaration_of_value, .type = element_type});
+    annotations[node.iterator.idx] = element_type;
+
+    TypeIndex body_type;
+    Try(check_expression(env_loop, node.body, nullptr, &body_type));
+
+    result = types->type.nil;
+  } break;
 
   case Ast_assign:
   case Ast_unary_op:

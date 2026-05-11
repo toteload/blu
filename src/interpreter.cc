@@ -518,12 +518,62 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(call_function(env, callee, {args, arg_count}, result));
   } break;
 
+  case Ast_for: {
+    auto node = source->nodes.data(node_index).for_;
+
+    ValueIndex iterable_idx;
+    Try(eval_expr(env, node.iterable, &iterable_idx));
+
+    auto iterable      = values.get(iterable_idx);
+    auto iterable_type = types->get(iterable->type);
+
+    u64       count;
+    void     *items;
+    TypeIndex element_type;
+
+    if (iterable_type->kind == Type_array) {
+      count        = iterable_type->array.size;
+      items        = iterable->data;
+      element_type = iterable_type->array.base_type;
+    } else if (iterable_type->kind == Type_slice) {
+      auto slice   = cast<ValueSlice *>(iterable->data);
+      count        = slice->len;
+      items        = slice->items;
+      element_type = iterable_type->slice.base_type;
+    } else {
+      Unreachable();
+    }
+
+    auto elem_size_info = types->size_info(element_type);
+
+    auto iterator_token = source->nodes.data(node.iterator).identifier.token_index;
+    auto iter_str       = get_token_str(iterator_token);
+    auto iter_key       = source->strings.add(iter_str);
+
+    auto env_loop = envs.alloc(env);
+    defer(envs.dealloc(env_loop));
+
+    for (u64 i = 0; i < count; i++) {
+      Value *v;
+      auto   iter_value_idx = values.alloc_value(&v);
+      auto   data           = values.alloc_memory(elem_size_info);
+      memcpy(data, ptr_offset(items, i * elem_size_info.stride), elem_size_info.size);
+      *v = {.type = element_type, .data = data};
+
+      env_loop->insert(iter_key, iter_value_idx);
+
+      ValueIndex body_result;
+      Try(eval_expr(env_loop, node.body, &body_result));
+    }
+
+    *result = common.nil;
+  } break;
+
   case Ast_assign:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
   case Ast_unary_op:
-  case Ast_for:
   case Ast_break:
   case Ast_continue:
   case Ast_return:
