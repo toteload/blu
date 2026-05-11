@@ -1,5 +1,45 @@
 #include "blu.hh"
 
+struct TypeHint {
+  TypeIndex type;
+  NodeIndex location;
+};
+
+struct TypeChecker {
+  Messages                *messages;
+  TypeInterner            *types;
+  EnvManager<Declaration> *envs;
+  StringInterner          *strings;
+  Arena                   *work_arena;
+  ParsedSource            *source;
+
+  Slice<TypeIndex> annotations;
+
+  b32 typecheck();
+
+  b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
+
+  b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
+  b32 check_expression(
+    Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
+  );
+
+  b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
+  b32 check_unification(
+    NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
+  );
+
+  b32 check_is_of_type(NodeIndex at, TypeIndex type, TypeIndex expected_type);
+
+  b32 check_is_declaration_resolved(Declaration decl, NodeIndex at);
+  b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
+  b32 check_is_indexable(TypeIndex type, NodeIndex at);
+
+  StrKey intern_identifier(TokenIndex identifier);
+
+  b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
+};
+
 struct RootEnvPopulator {
   Env<Declaration> *env;
   StringInterner   *strings;
@@ -34,45 +74,6 @@ void RootEnvPopulator::populate() {
   insert(Declaration_of_value, STR("false"), types->type.bool_);
   // clang-format on
 }
-
-struct TypeHint {
-  TypeIndex type;
-  NodeIndex location;
-};
-
-struct TypeChecker {
-  Messages                *messages;
-  TypeInterner            *types;
-  EnvManager<Declaration> *envs;
-  StringInterner          *strings;
-  Arena                   *work_arena;
-  ParsedSource            *source;
-
-  Slice<TypeIndex> annotations;
-
-  b32 typecheck();
-
-  b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
-
-  b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
-  b32 check_expression(
-    Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
-  );
-
-  b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
-  b32 check_unification(
-    NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
-  );
-
-  b32 check_is_of_type(NodeIndex at, TypeIndex type, TypeIndex expected_type);
-
-  b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
-  b32 check_is_indexable(TypeIndex type, NodeIndex at);
-
-  StrKey intern_identifier(TokenIndex identifier);
-
-  b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
-};
 
 b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations) {
   TypeChecker checker = {
@@ -116,7 +117,7 @@ b32 TypeChecker::typecheck() {
     env->insert(
       key,
       {
-        .kind       = Declaration_of_undetermined,
+        .kind       = Declaration_unresolved,
         .node_index = root.items[i],
       }
     );
@@ -134,9 +135,12 @@ b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex decl_node)
   auto key  = intern_identifier(decl.name);
 
   Declaration existing;
-  if (env->lookup(key, &existing) && existing.kind != Declaration_of_undetermined) {
+  if (env->lookup(key, &existing) && existing.kind != Declaration_unresolved) {
     return true;
   }
+
+  // Mark as in-progress so recursive references during resolution can be detected as cycles.
+  env->insert(key, {.kind = Declaration_resolving, .node_index = decl_node});
 
   TypeIndex declared_type;
   Try(eval_type_expression(env, decl.type, &declared_type));
@@ -229,17 +233,19 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     result = types->add(&type);
   } break;
   case Ast_identifier: {
-    auto        token_index = source->nodes->data(node_index).identifier.token_index;
+    auto token_index = source->nodes->data(node_index).identifier.token_index;
 
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
 
-    if (decl.kind == Declaration_of_undetermined) {
+    if (decl.kind == Declaration_unresolved) {
       Try(resolve_declaration(env, decl.node_index));
       Try(find_identifier(env, token_index, &decl));
     }
 
+    Try(check_is_declaration_resolved(decl, node_index));
     Try(check_is_declaration_of_type(decl, node_index));
+
     result = decl.type;
   } break;
 
@@ -319,15 +325,17 @@ b32 TypeChecker::check_expression(
     result = types->add(&type);
   } break;
   case Ast_identifier: {
-    auto        token_index = source->nodes->data(node_index).identifier.token_index;
+    auto token_index = source->nodes->data(node_index).identifier.token_index;
 
     Declaration decl;
     Try(find_identifier(env, token_index, &decl));
 
-    if (decl.kind == Declaration_of_undetermined) {
+    if (decl.kind == Declaration_unresolved) {
       Try(resolve_declaration(env, decl.node_index));
       Try(find_identifier(env, token_index, &decl));
     }
+
+    Try(check_is_declaration_resolved(decl, node_index));
 
     switch (decl.kind) {
     case Declaration_of_value:
@@ -336,7 +344,8 @@ b32 TypeChecker::check_expression(
     case Declaration_of_type:
       result = types->type.type;
       break;
-    case Declaration_of_undetermined:
+    case Declaration_unresolved:
+    case Declaration_resolving:
       Unreachable();
       break;
     }
@@ -355,14 +364,17 @@ b32 TypeChecker::check_expression(
 
     if (param_count > 0 && !hint_type) {
       messages->error(
-        node_index, "Cannot infer function parameter types without a function-type annotation."
+        node_index,
+        "Cannot infer function parameter types without a function-type annotation."
       );
       return false;
     }
 
     if (hint_type && hint_type->function.param_count != param_count) {
       messages->error(
-        node_index, "Function literal has wrong number of parameters for type {type}.", hint->type
+        node_index,
+        "Function literal has wrong number of parameters for type {type}.",
+        hint->type
       );
       return false;
     }
@@ -605,13 +617,12 @@ b32 TypeChecker::check_expression(
       return false;
     }
 
-    u32 expected_param_count = ty->kind == Type_function ? ty->function.param_count
-                                                         : ty->literal_function.param_count;
+    u32 expected_param_count =
+      ty->kind == Type_function ? ty->function.param_count : ty->literal_function.param_count;
 
     if (node.args.len() != expected_param_count) {
-      messages->error(
-        node_index, "Wrong number of arguments to function of type {type}.", callee_type
-      );
+      messages
+        ->error(node_index, "Wrong number of arguments to function of type {type}.", callee_type);
       return false;
     }
 
@@ -624,8 +635,8 @@ b32 TypeChecker::check_expression(
       }
     }
 
-    result = ty->kind == Type_function ? ty->function.return_type
-                                       : ty->literal_function.return_type;
+    result =
+      ty->kind == Type_function ? ty->function.return_type : ty->literal_function.return_type;
   } break;
 
   case Ast_assign:
@@ -697,6 +708,15 @@ b32 TypeChecker::check_is_indexable(TypeIndex type, NodeIndex at) {
 
   messages->error(at, "Type is not indexable. Got type {type}.", type);
 
+  return false;
+}
+
+b32 TypeChecker::check_is_declaration_resolved(Declaration decl, NodeIndex at) {
+  if (decl.kind != Declaration_resolving) {
+    return true;
+  }
+
+  messages->error(at, "Circular declaration detected");
   return false;
 }
 

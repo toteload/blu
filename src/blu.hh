@@ -198,7 +198,8 @@ struct SourceUnit {
 enum DeclarationKind {
   Declaration_of_type,
   Declaration_of_value,
-  Declaration_of_undetermined,
+  Declaration_unresolved,
+  Declaration_resolving,
 };
 
 struct Declaration {

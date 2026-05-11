@@ -543,33 +543,58 @@ b32 Interpreter::eval_binary_op(
 
     Assert(left_type->is_integer_or_literal_int());
 
-    bool is_unsigned =
-      left_type->kind == Type_integer && left_type->integer.signedness == Unsigned;
+    bool is_unsigned = left_type->kind == Type_integer && left_type->integer.signedness == Unsigned;
 
     bool res;
     if (is_unsigned) {
       u64 a = get_as_u64(lhs);
       u64 b = get_as_u64(rhs);
       switch (op) {
-      case Cmp_equal:         res = a == b; break;
-      case Cmp_not_equal:     res = a != b; break;
-      case Cmp_less_than:     res = a < b;  break;
-      case Cmp_less_equal:    res = a <= b; break;
-      case Cmp_greater_than:  res = a > b;  break;
-      case Cmp_greater_equal: res = a >= b; break;
-      default: Unreachable();
+      case Cmp_equal:
+        res = a == b;
+        break;
+      case Cmp_not_equal:
+        res = a != b;
+        break;
+      case Cmp_less_than:
+        res = a < b;
+        break;
+      case Cmp_less_equal:
+        res = a <= b;
+        break;
+      case Cmp_greater_than:
+        res = a > b;
+        break;
+      case Cmp_greater_equal:
+        res = a >= b;
+        break;
+      default:
+        Unreachable();
       }
     } else {
       i64 a = get_as_i64(lhs);
       i64 b = get_as_i64(rhs);
       switch (op) {
-      case Cmp_equal:         res = a == b; break;
-      case Cmp_not_equal:     res = a != b; break;
-      case Cmp_less_than:     res = a < b;  break;
-      case Cmp_less_equal:    res = a <= b; break;
-      case Cmp_greater_than:  res = a > b;  break;
-      case Cmp_greater_equal: res = a >= b; break;
-      default: Unreachable();
+      case Cmp_equal:
+        res = a == b;
+        break;
+      case Cmp_not_equal:
+        res = a != b;
+        break;
+      case Cmp_less_than:
+        res = a < b;
+        break;
+      case Cmp_less_equal:
+        res = a <= b;
+        break;
+      case Cmp_greater_than:
+        res = a > b;
+        break;
+      case Cmp_greater_equal:
+        res = a >= b;
+        break;
+      default:
+        Unreachable();
       }
     }
 
