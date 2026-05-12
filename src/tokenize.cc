@@ -200,7 +200,6 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_if_match("const",    Tok_keyword_const);
 
     Return_if_match("#print",   Tok_builtin_print);
-    Return_if_match("#run",     Tok_builtin_run);
     // clang-format on
 
     Return_token(Tok_identifier);

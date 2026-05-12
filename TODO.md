@@ -45,7 +45,6 @@ You will still have to write the logic for what the language does, it will "just
 ### Metaprogramming
 
 - [ ] Add `const` qualifier.
-- [ ] Add `#run` builtin.
 
 ### Misc
 

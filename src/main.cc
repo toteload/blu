@@ -76,11 +76,9 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  //  if (settings.verbose) {
-  //    for (u32 i = 0; i < nodes.kinds.len(); i++) {
-  //      printf("%s\n", ast_kind_string(nodes.kinds[i]));
-  //    }
-  //  }
+  if (settings.verbose) {
+    ast_pretty_print(unit.text, &unit.tokens, &unit.nodes);
+  }
 
   ok = unit.typecheck();
   if (!ok) {

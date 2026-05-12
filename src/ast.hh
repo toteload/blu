@@ -25,12 +25,12 @@ enum AstKind : u8 {
   Ast_continue,
   Ast_return,
   Ast_defer,
+  Ast_const,
   Ast_kind_max,
 };
 
 enum BuiltinKind : u8 {
   Builtin_print,
-  Builtin_run,
 };
 
 enum BinaryOpKind : u8 {
@@ -61,10 +61,6 @@ enum BinaryOpKind : u8 {
   BinaryOpKind_max,
 };
 
-enum QualifierKind : u8 {
-  Qualifier_const = 1,
-};
-
 enum AssignKind : u8 {
   Assign_normal,
 
@@ -82,7 +78,6 @@ struct AstBuiltin {
   BuiltinKind kind;
   union {
     SegmentList<NodeIndex> args;
-    NodeIndex              expr;
   };
 };
 
@@ -101,7 +96,6 @@ struct AstTypeArray {
 };
 
 struct AstDeclaration {
-  u32        qualifiers;
   TokenIndex name;
   NodeIndex  type;
   NodeIndex  value;
@@ -189,6 +183,10 @@ struct AstAssign {
   NodeIndex  value;
 };
 
+struct AstConst {
+  NodeIndex expr;
+};
+
 union AstNodeData {
   AstRoot            root;
   AstBlock           block;
@@ -213,6 +211,7 @@ union AstNodeData {
   AstFor             for_;
   AstReturn          return_;
   AstDefer           defer;
+  AstConst const_;
 };
 
 struct AstNode {
@@ -277,7 +276,7 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",        "block",  "type-slice",       "type-array",  "type-function",  "builtin",
   "declaration", "assign", "literal-sequence", "literal-int", "literal-string", "identifier",
   "call",        "index",  "unary-op",         "binary-op",   "function",       "if-else",
-  "while",       "break",  "continue",         "return",      "defer",          "illegal",
+  "while",       "break",  "continue",         "return",      "defer", "const",          "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

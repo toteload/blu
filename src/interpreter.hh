@@ -36,6 +36,8 @@ struct Interpreter {
   void deinit();
 
   // `load` runs const code and sets up the root environment.
+  // this is to simulate compilation of the code.
+  // const values are saved and used when the program is run.
   bool load(InterpreterContext *context);
   bool run_main(ValueIndex *result);
 

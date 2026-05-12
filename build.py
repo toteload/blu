@@ -71,6 +71,7 @@ def create_build_ninja():
         'typecheck.cc',
         'messages.cc',
         'utils.cc',
+        'ast_pretty_print.cc',
         join('utils', 'stdlib.cc'),
     ]
 
@@ -104,6 +105,7 @@ def create_build_ninja():
                 'typecheck.cc',
                 'utils.cc',
                 'messages.cc',
+                'ast_pretty_print.cc',
                 join('utils', 'stdlib.cc'),
         ]],
         )

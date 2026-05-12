@@ -73,3 +73,4 @@ u32 decode_string_literal(Str literal, char *out) {
 
   return written;
 }
+

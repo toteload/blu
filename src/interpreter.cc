@@ -116,27 +116,6 @@ bool Interpreter::load(InterpreterContext *context) {
     Try(add_declaration(env_root, item_idx));
   }
 
-  for (u32 i = 0; i < nodes->len(); i++) {
-    NodeIndex node_index = {i};
-    auto      kind       = nodes->kind(node_index);
-
-    if (kind == Ast_declaration) {
-      auto decl = nodes->data(node_index).declaration;
-      if (decl.qualifiers & Qualifier_const) {
-        ValueIndex val;
-        Try(eval_expr(env_root, decl.value, &val));
-        computed_values.insert(node_index, val);
-      }
-    } else if (kind == Ast_builtin) {
-      auto builtin = nodes->data(node_index).builtin;
-      if (builtin.kind == Builtin_run) {
-        ValueIndex val;
-        Try(eval_expr(env_root, builtin.expr, &val));
-        computed_values.insert(node_index, val);
-      }
-    }
-  }
-
   return true;
 }
 
@@ -336,9 +315,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_builtin: {
     auto builtin = nodes->data(node_index).builtin;
     switch (builtin.kind) {
-    case Builtin_run:
-      Try(eval_expr(env, builtin.expr, result));
-      break;
     case Builtin_print: {
       ValueIndex arg_format;
       Try(eval_expr(env, builtin.args[0], &arg_format));
@@ -529,6 +505,12 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     ValueIndex e;
     Try(eval_expr(env, defer_.value, &e));
     *result = common.nil;
+  } break;
+
+  case Ast_const: { 
+    auto node = nodes->data(node_index);
+
+    Todo();
   } break;
 
   case Ast_call: {

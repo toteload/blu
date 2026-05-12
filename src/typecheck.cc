@@ -270,6 +270,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_continue:
   case Ast_return:
   case Ast_defer:
+                       case Ast_const:
   case Ast_kind_max:
   case Ast_root:
     Todo();
@@ -585,11 +586,6 @@ b32 TypeChecker::check_expression(
     auto builtin = source->nodes->data(node_index).builtin;
 
     switch (builtin.kind) {
-    case Builtin_run: {
-      TypeIndex expr_type;
-      Try(check_expression(env, builtin.expr, hint, &expr_type));
-      result = expr_type;
-    } break;
     case Builtin_print: {
       if (builtin.args.len() == 0) {
         messages->error(node_index, "#print needs at least one argument.");
@@ -610,6 +606,11 @@ b32 TypeChecker::check_expression(
     TypeIndex deferred_type;
     Try(check_expression(env, defer_.value, nullptr, &deferred_type));
     result = types->type.nil;
+  } break;
+
+  case Ast_const: {
+    auto node = source->nodes->data(node_index);
+    Try(check_expression(env, node.const_.expr, nullptr, &result));
   } break;
 
   case Ast_call: {

@@ -50,7 +50,6 @@ enum TokenKind : u8 {
   Tok_identifier,
 
   Tok_builtin_print,
-  Tok_builtin_run,
 
   Tok_line_comment,
 
@@ -115,7 +114,7 @@ constexpr char const *token_string[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "identifier",
-  "#print",       "#run",
+  "#print",       
   "line-comment",
 };
 

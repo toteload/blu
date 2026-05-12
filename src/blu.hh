@@ -230,3 +230,4 @@ b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> 
 void debug_print_type(TypeInterner *types, TypeIndex type);
 u32  string_literal_byte_size(Str literal);
 u32  decode_string_literal(Str literal, char *out);
+void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes);

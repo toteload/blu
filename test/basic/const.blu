@@ -1,10 +1,10 @@
 main : (): i32 = || {
   const x : i32 = {45 + 5} / 5
-  y : u32 = #run fac(10)
-  0
+  a : i32 = 0
+  const fac(x) - 3628800
 }
 
-fac : (u32): u32 = |n| {
+fac : (i32): i32 = |n| {
   if n == 0 {
     1
   } else {
