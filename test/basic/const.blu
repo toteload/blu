@@ -1,0 +1,13 @@
+main : (): i32 = || {
+  const x : i32 = {45 + 5} / 5
+  y : u32 = #run fac(10)
+  0
+}
+
+fac : (u32): u32 = |n| {
+  if n == 0 {
+    1
+  } else {
+    n * fac(n-1)
+  }
+}

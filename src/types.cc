@@ -117,8 +117,9 @@ TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
     return TypeSizeInfo::of_type<u8>();
   case Type_array:
     return TypeSizeInfo::of_type<void *>();
-  case Type_sequence:
   case Type_literal_int:
+    return TypeSizeInfo::of_type<i64>();
+  case Type_sequence:
   case Type_nil:
   case Type_never:
   case Type_distinct:

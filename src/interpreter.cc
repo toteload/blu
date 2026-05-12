@@ -86,14 +86,14 @@ bool Interpreter::load_root(SourceUnit *source) {
 
   Env<ValueIndex> *env_builtin = envs.alloc(nullptr);
   {
-    PopulateRootEnv populate = {
+    PopulateRootEnv populator = {
       .strings = &source->strings,
       .types   = &source->types,
       .values  = &values,
       .env     = env_builtin,
     };
 
-    populate.populate();
+    populator.populate();
   }
 
   env_root = envs.alloc(env_builtin);
@@ -106,6 +106,12 @@ bool Interpreter::load_root(SourceUnit *source) {
     auto item_idx = root.root.items[i];
     Try(add_declaration(env_root, item_idx));
   }
+
+  return true;
+}
+
+bool Interpreter::run_const_code() {
+  Assert(source);
 
   return true;
 }
@@ -199,6 +205,11 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
 
       if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
         *cast<i64 *>(out) = cast<i64>(*cast<i32 *>(v->data));
+        return true;
+      }
+    } else {
+      if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
+        *cast<u64 *>(out) = cast<u64>(*cast<u32 *>(v->data));
         return true;
       }
     }
@@ -306,6 +317,9 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_builtin: {
     auto builtin = nodes->data(node_index).builtin;
     switch (builtin.kind) {
+    case Builtin_run:
+      Try(eval_expr(env, builtin.expr, result));
+      break;
     case Builtin_print: {
       ValueIndex arg_format;
       Try(eval_expr(env, builtin.args[0], &arg_format));
@@ -724,17 +738,20 @@ b32 Interpreter::eval_binary_op(
 
       auto result_type = types->get(result_type_idx);
 
-      i64 min_value = int_value_min(result_type->integer.bitwidth);
-      i64 max_value = int_value_max(result_type->integer.bitwidth);
+      if (result_type->kind == Type_integer) {
+        i64 min_value = int_value_min(result_type->integer.bitwidth);
+        i64 max_value = int_value_max(result_type->integer.bitwidth);
 
-      if (res > max_value || res < min_value) {
-        Todo();
+        if (res > max_value || res < min_value) {
+          Todo();
+        }
       }
 
+      auto   size_info = types->size_info(result_type_idx);
       Value *v;
       auto   idx       = values.alloc_value(&v);
-      void  *data      = values.alloc_memory(types->size_info(result_type_idx));
-      u32    byte_size = result_type->integer.bitwidth / 8;
+      void  *data      = values.alloc_memory(size_info);
+      u32    byte_size = size_info.size;
       memcpy(data, &res, byte_size);
       *v = {
         .type = result_type_idx,
@@ -761,7 +778,37 @@ b32 Interpreter::eval_binary_op(
       }
       // clang-format on
 
-      Todo("unsigned int op: make sure nothing overflowed");
+      if (overflow) {
+        Todo();
+      }
+
+      TypeIndex result_type_idx;
+      types->unify(left->type, right->type, &result_type_idx);
+
+      auto result_type = types->get(result_type_idx);
+
+      if (result_type->kind == Type_integer) {
+        u64 max_value = uint_value_max(result_type->integer.bitwidth);
+
+        if (res > max_value) {
+          Todo();
+        }
+      }
+
+      auto   size_info = types->size_info(result_type_idx);
+      Value *v;
+      auto   idx       = values.alloc_value(&v);
+      void  *data      = values.alloc_memory(size_info);
+      u32    byte_size = size_info.size;
+      memcpy(data, &res, byte_size);
+      *v = {
+        .type = result_type_idx,
+        .data = data,
+      };
+
+      *result = idx;
+
+      return true;
     }
   } break;
   default:

@@ -15,6 +15,7 @@ struct Interpreter {
   void deinit();
 
   bool load_root(SourceUnit *source);
+  bool run_const_code();
   bool run_main(ValueIndex *result);
 
   OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {

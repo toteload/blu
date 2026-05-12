@@ -24,7 +24,7 @@ struct TypeChecker {
     Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
   );
 
-  b32 check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst);
+  b32 check_coercion(TypeIndex type_dst, TypeIndex type_src, NodeIndex node_index_src);
   b32 check_unification(
     NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
   );
@@ -166,7 +166,7 @@ b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex decl_node)
 
   TypeIndex value_type;
   Try(check_expression(env, decl.value, &hint, &value_type));
-  Try(check_coercion(decl.value, value_type, declared_type));
+  Try(check_coercion(declared_type, value_type, decl.value));
 
   return true;
 }
@@ -217,7 +217,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     Try(check_expression(env, array.size, nullptr, &size_type));
 
     // For now hardcode that the size must be a literal int.
-    Try(check_coercion(array.size, size_type, types->type.literal_int));
+    Try(check_coercion(types->type.literal_int, size_type, array.size));
 
     TypeIndex base_type;
     Try(eval_type_expression(env, array.base, &base_type));
@@ -399,7 +399,7 @@ b32 TypeChecker::check_expression(
     Try(check_expression(env_params, f.body, nullptr, &body_type));
 
     if (hint_type) {
-      Try(check_coercion(f.body, body_type, hint_type->function.return_type));
+      Try(check_coercion(hint_type->function.return_type, body_type, f.body));
       result = hint->type;
     } else {
       Type function_type = {
@@ -434,7 +434,7 @@ b32 TypeChecker::check_expression(
 
     TypeIndex cond_type;
     Try(check_expression(env, if_else.cond, nullptr, &cond_type));
-    Try(check_coercion(if_else.cond, cond_type, types->type.bool_));
+    Try(check_coercion(types->type.bool_, cond_type, if_else.cond));
 
     TypeIndex then_type;
     Try(check_expression(env, if_else.then, nullptr, &then_type));
@@ -473,7 +473,7 @@ b32 TypeChecker::check_expression(
     TypeIndex value_type;
     Try(check_expression(env, decl.value, &hint, &value_type));
 
-    Try(check_coercion(decl.value, value_type, declared_type));
+    Try(check_coercion(declared_type, value_type, decl.value));
 
     // TODO: You probably want a unification of the declared type and the actual type here.
 
@@ -519,7 +519,7 @@ b32 TypeChecker::check_expression(
 
     TypeIndex type_index_at;
     Try(check_expression(env, node.index_at, nullptr, &type_index_at));
-    Try(check_coercion(node.index_at, type_index_at, types->type.uint));
+    Try(check_coercion(types->type.uint, type_index_at, node.index_at));
 
     auto ty = types->get(type_indexable);
 
@@ -585,6 +585,11 @@ b32 TypeChecker::check_expression(
     auto builtin = source->nodes->data(node_index).builtin;
 
     switch (builtin.kind) {
+    case Builtin_run: {
+      TypeIndex expr_type;
+      Try(check_expression(env, builtin.expr, hint, &expr_type));
+      result = expr_type;
+    } break;
     case Builtin_print: {
       if (builtin.args.len() == 0) {
         messages->error(node_index, "#print needs at least one argument.");
@@ -593,7 +598,7 @@ b32 TypeChecker::check_expression(
 
       TypeIndex arg_type;
       Try(check_expression(env, builtin.args[0], nullptr, &arg_type));
-      Try(check_coercion(builtin.args[0], arg_type, types->type.slice_u8));
+      Try(check_coercion(types->type.slice_u8, arg_type, builtin.args[0]));
 
       result = types->type.nil;
     } break;
@@ -637,7 +642,7 @@ b32 TypeChecker::check_expression(
 
     for (u32 i = 0; i < node.args.len(); i++) {
       TypeHint type_hint_arg = {
-        .type = ty->function.param_types[i],
+        .type     = ty->function.param_types[i],
         .location = node.callee, // TODO improve this location
       };
 
@@ -645,7 +650,7 @@ b32 TypeChecker::check_expression(
       Try(check_expression(env, node.args[i], &type_hint_arg, &arg_type));
 
       if (ty->kind == Type_function) {
-        Try(check_coercion(node.args[i], arg_type, ty->function.param_types[i]));
+        Try(check_coercion(ty->function.param_types[i], arg_type, node.args[i]));
       }
     }
 
@@ -698,7 +703,7 @@ b32 TypeChecker::check_expression(
     TypeIndex value_type;
     Try(check_expression(env, node.value, nullptr, &value_type));
 
-    Try(check_coercion(node_index, value_type, lhs_type));
+    Try(check_coercion(lhs_type, value_type, node.value));
 
     result = types->type.nil;
   } break;
@@ -718,12 +723,12 @@ b32 TypeChecker::check_expression(
   return true;
 }
 
-b32 TypeChecker::check_coercion(NodeIndex location, TypeIndex type_src, TypeIndex type_dst) {
+b32 TypeChecker::check_coercion(TypeIndex type_dst, TypeIndex type_src, NodeIndex node_index_src) {
   if (types->is_coercible_to(type_src, type_dst)) {
     return true;
   }
 
-  messages->error(location, "Cannot coerce type {type} to {type}.", type_src, type_dst);
+  messages->error(node_index_src, "Cannot coerce type {type} to {type}.", type_src, type_dst);
 
   return false;
 }

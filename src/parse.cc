@@ -11,7 +11,6 @@ struct Parser {
   // -
 
   b32 parse_root(NodeIndex *out);
-  b32 parse_builtin_print(NodeIndex *out);
   b32 parse_block(NodeIndex *out);
   b32 parse_type(NodeIndex *out);
   b32 parse_declaration(NodeIndex *out);
@@ -28,6 +27,9 @@ struct Parser {
   b32 parse_base_expression(NodeIndex *out);
   b32 parse_expression(NodeIndex *out, u32 prev_op = Op_count);
   b32 parse_identifier(NodeIndex *out);
+
+  b32 parse_builtin_print(NodeIndex *out);
+  b32 parse_builtin_run(NodeIndex *out);
 
   // - Helpers -
 
@@ -177,6 +179,24 @@ b32 Parser::parse_builtin_print(NodeIndex *out) {
   return true;
 }
 
+b32 Parser::parse_builtin_run(NodeIndex *out) {
+  auto node_index = nodes->alloc();
+  auto start      = at;
+
+  Try(expect_token(Tok_builtin_run));
+
+  AstBuiltin builtin;
+  builtin.kind = Builtin_run;
+
+  Try(parse_expression(&builtin.expr));
+
+  nodes->set(node_index, {Ast_builtin, {start, at}, {.builtin = builtin}});
+
+  *out = node_index;
+
+  return true;
+}
+
 b32 Parser::parse_block(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
@@ -309,9 +329,15 @@ b32 Parser::parse_declaration(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
 
-  AstDeclaration declaration;
-
+  AstDeclaration declaration{};
   declaration.name = at;
+
+  TokenKind tok;
+  if (peek(&tok) && tok == Tok_keyword_const) {
+    next();
+    declaration.qualifiers |= Qualifier_const;
+  }
+
   Try(expect_token(Tok_identifier));
 
   Try(expect_token(Tok_colon));
@@ -609,7 +635,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   NodeIndex base;
   switch (tok) {
     // clang-format off
-  case Tok_keyword_for:      Try(parse_for(&base));          break;
+  case Tok_keyword_for:      Try(parse_for(&base));            break;
   case Tok_keyword_continue: Try(parse_continue(&base));       break;
   case Tok_keyword_break:    Try(parse_break(&base));          break;
   case Tok_keyword_return:   Try(parse_return(&base));         break;
@@ -618,11 +644,9 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_literal_int:      Try(parse_literal_int(&base));    break;
   case Tok_literal_string:   Try(parse_literal_string(&base)); break;
   case Tok_bar:              Try(parse_function(&base));       break;
+  case Tok_builtin_print:    Try(parse_builtin_print(&base));  break;
+  case Tok_builtin_run:      Try(parse_builtin_run(&base));    break;
     // clang-format on
-
-  case Tok_builtin_print: {
-    Try(parse_builtin_print(&base));
-  } break;
 
   case Tok_brace_open: {
     next();
@@ -642,6 +666,9 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
     }
   } break;
 
+  case Tok_keyword_const:
+    Try(parse_declaration(&base));
+    break;
   case Tok_identifier: {
     TokenKind tok2;
     if (peek2(&tok2) && tok2 == Tok_colon) {

@@ -30,6 +30,7 @@ enum AstKind : u8 {
 
 enum BuiltinKind : u8 {
   Builtin_print,
+  Builtin_run,
 };
 
 enum BinaryOpKind : u8 {
@@ -60,6 +61,10 @@ enum BinaryOpKind : u8 {
   BinaryOpKind_max,
 };
 
+enum QualifierKind : u8 {
+  Qualifier_const = 1,
+};
+
 enum AssignKind : u8 {
   Assign_normal,
 
@@ -77,6 +82,7 @@ struct AstBuiltin {
   BuiltinKind kind;
   union {
     SegmentList<NodeIndex> args;
+    NodeIndex              expr;
   };
 };
 
@@ -95,6 +101,7 @@ struct AstTypeArray {
 };
 
 struct AstDeclaration {
+  u32        qualifiers;
   TokenIndex name;
   NodeIndex  type;
   NodeIndex  value;

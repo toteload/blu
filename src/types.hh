@@ -42,48 +42,39 @@ struct TypeSizeInfo {
 };
 
 ttld_inline i64 int_value_min(u16 bitwidth) {
+  // clang-format off
   switch (bitwidth) {
-  case 8:
-    return INT8_MIN;
-  case 16:
-    return INT16_MIN;
-  case 32:
-    return INT32_MIN;
-  case 64:
-    return INT64_MIN;
-  default:
-    Unreachable();
+  case 8:  return INT8_MIN;
+  case 16: return INT16_MIN;
+  case 32: return INT32_MIN;
+  case 64: return INT64_MIN;
+  default: Unreachable();
   }
+  // clang-format on
 }
 
 ttld_inline i64 int_value_max(u16 bitwidth) {
+  // clang-format off
   switch (bitwidth) {
-  case 8:
-    return INT8_MAX;
-  case 16:
-    return INT16_MAX;
-  case 32:
-    return INT32_MAX;
-  case 64:
-    return INT64_MAX;
-  default:
-    Unreachable();
+  case 8:  return INT8_MAX;
+  case 16: return INT16_MAX;
+  case 32: return INT32_MAX;
+  case 64: return INT64_MAX;
+  default: Unreachable();
   }
+  // clang-format on
 }
 
 ttld_inline u64 uint_value_max(u16 bitwidth) {
+  // clang-format off
   switch (bitwidth) {
-  case 8:
-    return UINT8_MAX;
-  case 16:
-    return UINT16_MAX;
-  case 32:
-    return UINT32_MAX;
-  case 64:
-    return UINT64_MAX;
-  default:
-    Unreachable();
+  case 8:  return UINT8_MAX;
+  case 16: return UINT16_MAX;
+  case 32: return UINT32_MAX;
+  case 64: return UINT64_MAX;
+  default: Unreachable();
   }
+  // clang-format on
 }
 
 struct Type {
