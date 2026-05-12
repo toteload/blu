@@ -33,6 +33,10 @@ void SourceUnit::deinit() {
     node_types.deinit();
   }
 
+  if (stage > Stage_run_const_code) {
+    interpreter.deinit();
+  }
+
   memset(this, 0, sizeof(*this));
 }
 
@@ -104,9 +108,38 @@ bool SourceUnit::typecheck() {
     return false;
   }
 
+  stage = Stage_run_const_code;
+
+  return true;
+}
+
+bool SourceUnit::run_const_code() {
+  Assert(stage == Stage_run_const_code);
+
+  interpreter.init();
+
+  InterpreterContext context{};
+  context.types      = &types;
+  context.strings    = &strings;
+  context.messages   = &messages;
+  context.text       = text;
+  context.tokens     = &tokens;
+  context.nodes      = &nodes;
+  context.node_types = node_types.slice();
+
+  bool ok = interpreter.load(&context);
+  if (!ok) {
+    return false;
+  }
+
   stage = Stage_done;
 
   return true;
+}
+
+bool SourceUnit::run_main(ValueIndex *result) {
+  Assert(stage == Stage_done);
+  return interpreter.run_main(result);
 }
 
 void SourceUnit::print_messages() {

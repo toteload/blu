@@ -1,27 +1,6 @@
 #include "blu.hh"
 #include "utils/stdlib.hh"
 
-void Interpreter::init() {
-  work_arena.init(MiB(1));
-  values.init(stdlib_alloc);
-  envs.init(stdlib_alloc, stdlib_alloc);
-}
-
-void Interpreter::deinit() {
-  if (env_root) {
-    auto at = env_root;
-    while (at) {
-      auto parent = at->parent;
-      envs.dealloc(at);
-      at = parent;
-    }
-  }
-
-  envs.deinit();
-  values.deinit();
-  work_arena.deinit();
-}
-
 struct PopulateRootEnv {
   StringInterner  *strings;
   TypeInterner    *types;
@@ -70,16 +49,47 @@ void PopulateRootEnv::populate() {
   // clang-format on
 }
 
-bool Interpreter::load_root(SourceUnit *source) {
-  this->source = source;
+void Interpreter::init() {
+  work_arena.init(MiB(1));
+  values.init(stdlib_alloc);
+  envs.init(stdlib_alloc, stdlib_alloc);
+  computed_values.init(stdlib_alloc);
+}
+
+void Interpreter::deinit() {
+  if (env_root) {
+    auto at = env_root;
+    while (at) {
+      auto parent = at->parent;
+      envs.dealloc(at);
+      at = parent;
+    }
+  }
+
+  computed_values.deinit();
+  envs.deinit();
+  values.deinit();
+  work_arena.deinit();
+
+  memset(this, 0, sizeof(*this));
+}
+
+bool Interpreter::load(InterpreterContext *context) {
+  types      = context->types;
+  strings    = context->strings;
+  messages   = context->messages;
+  text       = context->text;
+  tokens     = context->tokens;
+  nodes      = context->nodes;
+  node_types = context->node_types;
 
   {
     Value *v;
     common.nil = values.alloc_value(&v);
     auto data  = values.alloc_data<TypeIndex>();
-    *data      = source->types.type.nil;
+    *data      = types->type.nil;
     *v         = {
-      .type = source->types.type.type,
+      .type = types->type.type,
       .data = data,
     };
   }
@@ -87,8 +97,8 @@ bool Interpreter::load_root(SourceUnit *source) {
   Env<ValueIndex> *env_builtin = envs.alloc(nullptr);
   {
     PopulateRootEnv populator = {
-      .strings = &source->strings,
-      .types   = &source->types,
+      .strings = strings,
+      .types   = types,
       .values  = &values,
       .env     = env_builtin,
     };
@@ -96,22 +106,36 @@ bool Interpreter::load_root(SourceUnit *source) {
     populator.populate();
   }
 
-  env_root = envs.alloc(env_builtin);
-
+  env_root           = envs.alloc(env_builtin);
   NodeIndex root_idx = {0};
-  Assert(source->nodes.kind(root_idx) == Ast_root);
+  Assert(nodes->kind(root_idx) == Ast_root);
 
-  auto root = source->nodes.data(root_idx);
+  auto root = nodes->data(root_idx);
   for (u32 i = 0; i < root.root.items.len(); i++) {
     auto item_idx = root.root.items[i];
     Try(add_declaration(env_root, item_idx));
   }
 
-  return true;
-}
+  for (u32 i = 0; i < nodes->len(); i++) {
+    NodeIndex node_index = {i};
+    auto      kind       = nodes->kind(node_index);
 
-bool Interpreter::run_const_code() {
-  Assert(source);
+    if (kind == Ast_declaration) {
+      auto decl = nodes->data(node_index).declaration;
+      if (decl.qualifiers & Qualifier_const) {
+        ValueIndex val;
+        Try(eval_expr(env_root, decl.value, &val));
+        computed_values.insert(node_index, val);
+      }
+    } else if (kind == Ast_builtin) {
+      auto builtin = nodes->data(node_index).builtin;
+      if (builtin.kind == Builtin_run) {
+        ValueIndex val;
+        Try(eval_expr(env_root, builtin.expr, &val));
+        computed_values.insert(node_index, val);
+      }
+    }
+  }
 
   return true;
 }
@@ -129,13 +153,13 @@ bool Interpreter::run_main(ValueIndex *result) {
     *t = {
       .kind     = Type_function,
       .function = {
-        .return_type = source->types.type.i32_,
+        .return_type = types->type.i32_,
         .param_count = 0,
         .param_types = {},
       },
     };
 
-    main_function_type = source->types.add(t);
+    main_function_type = types->add(t);
   }
 
   Try(call_function(env_root, main, {}, result));
@@ -145,8 +169,6 @@ bool Interpreter::run_main(ValueIndex *result) {
 
 // Assume: The coercion is always possible.
 bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
-  auto types = &source->types;
-
   auto v      = values.get(src);
   auto ty_src = types->get(v->type);
 
@@ -171,13 +193,13 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
       i64 min_value = int_value_min(bitwidth);
       i64 max_value = int_value_max(bitwidth);
       if (val < min_value || val > max_value) {
-        source->messages.error("integer constant out of range of destination type.");
+        messages->error("integer constant out of range of destination type.");
         return false;
       }
     } else {
       u64 max_value = uint_value_max(bitwidth);
       if (val < 0 || cast<u64>(val) > max_value) {
-        source->messages.error("integer constant out of range of destination type.");
+        messages->error("integer constant out of range of destination type.");
         return false;
       }
     }
@@ -265,9 +287,9 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
 }
 
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
-  Assert(source->nodes.kind(declaration) == Ast_declaration);
+  Assert(nodes->kind(declaration) == Ast_declaration);
 
-  auto decl = source->nodes.data(declaration).declaration;
+  auto decl = nodes->data(declaration).declaration;
 
   TypeIndex decl_type = get_type(decl.type);
 
@@ -276,7 +298,7 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 
   Value *v;
   auto   val  = values.alloc_value(&v);
-  auto   data = values.alloc_memory(source->types.size_info(decl_type));
+  auto   data = values.alloc_memory(types->size_info(decl_type));
   *v          = {
     .type = decl_type,
     .data = data,
@@ -285,7 +307,7 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Try(coerce_value(decl_type, decl_value, data));
 
   auto str = get_token_str(decl.name);
-  auto key = source->strings.add(str);
+  auto key = strings->add(str);
 
   env->insert(key, val);
 
@@ -293,9 +315,6 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 }
 
 b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result) {
-  auto nodes = &source->nodes;
-  auto types = &source->types;
-
   auto kind = nodes->kind(node_index);
 
   switch (kind) {
@@ -392,7 +411,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = lookup_identifier(env, node_index);
   } break;
   case Ast_if_else: {
-    auto if_else = source->nodes.data(node_index).if_else;
+    auto if_else = nodes->data(node_index).if_else;
 
     ValueIndex cond;
     Try(eval_expr(env, if_else.cond, &cond));
@@ -413,7 +432,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(add_declaration(env, node_index));
   } break;
   case Ast_binary_op: {
-    auto binop = source->nodes.data(node_index).binary_op;
+    auto binop = nodes->data(node_index).binary_op;
     auto op    = binop.kind;
 
     ValueIndex lhs;
@@ -428,7 +447,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     values.drop(rhs);
   } break;
   case Ast_literal_sequence: {
-    auto seq   = source->nodes.data(node_index).literal_sequence;
+    auto seq   = nodes->data(node_index).literal_sequence;
     auto count = seq.items.len();
 
     Value      *v;
@@ -447,7 +466,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = res;
   } break;
   case Ast_index: {
-    auto node = source->nodes.data(node_index).index;
+    auto node = nodes->data(node_index).index;
 
     ValueIndex idx_indexable;
     Try(eval_expr(env, node.indexable, &idx_indexable));
@@ -513,7 +532,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_call: {
-    auto call = source->nodes.data(node_index).call;
+    auto call = nodes->data(node_index).call;
 
     ValueIndex callee_idx;
     Try(eval_expr(env, call.callee, &callee_idx));
@@ -533,7 +552,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_for: {
-    auto node = source->nodes.data(node_index).for_;
+    auto node = nodes->data(node_index).for_;
 
     ValueIndex iterable_idx;
     Try(eval_expr(env, node.iterable, &iterable_idx));
@@ -560,9 +579,9 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     auto elem_size_info = types->size_info(element_type);
 
-    auto iterator_token = source->nodes.data(node.iterator).identifier.token_index;
+    auto iterator_token = nodes->data(node.iterator).identifier.token_index;
     auto iter_str       = get_token_str(iterator_token);
-    auto iter_key       = source->strings.add(iter_str);
+    auto iter_key       = strings->add(iter_str);
 
     auto env_loop = envs.alloc(env);
     defer(envs.dealloc(env_loop));
@@ -584,7 +603,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_assign: {
-    auto node = source->nodes.data(node_index).assign;
+    auto node = nodes->data(node_index).assign;
 
     Assert(node.kind == Assign_normal);
 
@@ -619,8 +638,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 b32 Interpreter::eval_binary_op(
   BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
 ) {
-  auto types = &source->types;
-
   switch (op) {
   case Cmp_equal:
   case Cmp_not_equal:
@@ -819,9 +836,9 @@ b32 Interpreter::eval_binary_op(
 }
 
 ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier) {
-  auto token_index = source->nodes.data(identifier).identifier.token_index;
+  auto token_index = nodes->data(identifier).identifier.token_index;
   auto str         = get_token_str(token_index);
-  auto key         = source->strings.add(str);
+  auto key         = strings->add(str);
 
   ValueIndex val;
   auto       found = env->lookup(key, &val);
@@ -834,7 +851,7 @@ ValueIndex Interpreter::lookup_identifier(Env<ValueIndex> *env, NodeIndex identi
 b32 Interpreter::eval_place(
   Env<ValueIndex> *env, NodeIndex node, void **out_ptr, TypeIndex *out_type
 ) {
-  auto kind = source->nodes.kind(node);
+  auto kind = nodes->kind(node);
 
   if (kind == Ast_identifier) {
     auto val  = lookup_identifier(env, node);
@@ -845,7 +862,7 @@ b32 Interpreter::eval_place(
   }
 
   if (kind == Ast_index) {
-    auto inode = source->nodes.data(node).index;
+    auto inode = nodes->data(node).index;
 
     void     *base_ptr;
     TypeIndex base_type;
@@ -855,7 +872,7 @@ b32 Interpreter::eval_place(
     Try(eval_expr(env, inode.index_at, &idx_value));
     u64 i = get_uint(idx_value);
 
-    auto      bt = source->types.get(base_type);
+    auto      bt = types->get(base_type);
     TypeIndex elem_type;
     void     *items;
     if (bt->kind == Type_array) {
@@ -869,7 +886,7 @@ b32 Interpreter::eval_place(
       Unreachable();
     }
 
-    auto elem_size_info = source->types.size_info(elem_type);
+    auto elem_size_info = types->size_info(elem_type);
     *out_ptr            = ptr_offset(items, i * elem_size_info.stride);
     *out_type           = elem_type;
     return true;
@@ -883,8 +900,8 @@ b32 Interpreter::call_function(
   Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
 ) {
   auto node_index    = *cast<NodeIndex *>(function->data);
-  auto function_node = source->nodes.data(node_index).function;
-  auto function_type = source->types.get(function->type);
+  auto function_node = nodes->data(node_index).function;
+  auto function_type = types->get(function->type);
 
   Assert(function_type->kind == Type_function);
   Assert(arguments.len() == function_type->function.param_count);
@@ -897,14 +914,14 @@ b32 Interpreter::call_function(
 
     Value *pv;
     auto   param_value_idx = values.alloc_value(&pv);
-    auto   data            = values.alloc_memory(source->types.size_info(param_type));
+    auto   data            = values.alloc_memory(types->size_info(param_type));
     *pv                    = {.type = param_type, .data = data};
     Try(coerce_value(param_type, arguments[i], data));
 
     auto param_node  = function_node.param_names[i];
-    auto token_index = source->nodes.data(param_node).identifier.token_index;
+    auto token_index = nodes->data(param_node).identifier.token_index;
     auto str         = get_token_str(token_index);
-    auto key         = source->strings.add(str);
+    auto key         = strings->add(str);
 
     env_args->insert(key, param_value_idx);
   }
@@ -916,7 +933,7 @@ b32 Interpreter::call_function(
 
   Value *v;
   *result   = values.alloc_value(&v);
-  auto data = values.alloc_memory(source->types.size_info(return_type_idx));
+  auto data = values.alloc_memory(types->size_info(return_type_idx));
   *v        = {.type = return_type_idx, .data = data};
 
   Try(coerce_value(return_type_idx, body_result, data));
@@ -924,17 +941,15 @@ b32 Interpreter::call_function(
   return true;
 }
 
-TypeIndex Interpreter::get_type(NodeIndex node_index) { return source->node_types[node_index.idx]; }
+TypeIndex Interpreter::get_type(NodeIndex node_index) { return node_types[node_index.idx]; }
 
 u64 Interpreter::get_uint(ValueIndex idx) {
   u64 res;
-  Try(coerce_value(source->types.type.uint, idx, &res));
+  Try(coerce_value(types->type.uint, idx, &res));
   return res;
 }
 
 void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
-  auto types = &source->types;
-
   usize i         = 0;
   u32   arg_index = 0;
   while (i < format.len()) {

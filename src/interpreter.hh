@@ -1,11 +1,32 @@
 #pragma once
 
+struct InterpreterContext {
+  TypeInterner   *types;
+  StringInterner *strings;
+  Messages       *messages;
+
+  Str              text;
+  Tokens          *tokens;
+  AstNodes        *nodes;
+  Slice<TypeIndex> node_types;
+};
+
 struct Interpreter {
   EnvManager<ValueIndex> envs;
   ValueStore             values;
   Arena                  work_arena;
   Env<ValueIndex>       *env_root;
-  SourceUnit            *source;
+
+  // Externally owned
+  TypeInterner    *types;
+  StringInterner  *strings;
+  Messages        *messages;
+  Str              text;
+  Tokens          *tokens;
+  AstNodes        *nodes;
+  Slice<TypeIndex> node_types;
+
+  HashMap<NodeIndex, ValueIndex, eq_node_index, hash_node_index> computed_values;
 
   struct {
     ValueIndex nil;
@@ -14,13 +35,13 @@ struct Interpreter {
   void init();
   void deinit();
 
-  bool load_root(SourceUnit *source);
-  bool run_const_code();
+  // `load` runs const code and sets up the root environment.
+  bool load(InterpreterContext *context);
   bool run_main(ValueIndex *result);
 
   OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {
     ValueIndex idx;
-    b32        found = env->lookup(source->strings.add(identifier), &idx);
+    b32        found = env->lookup(strings->add(identifier), &idx);
     if (!found) {
       return OptionalValueIndex::none();
     }
@@ -52,18 +73,18 @@ struct Interpreter {
   // Can read any signed integer type and convert it to i64.
   i64 get_as_i64(ValueIndex idx) {
     i64 res;
-    coerce_value(source->types.type.i64_, idx, &res);
+    coerce_value(types->type.i64_, idx, &res);
     return res;
   }
 
   // Can read any unsigned integer type and convert it to u64.
   u64 get_as_u64(ValueIndex idx) {
     i64 res;
-    coerce_value(source->types.type.u64_, idx, &res);
+    coerce_value(types->type.u64_, idx, &res);
     return res;
   }
 
   void populate_root_env(Env<ValueIndex> *env);
 
-  Str get_token_str(TokenIndex idx) { return ::get_token_str(source->text, &source->tokens, idx); }
+  Str get_token_str(TokenIndex idx) { return ::get_token_str(text, tokens, idx); }
 };

@@ -89,21 +89,21 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  Interpreter interpreter{};
-  interpreter.init();
-  defer(interpreter.deinit());
-
-  ok = interpreter.load_root(&unit);
+  ok = unit.run_const_code();
   if (!ok) {
+    printf("Const code evaluation error\n");
+    unit.print_messages();
     return 1;
   }
 
   ValueIndex result;
-  ok = interpreter.run_main(&result);
+  ok = unit.run_main(&result);
   if (!ok) {
+    printf("Runtime error\n");
+    unit.print_messages();
     return 1;
   }
 
-  i32 result_code = *cast<i32 *>(interpreter.values.get(result)->data);
+  i32 result_code = *cast<i32 *>(unit.interpreter.values.get(result)->data);
   return result_code;
 }

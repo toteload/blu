@@ -158,11 +158,14 @@ ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
   return text.sub(span.start, span.end);
 }
 
+#include "interpreter.hh"
+
 enum SourceUnitStage : u8 {
   Stage_init = 0,
   Stage_tokenize,
   Stage_parse,
   Stage_typecheck,
+  Stage_run_const_code,
   Stage_done,
 };
 
@@ -180,6 +183,8 @@ struct SourceUnit {
   StringInterner strings;
   TypeInterner   types;
 
+  Interpreter interpreter;
+
   Tokens            tokens;
   AstNodes          nodes;
   Vector<TypeIndex> node_types;
@@ -190,6 +195,8 @@ struct SourceUnit {
   bool tokenize();
   bool parse();
   bool typecheck();
+  bool run_const_code();
+  bool run_main(ValueIndex *result);
 
   void print_messages();
 };
@@ -219,8 +226,6 @@ struct TypeCheckContext {
 };
 
 b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> node_types);
-
-#include "interpreter.hh"
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
 u32  string_literal_byte_size(Str literal);
