@@ -265,6 +265,61 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
   return false;
 }
 
+TypeIndex Interpreter::slot_type(NodeIndex slot) {
+  if (slot.kind == NodeIndex_value) {
+    return values.get(ValueIndex{slot.idx})->type;
+  }
+  return get_type(slot);
+}
+
+b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
+  if (slot->is_none()) {
+    // This should never happen though
+    return true;
+  }
+
+  if (slot->kind == NodeIndex_value) {
+    ValueIndex val_idx{slot->idx};
+    Value     *v = values.get(val_idx);
+    if (v->type == dst_type) {
+      return true;
+    }
+    if (!types->is_coercible_to(v->type, dst_type)) {
+      return true;
+    }
+
+    Value *new_v;
+    auto   new_idx = values.alloc_value(&new_v);
+    auto   data    = values.alloc_memory(types->size_info(dst_type));
+    *new_v         = {.type = dst_type, .data = data};
+    Try(coerce_value(dst_type, val_idx, data));
+
+    *slot = NodeIndex{NodeIndex_value, new_idx.idx};
+    return true;
+  }
+
+  auto kind = nodes->kind(*slot);
+  switch (kind) {
+  case Ast_block: {
+    auto &block = nodes->datas[slot->idx].block;
+    if (block.items.len() == 0) {
+      return true;
+    }
+    return coerce_slot_to(&block.items[block.items.len() - 1], dst_type);
+  }
+  case Ast_if_else: {
+    auto &ie = nodes->datas[slot->idx].if_else;
+    Try(coerce_slot_to(&ie.then, dst_type));
+    if (ie.otherwise.is_some()) {
+      Try(coerce_slot_to(&ie.otherwise, dst_type));
+    }
+    return true;
+  }
+  default:
+    return true;
+  }
+}
+
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   Assert(nodes->kind(declaration) == Ast_declaration);
 
@@ -679,27 +734,38 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   } break;
 
   case Ast_binary_op: {
-    Try(const_walk(env, &nodes->datas[idx.idx].binary_op.lhs));
-    Try(const_walk(env, &nodes->datas[idx.idx].binary_op.rhs));
+    auto &bop = nodes->datas[idx.idx].binary_op;
+    Try(const_walk(env, &bop.lhs));
+    Try(const_walk(env, &bop.rhs));
 
-    auto lhs = nodes->data(idx).binary_op.lhs;
-    auto rhs = nodes->data(idx).binary_op.rhs;
-    if (lhs.kind == NodeIndex_value && rhs.kind == NodeIndex_value) {
+    if (bop.lhs.kind == NodeIndex_value && bop.rhs.kind == NodeIndex_value) {
       ValueIndex val;
       Try(eval_expr(env, idx, &val));
       *slot = NodeIndex{NodeIndex_value, val.idx};
+      break;
+    }
+
+    TypeIndex lhs_t = slot_type(bop.lhs);
+    TypeIndex rhs_t = slot_type(bop.rhs);
+    TypeIndex unified;
+    if (types->unify(lhs_t, rhs_t, &unified)) {
+      Try(coerce_slot_to(&bop.lhs, unified));
+      Try(coerce_slot_to(&bop.rhs, unified));
     }
   } break;
 
   case Ast_unary_op: {
-    Try(const_walk(env, &nodes->datas[idx.idx].unary_op.value));
+    auto &uop = nodes->datas[idx.idx].unary_op;
+    Try(const_walk(env, &uop.value));
 
-    auto v = nodes->data(idx).unary_op.value;
-    if (v.kind == NodeIndex_value) {
+    if (uop.value.kind == NodeIndex_value) {
       ValueIndex val;
       Try(eval_expr(env, idx, &val));
       *slot = NodeIndex{NodeIndex_value, val.idx};
+      break;
     }
+
+    Try(coerce_slot_to(&uop.value, get_type(idx)));
   } break;
 
   case Ast_cast: {
@@ -714,12 +780,14 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   } break;
 
   case Ast_index: {
-    Try(const_walk(env, &nodes->datas[idx.idx].index.indexable));
-    Try(const_walk(env, &nodes->datas[idx.idx].index.index_at));
+    auto &index_data = nodes->datas[idx.idx].index;
+    Try(const_walk(env, &index_data.indexable));
+    Try(const_walk(env, &index_data.index_at));
 
-    auto a = nodes->data(idx).index.indexable;
-    auto b = nodes->data(idx).index.index_at;
-    if (a.kind == NodeIndex_value && b.kind == NodeIndex_value) {
+    Try(coerce_slot_to(&index_data.index_at, types->type.uint));
+
+    if (index_data.indexable.kind == NodeIndex_value &&
+        index_data.index_at.kind == NodeIndex_value) {
       ValueIndex val;
       Try(eval_expr(env, idx, &val));
       *slot = NodeIndex{NodeIndex_value, val.idx};
@@ -743,15 +811,25 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   } break;
 
   case Ast_call: {
-    Try(const_walk(env, &nodes->datas[idx.idx].call.callee));
-    auto &args = nodes->datas[idx.idx].call.args;
-    for (u32 i = 0; i < args.len(); i++) {
-      Try(const_walk(env, &args[i]));
+    auto &call = nodes->datas[idx.idx].call;
+    Try(const_walk(env, &call.callee));
+    for (u32 i = 0; i < call.args.len(); i++) {
+      Try(const_walk(env, &call.args[i]));
+    }
+
+    TypeIndex callee_t = slot_type(call.callee);
+    Type     *ft       = types->get(callee_t);
+    if (ft->kind == Type_function) {
+      for (u32 i = 0; i < call.args.len(); i++) {
+        Try(coerce_slot_to(&call.args[i], ft->function.param_types[i]));
+      }
     }
   } break;
 
   case Ast_declaration: {
-    Try(const_walk(env, &nodes->datas[idx.idx].declaration.value));
+    auto &decl = nodes->datas[idx.idx].declaration;
+    Try(const_walk(env, &decl.value));
+    Try(coerce_slot_to(&decl.value, get_type(decl.type)));
   } break;
 
   case Ast_block: {
@@ -767,13 +845,28 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   case Ast_function: {
     auto env_fn = envs.alloc(env);
     defer(envs.dealloc(env_fn));
-    Try(const_walk(env_fn, &nodes->datas[idx.idx].function.body));
+    auto &fn = nodes->datas[idx.idx].function;
+    Try(const_walk(env_fn, &fn.body));
+
+    Type *ft = types->get(get_type(idx));
+    if (ft->kind == Type_function) {
+      Try(coerce_slot_to(&fn.body, ft->function.return_type));
+    }
   } break;
 
   case Ast_if_else: {
-    Try(const_walk(env, &nodes->datas[idx.idx].if_else.cond));
-    Try(const_walk(env, &nodes->datas[idx.idx].if_else.then));
-    Try(const_walk(env, &nodes->datas[idx.idx].if_else.otherwise));
+    auto &ie = nodes->datas[idx.idx].if_else;
+    Try(const_walk(env, &ie.cond));
+    Try(const_walk(env, &ie.then));
+    Try(const_walk(env, &ie.otherwise));
+
+    Try(coerce_slot_to(&ie.cond, types->type.bool_));
+
+    TypeIndex if_else_t = get_type(idx);
+    Try(coerce_slot_to(&ie.then, if_else_t));
+    if (ie.otherwise.is_some()) {
+      Try(coerce_slot_to(&ie.otherwise, if_else_t));
+    }
   } break;
 
   case Ast_for: {
@@ -792,7 +885,9 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   } break;
 
   case Ast_assign: {
-    Try(const_walk(env, &nodes->datas[idx.idx].assign.value));
+    auto &assign = nodes->datas[idx.idx].assign;
+    Try(const_walk(env, &assign.value));
+    Try(coerce_slot_to(&assign.value, get_type(assign.lhs)));
   } break;
 
   case Ast_builtin: {
@@ -801,6 +896,10 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
 
     for (u32 i = 0; i < builtin.args.len(); i++) {
       Try(const_walk(env, &builtin.args[i]));
+    }
+
+    if (builtin.args.len() > 0) {
+      Try(coerce_slot_to(&builtin.args[0], types->type.slice_u8));
     }
   } break;
 

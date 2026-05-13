@@ -2,6 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(python build.py)",
+      "Bash(python run_tests.py)",
       "Bash(out/blu test/basic/*.blu)",
       "Bash(out/blu -v test/basic/*.blu)",
       "Edit(/src/**/*.cc)",

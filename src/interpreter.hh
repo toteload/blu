@@ -70,6 +70,8 @@ struct Interpreter {
 
   b32  add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
   bool coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
+  b32  coerce_slot_to(NodeIndex *slot, TypeIndex dst_type);
+  TypeIndex slot_type(NodeIndex slot);
 
   u64 get_uint(ValueIndex idx);
 
