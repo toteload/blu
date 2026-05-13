@@ -53,7 +53,6 @@ void Interpreter::init() {
   work_arena.init(MiB(1));
   values.init(stdlib_alloc);
   envs.init(stdlib_alloc, stdlib_alloc);
-  computed_values.init(stdlib_alloc);
 }
 
 void Interpreter::deinit() {
@@ -66,7 +65,6 @@ void Interpreter::deinit() {
     }
   }
 
-  computed_values.deinit();
   envs.deinit();
   values.deinit();
   work_arena.deinit();
@@ -86,11 +84,9 @@ bool Interpreter::run_const_code(InterpreterContext *context) {
   {
     Value *v;
     common.nil = values.alloc_value(&v);
-    auto data  = values.alloc_data<TypeIndex>();
-    *data      = types->type.nil;
     *v         = {
-      .type = types->type.type,
-      .data = data,
+      .type = types->type.nil,
+      .data = nullptr,
     };
   }
 
@@ -107,13 +103,17 @@ bool Interpreter::run_const_code(InterpreterContext *context) {
   }
 
   env_root           = envs.alloc(env_builtin);
+
   NodeIndex root_idx = nodes->first_valid_index();
   Assert(nodes->kind(root_idx) == Ast_root);
 
-  auto root = nodes->data(root_idx);
-  for (u32 i = 0; i < root.root.items.len(); i++) {
-    auto item_idx = root.root.items[i];
-    Try(add_declaration(env_root, item_idx));
+  auto &root_items = nodes->datas[root_idx.idx].root.items;
+  for (u32 i = 0; i < root_items.len(); i++) {
+    Try(add_declaration(env_root, root_items[i]));
+  }
+
+  for (u32 i = 0; i < root_items.len(); i++) {
+    Try(const_walk(env_root, &root_items[i]));
   }
 
   return true;
@@ -294,6 +294,11 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 }
 
 b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result) {
+  if (node_index.kind == NodeIndex_value) {
+    *result = ValueIndex{node_index.idx};
+    return true;
+  }
+
   auto kind = nodes->kind(node_index);
 
   switch (kind) {
@@ -401,8 +406,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     } else {
       *result = common.nil;
     }
-
-    values.drop(cond);
   } break;
   case Ast_declaration: {
     Try(add_declaration(env, node_index));
@@ -418,9 +421,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     Try(eval_expr(env, binop.rhs, &rhs));
 
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
-
-    values.drop(lhs);
-    values.drop(rhs);
   } break;
   case Ast_literal_sequence: {
     auto seq   = nodes->data(node_index).literal_sequence;
@@ -508,9 +508,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_const: {
-    auto node = nodes->data(node_index);
-
-    Todo();
+    return eval_expr(env, nodes->data(node_index).const_.expr, result);
   } break;
 
   case Ast_call: {
@@ -612,6 +610,186 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_root:
     Todo();
     return false;
+  }
+
+  return true;
+}
+
+b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
+  if (slot->kind == NodeIndex_value || slot->is_none()) {
+    return true;
+  }
+
+  auto idx  = *slot;
+  auto kind = nodes->kind(idx);
+
+  switch (kind) {
+  case Ast_const: {
+    auto inner_slot = &nodes->datas[idx.idx].const_.expr;
+    Try(const_walk(env, inner_slot));
+
+    auto inner_idx = *inner_slot;
+    bool is_decl   = inner_idx.kind == NodeIndex_ast_node && inner_idx.is_some() &&
+                   nodes->kind(inner_idx) == Ast_declaration;
+
+    if (is_decl) {
+      Try(add_declaration(env, inner_idx));
+      *slot = NodeIndex{NodeIndex_value, common.nil.idx};
+    } else {
+      ValueIndex val;
+      Try(eval_expr(env, inner_idx, &val));
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_literal_int:
+  case Ast_literal_string: {
+    ValueIndex val;
+    Try(eval_expr(env, idx, &val));
+    *slot = NodeIndex{NodeIndex_value, val.idx};
+  } break;
+
+  case Ast_identifier: {
+    auto token_idx = nodes->data(idx).identifier.token_index;
+    auto str       = get_token_str(token_idx);
+    auto key       = strings->add(str);
+
+    ValueIndex val;
+    if (env->lookup(key, &val)) {
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_binary_op: {
+    Try(const_walk(env, &nodes->datas[idx.idx].binary_op.lhs));
+    Try(const_walk(env, &nodes->datas[idx.idx].binary_op.rhs));
+
+    auto lhs = nodes->data(idx).binary_op.lhs;
+    auto rhs = nodes->data(idx).binary_op.rhs;
+    if (lhs.kind == NodeIndex_value && rhs.kind == NodeIndex_value) {
+      ValueIndex val;
+      Try(eval_expr(env, idx, &val));
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_unary_op: {
+    Try(const_walk(env, &nodes->datas[idx.idx].unary_op.value));
+
+    auto v = nodes->data(idx).unary_op.value;
+    if (v.kind == NodeIndex_value) {
+      ValueIndex val;
+      Try(eval_expr(env, idx, &val));
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_index: {
+    Try(const_walk(env, &nodes->datas[idx.idx].index.indexable));
+    Try(const_walk(env, &nodes->datas[idx.idx].index.index_at));
+
+    auto a = nodes->data(idx).index.indexable;
+    auto b = nodes->data(idx).index.index_at;
+    if (a.kind == NodeIndex_value && b.kind == NodeIndex_value) {
+      ValueIndex val;
+      Try(eval_expr(env, idx, &val));
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_literal_sequence: {
+    auto &items     = nodes->datas[idx.idx].literal_sequence.items;
+    bool  all_const = true;
+    for (u32 i = 0; i < items.len(); i++) {
+      Try(const_walk(env, &items[i]));
+      if (items[i].kind != NodeIndex_value) {
+        all_const = false;
+      }
+    }
+    if (all_const) {
+      ValueIndex val;
+      Try(eval_expr(env, idx, &val));
+      *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_call: {
+    Try(const_walk(env, &nodes->datas[idx.idx].call.callee));
+    auto &args = nodes->datas[idx.idx].call.args;
+    for (u32 i = 0; i < args.len(); i++) {
+      Try(const_walk(env, &args[i]));
+    }
+  } break;
+
+  case Ast_declaration: {
+    Try(const_walk(env, &nodes->datas[idx.idx].declaration.value));
+  } break;
+
+  case Ast_block: {
+    auto env_block = envs.alloc(env);
+    defer(envs.dealloc(env_block));
+
+    auto &items = nodes->datas[idx.idx].block.items;
+    for (u32 i = 0; i < items.len(); i++) {
+      Try(const_walk(env_block, &items[i]));
+    }
+  } break;
+
+  case Ast_function: {
+    auto env_fn = envs.alloc(env);
+    defer(envs.dealloc(env_fn));
+    Try(const_walk(env_fn, &nodes->datas[idx.idx].function.body));
+  } break;
+
+  case Ast_if_else: {
+    Try(const_walk(env, &nodes->datas[idx.idx].if_else.cond));
+    Try(const_walk(env, &nodes->datas[idx.idx].if_else.then));
+    Try(const_walk(env, &nodes->datas[idx.idx].if_else.otherwise));
+  } break;
+
+  case Ast_for: {
+    Try(const_walk(env, &nodes->datas[idx.idx].for_.iterable));
+    auto env_for = envs.alloc(env);
+    defer(envs.dealloc(env_for));
+    Try(const_walk(env_for, &nodes->datas[idx.idx].for_.body));
+  } break;
+
+  case Ast_defer: {
+    Try(const_walk(env, &nodes->datas[idx.idx].defer.value));
+  } break;
+
+  case Ast_return: {
+    Try(const_walk(env, &nodes->datas[idx.idx].return_.value));
+  } break;
+
+  case Ast_assign: {
+    Try(const_walk(env, &nodes->datas[idx.idx].assign.value));
+  } break;
+
+  case Ast_builtin: {
+    auto &builtin = nodes->datas[idx.idx].builtin;
+    Assert(builtin.kind == Builtin_print);
+
+    for (u32 i = 0; i < builtin.args.len(); i++) {
+      Try(const_walk(env, &builtin.args[i]));
+    }
+  } break;
+
+  case Ast_root: {
+    auto &items = nodes->datas[idx.idx].root.items;
+    for (u32 i = 0; i < items.len(); i++) {
+      Try(const_walk(env, &items[i]));
+    }
+  } break;
+
+  case Ast_break:
+  case Ast_continue:
+  case Ast_type_slice:
+  case Ast_type_array:
+  case Ast_type_function:
+  case Ast_kind_max:
+                 Todo();
+    break;
   }
 
   return true;

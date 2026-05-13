@@ -76,10 +76,6 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  if (settings.verbose) {
-    ast_pretty_print(unit.text, &unit.tokens, &unit.nodes, unit.nodes.first_valid_index());
-  }
-
   ok = unit.typecheck();
   if (!ok) {
     printf("Typecheck error\n");
@@ -92,6 +88,10 @@ int main(i32 arg_count, char const *const *args) {
     printf("Const code evaluation error\n");
     unit.print_messages();
     return 1;
+  }
+
+  if (settings.verbose) {
+    ast_pretty_print(unit.text, &unit.tokens, &unit.types, &unit.interpreter.values, &unit.nodes, unit.nodes.first_valid_index());
   }
 
   ValueIndex result;

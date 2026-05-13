@@ -6,6 +6,7 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   u32 written = 0;
   u32 offset;
 
+#if 0
   offset    = snprintf(buf, buf_size, "(");
   buf      += offset;
   buf_size -= offset;
@@ -16,10 +17,11 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   buf_size -= offset;
   written  += offset;
 
-  offset    = snprintf(buf, buf_size, ") ");
+  offset    = snprintf(buf, buf_size, ")");
   buf      += offset;
   buf_size -= offset;
   written  += offset;
+#endif
 
   auto t = types->get(v->type);
 
@@ -32,18 +34,16 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
     buf_size -= offset;
     written  += offset;
   } break;
-  case Type_literal_function:
-  case Type_boolean:
-  case Type_function:
-  case Type_nil:
-  case Type_never:
-  case Type_slice:
-  case Type_array:
-  case Type_distinct:
-  case Type_sequence:
-  case Type_type:
-    Todo();
-    break;
+  case Type_boolean: { Todo(); } break;
+  case Type_literal_function: { Todo(); } break;
+  case Type_function: { written += snprintf(buf, buf_size, "<function TODO>"); } break;
+  case Type_nil: { written += snprintf(buf, buf_size, "nil"); } break;
+  case Type_never: { Todo(); } break;
+  case Type_slice: { Todo(); } break;
+  case Type_array: { Todo(); } break;
+  case Type_distinct: { Todo(); } break;
+  case Type_sequence: { Todo(); } break;
+  case Type_type: { written += snprintf(buf, buf_size, "<a type>"); } break;
   }
 
   return written;

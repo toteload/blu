@@ -48,16 +48,6 @@ struct ValueStore {
     return cast<T *>(alloc_memory(TypeSizeInfo::of_type<T>(), count));
   }
 
-  // `drop` frees up the slot in the item pool of values AND frees any payload memory it owns.
-  void drop(ValueIndex idx) {
-    // TODO
-  }
-
-  // `forget` frees up the slot in the item pool of values.
-  void forget(ValueIndex idx) {
-    // TODO
-  }
-
   Value *get(ValueIndex idx) { return pool.get(idx.idx); }
 
   // Returns the number of bytes written to `buf`.

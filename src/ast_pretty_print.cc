@@ -21,18 +21,16 @@ static char const *binary_op_src_string(BinaryOpKind kind) {
   case Cmp_less_equal:    return "<=";
   case Logical_and:       return "and";
   case Logical_or:        return "or";
-  case BinaryOpKind_max:  break;
+  default: return "?";
   }
-  return "?";
 }
 
 static char const *unary_op_src_string(UnaryOpKind kind) {
   switch (kind) {
   case Negate:          return "-";
   case Not:             return "!";
-  case UnaryOpKind_max: break;
+  default: return "?";
   }
-  return "?";
 }
 
 // Lower group binds tighter (matches parse.cc's op_precedence_group).
@@ -65,6 +63,8 @@ struct AstPrinter {
   Str       text;
   Tokens   *tokens;
   AstNodes *nodes;
+  TypeInterner *types;
+  ValueStore *values;
 
   Str token_str(TokenIndex idx) { return get_token_str(text, tokens, idx); }
 
@@ -104,6 +104,13 @@ struct AstPrinter {
 };
 
 void AstPrinter::print(NodeIndex node, u32 indent) {
+  if (node.kind == NodeIndex_value) {
+    char buf[256] = { 0};
+    u32 len = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
+    printf("%.*s", cast<int>(len), buf);
+    return;
+  }
+
   auto kind = nodes->kind(node);
   auto data = nodes->data(node);
 
@@ -299,7 +306,7 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
   }
 }
 
-void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes, NodeIndex idx) {
+void ast_pretty_print(Str text, Tokens *tokens, TypeInterner *types, ValueStore *values, AstNodes *nodes, NodeIndex idx) {
   if (nodes->len() == 0) {
     return;
   }
@@ -307,6 +314,8 @@ void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes, NodeIndex idx) 
   AstPrinter printer = {
     .text   = text,
     .tokens = tokens,
+    .types = types,
+    .values = values,
     .nodes  = nodes,
   };
 

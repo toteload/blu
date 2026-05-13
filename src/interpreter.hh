@@ -26,8 +26,6 @@ struct Interpreter {
   AstNodes        *nodes;
   Slice<TypeIndex> node_types;
 
-  HashMap<NodeIndex, ValueIndex, eq_node_index, hash_node_index> computed_values;
-
   struct {
     ValueIndex nil;
   } common;
@@ -58,6 +56,7 @@ struct Interpreter {
     Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
   );
   b32 eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result);
+  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
   b32 eval_binary_op(
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
