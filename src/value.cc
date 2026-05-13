@@ -1,26 +1,22 @@
 #include "blu.hh"
 
 u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, u32 buf_size) {
+  u32 buf_size_start = buf_size;
+
   Value *v = get(idx);
 
-  u32 written = 0;
-  u32 offset;
+#define Update(Code)                                                                               \
+  do {                                                                                             \
+    u32 _offset = (Code);                                                                          \
+    _offset = min(_offset, buf_size); \
+    buf      += _offset;                                                                         \
+    buf_size -= _offset;                                                                         \
+  } while (false)
 
 #if 1
-  offset    = snprintf(buf, buf_size, "(");
-  buf      += offset;
-  buf_size -= offset;
-  written  += offset;
-
-  offset    = types->type_to_string(v->type, buf, buf_size);
-  buf      += offset;
-  buf_size -= offset;
-  written  += offset;
-
-  offset    = snprintf(buf, buf_size, ")");
-  buf      += offset;
-  buf_size -= offset;
-  written  += offset;
+  Update(snprintf(buf, buf_size, "("));
+  Update(types->type_to_string(v->type, buf, buf_size));
+  Update(snprintf(buf, buf_size, ")"));
 #endif
 
   auto t = types->get(v->type);
@@ -29,22 +25,20 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   case Type_integer:
   case Type_literal_int: {
     i64 i     = *cast<i64 *>(v->data);
-    offset    = snprintf(buf, buf_size, "%lld", i);
-    buf      += offset;
-    buf_size -= offset;
-    written  += offset;
+    Update(snprintf(buf, buf_size, "%lld", i));
   } break;
   case Type_boolean: {
-    Todo();
+    u8 b     = *cast<u8 *>(v->data);
+    Update(snprintf(buf, buf_size, "%s", (b == 1) ? "true" : "false"));
   } break;
   case Type_literal_function: {
     Todo();
   } break;
   case Type_function: {
-    written += snprintf(buf, buf_size, "<function TODO>");
+    Update(snprintf(buf, buf_size, "<function TODO>"));
   } break;
   case Type_nil: {
-    written += snprintf(buf, buf_size, "nil");
+    Update(snprintf(buf, buf_size, "nil"));
   } break;
   case Type_never: {
     Todo();
@@ -62,9 +56,9 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
     Todo();
   } break;
   case Type_type: {
-    written += snprintf(buf, buf_size, "<a type>");
+    Update(snprintf(buf, buf_size, "<a type>"));
   } break;
   }
 
-  return written;
+  return buf_size_start - buf_size;
 }

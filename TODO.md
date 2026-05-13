@@ -58,6 +58,8 @@ You will still have to write the logic for what the language does, it will "just
 
 - [ ] Make the TypeIndex invalid value 0.
 - [ ] Make the TokenIndex invalid value 0.
+- [ ] Add tests to check that integer overflows are caught at runtime.
+- [ ] Add tests to check that out of range integer casts at runtime.
 - [ ] Properly free values that are no longer used in the interpreter.
 - [ ] Currently `coerce_value` in `interpreter.cc` can fail if the value of the integer constant is too big for the destination type.
       This should be checked at an earlier stage. The coercion in the interpreter is expected to never fail.
