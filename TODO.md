@@ -51,6 +51,8 @@ You will still have to write the logic for what the language does, it will "just
 
 ### Misc
 
+- [ ] Make the TypeIndex invalid value 0.
+- [ ] Make the TokenIndex invalid value 0.
 - [ ] Properly free values that are no longer used in the interpreter.
 - [ ] Currently `coerce_value` in `interpreter.cc` can fail if the value of the integer constant is too big for the destination type.
       This should be checked at an earlier stage. The coercion in the interpreter is expected to never fail.

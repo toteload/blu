@@ -65,45 +65,46 @@ struct AstPrinter {
   AstNodes *nodes;
   TypeInterner *types;
   ValueStore *values;
+  u32 indent;
 
   Str token_str(TokenIndex idx) { return get_token_str(text, tokens, idx); }
 
-  void print_indent(u32 indent) {
+  void print_indent() {
     for (u32 i = 0; i < indent; i++) {
       fputs("  ", stdout);
     }
   }
 
-  void print(NodeIndex node, u32 indent);
+  void print(NodeIndex node);
 
-  void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right, u32 indent) {
+  void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right) {
     if (nodes->kind(node) == Ast_binary_op) {
       u8   child_group = binop_prec_group(nodes->data(node).binary_op.kind);
       bool need_parens = child_group > parent_group ||
                          (child_group == parent_group && is_right);
       if (need_parens) {
         fputs("{", stdout);
-        print(node, indent);
+        print(node);
         fputs("}", stdout);
         return;
       }
     }
-    print(node, indent);
+    print(node);
   }
 
-  void print_unary_operand(NodeIndex node, u32 indent) {
+  void print_unary_operand(NodeIndex node) {
     auto kind = nodes->kind(node);
     if (kind == Ast_binary_op || kind == Ast_unary_op) {
       fputs("{", stdout);
-      print(node, indent);
+      print(node);
       fputs("}", stdout);
       return;
     }
-    print(node, indent);
+    print(node);
   }
 };
 
-void AstPrinter::print(NodeIndex node, u32 indent) {
+void AstPrinter::print(NodeIndex node) {
   if (node.kind == NodeIndex_value) {
     char buf[256] = { 0};
     u32 len = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
@@ -120,8 +121,8 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
       if (i > 0) {
         fputs("\n", stdout);
       }
-      print_indent(indent);
-      print(data.root.items[i], indent);
+      print_indent();
+      print(data.root.items[i]);
       fputs("\n", stdout);
     }
   } break;
@@ -132,25 +133,27 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
       break;
     }
     fputs("{\n", stdout);
+    indent += 1;
     for (u32 i = 0; i < data.block.items.len(); i++) {
-      print_indent(indent + 1);
-      print(data.block.items[i], indent + 1);
+      print_indent();
+      print(data.block.items[i]);
       fputs("\n", stdout);
     }
-    print_indent(indent);
+    indent -= 1;
+    print_indent();
     fputs("}", stdout);
   } break;
 
   case Ast_type_slice: {
     fputs("[]", stdout);
-    print(data.type_slice.base, indent);
+    print(data.type_slice.base);
   } break;
 
   case Ast_type_array: {
     fputs("[", stdout);
-    print(data.type_array.size, indent);
+    print(data.type_array.size);
     fputs("]", stdout);
-    print(data.type_array.base, indent);
+    print(data.type_array.base);
   } break;
 
   case Ast_type_function: {
@@ -159,10 +162,10 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.type_function.param_types[i], indent);
+      print(data.type_function.param_types[i]);
     }
     fputs("): ", stdout);
-    print(data.type_function.return_type, indent);
+    print(data.type_function.return_type);
   } break;
 
   case Ast_builtin: {
@@ -173,7 +176,7 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
         if (i > 0) {
           fputs(", ", stdout);
         }
-        print(data.builtin.args[i], indent);
+        print(data.builtin.args[i]);
       }
       fputs(")", stdout);
     } break;
@@ -183,21 +186,21 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
   case Ast_declaration: {
     auto name = token_str(data.declaration.name);
     printf("%.*s : ", cast<int>(name.len()), name.str);
-    print(data.declaration.type, indent);
+    print(data.declaration.type);
     fputs(" = ", stdout);
-    print(data.declaration.value, indent);
+    print(data.declaration.value);
   } break;
 
   case Ast_const: {
     fputs("const {", stdout);
-    print(data.const_.expr, indent);
+    print(data.const_.expr);
     fputs("}", stdout);
   } break;
 
   case Ast_assign: {
-    print(data.assign.lhs, indent);
+    print(data.assign.lhs);
     fputs(" = ", stdout);
-    print(data.assign.value, indent);
+    print(data.assign.value);
   } break;
 
   case Ast_literal_sequence: {
@@ -206,7 +209,7 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.literal_sequence.items[i], indent);
+      print(data.literal_sequence.items[i]);
     }
     fputs(" }", stdout);
   } break;
@@ -227,34 +230,34 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
   } break;
 
   case Ast_call: {
-    print(data.call.callee, indent);
+    print(data.call.callee);
     fputs("(", stdout);
     for (u32 i = 0; i < data.call.args.len(); i++) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.call.args[i], indent);
+      print(data.call.args[i]);
     }
     fputs(")", stdout);
   } break;
 
   case Ast_index: {
-    print(data.index.indexable, indent);
+    print(data.index.indexable);
     fputs("[", stdout);
-    print(data.index.index_at, indent);
+    print(data.index.index_at);
     fputs("]", stdout);
   } break;
 
   case Ast_unary_op: {
     fputs(unary_op_src_string(data.unary_op.kind), stdout);
-    print_unary_operand(data.unary_op.value, indent);
+    print_unary_operand(data.unary_op.value);
   } break;
 
   case Ast_binary_op: {
     u8 group = binop_prec_group(data.binary_op.kind);
-    print_binop_operand(data.binary_op.lhs, group, false, indent);
+    print_binop_operand(data.binary_op.lhs, group, false);
     printf(" %s ", binary_op_src_string(data.binary_op.kind));
-    print_binop_operand(data.binary_op.rhs, group, true, indent);
+    print_binop_operand(data.binary_op.rhs, group, true);
   } break;
 
   case Ast_function: {
@@ -263,37 +266,37 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.function.param_names[i], indent);
+      print(data.function.param_names[i]);
     }
     fputs("| ", stdout);
-    print(data.function.body, indent);
+    print(data.function.body);
   } break;
 
   case Ast_cast: {
     fputs("cast(", stdout);
-    print(data.cast.type_dst, indent);
-    fputs(")", stdout);
-    print(data.cast.value, indent);
+    print(data.cast.type_dst);
+    fputs(") ", stdout);
+    print(data.cast.value);
  } break;
 
   case Ast_if_else: {
     fputs("if ", stdout);
-    print(data.if_else.cond, indent);
+    print(data.if_else.cond);
     fputs(" ", stdout);
-    print(data.if_else.then, indent);
+    print(data.if_else.then);
     if (data.if_else.otherwise.is_some()) {
       fputs(" else ", stdout);
-      print(data.if_else.otherwise, indent);
+      print(data.if_else.otherwise);
     }
   } break;
 
   case Ast_for: {
     fputs("for ", stdout);
-    print(data.for_.iterable, indent);
+    print(data.for_.iterable);
     fputs(" do ", stdout);
-    print(data.for_.iterator, indent);
+    print(data.for_.iterator);
     fputs(" ", stdout);
-    print(data.for_.body, indent);
+    print(data.for_.body);
   } break;
 
   case Ast_break:    fputs("break", stdout); break;
@@ -301,12 +304,12 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
 
   case Ast_return: {
     fputs("return ", stdout);
-    print(data.return_.value, indent);
+    print(data.return_.value);
   } break;
 
   case Ast_defer: {
     fputs("defer ", stdout);
-    print(data.defer.value, indent);
+    print(data.defer.value);
   } break;
 
   case Ast_kind_max: break;
@@ -321,10 +324,11 @@ void ast_pretty_print(Str text, Tokens *tokens, TypeInterner *types, ValueStore 
   AstPrinter printer = {
     .text   = text,
     .tokens = tokens,
+    .nodes  = nodes,
     .types = types,
     .values = values,
-    .nodes  = nodes,
+    .indent = 0,
   };
 
-  printer.print(idx, 0);
+  printer.print(idx);
 }

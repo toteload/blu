@@ -29,8 +29,8 @@ struct TypeChecker {
     NodeIndex lhs, TypeIndex type_lhs, NodeIndex rhs, TypeIndex type_rhs, TypeIndex *result
   );
 
+  b32 check_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr);
   b32 check_is_of_type(NodeIndex at, TypeIndex type, TypeIndex expected_type);
-
   b32 check_is_declaration_resolved(Declaration decl, NodeIndex at);
   b32 check_is_declaration_of_type(Declaration decl, NodeIndex at);
   b32 check_is_indexable(TypeIndex type, NodeIndex at);
@@ -294,7 +294,16 @@ b32 TypeChecker::check_expression(
 
   switch (kind) {
   case Ast_cast: {
-    Todo();
+    auto node = source->nodes->data(node_index);
+
+  TypeIndex type_dst;
+  Try(eval_type_expression(env, node.cast.type_dst, &type_dst));
+
+    TypeIndex expr_type;
+    Try(check_expression(env, node.cast.value, nullptr, &expr_type));
+    Try(check_is_valid_cast(node_index, type_dst, expr_type));
+
+    result = type_dst;
   } break;
 
   case Ast_type_function: {
@@ -748,6 +757,23 @@ b32 TypeChecker::check_unification(
   }
 
   messages->error(lhs, "Cannot unify types {type} and {type}.", type_lhs, type_rhs);
+
+  return false;
+}
+
+b32 TypeChecker::check_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr) {
+  if (types->is_coercible_to(type_expr, type_dst)) {
+    return true;
+  }
+
+  Type *t_dst = types->get(type_dst);
+  Type *t_src = types->get(type_expr);
+
+  if (t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)) {
+    return true;
+  }
+
+  Todo();
 
   return false;
 }

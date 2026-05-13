@@ -303,7 +303,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
   switch (kind) {
   case Ast_cast: {
-    Todo();
     auto node = nodes->data(node_index).cast;
 
     TypeIndex type_dst = get_type(node.type_dst);
