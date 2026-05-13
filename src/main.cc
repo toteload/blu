@@ -91,7 +91,14 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   if (settings.verbose) {
-    ast_pretty_print(unit.text, &unit.tokens, &unit.types, &unit.interpreter.values, &unit.nodes, unit.nodes.first_valid_index());
+    ast_pretty_print(
+      unit.text,
+      &unit.tokens,
+      &unit.types,
+      &unit.interpreter.values,
+      &unit.nodes,
+      unit.nodes.first_valid_index()
+    );
   }
 
   ValueIndex result;

@@ -26,6 +26,8 @@ enum AstKind : u8 {
   Ast_return,
   Ast_defer,
   Ast_const,
+  Ast_cast,
+
   Ast_kind_max,
 };
 
@@ -160,11 +162,6 @@ struct AstIndex {
   NodeIndex index_at;
 };
 
-struct AstCast {
-  NodeIndex destination_type;
-  NodeIndex value;
-};
-
 struct AstReturn {
   NodeIndex value;
 };
@@ -187,6 +184,11 @@ struct AstConst {
   NodeIndex expr;
 };
 
+struct AstCast {
+  NodeIndex type_dst;
+  NodeIndex value;
+};
+
 union AstNodeData {
   AstRoot            root;
   AstBlock           block;
@@ -203,7 +205,6 @@ union AstNodeData {
   AstFieldAccess     access;
   AstCall            call;
   AstIndex           index;
-  AstCast            cast;
   AstUnaryOp         unary_op;
   AstBinaryOp        binary_op;
   AstFunction        function;
@@ -212,6 +213,7 @@ union AstNodeData {
   AstReturn          return_;
   AstDefer           defer;
   AstConst           const_;
+  AstCast            cast;
 };
 
 struct AstNode {
@@ -295,11 +297,11 @@ struct AstNodes {
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",        "block",  "type-slice",       "type-array",  "type-function",  "builtin",
-  "declaration", "assign", "literal-sequence", "literal-int", "literal-string", "identifier",
-  "call",        "index",  "unary-op",         "binary-op",   "function",       "if-else",
-  "while",       "break",  "continue",         "return",      "defer",          "const",
-  "illegal",
+  "root",        "block",   "type-slice",       "type-array",  "type-function",  "builtin",
+  "declaration", "assign",  "literal-sequence", "literal-int", "literal-string", "identifier",
+  "call",        "index",   "unary-op",         "binary-op",   "function",       "if-else",
+  "while",       "break",   "continue",         "return",      "defer",          "const",
+  "cast",        "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

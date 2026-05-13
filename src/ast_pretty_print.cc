@@ -269,6 +269,13 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
     print(data.function.body, indent);
   } break;
 
+  case Ast_cast: {
+    fputs("cast(", stdout);
+    print(data.cast.type_dst, indent);
+    fputs(")", stdout);
+    print(data.cast.value, indent);
+ } break;
+
   case Ast_if_else: {
     fputs("if ", stdout);
     print(data.if_else.cond, indent);

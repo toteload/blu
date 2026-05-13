@@ -25,6 +25,7 @@ struct Parser {
   b32 parse_defer(NodeIndex *out);
   b32 parse_if_else(NodeIndex *out);
   b32 parse_const(NodeIndex *out);
+  b32 parse_cast(NodeIndex *out);
   b32 parse_base_expression(NodeIndex *out);
   b32 parse_expression(NodeIndex *out, u32 prev_op = Op_count);
   b32 parse_identifier(NodeIndex *out);
@@ -625,6 +626,34 @@ b32 Parser::parse_const(NodeIndex *out) {
   return true;
 }
 
+b32 Parser::parse_cast(NodeIndex *out) {
+  auto node_index = nodes->alloc();
+  auto start      = at;
+
+  Try(expect_token(Tok_keyword_cast));
+
+  AstCast cast;
+
+  Try(expect_token(Tok_paren_open));
+  Try(parse_type(&cast.type_dst));
+  Try(expect_token(Tok_paren_close));
+
+  Try(parse_base_expression(&cast.value));
+
+  nodes->set(
+    node_index,
+    {
+      Ast_cast,
+      {start, at},
+      {.cast = cast},
+    }
+  );
+
+  *out = node_index;
+
+  return true;
+}
+
 b32 Parser::parse_base_expression(NodeIndex *out) {
   TokenKind tok;
   Try(peek(&tok));
@@ -643,6 +672,7 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_bar:              Try(parse_function(&base));       break;
   case Tok_builtin_print:    Try(parse_builtin_print(&base));  break;
   case Tok_keyword_const:    Try(parse_const(&base));          break;
+  case Tok_keyword_cast:     Try(parse_cast(&base));           break;
     // clang-format on
 
   case Tok_brace_open: {

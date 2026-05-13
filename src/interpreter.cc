@@ -102,7 +102,7 @@ bool Interpreter::run_const_code(InterpreterContext *context) {
     populator.populate();
   }
 
-  env_root           = envs.alloc(env_builtin);
+  env_root = envs.alloc(env_builtin);
 
   NodeIndex root_idx = nodes->first_valid_index();
   Assert(nodes->kind(root_idx) == Ast_root);
@@ -302,6 +302,18 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   auto kind = nodes->kind(node_index);
 
   switch (kind) {
+  case Ast_cast: {
+    Todo();
+    auto node = nodes->data(node_index).cast;
+
+    TypeIndex type_dst = get_type(node.type_dst);
+
+    ValueIndex val_idx;
+    Try(eval_expr(env, node.value, &val_idx));
+
+    Try(eval_cast(type_dst, val_idx, result));
+  } break;
+
   case Ast_literal_int: {
     auto token_index = nodes->data(node_index).literal_int.token_index;
     auto str         = get_token_str(token_index);
@@ -508,7 +520,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   } break;
 
   case Ast_const: {
-    return eval_expr(env, nodes->data(node_index).const_.expr, result);
+    Todo("should not exist at runtime");
+    // return eval_expr(env, nodes->data(node_index).const_.expr, result);
   } break;
 
   case Ast_call: {
@@ -630,7 +643,7 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
 
     auto inner_idx = *inner_slot;
     bool is_decl   = inner_idx.kind == NodeIndex_ast_node && inner_idx.is_some() &&
-                   nodes->kind(inner_idx) == Ast_declaration;
+                     nodes->kind(inner_idx) == Ast_declaration;
 
     if (is_decl) {
       Try(add_declaration(env, inner_idx));
@@ -681,6 +694,17 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
       ValueIndex val;
       Try(eval_expr(env, idx, &val));
       *slot = NodeIndex{NodeIndex_value, val.idx};
+    }
+  } break;
+
+  case Ast_cast: {
+    Try(const_walk(env, &nodes->datas[idx.idx].cast.value));
+
+    auto v = nodes->data(idx).cast.value;
+    if (v.kind == NodeIndex_value) {
+      ValueIndex e;
+      Try(eval_expr(env, idx, &e));
+      *slot = NodeIndex{NodeIndex_value, e.idx};
     }
   } break;
 
@@ -788,7 +812,7 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
   case Ast_type_array:
   case Ast_type_function:
   case Ast_kind_max:
-                 Todo();
+    Todo();
     break;
   }
 
@@ -1102,6 +1126,102 @@ b32 Interpreter::call_function(
 }
 
 TypeIndex Interpreter::get_type(NodeIndex node_index) { return node_types[node_index.idx]; }
+
+b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *result) {
+  Value *val = values.get(val_idx);
+
+  if (types->is_coercible_to(val->type, type_idx_dst)) {
+    Value *v;
+    *result = values.alloc_value(&v);
+
+    auto size_info = types->size_info(type_idx_dst);
+    auto data      = values.alloc_memory(size_info);
+
+    *v = {
+      .type = type_idx_dst,
+      .data = data,
+    };
+
+    return coerce_value(type_idx_dst, val_idx, data);
+  }
+
+  Type *type_dst = types->get(type_idx_dst);
+  Type *type_val = types->get(val->type);
+
+  if (type_dst->kind == Type_integer) {
+    if (type_val->kind == Type_integer) {
+      if (type_dst->integer.signedness == Signed && type_val->integer.signedness == Signed) {
+        i64 i = get_as_i64(val_idx);
+
+        i64 lo = int_value_min(type_dst->integer.bitwidth);
+        i64 hi = int_value_max(type_dst->integer.bitwidth);
+
+        if (i < lo || i > hi) {
+          Todo("invalid cast: value out of range");
+        }
+      } else if (
+        type_dst->integer.signedness == Unsigned && type_val->integer.signedness == Signed
+      ) {
+        i64 i = get_as_i64(val_idx);
+
+        if (i < 0) {
+          Todo("invalid cast: value out of range");
+        }
+
+        if (type_val->integer.bitwidth > type_dst->integer.bitwidth) {
+          u64 u = cast<u64>(i);
+
+          u64 hi = uint_value_max(type_dst->integer.bitwidth);
+
+          if (u > hi) {
+            Todo("invalid cast: value out of range");
+          }
+        }
+      } else if (
+        type_dst->integer.signedness == Signed && type_val->integer.signedness == Unsigned
+      ) {
+        u64 i = get_as_u64(val_idx);
+
+        u64 hi = cast<u64>(int_value_max(type_dst->integer.bitwidth));
+
+        if (i > hi) {
+          Todo("invalid cast: value out of range");
+        }
+      } else if (
+        type_dst->integer.signedness == Unsigned && type_val->integer.signedness == Unsigned
+      ) {
+        u64 i = get_as_u64(val_idx);
+
+        u64 hi = uint_value_max(type_dst->integer.bitwidth);
+
+        if (i > hi) {
+          Todo("invalid cast: value out of range");
+        }
+      } else {
+        Unreachable();
+      }
+
+      Value *v;
+      *result = values.alloc_value(&v);
+
+      auto size_info = types->size_info(type_idx_dst);
+      auto data      = values.alloc_memory(size_info);
+
+      *v = {
+        .type = type_idx_dst,
+        .data = data,
+      };
+
+      memcpy(data, val->data, size_info.size);
+
+      return true;
+    }
+  }
+
+  Todo();
+
+  return true;
+}
 
 u64 Interpreter::get_uint(ValueIndex idx) {
   u64 res;

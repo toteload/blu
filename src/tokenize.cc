@@ -198,6 +198,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_if_match("or",       Tok_keyword_or);
     Return_if_match("defer",    Tok_keyword_defer);
     Return_if_match("const",    Tok_keyword_const);
+    Return_if_match("cast",     Tok_keyword_cast);
 
     Return_if_match("#print",   Tok_builtin_print);
     // clang-format on

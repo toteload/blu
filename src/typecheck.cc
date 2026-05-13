@@ -272,6 +272,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_return:
   case Ast_defer:
   case Ast_const:
+  case Ast_cast:
   case Ast_kind_max:
   case Ast_root:
     Todo();
@@ -292,6 +293,10 @@ b32 TypeChecker::check_expression(
   TypeIndex result;
 
   switch (kind) {
+  case Ast_cast: {
+    Todo();
+  } break;
+
   case Ast_type_function: {
     auto f = source->nodes->data(node_index).type_function;
 

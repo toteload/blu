@@ -46,6 +46,7 @@ enum TokenKind : u8 {
   Tok_keyword_or,
   Tok_keyword_defer,
   Tok_keyword_const,
+  Tok_keyword_cast,
 
   Tok_identifier,
 
@@ -113,8 +114,9 @@ constexpr char const *token_string[Tok_kind_max] = {
   "break",        "continue",
   "return",       "and",
   "or",           "defer",
-  "const",        "identifier",
-  "#print",       "line-comment",
+  "const",        "cast",
+  "identifier",   "#print",
+  "line-comment",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {
