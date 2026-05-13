@@ -296,8 +296,8 @@ b32 TypeChecker::check_expression(
   case Ast_cast: {
     auto node = source->nodes->data(node_index);
 
-  TypeIndex type_dst;
-  Try(eval_type_expression(env, node.cast.type_dst, &type_dst));
+    TypeIndex type_dst;
+    Try(eval_type_expression(env, node.cast.type_dst, &type_dst));
 
     TypeIndex expr_type;
     Try(check_expression(env, node.cast.value, nullptr, &expr_type));
@@ -769,7 +769,9 @@ b32 TypeChecker::check_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex
   Type *t_dst = types->get(type_dst);
   Type *t_src = types->get(type_expr);
 
-  if (t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)) {
+  if (
+    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
+  ) {
     return true;
   }
 

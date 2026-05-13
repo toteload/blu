@@ -6,7 +6,7 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   u32 written = 0;
   u32 offset;
 
-#if 0
+#if 1
   offset    = snprintf(buf, buf_size, "(");
   buf      += offset;
   buf_size -= offset;

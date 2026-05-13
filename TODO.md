@@ -6,6 +6,10 @@ It is not compiled ahead of time.
 All checks are performed at runtime.
 You will still have to write the logic for what the language does, it will "just" be done at a different time compared to an AOT compiler.
 
+### In progress
+
+- Create coerced values for values that should be coerced.
+
 ### Basic
 
 - [x] `test\basic\main.blu`
@@ -21,8 +25,9 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\defer.blu`
 - [x] User functions
 - [x] Add assign of variables.
-- [ ] Add `cast`. Should only work for integers for now.
+- [x] Add `cast`. Should only work for integers for now.
 - [ ] Some form of encapsulation of declarations, think packages or modules.
+  - Use a toplevel package declaration to say what package you are part of.
 
 ### Control flow
 

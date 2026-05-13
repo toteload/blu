@@ -668,6 +668,12 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
 
     ValueIndex val;
     if (env->lookup(key, &val)) {
+      Value *v = values.get(val);
+      Type  *t = types->get(v->type);
+      if (t->kind == Type_literal_function || t->kind == Type_function) {
+        break;
+      }
+
       *slot = NodeIndex{NodeIndex_value, val.idx};
     }
   } break;
