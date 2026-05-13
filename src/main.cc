@@ -77,7 +77,7 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   if (settings.verbose) {
-    ast_pretty_print(unit.text, &unit.tokens, &unit.nodes);
+    ast_pretty_print(unit.text, &unit.tokens, &unit.nodes, unit.nodes.first_valid_index());
   }
 
   ok = unit.typecheck();

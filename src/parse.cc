@@ -567,7 +567,7 @@ b32 Parser::parse_if_else(NodeIndex *out) {
   TokenKind tok;
   Try(peek(&tok));
   if (tok != Tok_keyword_else) {
-    if_else.otherwise = OptionalNodeIndex::none();
+    if_else.otherwise = NodeIndex::none();
 
     nodes->set(
       node_index,
@@ -585,10 +585,7 @@ b32 Parser::parse_if_else(NodeIndex *out) {
 
   next();
 
-  NodeIndex otherwise;
-  Try(parse_block(&otherwise));
-
-  if_else.otherwise = OptionalNodeIndex::from_index(otherwise);
+  Try(parse_block(&if_else.otherwise));
 
   nodes->set(
     node_index,
@@ -612,7 +609,7 @@ b32 Parser::parse_const(NodeIndex *out) {
 
   AstConst const_;
 
-  Try(parse_expression(&const_.expr));
+  Try(parse_base_expression(&const_.expr));
 
   nodes->set(
     node_index,
@@ -665,7 +662,6 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
       return false;
     }
   } break;
-
 
   case Tok_identifier: {
     TokenKind tok2;

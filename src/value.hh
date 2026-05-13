@@ -1,10 +1,6 @@
 #include "option.hh"
 #include "arena_item_pool.hh"
 
-struct ValueIndexTag {};
-using ValueIndex         = Index<u32, ValueIndexTag>;
-using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
-
 struct ValueSlice {
   u64   len;
   void *items;

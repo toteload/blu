@@ -74,7 +74,7 @@ void Interpreter::deinit() {
   memset(this, 0, sizeof(*this));
 }
 
-bool Interpreter::load(InterpreterContext *context) {
+bool Interpreter::run_const_code(InterpreterContext *context) {
   types      = context->types;
   strings    = context->strings;
   messages   = context->messages;
@@ -107,7 +107,7 @@ bool Interpreter::load(InterpreterContext *context) {
   }
 
   env_root           = envs.alloc(env_builtin);
-  NodeIndex root_idx = {0};
+  NodeIndex root_idx = nodes->first_valid_index();
   Assert(nodes->kind(root_idx) == Ast_root);
 
   auto root = nodes->data(root_idx);
@@ -397,7 +397,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     if (*cast<u8 *>(v->data) == 1) {
       Try(eval_expr(env, if_else.then, result));
     } else if (if_else.otherwise.is_some()) {
-      Try(eval_expr(env, if_else.otherwise.as_index(), result));
+      Try(eval_expr(env, if_else.otherwise, result));
     } else {
       *result = common.nil;
     }
@@ -507,7 +507,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = common.nil;
   } break;
 
-  case Ast_const: { 
+  case Ast_const: {
     auto node = nodes->data(node_index);
 
     Todo();

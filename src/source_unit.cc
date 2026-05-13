@@ -103,7 +103,7 @@ bool SourceUnit::typecheck() {
     .nodes  = &nodes,
   };
 
-  bool ok = ::typecheck(&context, &source, node_types.slice());
+  bool ok = ::typecheck(&context, &source, node_types.slice(), nodes.first_valid_index());
   if (!ok) {
     return false;
   }
@@ -127,7 +127,7 @@ bool SourceUnit::run_const_code() {
   context.nodes      = &nodes;
   context.node_types = node_types.slice();
 
-  bool ok = interpreter.load(&context);
+  bool ok = interpreter.run_const_code(&context);
   if (!ok) {
     return false;
   }

@@ -182,8 +182,9 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
   } break;
 
   case Ast_const: {
-    fputs("const ", stdout);
+    fputs("const {", stdout);
     print(data.const_.expr, indent);
+    fputs("}", stdout);
   } break;
 
   case Ast_assign: {
@@ -268,7 +269,7 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
     print(data.if_else.then, indent);
     if (data.if_else.otherwise.is_some()) {
       fputs(" else ", stdout);
-      print(data.if_else.otherwise.as_index(), indent);
+      print(data.if_else.otherwise, indent);
     }
   } break;
 
@@ -298,7 +299,7 @@ void AstPrinter::print(NodeIndex node, u32 indent) {
   }
 }
 
-void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes) {
+void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes, NodeIndex idx) {
   if (nodes->len() == 0) {
     return;
   }
@@ -308,5 +309,6 @@ void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes) {
     .tokens = tokens,
     .nodes  = nodes,
   };
-  printer.print(NodeIndex{0}, 0);
+
+  printer.print(idx, 0);
 }

@@ -15,7 +15,7 @@ struct TypeChecker {
 
   Slice<TypeIndex> annotations;
 
-  b32 typecheck();
+  b32 typecheck(NodeIndex idx_root);
 
   b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
 
@@ -78,7 +78,9 @@ void RootEnvPopulator::populate() {
   // clang-format on
 }
 
-b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations) {
+b32 typecheck(
+  TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations, NodeIndex idx_root
+) {
   TypeChecker checker = {
     .messages    = context->messages,
     .types       = context->types,
@@ -89,12 +91,11 @@ b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> 
     .annotations = annotations,
   };
 
-  return checker.typecheck();
+  return checker.typecheck(idx_root);
 }
 
-b32 TypeChecker::typecheck() {
-  NodeIndex root_idx = {0};
-  Assert(source->nodes->kind(root_idx) == Ast_root);
+b32 TypeChecker::typecheck(NodeIndex idx_root) {
+  Assert(source->nodes->kind(idx_root) == Ast_root);
 
   auto env_root = envs->alloc(nullptr);
   {
@@ -109,7 +110,7 @@ b32 TypeChecker::typecheck() {
   auto env = envs->alloc(env_root);
 
   // Add all root level declarations to the environment.
-  auto root = source->nodes->data(root_idx).root;
+  auto root = source->nodes->data(idx_root).root;
   for (u32 i = 0; i < root.items.len(); i++) {
     Assert(source->nodes->kind(root.items[i]) == Ast_declaration);
 
@@ -270,7 +271,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_continue:
   case Ast_return:
   case Ast_defer:
-                       case Ast_const:
+  case Ast_const:
   case Ast_kind_max:
   case Ast_root:
     Todo();
@@ -446,7 +447,7 @@ b32 TypeChecker::check_expression(
     }
 
     TypeIndex otherwise_type;
-    Try(check_expression(env, if_else.otherwise.as_index(), nullptr, &otherwise_type));
+    Try(check_expression(env, if_else.otherwise, nullptr, &otherwise_type));
 
     TypeIndex final_type;
     if (types->is_coercible_to(then_type, otherwise_type)) {

@@ -21,6 +21,7 @@ You will still have to write the logic for what the language does, it will "just
 - [x] `test\basic\defer.blu`
 - [x] User functions
 - [x] Add assign of variables.
+- [ ] Add `cast`. Should only work for integers for now.
 - [ ] Some form of encapsulation of declarations, think packages or modules.
 
 ### Control flow
@@ -44,7 +45,9 @@ You will still have to write the logic for what the language does, it will "just
 
 ### Metaprogramming
 
-- [ ] Add `const` qualifier.
+- [ ] Add `const` expression.
+  - Similar to zig, this will run the expression at compile time. In order to weave the compile time evaluated values
+    into the AST I want to change `NodeIndex` such that it can refer to both AST nodes and values.
 
 ### Misc
 

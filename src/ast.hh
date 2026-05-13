@@ -123,9 +123,9 @@ struct AstFunction {
 };
 
 struct AstIfElse {
-  NodeIndex         cond;
-  NodeIndex         then;
-  OptionalNodeIndex otherwise;
+  NodeIndex cond;
+  NodeIndex then;
+  NodeIndex otherwise;
 };
 
 struct AstFor {
@@ -211,7 +211,7 @@ union AstNodeData {
   AstFor             for_;
   AstReturn          return_;
   AstDefer           defer;
-  AstConst const_;
+  AstConst           const_;
 };
 
 struct AstNode {
@@ -232,6 +232,10 @@ struct AstNodes {
     spans.init(vector_allocator);
     datas.init(vector_allocator);
 
+    kinds.push_empty();
+    spans.push_empty();
+    datas.push_empty();
+
     this->segment_allocator = segment_allocator;
   }
 
@@ -243,10 +247,21 @@ struct AstNodes {
     memset(this, 0, sizeof(*this));
   }
 
+  NodeIndex first_valid_index() const {
+    return {
+      .kind = NodeIndex_ast_node,
+      .idx  = 1,
+    };
+  }
+
   usize len() { return kinds.len(); }
 
   NodeIndex alloc() {
-    NodeIndex res = {cast<u32>(kinds.len())};
+    NodeIndex res = {
+      .kind = NodeIndex_ast_node,
+      .idx  = cast<u32>(kinds.len()),
+    };
+
     kinds.push_empty();
     spans.push_empty();
     datas.push_empty();
@@ -254,16 +269,23 @@ struct AstNodes {
   }
 
   void set(NodeIndex idx, AstNode node) {
+    Debug_assert(idx.kind == NodeIndex_ast_node && idx.is_some());
+
     kinds[idx.idx] = node.kind;
     spans[idx.idx] = node.span;
     datas[idx.idx] = node.data;
   }
 
   NodeIndex add(AstNode node) {
-    NodeIndex res = {cast<u32>(kinds.len())};
+    NodeIndex res = {
+      .kind = NodeIndex_ast_node,
+      .idx  = cast<u32>(kinds.len()),
+    };
+
     kinds.push(node.kind);
     spans.push(node.span);
     datas.push(node.data);
+
     return res;
   }
 
@@ -276,7 +298,8 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",        "block",  "type-slice",       "type-array",  "type-function",  "builtin",
   "declaration", "assign", "literal-sequence", "literal-int", "literal-string", "identifier",
   "call",        "index",  "unary-op",         "binary-op",   "function",       "if-else",
-  "while",       "break",  "continue",         "return",      "defer", "const",          "illegal",
+  "while",       "break",  "continue",         "return",      "defer",          "const",
+  "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {

@@ -35,10 +35,11 @@ struct Interpreter {
   void init();
   void deinit();
 
-  // `load` runs const code and sets up the root environment.
+  // `run_const_code` runs const code and sets up the root environment.
   // this is to simulate compilation of the code.
   // const values are saved and used when the program is run.
-  bool load(InterpreterContext *context);
+  bool run_const_code(InterpreterContext *context);
+
   bool run_main(ValueIndex *result);
 
   OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {

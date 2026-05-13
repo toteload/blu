@@ -114,8 +114,7 @@ constexpr char const *token_string[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "identifier",
-  "#print",       
-  "line-comment",
+  "#print",       "line-comment",
 };
 
 ttld_inline char const *token_kind_string(u32 kind) {

@@ -13,13 +13,34 @@
 
 typedef u32 SourceIdx;
 
-struct AstNodeTag {};
-using NodeIndex         = Index<u32, AstNodeTag>;
-using OptionalNodeIndex = OptionalIndex<u32, AstNodeTag>;
+struct ValueIndexTag {};
+using ValueIndex         = Index<u32, ValueIndexTag>;
+using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
+
+enum NodeIndexKind : u8 {
+  NodeIndex_ast_node,
+  NodeIndex_value,
+};
+
+struct NodeIndex {
+  NodeIndexKind kind;
+
+  // A value of 0 means not valid or nil.
+  u32 idx;
+
+  bool is_some() const { return idx != 0; }
+  bool is_none() const { return idx == 0; }
+
+  static NodeIndex none() {
+    return {
+      .kind = NodeIndex_ast_node, // The kind is invalid if `idx == 0`.
+      .idx  = 0,
+    };
+  }
+};
 
 struct TypeIndexTag {};
-using TypeIndex         = Index<u32, TypeIndexTag>;
-using OptionalTypeIndex = OptionalIndex<u32, TypeIndexTag>;
+using TypeIndex = Index<u32, TypeIndexTag>;
 
 // -[ Source location ]-
 
@@ -70,8 +91,12 @@ struct ParseContext {
 
 b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *out);
 
-ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) { return a == b; }
-ttld_inline u32 hash_node_index(void *context, NodeIndex a) { return a.inner(); }
+ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) {
+  return a.kind == b.kind && a.idx == b.idx;
+}
+ttld_inline u32 hash_node_index(void *context, NodeIndex a) {
+  return (cast<u32>(a.kind) << 30) | a.idx;
+}
 
 #include "value.hh"
 #include "env.hh"
@@ -225,9 +250,11 @@ struct TypeCheckContext {
   Arena                   *work_arena;
 };
 
-b32 typecheck(TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> node_types);
+b32 typecheck(
+  TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> node_types, NodeIndex idx
+);
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
 u32  string_literal_byte_size(Str literal);
 u32  decode_string_literal(Str literal, char *out);
-void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes);
+void ast_pretty_print(Str text, Tokens *tokens, AstNodes *nodes, NodeIndex idx);
