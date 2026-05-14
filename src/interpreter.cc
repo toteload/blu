@@ -15,8 +15,8 @@ struct PopulateRootEnv {
     auto   data = values->alloc_data<T>();
     *data       = val;
     *v          = {
-      .type = type,
-      .data = data,
+               .type = type,
+               .data = data,
     };
 
     env->insert(key, idx);
@@ -85,8 +85,8 @@ bool Interpreter::run_const_code(InterpreterContext *context) {
     Value *v;
     common.nil = values.alloc_value(&v);
     *v         = {
-      .type = types->type.nil,
-      .data = nullptr,
+              .type = types->type.nil,
+              .data = nullptr,
     };
   }
 
@@ -334,8 +334,8 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
   auto   val  = values.alloc_value(&v);
   auto   data = values.alloc_memory(types->size_info(decl_type));
   *v          = {
-    .type = decl_type,
-    .data = data,
+             .type = decl_type,
+             .data = data,
   };
 
   Try(coerce_value(decl_type, decl_value, data));
@@ -450,8 +450,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     auto data = values.alloc_data<NodeIndex>();
     *data     = node_index;
     *v        = {
-      .type = get_type(node_index),
-      .data = data,
+             .type = get_type(node_index),
+             .data = data,
     };
   } break;
   case Ast_identifier: {
@@ -697,7 +697,7 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
 
     auto inner_idx = *inner_slot;
     bool is_decl   = inner_idx.kind == NodeIndex_ast_node && inner_idx.is_some() &&
-                     nodes->kind(inner_idx) == Ast_declaration;
+                   nodes->kind(inner_idx) == Ast_declaration;
 
     if (is_decl) {
       Try(add_declaration(env, inner_idx));
@@ -1263,9 +1263,8 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
         if (i < lo || i > hi) {
           Todo("invalid cast: value out of range");
         }
-      } else if (
-        type_dst->integer.signedness == Unsigned && type_val->integer.signedness == Signed
-      ) {
+      } else if (type_dst->integer.signedness == Unsigned &&
+                 type_val->integer.signedness == Signed) {
         i64 i = get_as_i64(val_idx);
 
         if (i < 0) {
@@ -1281,9 +1280,8 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
             Todo("invalid cast: value out of range");
           }
         }
-      } else if (
-        type_dst->integer.signedness == Signed && type_val->integer.signedness == Unsigned
-      ) {
+      } else if (type_dst->integer.signedness == Signed &&
+                 type_val->integer.signedness == Unsigned) {
         u64 i = get_as_u64(val_idx);
 
         u64 hi = cast<u64>(int_value_max(type_dst->integer.bitwidth));
@@ -1291,9 +1289,8 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
         if (i > hi) {
           Todo("invalid cast: value out of range");
         }
-      } else if (
-        type_dst->integer.signedness == Unsigned && type_val->integer.signedness == Unsigned
-      ) {
+      } else if (type_dst->integer.signedness == Unsigned &&
+                 type_val->integer.signedness == Unsigned) {
         u64 i = get_as_u64(val_idx);
 
         u64 hi = uint_value_max(type_dst->integer.bitwidth);
@@ -1340,10 +1337,8 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
     char c = format[i];
 
     // "{{}}" — emit a verbatim "{}"
-    if (
-      c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
-      format[i + 3] == '}'
-    ) {
+    if (c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
+        format[i + 3] == '}') {
       fputs("{}", stdout);
       i += 4;
       continue;
@@ -1392,10 +1387,8 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
         fputs(val ? "true" : "false", stdout);
       } break;
       case Type_slice: {
-        if (
-          types->get(t->slice.base_type)->kind == Type_integer &&
-          types->get(t->slice.base_type)->integer.bitwidth == 8
-        ) {
+        if (types->get(t->slice.base_type)->kind == Type_integer &&
+            types->get(t->slice.base_type)->integer.bitwidth == 8) {
           auto s = cast<ValueSlice *>(v->data);
           printf("%.*s", cast<int>(s->len), cast<char const *>(s->items));
         } else {

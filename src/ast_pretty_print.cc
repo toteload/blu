@@ -2,35 +2,39 @@
 #include <stdio.h>
 
 static char const *binary_op_src_string(BinaryOpKind kind) {
+  // clang-format off
   switch (kind) {
-  case Mul:               return "*";
-  case Div:               return "/";
-  case Mod:               return "%";
-  case Sub:               return "-";
-  case Add:               return "+";
-  case Bit_shift_left:    return "<<";
-  case Bit_shift_right:   return ">>";
-  case Bit_and:           return "&";
-  case Bit_or:            return "|";
-  case Bit_xor:           return "^";
-  case Cmp_equal:         return "==";
-  case Cmp_not_equal:     return "!=";
-  case Cmp_greater_than:  return ">";
+  case Mul: return "*";
+  case Div: return "/";
+  case Mod: return "%";
+  case Sub: return "-";
+  case Add: return "+";
+  case Bit_shift_left: return "<<";
+  case Bit_shift_right: return ">>";
+  case Bit_and: return "&";
+  case Bit_or: return "|";
+  case Bit_xor: return "^";
+  case Cmp_equal: return "==";
+  case Cmp_not_equal: return "!=";
+  case Cmp_greater_than: return ">";
   case Cmp_greater_equal: return ">=";
-  case Cmp_less_than:     return "<";
-  case Cmp_less_equal:    return "<=";
-  case Logical_and:       return "and";
-  case Logical_or:        return "or";
+  case Cmp_less_than: return "<";
+  case Cmp_less_equal: return "<=";
+  case Logical_and: return "and";
+  case Logical_or: return "or";
   default: return "?";
   }
+  // clang-format on
 }
 
 static char const *unary_op_src_string(UnaryOpKind kind) {
+  // clang-format off
   switch (kind) {
-  case Negate:          return "-";
-  case Not:             return "!";
+  case Negate: return "-";
+  case Not: return "!";
   default: return "?";
   }
+  // clang-format on
 }
 
 // Lower group binds tighter (matches parse.cc's op_precedence_group).
@@ -38,34 +42,41 @@ static u8 binop_prec_group(BinaryOpKind kind) {
   switch (kind) {
   case Mul:
   case Div:
-  case Mod:               return 10;
+  case Mod:
+    return 10;
   case Sub:
-  case Add:               return 20;
+  case Add:
+    return 20;
   case Bit_shift_left:
-  case Bit_shift_right:   return 30;
+  case Bit_shift_right:
+    return 30;
   case Bit_and:
   case Bit_or:
-  case Bit_xor:           return 40;
+  case Bit_xor:
+    return 40;
   case Cmp_equal:
   case Cmp_not_equal:
   case Cmp_greater_than:
   case Cmp_greater_equal:
   case Cmp_less_than:
-  case Cmp_less_equal:    return 50;
+  case Cmp_less_equal:
+    return 50;
   case Logical_and:
-  case Logical_or:        return 60;
-  case BinaryOpKind_max:  break;
+  case Logical_or:
+    return 60;
+  case BinaryOpKind_max:
+    break;
   }
   return 255;
 }
 
 struct AstPrinter {
-  Str       text;
-  Tokens   *tokens;
-  AstNodes *nodes;
+  Str           text;
+  Tokens       *tokens;
+  AstNodes     *nodes;
   TypeInterner *types;
-  ValueStore *values;
-  u32 indent;
+  ValueStore   *values;
+  u32           indent;
 
   Str token_str(TokenIndex idx) { return get_token_str(text, tokens, idx); }
 
@@ -80,8 +91,7 @@ struct AstPrinter {
   void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right) {
     if (nodes->kind(node) == Ast_binary_op) {
       u8   child_group = binop_prec_group(nodes->data(node).binary_op.kind);
-      bool need_parens = child_group > parent_group ||
-                         (child_group == parent_group && is_right);
+      bool need_parens = child_group > parent_group || (child_group == parent_group && is_right);
       if (need_parens) {
         fputs("{", stdout);
         print(node);
@@ -106,8 +116,8 @@ struct AstPrinter {
 
 void AstPrinter::print(NodeIndex node) {
   if (node.kind == NodeIndex_value) {
-    char buf[256] = { 0};
-    u32 len = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
+    char buf[256] = {0};
+    u32  len      = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
     printf("%.*s", cast<int>(len), buf);
     return;
   }
@@ -277,7 +287,7 @@ void AstPrinter::print(NodeIndex node) {
     print(data.cast.type_dst);
     fputs(") ", stdout);
     print(data.cast.value);
- } break;
+  } break;
 
   case Ast_if_else: {
     fputs("if ", stdout);
@@ -299,8 +309,12 @@ void AstPrinter::print(NodeIndex node) {
     print(data.for_.body);
   } break;
 
-  case Ast_break:    fputs("break", stdout); break;
-  case Ast_continue: fputs("continue", stdout); break;
+  case Ast_break:
+    fputs("break", stdout);
+    break;
+  case Ast_continue:
+    fputs("continue", stdout);
+    break;
 
   case Ast_return: {
     fputs("return ", stdout);
@@ -312,11 +326,14 @@ void AstPrinter::print(NodeIndex node) {
     print(data.defer.value);
   } break;
 
-  case Ast_kind_max: break;
+  case Ast_kind_max:
+    break;
   }
 }
 
-void ast_pretty_print(Str text, Tokens *tokens, TypeInterner *types, ValueStore *values, AstNodes *nodes, NodeIndex idx) {
+void ast_pretty_print(
+  Str text, Tokens *tokens, TypeInterner *types, ValueStore *values, AstNodes *nodes, NodeIndex idx
+) {
   if (nodes->len() == 0) {
     return;
   }
@@ -325,7 +342,7 @@ void ast_pretty_print(Str text, Tokens *tokens, TypeInterner *types, ValueStore 
     .text   = text,
     .tokens = tokens,
     .nodes  = nodes,
-    .types = types,
+    .types  = types,
     .values = values,
     .indent = 0,
   };

@@ -68,9 +68,9 @@ struct Interpreter {
   b32 eval_place(Env<ValueIndex> *env, NodeIndex node, void **out_ptr, TypeIndex *out_type);
   b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
 
-  b32  add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
-  bool coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
-  b32  coerce_slot_to(NodeIndex *slot, TypeIndex dst_type);
+  b32       add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
+  bool      coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
+  b32       coerce_slot_to(NodeIndex *slot, TypeIndex dst_type);
   TypeIndex slot_type(NodeIndex slot);
 
   u64 get_uint(ValueIndex idx);

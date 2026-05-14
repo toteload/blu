@@ -124,7 +124,7 @@ TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
   case Type_never:
   case Type_distinct:
     Todo();
-    break;
+    return {};
   }
 }
 

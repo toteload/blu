@@ -76,6 +76,17 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+  if (settings.verbose) {
+    ast_pretty_print(
+      source_text,
+      &unit.tokens,
+      &unit.types,
+      &unit.interpreter.values,
+      &unit.nodes,
+      unit.nodes.first_valid_index()
+    );
+  }
+
   ok = unit.typecheck();
   if (!ok) {
     printf("Typecheck error\n");

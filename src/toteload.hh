@@ -367,8 +367,9 @@ template<typename T> void ObjectPool<T>::deinit() {
   Block *at = blocks;
 
   while (at != nullptr) {
+    Block *next = at->next;
     backing.raw_free(at, sizeof(Block) + at->count * sizeof(Item));
-    at = at->next;
+    at = next;
   }
 
   blocks   = nullptr;
