@@ -246,7 +246,7 @@ bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
 
     ValueIndex *sequence_items = cast<ValueIndex *>(v->data);
 
-    auto items = values.alloc_memory(size_info, count);
+    auto items = values.alloc_data(size_info, count);
     for (u32 i = 0; i < count; i++) {
       Try(coerce_value(base_type, sequence_items[i], ptr_offset(items, size_info.stride * i)));
     }
@@ -289,7 +289,7 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
 
     Value *new_v;
     auto   new_idx = values.alloc_value(&new_v);
-    auto   data    = values.alloc_memory(types->size_info(dst_type));
+    auto   data    = values.alloc_data(types->size_info(dst_type));
     *new_v         = {.type = dst_type, .data = data};
 
     Try(coerce_value(dst_type, val_idx, data));
@@ -324,30 +324,28 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
 
     // We got through the type checker so this cast must be valid.
 
-    if (true){
-      auto old_node_index = *slot;
-      auto node_index = nodes->alloc();
-      *slot = NodeIndex{NodeIndex_ast_node, node_index.idx};
+    auto old_node_index = *slot;
+    auto node_index = nodes->alloc();
+    *slot = NodeIndex{NodeIndex_ast_node, node_index.idx};
 
-      Value *val_type_dst;
-      auto val_idx = values.alloc_value(&val_type_dst);
-      auto data = values.alloc_memory(types->size_info(types->type.type));
-      *cast<TypeIndex*>(data) = dst_type;
-      *val_type_dst = {.type = types->type.type, .data = data};
+    Value *val_type_dst;
+    auto val_idx = values.alloc_value(&val_type_dst);
+    auto data = values.alloc_data(types->size_info(types->type.type));
+    *cast<TypeIndex*>(data) = dst_type;
+    *val_type_dst = {.type = types->type.type, .data = data};
 
-      AstCast cast;
-      cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
-      cast.value = old_node_index;
+    AstCast cast;
+    cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
+    cast.value = old_node_index;
 
-      nodes->set(
-        node_index,
-        {
-          Ast_cast,
-          {{0}, {0}},
-          {.cast = cast},
-        }
-      );
-    }
+    nodes->set(
+      node_index,
+      {
+        Ast_cast,
+        {{0}, {0}}, // TODO replace this with something else.
+        {.cast = cast},
+      }
+    );
   } break;
   }
 
@@ -366,7 +364,7 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 
   Value *v;
   auto   val  = values.alloc_value(&v);
-  auto   data = values.alloc_memory(types->size_info(decl_type));
+  auto   data = values.alloc_data(types->size_info(decl_type));
   *v          = {
              .type = decl_type,
              .data = data,
@@ -571,7 +569,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     }
 
     auto elem_size_info = types->size_info(base_type);
-    auto data           = values.alloc_memory(elem_size_info);
+    auto data           = values.alloc_data(elem_size_info);
     memcpy(data, elem_ptr, elem_size_info.size);
 
     Value *vout;
@@ -585,7 +583,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     Value *v;
     auto   res   = values.alloc_value(&v);
-    void  *bytes = values.alloc_memory(types->size_info(t->array.base_type), count);
+    void  *bytes = values.alloc_data(types->size_info(t->array.base_type), count);
 
     *v = {
       .type = ty,
@@ -670,7 +668,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     for (u64 i = 0; i < count; i++) {
       Value *v;
       auto   iter_value_idx = values.alloc_value(&v);
-      auto   data           = values.alloc_memory(elem_size_info);
+      auto   data           = values.alloc_data(elem_size_info);
       memcpy(data, ptr_offset(items, i * elem_size_info.stride), elem_size_info.size);
       *v = {.type = element_type, .data = data};
 
@@ -1031,7 +1029,7 @@ b32 Interpreter::eval_binary_op(
 
     Value *v;
     auto   idx  = values.alloc_value(&v);
-    auto   data = cast<u8 *>(values.alloc_memory(types->size_info(types->type.bool_)));
+    auto   data = cast<u8 *>(values.alloc_data(types->size_info(types->type.bool_)));
     *data       = res ? 1 : 0;
     *v          = {.type = types->type.bool_, .data = data};
     *result     = idx;
@@ -1091,7 +1089,7 @@ b32 Interpreter::eval_binary_op(
       auto   size_info = types->size_info(result_type_idx);
       Value *v;
       auto   idx       = values.alloc_value(&v);
-      void  *data      = values.alloc_memory(size_info);
+      void  *data      = values.alloc_data(size_info);
       u32    byte_size = size_info.size;
       memcpy(data, &res, byte_size);
       *v = {
@@ -1139,7 +1137,7 @@ b32 Interpreter::eval_binary_op(
       auto   size_info = types->size_info(result_type_idx);
       Value *v;
       auto   idx       = values.alloc_value(&v);
-      void  *data      = values.alloc_memory(size_info);
+      void  *data      = values.alloc_data(size_info);
       u32    byte_size = size_info.size;
       memcpy(data, &res, byte_size);
       *v = {
@@ -1238,7 +1236,7 @@ b32 Interpreter::call_function(
 
     Value *pv;
     auto   param_value_idx = values.alloc_value(&pv);
-    auto   data            = values.alloc_memory(types->size_info(param_type));
+    auto   data            = values.alloc_data(types->size_info(param_type));
     *pv                    = {.type = param_type, .data = data};
     Try(coerce_value(param_type, arguments[i], data));
 
@@ -1257,7 +1255,7 @@ b32 Interpreter::call_function(
 
   Value *v;
   *result   = values.alloc_value(&v);
-  auto data = values.alloc_memory(types->size_info(return_type_idx));
+  auto data = values.alloc_data(types->size_info(return_type_idx));
   *v        = {.type = return_type_idx, .data = data};
 
   Try(coerce_value(return_type_idx, body_result, data));
@@ -1282,7 +1280,7 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
     *result = values.alloc_value(&v);
 
     auto size_info = types->size_info(type_idx_dst);
-    auto data      = values.alloc_memory(size_info);
+    auto data      = values.alloc_data(size_info);
 
     *v = {
       .type = type_idx_dst,
@@ -1349,7 +1347,7 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
       *result = values.alloc_value(&v);
 
       auto size_info = types->size_info(type_idx_dst);
-      auto data      = values.alloc_memory(size_info);
+      auto data      = values.alloc_data(size_info);
 
       *v = {
         .type = type_idx_dst,
