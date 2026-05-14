@@ -273,17 +273,16 @@ TypeIndex Interpreter::slot_type(NodeIndex slot) {
 }
 
 b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
-  if (slot->is_none()) {
-    // This should never happen though
-    return true;
-  }
+  Assert(slot->is_some());
 
   if (slot->kind == NodeIndex_value) {
     ValueIndex val_idx{slot->idx};
     Value     *v = values.get(val_idx);
+
     if (v->type == dst_type) {
       return true;
     }
+
     if (!types->is_coercible_to(v->type, dst_type)) {
       return true;
     }
@@ -292,9 +291,11 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
     auto   new_idx = values.alloc_value(&new_v);
     auto   data    = values.alloc_memory(types->size_info(dst_type));
     *new_v         = {.type = dst_type, .data = data};
+
     Try(coerce_value(dst_type, val_idx, data));
 
     *slot = NodeIndex{NodeIndex_value, new_idx.idx};
+
     return true;
   }
 
@@ -303,21 +304,54 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
   case Ast_block: {
     auto &block = nodes->datas[slot->idx].block;
     if (block.items.len() == 0) {
-      return true;
+      break;
     }
-    return coerce_slot_to(&block.items[block.items.len() - 1], dst_type);
-  }
+
+    Try(coerce_slot_to(&block.items[block.items.len() - 1], dst_type));
+  } break;
   case Ast_if_else: {
     auto &ie = nodes->datas[slot->idx].if_else;
     Try(coerce_slot_to(&ie.then, dst_type));
     if (ie.otherwise.is_some()) {
       Try(coerce_slot_to(&ie.otherwise, dst_type));
     }
-    return true;
+  } break;
+  default: {
+    TypeIndex type_src = get_type(*slot);
+    if (type_src == dst_type) {
+      break;
+    }
+
+    // We got through the type checker so this cast must be valid.
+
+    if (true){
+      auto old_node_index = *slot;
+      auto node_index = nodes->alloc();
+      *slot = NodeIndex{NodeIndex_ast_node, node_index.idx};
+
+      Value *val_type_dst;
+      auto val_idx = values.alloc_value(&val_type_dst);
+      auto data = values.alloc_memory(types->size_info(types->type.type));
+      *cast<TypeIndex*>(data) = dst_type;
+      *val_type_dst = {.type = types->type.type, .data = data};
+
+      AstCast cast;
+      cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
+      cast.value = old_node_index;
+
+      nodes->set(
+        node_index,
+        {
+          Ast_cast,
+          {{0}, {0}},
+          {.cast = cast},
+        }
+      );
+    }
+  } break;
   }
-  default:
-    return true;
-  }
+
+  return true;
 }
 
 b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
@@ -722,7 +756,9 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     auto key       = strings->add(str);
 
     ValueIndex val;
-    if (env->lookup(key, &val)) {
+    auto found_in_const_env = env->lookup(key, &val);
+
+    if (found_in_const_env) {
       Value *v = values.get(val);
       Type  *t = types->get(v->type);
       if (t->kind == Type_literal_function || t->kind == Type_function) {
@@ -1229,7 +1265,14 @@ b32 Interpreter::call_function(
   return true;
 }
 
-TypeIndex Interpreter::get_type(NodeIndex node_index) { return node_types[node_index.idx]; }
+TypeIndex Interpreter::get_type(NodeIndex node_index) { 
+  if (node_index.kind == NodeIndex_ast_node) {
+    return node_types[node_index.idx]; 
+  } else {
+    Value *v = values.get({node_index.idx});
+    return *cast<TypeIndex*>(v->data);
+  }
+}
 
 b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *result) {
   Value *val = values.get(val_idx);

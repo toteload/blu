@@ -76,7 +76,7 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
     Todo();
   } break;
   case Type_type: {
-    Update(snprintf(buf, buf_size, "<a type>"));
+    Update(types->type_to_string(*cast<TypeIndex*>(v->data), buf, buf_size));
   } break;
   }
 
