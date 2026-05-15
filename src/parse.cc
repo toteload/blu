@@ -19,9 +19,6 @@ struct Parser {
   b32 parse_literal_sequence(NodeIndex *out);
   b32 parse_function(NodeIndex *out);
   b32 parse_for(NodeIndex *out);
-  b32 parse_break(NodeIndex *out);
-  b32 parse_continue(NodeIndex *out);
-  b32 parse_return(NodeIndex *out);
   b32 parse_defer(NodeIndex *out);
   b32 parse_if_else(NodeIndex *out);
   b32 parse_const(NodeIndex *out);
@@ -478,58 +475,6 @@ b32 Parser::parse_for(NodeIndex *out) {
   return true;
 }
 
-b32 Parser::parse_break(NodeIndex *out) {
-  auto start = at;
-
-  Try(expect_token(Tok_keyword_break));
-
-  *out = nodes->add({
-    Ast_break,
-    {start, at},
-    {},
-  });
-
-  return true;
-}
-
-b32 Parser::parse_continue(NodeIndex *out) {
-  auto start = at;
-
-  Try(expect_token(Tok_keyword_continue));
-
-  *out = nodes->add({
-    Ast_continue,
-    {start, at},
-    {},
-  });
-
-  return true;
-}
-
-b32 Parser::parse_return(NodeIndex *out) {
-  auto node_index = nodes->alloc();
-  auto start      = at;
-
-  Try(expect_token(Tok_keyword_return));
-
-  AstReturn return_;
-
-  Try(parse_expression(&return_.value));
-
-  nodes->set(
-    node_index,
-    {
-      Ast_return,
-      {start, at},
-      {.return_ = return_},
-    }
-  );
-
-  *out = node_index;
-
-  return true;
-}
-
 b32 Parser::parse_defer(NodeIndex *out) {
   auto node_index = nodes->alloc();
   auto start      = at;
@@ -662,9 +607,6 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   switch (tok) {
     // clang-format off
   case Tok_keyword_for:      Try(parse_for(&base));            break;
-  case Tok_keyword_continue: Try(parse_continue(&base));       break;
-  case Tok_keyword_break:    Try(parse_break(&base));          break;
-  case Tok_keyword_return:   Try(parse_return(&base));         break;
   case Tok_keyword_defer:    Try(parse_defer(&base));          break;
   case Tok_keyword_if:       Try(parse_if_else(&base));        break;
   case Tok_literal_int:      Try(parse_literal_int(&base));    break;

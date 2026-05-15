@@ -309,18 +309,6 @@ void AstPrinter::print(NodeIndex node) {
     print(data.for_.body);
   } break;
 
-  case Ast_break:
-    fputs("break", stdout);
-    break;
-  case Ast_continue:
-    fputs("continue", stdout);
-    break;
-
-  case Ast_return: {
-    fputs("return ", stdout);
-    print(data.return_.value);
-  } break;
-
   case Ast_defer: {
     fputs("defer ", stdout);
     print(data.defer.value);

@@ -30,13 +30,13 @@ struct Interpreter {
     ValueIndex nil;
   } common;
 
-  void init();
+  void init(InterpreterContext *context);
   void deinit();
 
-  // `run_const_code` runs const code and sets up the root environment.
-  // this is to simulate compilation of the code.
-  // const values are saved and used when the program is run.
-  bool run_const_code(InterpreterContext *context);
+  // - Creates root env and add roots declarations.
+  // - Inserts explicit casts for all type coercions.
+  // - Evaluates all the `const` code and inserts computed values into AST.
+  bool prepare_code();
 
   bool run_main(ValueIndex *result);
 
@@ -56,10 +56,15 @@ struct Interpreter {
     Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
   );
   b32 eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result);
-  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
   b32 eval_binary_op(
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
+
+  // Replaces type coercions with explicit casts. 
+  b32 coercion_resolve_walk(NodeIndex *node);
+  void resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node);
+
+  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   void builtin_print(Str format, Slice<ValueIndex> args);
 
@@ -92,4 +97,7 @@ struct Interpreter {
   void populate_root_env(Env<ValueIndex> *env);
 
   Str get_token_str(TokenIndex idx) { return ::get_token_str(text, tokens, idx); }
+
+  ValueIndex alloc_value_type(TypeIndex type);
+  void insert_cast_to(TypeIndex type_dst, NodeIndex *node);
 };

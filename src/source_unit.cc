@@ -116,8 +116,6 @@ bool SourceUnit::typecheck() {
 bool SourceUnit::run_const_code() {
   Assert(stage == Stage_run_const_code);
 
-  interpreter.init();
-
   InterpreterContext context{};
   context.types      = &types;
   context.strings    = &strings;
@@ -127,7 +125,9 @@ bool SourceUnit::run_const_code() {
   context.nodes      = &nodes;
   context.node_types = node_types.slice();
 
-  bool ok = interpreter.run_const_code(&context);
+  interpreter.init(&context);
+
+  bool ok = interpreter.prepare_code();
   if (!ok) {
     return false;
   }

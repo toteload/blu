@@ -49,10 +49,30 @@ void PopulateRootEnv::populate() {
   // clang-format on
 }
 
-void Interpreter::init() {
+void Interpreter::init(InterpreterContext *context) {
   work_arena.init(MiB(1));
   values.init(stdlib_alloc);
   envs.init(stdlib_alloc, stdlib_alloc);
+
+  env_root = nullptr;
+
+  types      = context->types;
+  strings    = context->strings;
+  messages   = context->messages;
+  text       = context->text;
+  tokens     = context->tokens;
+  nodes      = context->nodes;
+  node_types = context->node_types;
+
+  {
+    Value *v;
+    common.nil = values.alloc_value(&v);
+
+    *v = {
+      .type = types->type.nil,
+      .data = nullptr,
+    };
+  }
 }
 
 void Interpreter::deinit() {
@@ -72,24 +92,7 @@ void Interpreter::deinit() {
   memset(this, 0, sizeof(*this));
 }
 
-bool Interpreter::run_const_code(InterpreterContext *context) {
-  types      = context->types;
-  strings    = context->strings;
-  messages   = context->messages;
-  text       = context->text;
-  tokens     = context->tokens;
-  nodes      = context->nodes;
-  node_types = context->node_types;
-
-  {
-    Value *v;
-    common.nil = values.alloc_value(&v);
-    *v         = {
-              .type = types->type.nil,
-              .data = nullptr,
-    };
-  }
-
+bool Interpreter::prepare_code() {
   Env<ValueIndex> *env_builtin = envs.alloc(nullptr);
   {
     PopulateRootEnv populator = {
@@ -107,11 +110,18 @@ bool Interpreter::run_const_code(InterpreterContext *context) {
   NodeIndex root_idx = nodes->first_valid_index();
   Assert(nodes->kind(root_idx) == Ast_root);
 
+  // Add root declarations to env.
   auto &root_items = nodes->datas[root_idx.idx].root.items;
   for (u32 i = 0; i < root_items.len(); i++) {
     Try(add_declaration(env_root, root_items[i]));
   }
 
+  // Insert explicit cast for coercions.
+  for (u32 i = 0; i < root_items.len(); i++) {
+    Try(coercion_resolve_walk(&root_items[i]));
+  }
+
+  // Evaluate all the const code.
   for (u32 i = 0; i < root_items.len(); i++) {
     Try(const_walk(env_root, &root_items[i]));
   }
@@ -144,6 +154,201 @@ bool Interpreter::run_main(ValueIndex *result) {
   Try(call_function(env_root, main, {}, result));
 
   return true;
+}
+
+b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
+  Assert(node->kind == NodeIndex_ast_node);
+
+  auto kind = nodes->kind(*node);
+  auto data = nodes->data(*node);
+
+  switch (kind) {
+  case Ast_declaration: {
+    auto declared_type = get_type(data.declaration.type);
+    resolve_possible_coercion(declared_type, &data.declaration.value);
+  } break;
+
+  case Ast_if_else: {
+    resolve_possible_coercion(types->type.bool_, &data.if_else.cond);
+    if (data.if_else.otherwise.is_some()) {
+      TypeIndex type_expr = get_type(*node);
+      resolve_possible_coercion(type_expr, &data.if_else.then);
+      resolve_possible_coercion(type_expr, &data.if_else.otherwise);
+    }
+  } break;
+
+  case Ast_assign: {
+    auto type_lhs = get_type(data.assign.lhs);
+    resolve_possible_coercion(type_lhs, &data.assign.value);
+  } break;
+
+  case Ast_index: {
+    resolve_possible_coercion(types->type.uint, &data.index.index_at);
+  } break;
+
+  case Ast_binary_op: {
+    auto op_kind = data.binary_op.kind;
+
+    switch (op_kind) {
+    case Cmp_equal:
+    case Cmp_not_equal:
+    case Cmp_less_than:
+    case Cmp_less_equal:
+    case Cmp_greater_than:
+    case Cmp_greater_equal: {
+      TypeIndex t;
+      types->unify(get_type(data.binary_op.lhs), get_type(data.binary_op.rhs), &t);
+      resolve_possible_coercion(t, &data.binary_op.lhs);
+      resolve_possible_coercion(t, &data.binary_op.lhs);
+    } break;
+
+    case Mul:
+    case Div:
+    case Mod:
+    case Sub:
+    case Add:
+    case Bit_shift_left:
+    case Bit_shift_right:
+    case Bit_and:
+    case Bit_or:
+    case Bit_xor: {
+      TypeIndex type_expr = get_type(*node);
+      resolve_possible_coercion(type_expr, &data.binary_op.lhs);
+      resolve_possible_coercion(type_expr, &data.binary_op.rhs);
+    } break;
+
+    case Logical_and:
+    case Logical_or:
+    case BinaryOpKind_max:
+      break;
+    }
+  } break;
+
+  case Ast_call: {
+    Todo();
+  } break;
+
+  case Ast_function: {
+  } break;
+  case Ast_block: {
+  } break;
+
+  case Ast_identifier:
+  case Ast_type_slice:
+  case Ast_type_array:
+  case Ast_type_function:
+  case Ast_builtin:
+  case Ast_unary_op:
+  case Ast_root:
+  case Ast_literal_int:
+  case Ast_literal_string:
+  case Ast_literal_sequence:
+  case Ast_for:
+  case Ast_defer:
+  case Ast_const:
+  case Ast_cast:
+    break;
+
+  case Ast_kind_max: {
+    Todo();
+  } break;
+  }
+
+  switch (kind) {
+  case Ast_declaration: {
+    coercion_resolve_walk(&data.declaration.value);
+  } break;
+  case Ast_if_else: {
+    coercion_resolve_walk(&data.if_else.cond);
+    coercion_resolve_walk(&data.if_else.then);
+    coercion_resolve_walk(&data.if_else.otherwise);
+  } break;
+  case Ast_assign: {
+    coercion_resolve_walk(&data.assign.lhs);
+    coercion_resolve_walk(&data.assign.value);
+  } break;
+  case Ast_index: {
+    coercion_resolve_walk(&data.index.indexable);
+    coercion_resolve_walk(&data.index.index_at);
+  } break;
+  case Ast_binary_op: {
+    coercion_resolve_walk(&data.binary_op.lhs);
+    coercion_resolve_walk(&data.binary_op.rhs);
+  } break;
+
+  case Ast_call: {
+    coercion_resolve_walk(&data.call.callee);
+    for (u32 i = 0; i < data.call.args.len(); i++) {
+      coercion_resolve_walk(&data.call.args[i]);
+    }
+  } break;
+
+  case Ast_unary_op: {
+    coercion_resolve_walk(&data.unary_op.value);
+  } break;
+
+  case Ast_block: {
+    for (u32 i = 0; i < data.block.items.len(); i++) {
+      coercion_resolve_walk(&data.block.items[i]);
+    }
+  } break;
+
+  case Ast_function: {
+    coercion_resolve_walk(&data.function.body);
+  } break;
+
+  case Ast_builtin: {
+    Todo();
+  } break;
+
+  case Ast_for: {
+    coercion_resolve_walk(&data.for_.iterable);
+    coercion_resolve_walk(&data.for_.body);
+  } break;
+
+  case Ast_defer: {
+    coercion_resolve_walk(&data.defer.value);
+  } break;
+  case Ast_const: {
+    coercion_resolve_walk(&data.const_.expr);
+  } break;
+  case Ast_cast: {
+    coercion_resolve_walk(&data.cast.value);
+  } break;
+  case Ast_literal_sequence: {
+    Todo();
+  } break;
+
+  case Ast_type_function:
+    break;
+  case Ast_type_array:
+    break;
+  case Ast_type_slice:
+    break;
+  case Ast_identifier:
+  case Ast_literal_int:
+  case Ast_literal_string:
+    break;
+
+  case Ast_root:
+  case Ast_kind_max: {
+    Todo();
+  } break;
+  }
+
+  return true;
+}
+
+void Interpreter::resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node) {
+  Assert(node->kind == NodeIndex_ast_node);
+
+  auto type = get_type(*node);
+
+  if (type == type_dst) {
+    return;
+  }
+
+  insert_cast_to(type_dst, node);
 }
 
 // Assume: The coercion is always possible.
@@ -269,6 +474,7 @@ TypeIndex Interpreter::slot_type(NodeIndex slot) {
   if (slot.kind == NodeIndex_value) {
     return values.get(ValueIndex{slot.idx})->type;
   }
+
   return get_type(slot);
 }
 
@@ -323,29 +529,7 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
     }
 
     // We got through the type checker so this cast must be valid.
-
-    auto old_node_index = *slot;
-    auto node_index = nodes->alloc();
-    *slot = NodeIndex{NodeIndex_ast_node, node_index.idx};
-
-    Value *val_type_dst;
-    auto val_idx = values.alloc_value(&val_type_dst);
-    auto data = values.alloc_data(types->size_info(types->type.type));
-    *cast<TypeIndex*>(data) = dst_type;
-    *val_type_dst = {.type = types->type.type, .data = data};
-
-    AstCast cast;
-    cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
-    cast.value = old_node_index;
-
-    nodes->set(
-      node_index,
-      {
-        Ast_cast,
-        {{0}, {0}}, // TODO replace this with something else.
-        {.cast = cast},
-      }
-    );
+    insert_cast_to(dst_type, slot);
   } break;
   }
 
@@ -702,9 +886,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_type_array:
   case Ast_type_function:
   case Ast_unary_op:
-  case Ast_break:
-  case Ast_continue:
-  case Ast_return:
   case Ast_kind_max:
   case Ast_root:
     Todo();
@@ -754,7 +935,7 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     auto key       = strings->add(str);
 
     ValueIndex val;
-    auto found_in_const_env = env->lookup(key, &val);
+    auto       found_in_const_env = env->lookup(key, &val);
 
     if (found_in_const_env) {
       Value *v = values.get(val);
@@ -914,10 +1095,6 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     Try(const_walk(env, &nodes->datas[idx.idx].defer.value));
   } break;
 
-  case Ast_return: {
-    Try(const_walk(env, &nodes->datas[idx.idx].return_.value));
-  } break;
-
   case Ast_assign: {
     auto &assign = nodes->datas[idx.idx].assign;
     Try(const_walk(env, &assign.value));
@@ -944,8 +1121,6 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     }
   } break;
 
-  case Ast_break:
-  case Ast_continue:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
@@ -978,53 +1153,31 @@ b32 Interpreter::eval_binary_op(
     if (is_unsigned) {
       u64 a = get_as_u64(lhs);
       u64 b = get_as_u64(rhs);
+      // clang-format off
       switch (op) {
-      case Cmp_equal:
-        res = a == b;
-        break;
-      case Cmp_not_equal:
-        res = a != b;
-        break;
-      case Cmp_less_than:
-        res = a < b;
-        break;
-      case Cmp_less_equal:
-        res = a <= b;
-        break;
-      case Cmp_greater_than:
-        res = a > b;
-        break;
-      case Cmp_greater_equal:
-        res = a >= b;
-        break;
-      default:
-        Unreachable();
+      case Cmp_equal: res = a == b; break;
+      case Cmp_not_equal: res = a != b; break;
+      case Cmp_less_than: res = a < b; break;
+      case Cmp_less_equal: res = a <= b; break;
+      case Cmp_greater_than: res = a > b; break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
       }
+      // clang-format on
     } else {
       i64 a = get_as_i64(lhs);
       i64 b = get_as_i64(rhs);
+      // clang-format off
       switch (op) {
-      case Cmp_equal:
-        res = a == b;
-        break;
-      case Cmp_not_equal:
-        res = a != b;
-        break;
-      case Cmp_less_than:
-        res = a < b;
-        break;
-      case Cmp_less_equal:
-        res = a <= b;
-        break;
-      case Cmp_greater_than:
-        res = a > b;
-        break;
-      case Cmp_greater_equal:
-        res = a >= b;
-        break;
-      default:
-        Unreachable();
+      case Cmp_equal: res = a == b; break;
+      case Cmp_not_equal: res = a != b; break;
+      case Cmp_less_than: res = a < b; break;
+      case Cmp_less_equal: res = a <= b; break;
+      case Cmp_greater_than: res = a > b; break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
       }
+      // clang-format on
     }
 
     Value *v;
@@ -1263,12 +1416,12 @@ b32 Interpreter::call_function(
   return true;
 }
 
-TypeIndex Interpreter::get_type(NodeIndex node_index) { 
+TypeIndex Interpreter::get_type(NodeIndex node_index) {
   if (node_index.kind == NodeIndex_ast_node) {
-    return node_types[node_index.idx]; 
+    return node_types[node_index.idx];
   } else {
     Value *v = values.get({node_index.idx});
-    return *cast<TypeIndex*>(v->data);
+    return *cast<TypeIndex *>(v->data);
   }
 }
 
@@ -1456,4 +1609,36 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
     putchar(c);
     i += 1;
   }
+}
+
+ValueIndex Interpreter::alloc_value_type(TypeIndex type) {
+  Value *val;
+  auto   idx               = values.alloc_value(&val);
+  auto   data              = values.alloc_data<TypeIndex>();
+  *cast<TypeIndex *>(data) = type;
+
+  *val = {.type = types->type.type, .data = data};
+
+  return idx;
+}
+
+void Interpreter::insert_cast_to(TypeIndex type_dst, NodeIndex *node) {
+  auto old_node_index = *node;
+  auto node_index     = nodes->alloc();
+  *node               = NodeIndex{NodeIndex_ast_node, node_index.idx};
+
+  auto val_idx = alloc_value_type(type_dst);
+
+  AstCast cast;
+  cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
+  cast.value    = old_node_index;
+
+  nodes->set(
+    node_index,
+    {
+      Ast_cast,
+      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in `AstNodes`
+      {.cast = cast},
+    }
+  );
 }

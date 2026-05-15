@@ -17,3 +17,5 @@ __pycache__/
 .DS_Store
 **/.DS_Store
 
+.cache/
+compile_commands.json

@@ -1,4 +1,3 @@
-#include "option.hh"
 #include "arena_item_pool.hh"
 
 struct ValueSlice {

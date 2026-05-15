@@ -21,9 +21,6 @@ enum AstKind : u8 {
   Ast_function,
   Ast_if_else,
   Ast_for,
-  Ast_break,
-  Ast_continue,
-  Ast_return,
   Ast_defer,
   Ast_const,
   Ast_cast,
@@ -162,10 +159,6 @@ struct AstIndex {
   NodeIndex index_at;
 };
 
-struct AstReturn {
-  NodeIndex value;
-};
-
 struct AstDefer {
   NodeIndex value;
 };
@@ -210,7 +203,6 @@ union AstNodeData {
   AstFunction        function;
   AstIfElse          if_else;
   AstFor             for_;
-  AstReturn          return_;
   AstDefer           defer;
   AstConst           const_;
   AstCast            cast;
@@ -300,7 +292,7 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "root",        "block",   "type-slice",       "type-array",  "type-function",  "builtin",
   "declaration", "assign",  "literal-sequence", "literal-int", "literal-string", "identifier",
   "call",        "index",   "unary-op",         "binary-op",   "function",       "if-else",
-  "while",       "break",   "continue",         "return",      "defer",          "const",
+  "while",       "defer",          "const",
   "cast",        "illegal",
 };
 

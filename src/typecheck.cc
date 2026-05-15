@@ -267,9 +267,6 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
   case Ast_unary_op:
   case Ast_binary_op:
   case Ast_for:
-  case Ast_break:
-  case Ast_continue:
-  case Ast_return:
   case Ast_defer:
   case Ast_const:
   case Ast_cast:
@@ -369,6 +366,7 @@ b32 TypeChecker::check_expression(
       break;
     }
   } break;
+
   case Ast_function: {
     auto f           = source->nodes->data(node_index).function;
     u32  param_count = cast<u32>(f.param_names.len());
@@ -428,6 +426,7 @@ b32 TypeChecker::check_expression(
       result = types->add(&function_type);
     }
   } break;
+
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
     if (block.items.len() == 0) {
@@ -464,13 +463,7 @@ b32 TypeChecker::check_expression(
     Try(check_expression(env, if_else.otherwise, nullptr, &otherwise_type));
 
     TypeIndex final_type;
-    if (types->is_coercible_to(then_type, otherwise_type)) {
-      final_type = otherwise_type;
-    } else if (types->is_coercible_to(otherwise_type, then_type)) {
-      final_type = then_type;
-    } else {
-      Todo();
-    }
+    Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &final_type));
 
     result = final_type;
   } break;
@@ -575,8 +568,8 @@ b32 TypeChecker::check_expression(
     case Cmp_less_equal:
     case Cmp_greater_than:
     case Cmp_greater_equal: {
-      TypeIndex unified;
-      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &unified));
+      TypeIndex _unified;
+      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &_unified));
       result = types->type.bool_;
     } break;
     case Mul:
@@ -723,10 +716,8 @@ b32 TypeChecker::check_expression(
 
     result = types->type.nil;
   } break;
+
   case Ast_unary_op:
-  case Ast_break:
-  case Ast_continue:
-  case Ast_return:
   case Ast_root:
   case Ast_kind_max:
     Todo();

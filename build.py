@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import ninja_syntax as n
-from subprocess import run
+from subprocess import run, call
 import sys
 import os
 import platform
@@ -126,3 +126,5 @@ def create_build_ninja():
 if __name__ == '__main__':
     create_build_ninja()
     run(['ninja'] + sys.argv[1:])
+    comp_commands = open('compile_commands.json', 'w')
+    call(['ninja', '-t', 'compdb', 'compile_cpp_debug'], stdout=comp_commands)
