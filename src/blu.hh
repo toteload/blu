@@ -23,7 +23,10 @@ struct NodeIndex {
   NodeIndexKind kind;
 
   // A value of 0 means not valid or nil.
+  union {
   u32 idx;
+  ValueIndex value_idx;
+  };
 
   bool is_some() const { return idx != 0; }
   bool is_none() const { return idx == 0; }
@@ -269,7 +272,8 @@ struct TypeInterner {
   bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);
 
   u32 type_to_string(TypeIndex type, char *buf, u32 buf_size);
-};template<typename T> struct Span {
+};
+template<typename T> struct Span {
   T start;
   T end;
 };
@@ -697,15 +701,18 @@ struct AstNodes {
     return res;
   }
 
-  AstKind          kind(NodeIndex idx) { return kinds[idx.idx]; }
-  Span<TokenIndex> span(NodeIndex idx) { return spans[idx.idx]; }
-  AstNodeData      data(NodeIndex idx) { return datas[idx.idx]; }
+  AstKind          &kind(NodeIndex idx) { return kinds[idx.idx]; }
+  Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx]; }
+  AstNodeData      &data(NodeIndex idx) { return datas[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
-  "root",        "block",   "type-slice",       "type-array",  "type-function",  "builtin",
-  "declaration", "assign",  "literal-sequence", "literal-int", "literal-string", "identifier",
-  "call",        "index",   "unary-op",         "binary-op",   "function",       "if-else",
+  "root",        "block",          "type-slice",
+  "type-array",  "type-function",  "builtin",
+  "declaration", "assign",         "literal-sequence",
+  "literal-int", "literal-string", "identifier",
+  "call",        "index",          "unary-op",
+  "binary-op",   "function",       "if-else",
   "while",       "defer",          "const",
   "cast",        "illegal",
 };
@@ -992,10 +999,10 @@ struct Interpreter {
   // - Evaluates all the `const` code and inserts computed values into AST.
   bool prepare_code();
 
-  // Replaces type coercions with explicit casts. 
-  b32 coercion_resolve_walk(NodeIndex *node);
+  // Replaces type coercions with explicit casts.
+  b32  coercion_resolve_walk(NodeIndex *node);
   void resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node);
-  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
+  b32  const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   bool run_main(ValueIndex *result);
 
@@ -1011,39 +1018,31 @@ struct Interpreter {
 
   TypeIndex get_type(NodeIndex node_index);
 
-  b32 call_function(
-    Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
-  );
+  void copy_value(TypeIndex type, ValueIndex src, void *dst);
+
   b32 eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result);
-  b32 eval_binary_op(
-    BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
-  );
+  b32 eval_declaration(Env<ValueIndex> *env, NodeIndex declaration, ValueIndex *result);
+  b32 eval_call( Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result);
+  b32 eval_binary_op( BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result);
+  b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
 
   void builtin_print(Str format, Slice<ValueIndex> args);
 
   ValueIndex lookup_identifier(Env<ValueIndex> *env, NodeIndex identifier);
 
   b32 eval_place(Env<ValueIndex> *env, NodeIndex node, void **out_ptr, TypeIndex *out_type);
-  b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
-
-  b32       add_declaration(Env<ValueIndex> *env, NodeIndex declaration);
-  bool      coerce_value(TypeIndex type_dst, ValueIndex src, void *out);
-  b32       coerce_slot_to(NodeIndex *slot, TypeIndex dst_type);
-  TypeIndex slot_type(NodeIndex slot);
-
-  u64 get_uint(ValueIndex idx);
 
   // Can read any signed integer type and convert it to i64.
   i64 get_as_i64(ValueIndex idx) {
     i64 res;
-    coerce_value(types->type.i64_, idx, &res);
+    Todo();
     return res;
   }
 
   // Can read any unsigned integer type and convert it to u64.
   u64 get_as_u64(ValueIndex idx) {
     i64 res;
-    coerce_value(types->type.u64_, idx, &res);
+    Todo();
     return res;
   }
 
@@ -1052,7 +1051,7 @@ struct Interpreter {
   Str get_token_str(TokenIndex idx) { return ::get_token_str(text, tokens, idx); }
 
   ValueIndex alloc_value_type(TypeIndex type);
-  void insert_cast_to(TypeIndex type_dst, NodeIndex *node);
+  void       insert_cast_to(TypeIndex type_dst, NodeIndex *node);
 };
 
 enum SourceUnitStage : u8 {

@@ -113,7 +113,8 @@ bool Interpreter::prepare_code() {
   // Add root declarations to env.
   auto &root_items = nodes->datas[root_idx.idx].root.items;
   for (u32 i = 0; i < root_items.len(); i++) {
-    Try(add_declaration(env_root, root_items[i]));
+    ValueIndex _nil;
+    Try(eval_declaration(env_root, root_items[i], &_nil));
   }
 
   // Insert explicit cast for coercions.
@@ -151,13 +152,15 @@ bool Interpreter::run_main(ValueIndex *result) {
     main_function_type = types->add(t);
   }
 
-  Try(call_function(env_root, main, {}, result));
+  Try(eval_call(env_root, main, {}, result));
 
   return true;
 }
 
 b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   Assert(node->kind == NodeIndex_ast_node);
+
+  // NOTE: instead of a recursive walk, this can probably be replaced with a linear walk.
 
   auto kind = nodes->kind(*node);
   auto data = nodes->data(*node);
@@ -226,7 +229,7 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
 
   case Ast_call: {
     TypeIndex type_idx_callee = get_type(data.call.callee);
-    auto type_callee = types->get(type_idx_callee);
+    auto      type_callee     = types->get(type_idx_callee);
     Assert(type_callee->kind == Type_function);
     for (u32 i = 0; i < type_callee->function.param_count; i++) {
       resolve_possible_coercion(type_callee->function.param_types[i], &data.call.args[i]);
@@ -238,11 +241,18 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   case Ast_block: {
   } break;
 
+  case Ast_builtin: {
+    switch (data.builtin.kind) {
+    case Builtin_print: {
+      resolve_possible_coercion(types->type.slice_u8, &data.builtin.args[0]);
+    } break;
+    }
+  } break;
+
   case Ast_identifier:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
-  case Ast_builtin:
   case Ast_unary_op:
   case Ast_root:
   case Ast_literal_int:
@@ -280,24 +290,20 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
     coercion_resolve_walk(&data.binary_op.lhs);
     coercion_resolve_walk(&data.binary_op.rhs);
   } break;
-
   case Ast_call: {
     coercion_resolve_walk(&data.call.callee);
     for (u32 i = 0; i < data.call.args.len(); i++) {
       coercion_resolve_walk(&data.call.args[i]);
     }
   } break;
-
   case Ast_unary_op: {
     coercion_resolve_walk(&data.unary_op.value);
   } break;
-
   case Ast_block: {
     for (u32 i = 0; i < data.block.items.len(); i++) {
       coercion_resolve_walk(&data.block.items[i]);
     }
   } break;
-
   case Ast_function: {
     coercion_resolve_walk(&data.function.body);
   } break;
@@ -354,215 +360,26 @@ void Interpreter::resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node)
   insert_cast_to(type_dst, node);
 }
 
-// Assume: The coercion is always possible.
-bool Interpreter::coerce_value(TypeIndex type_dst, ValueIndex src, void *out) {
-  auto v      = values.get(src);
-  auto ty_src = types->get(v->type);
-
-  if (type_dst == v->type) {
-    memcpy(out, v->data, types->size_info(v->type).size);
-    return true;
-  }
-
-  auto ty_dst = types->get(type_dst);
-
-  if (ty_src->kind == Type_literal_function && ty_dst->kind == Type_function) {
-    memcpy(out, v->data, sizeof(NodeIndex));
-    return true;
-  }
-
-  if (ty_src->kind == Type_literal_int && ty_dst->kind == Type_integer) {
-    i64  val        = *cast<i64 *>(v->data);
-    auto signedness = ty_dst->integer.signedness;
-    auto bitwidth   = ty_dst->integer.bitwidth;
-
-    if (signedness == Signed) {
-      i64 min_value = int_value_min(bitwidth);
-      i64 max_value = int_value_max(bitwidth);
-      if (val < min_value || val > max_value) {
-        messages->error("integer constant out of range of destination type.");
-        return false;
-      }
-    } else {
-      u64 max_value = uint_value_max(bitwidth);
-      if (val < 0 || cast<u64>(val) > max_value) {
-        messages->error("integer constant out of range of destination type.");
-        return false;
-      }
-    }
-
-    // clang-format off
-    switch (ty_dst->integer.bitwidth) {
-    case  8: signedness == Signed ? (*cast<i8  *>(out) = cast<i8 >(val)) : (*cast<u8  *>(out) = cast<u8 >(val)); break;
-    case 16: signedness == Signed ? (*cast<i16 *>(out) = cast<i16>(val)) : (*cast<u16 *>(out) = cast<u16>(val)); break;
-    case 32: signedness == Signed ? (*cast<i32 *>(out) = cast<i32>(val)) : (*cast<u32 *>(out) = cast<u32>(val)); break;
-    case 64: signedness == Signed ? (*cast<i64 *>(out) = cast<i64>(val)) : (*cast<u64 *>(out) = cast<u64>(val)); break;
-    default: Unreachable();
-    }
-    // clang-format on
-
-    return true;
-  }
-
-  if (ty_src->kind == Type_integer && ty_dst->kind == Type_integer) {
-    auto signedness = ty_dst->integer.signedness;
-    if (signedness == Signed) {
-      if (ty_src->integer.bitwidth == 8 && ty_dst->integer.bitwidth == 32) {
-        *cast<i32 *>(out) = cast<i32>(*cast<i8 *>(v->data));
-        return true;
-      }
-
-      if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
-        *cast<i64 *>(out) = cast<i64>(*cast<i32 *>(v->data));
-        return true;
-      }
-    } else {
-      if (ty_src->integer.bitwidth == 32 && ty_dst->integer.bitwidth == 64) {
-        *cast<u64 *>(out) = cast<u64>(*cast<u32 *>(v->data));
-        return true;
-      }
-    }
-
-    Todo();
-
-    return false;
-  }
-
-  if (ty_src->kind == Type_array && ty_dst->kind == Type_slice) {
-    u32 count = ty_src->array.size;
-
-    *cast<ValueSlice *>(out) = {
-      .len   = count,
-      .items = v->data,
-    };
-
-    return true;
-  }
-
-  if (ty_src->kind == Type_sequence) {
-    TypeIndex base_type;
-    if (ty_dst->kind == Type_slice) {
-      base_type = ty_dst->slice.base_type;
-    } else if (ty_dst->kind == Type_array) {
-      base_type = ty_dst->array.base_type;
-    } else {
-      Unreachable();
-    }
-
-    u32  count     = ty_src->sequence.count;
-    auto size_info = types->size_info(base_type);
-
-    ValueIndex *sequence_items = cast<ValueIndex *>(v->data);
-
-    auto items = values.alloc_data(size_info, count);
-    for (u32 i = 0; i < count; i++) {
-      Try(coerce_value(base_type, sequence_items[i], ptr_offset(items, size_info.stride * i)));
-    }
-
-    if (ty_dst->kind == Type_array) {
-      *cast<void **>(out) = items;
-    } else {
-      *cast<ValueSlice *>(out) = {.len = count, .items = items};
-    }
-
-    return true;
-  }
-
-  Todo();
-
-  return false;
+void Interpreter::copy_value(TypeIndex type, ValueIndex src, void *dst) {
+  auto val = values.get(src);
+  Assert(val->type == type);
+  memcpy(dst, val->data, types->size_info(type).size);
 }
 
-TypeIndex Interpreter::slot_type(NodeIndex slot) {
-  if (slot.kind == NodeIndex_value) {
-    return values.get(ValueIndex{slot.idx})->type;
-  }
-
-  return get_type(slot);
-}
-
-b32 Interpreter::coerce_slot_to(NodeIndex *node, TypeIndex dst_type) {
-  Assert(node->is_some());
-
-  if (node->kind == NodeIndex_value) {
-    ValueIndex val_idx{node->idx};
-    Value     *v = values.get(val_idx);
-
-    if (v->type == dst_type) {
-      return true;
-    }
-
-    if (!types->is_coercible_to(v->type, dst_type)) {
-      return true;
-    }
-
-    Value *new_v;
-    auto   new_idx = values.alloc_value(&new_v);
-    auto   data    = values.alloc_data(types->size_info(dst_type));
-    *new_v         = {.type = dst_type, .data = data};
-
-    Try(coerce_value(dst_type, val_idx, data));
-
-    *node = NodeIndex{NodeIndex_value, new_idx.idx};
-
-    return true;
-  }
-
-  auto kind = nodes->kind(*node);
-  switch (kind) {
-  case Ast_block: {
-    auto &block = nodes->datas[node->idx].block;
-    if (block.items.len() == 0) {
-      break;
-    }
-
-    Try(coerce_slot_to(&block.items[block.items.len() - 1], dst_type));
-  } break;
-  case Ast_if_else: {
-    auto &ie = nodes->datas[node->idx].if_else;
-    Try(coerce_slot_to(&ie.then, dst_type));
-    if (ie.otherwise.is_some()) {
-      Try(coerce_slot_to(&ie.otherwise, dst_type));
-    }
-  } break;
-  default: {
-    TypeIndex type_src = get_type(*node);
-    if (type_src == dst_type) {
-      break;
-    }
-
-    // We got through the type checker so this cast must be valid.
-    insert_cast_to(dst_type, node);
-  } break;
-  }
-
-  return true;
-}
-
-b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
+b32 Interpreter::eval_declaration(Env<ValueIndex> *env, NodeIndex declaration, ValueIndex *result) {
   Assert(nodes->kind(declaration) == Ast_declaration);
 
   auto decl = nodes->data(declaration).declaration;
 
-  TypeIndex decl_type = get_type(decl.type);
-
   ValueIndex decl_value;
   Try(eval_expr(env, decl.value, &decl_value));
-
-  Value *v;
-  auto   val  = values.alloc_value(&v);
-  auto   data = values.alloc_data(types->size_info(decl_type));
-  *v          = {
-             .type = decl_type,
-             .data = data,
-  };
-
-  Try(coerce_value(decl_type, decl_value, data));
 
   auto str = get_token_str(decl.name);
   auto key = strings->add(str);
 
-  env->insert(key, val);
+  env->insert(key, decl_value);
+
+  *result = common.nil;
 
   return true;
 }
@@ -570,7 +387,6 @@ b32 Interpreter::add_declaration(Env<ValueIndex> *env, NodeIndex declaration) {
 b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result) {
   if (node_index.kind == NodeIndex_value) {
     *result = ValueIndex{node_index.idx};
-    return true;
   }
 
   auto kind = nodes->kind(node_index);
@@ -583,25 +399,9 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     ValueIndex val_idx;
     Try(eval_expr(env, node.value, &val_idx));
-
     Try(eval_cast(type_dst, val_idx, result));
   } break;
 
-  case Ast_literal_int: {
-    auto token_index = nodes->data(node_index).literal_int.token_index;
-    auto str         = get_token_str(token_index);
-    auto i           = parse_i64(str);
-
-    Value *v;
-    *result   = values.alloc_value(&v);
-    auto data = values.alloc_data<i64>();
-    *data     = i;
-
-    *v = {
-      .type = types->type.literal_int,
-      .data = data,
-    };
-  } break;
   case Ast_builtin: {
     auto builtin = nodes->data(node_index).builtin;
     switch (builtin.kind) {
@@ -610,7 +410,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       Try(eval_expr(env, builtin.args[0], &arg_format));
 
       ValueSlice slice;
-      Try(coerce_value(types->type.slice_u8, arg_format, &slice));
+      copy_value(types->type.slice_u8, arg_format, &slice);
 
       auto snapshot = work_arena.take_snapshot();
       defer(work_arena.restore(snapshot));
@@ -628,6 +428,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     } break;
     }
   } break;
+
   case Ast_block: {
     auto block = nodes->data(node_index).block;
     if (block.items.len() == 0) {
@@ -663,19 +464,24 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       Try(eval_expr(env_block, defers[i - 1], &e));
     }
   } break;
+
   case Ast_function: {
     Value *v;
     *result   = values.alloc_value(&v);
     auto data = values.alloc_data<NodeIndex>();
-    *data     = node_index;
-    *v        = {
-             .type = get_type(node_index),
-             .data = data,
+
+    *data = node_index;
+
+    *v = {
+      .type = get_type(node_index),
+      .data = data,
     };
   } break;
+
   case Ast_identifier: {
     *result = lookup_identifier(env, node_index);
   } break;
+
   case Ast_if_else: {
     auto if_else = nodes->data(node_index).if_else;
 
@@ -692,9 +498,11 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
       *result = common.nil;
     }
   } break;
+
   case Ast_declaration: {
-    Try(add_declaration(env, node_index));
+    Try(eval_declaration(env, node_index, result));
   } break;
+
   case Ast_binary_op: {
     auto binop = nodes->data(node_index).binary_op;
     auto op    = binop.kind;
@@ -707,25 +515,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
 
     Try(eval_binary_op(op, lhs, rhs, node_index, result));
   } break;
-  case Ast_literal_sequence: {
-    auto seq   = nodes->data(node_index).literal_sequence;
-    auto count = seq.items.len();
 
-    Value      *v;
-    auto        res   = values.alloc_value(&v);
-    ValueIndex *items = values.alloc_data<ValueIndex>(count);
-
-    *v = {
-      .type = get_type(node_index),
-      .data = items,
-    };
-
-    for (u32 i = 0; i < count; i++) {
-      Try(eval_expr(env, seq.items[i], &items[i]));
-    }
-
-    *result = res;
-  } break;
   case Ast_index: {
     auto node = nodes->data(node_index).index;
 
@@ -735,7 +525,8 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     ValueIndex idx_index_at;
     Try(eval_expr(env, node.index_at, &idx_index_at));
 
-    u64 i = get_uint(idx_index_at);
+    u64 i;
+    Todo();
 
     auto indexable      = values.get(idx_indexable);
     auto type_indexable = types->get(indexable->type);
@@ -763,6 +554,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = values.alloc_value(&vout);
     *vout   = {.type = base_type, .data = data};
   } break;
+
   case Ast_literal_string: {
     auto ty    = get_type(node_index);
     auto t     = types->get(ty);
@@ -792,11 +584,6 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     *result = common.nil;
   } break;
 
-  case Ast_const: {
-    Todo("should not exist at runtime");
-    // return eval_expr(env, nodes->data(node_index).const_.expr, result);
-  } break;
-
   case Ast_call: {
     auto call = nodes->data(node_index).call;
 
@@ -814,7 +601,7 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     }
 
     auto callee = values.get(callee_idx);
-    Try(call_function(env, callee, {args, arg_count}, result));
+    Try(eval_call(env, callee, {args, arg_count}, result));
   } break;
 
   case Ast_for: {
@@ -880,9 +667,51 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
     ValueIndex value_idx;
     Try(eval_expr(env, node.value, &value_idx));
 
-    Try(coerce_value(lhs_type, value_idx, lhs_ptr));
+    copy_value(lhs_type, value_idx, lhs_ptr);
 
     *result = common.nil;
+  } break;
+
+  // Should only be called during const evaluation.
+  case Ast_literal_int: {
+    auto token_index = nodes->data(node_index).literal_int.token_index;
+    auto str         = get_token_str(token_index);
+    auto i           = parse_i64(str);
+
+    Value *v;
+    *result   = values.alloc_value(&v);
+    auto data = values.alloc_data<i64>();
+    *data     = i;
+
+    *v = {
+      .type = types->type.literal_int,
+      .data = data,
+    };
+  } break;
+
+  case Ast_literal_sequence: {
+    auto seq   = nodes->data(node_index).literal_sequence;
+    auto count = seq.items.len();
+
+    Value      *v;
+    auto        res   = values.alloc_value(&v);
+    ValueIndex *items = values.alloc_data<ValueIndex>(count);
+
+    *v = {
+      .type = get_type(node_index),
+      .data = items,
+    };
+
+    for (u32 i = 0; i < count; i++) {
+      Try(eval_expr(env, seq.items[i], &items[i]));
+    }
+
+    *result = res;
+  } break;
+
+  case Ast_const: {
+    Todo("should not exist at runtime");
+    // return eval_expr(env, nodes->data(node_index).const_.expr, result);
   } break;
 
   case Ast_type_slice:
@@ -892,53 +721,41 @@ b32 Interpreter::eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueInde
   case Ast_kind_max:
   case Ast_root:
     Todo();
-    return false;
   }
 
   return true;
 }
 
 b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
-  if (slot->kind == NodeIndex_value || slot->is_none()) {
+  Assert(slot->is_some());
+
+  if (slot->kind == NodeIndex_value) {
     return true;
   }
 
   auto idx  = *slot;
   auto kind = nodes->kind(idx);
+  auto data = nodes->data(idx);
 
   switch (kind) {
   case Ast_const: {
-    auto inner_slot = &nodes->datas[idx.idx].const_.expr;
-    Try(const_walk(env, inner_slot));
-
-    auto inner_idx = *inner_slot;
-    bool is_decl   = inner_idx.kind == NodeIndex_ast_node && inner_idx.is_some() &&
-                   nodes->kind(inner_idx) == Ast_declaration;
-
-    if (is_decl) {
-      Try(add_declaration(env, inner_idx));
-      *slot = NodeIndex{NodeIndex_value, common.nil.idx};
-    } else {
-      ValueIndex val;
-      Try(eval_expr(env, inner_idx, &val));
-      *slot = NodeIndex{NodeIndex_value, val.idx};
-    }
+    Try(const_walk(env, &data.const_.expr));
+    Try(eval_expr(env, data.const_.expr, &slot->value_idx));
   } break;
 
   case Ast_literal_int:
   case Ast_literal_string: {
-    ValueIndex val;
-    Try(eval_expr(env, idx, &val));
-    *slot = NodeIndex{NodeIndex_value, val.idx};
+    Try(eval_expr(env, idx, &slot->value_idx));
   } break;
 
   case Ast_identifier: {
-    auto token_idx = nodes->data(idx).identifier.token_index;
+    auto token_idx = data.identifier.token_index;
     auto str       = get_token_str(token_idx);
     auto key       = strings->add(str);
 
     ValueIndex val;
-    auto       found_in_const_env = env->lookup(key, &val);
+
+    auto found_in_const_env = env->lookup(key, &val);
 
     if (found_in_const_env) {
       Value *v = values.get(val);
@@ -947,73 +764,47 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
         break;
       }
 
-      *slot = NodeIndex{NodeIndex_value, val.idx};
+      *slot = NodeIndex{NodeIndex_value, {val.idx}};
     }
   } break;
 
   case Ast_binary_op: {
-    auto &bop = nodes->datas[idx.idx].binary_op;
-    Try(const_walk(env, &bop.lhs));
-    Try(const_walk(env, &bop.rhs));
+    Try(const_walk(env, &data.binary_op.lhs));
+    Try(const_walk(env, &data.binary_op.rhs));
 
-    if (bop.lhs.kind == NodeIndex_value && bop.rhs.kind == NodeIndex_value) {
-      ValueIndex val;
-      Try(eval_expr(env, idx, &val));
-      *slot = NodeIndex{NodeIndex_value, val.idx};
-      break;
-    }
-
-    TypeIndex lhs_t = slot_type(bop.lhs);
-    TypeIndex rhs_t = slot_type(bop.rhs);
-    TypeIndex unified;
-    if (types->unify(lhs_t, rhs_t, &unified)) {
-      Try(coerce_slot_to(&bop.lhs, unified));
-      Try(coerce_slot_to(&bop.rhs, unified));
+    if (data.binary_op.lhs.kind == NodeIndex_value && data.binary_op.rhs.kind == NodeIndex_value) {
+      Try(eval_expr(env, idx, &slot->value_idx));
     }
   } break;
 
   case Ast_unary_op: {
-    auto &uop = nodes->datas[idx.idx].unary_op;
-    Try(const_walk(env, &uop.value));
+    Try(const_walk(env, &data.unary_op.value));
 
-    if (uop.value.kind == NodeIndex_value) {
-      ValueIndex val;
-      Try(eval_expr(env, idx, &val));
-      *slot = NodeIndex{NodeIndex_value, val.idx};
-      break;
+    if (data.unary_op.value.kind == NodeIndex_value) {
+      Try(eval_expr(env, idx, &slot->value_idx));
     }
-
-    Try(coerce_slot_to(&uop.value, get_type(idx)));
   } break;
 
   case Ast_cast: {
-    Try(const_walk(env, &nodes->datas[idx.idx].cast.value));
+    Try(const_walk(env, &data.cast.value));
 
-    auto v = nodes->data(idx).cast.value;
-    if (v.kind == NodeIndex_value) {
-      ValueIndex e;
-      Try(eval_expr(env, idx, &e));
-      *slot = NodeIndex{NodeIndex_value, e.idx};
+    if (data.cast.value.kind == NodeIndex_value) {
+      Try(eval_expr(env, idx, &slot->value_idx));
     }
   } break;
 
   case Ast_index: {
-    auto &index_data = nodes->datas[idx.idx].index;
-    Try(const_walk(env, &index_data.indexable));
-    Try(const_walk(env, &index_data.index_at));
+    Try(const_walk(env, &data.index.indexable));
+    Try(const_walk(env, &data.index.index_at));
 
-    Try(coerce_slot_to(&index_data.index_at, types->type.uint));
-
-    if (index_data.indexable.kind == NodeIndex_value &&
-        index_data.index_at.kind == NodeIndex_value) {
-      ValueIndex val;
-      Try(eval_expr(env, idx, &val));
-      *slot = NodeIndex{NodeIndex_value, val.idx};
+    if (data.index.indexable.kind == NodeIndex_value &&
+        data.index.index_at.kind == NodeIndex_value) {
+      Try(eval_expr(env, idx, &slot->value_idx));
     }
   } break;
 
   case Ast_literal_sequence: {
-    auto &items     = nodes->datas[idx.idx].literal_sequence.items;
+    auto &items     = data.literal_sequence.items;
     bool  all_const = true;
     for (u32 i = 0; i < items.len(); i++) {
       Try(const_walk(env, &items[i]));
@@ -1021,103 +812,68 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
         all_const = false;
       }
     }
+
     if (all_const) {
-      ValueIndex val;
-      Try(eval_expr(env, idx, &val));
-      *slot = NodeIndex{NodeIndex_value, val.idx};
+      Try(eval_expr(env, idx, &slot->value_idx));
     }
   } break;
 
   case Ast_call: {
-    auto &call = nodes->datas[idx.idx].call;
-    Try(const_walk(env, &call.callee));
-    for (u32 i = 0; i < call.args.len(); i++) {
-      Try(const_walk(env, &call.args[i]));
-    }
-
-    TypeIndex callee_t = slot_type(call.callee);
-    Type     *ft       = types->get(callee_t);
-    if (ft->kind == Type_function) {
-      for (u32 i = 0; i < call.args.len(); i++) {
-        Try(coerce_slot_to(&call.args[i], ft->function.param_types[i]));
-      }
+    Try(const_walk(env, &data.call.callee));
+    for (u32 i = 0; i < data.call.args.len(); i++) {
+      Try(const_walk(env, &data.call.args[i]));
     }
   } break;
 
   case Ast_declaration: {
-    auto &decl = nodes->datas[idx.idx].declaration;
-    Try(const_walk(env, &decl.value));
-    Try(coerce_slot_to(&decl.value, get_type(decl.type)));
+    Try(const_walk(env, &data.declaration.value));
   } break;
 
   case Ast_block: {
     auto env_block = envs.alloc(env);
     defer(envs.dealloc(env_block));
 
-    auto &items = nodes->datas[idx.idx].block.items;
+    auto &items = data.block.items;
     for (u32 i = 0; i < items.len(); i++) {
       Try(const_walk(env_block, &items[i]));
     }
   } break;
 
   case Ast_function: {
-    auto env_fn = envs.alloc(env);
-    defer(envs.dealloc(env_fn));
-    auto &fn = nodes->datas[idx.idx].function;
-    Try(const_walk(env_fn, &fn.body));
-
-    Type *ft = types->get(get_type(idx));
-    if (ft->kind == Type_function) {
-      Try(coerce_slot_to(&fn.body, ft->function.return_type));
-    }
+    Try(const_walk(env, &data.function.body));
   } break;
 
   case Ast_if_else: {
-    auto &ie = nodes->datas[idx.idx].if_else;
-    Try(const_walk(env, &ie.cond));
-    Try(const_walk(env, &ie.then));
-    Try(const_walk(env, &ie.otherwise));
+    Try(const_walk(env, &data.if_else.cond));
+    Try(const_walk(env, &data.if_else.then));
+    Try(const_walk(env, &data.if_else.otherwise));
 
-    Try(coerce_slot_to(&ie.cond, types->type.bool_));
-
-    TypeIndex if_else_t = get_type(idx);
-    Try(coerce_slot_to(&ie.then, if_else_t));
-    if (ie.otherwise.is_some()) {
-      Try(coerce_slot_to(&ie.otherwise, if_else_t));
-    }
+    // TODO eval this
   } break;
 
   case Ast_for: {
-    Try(const_walk(env, &nodes->datas[idx.idx].for_.iterable));
-    auto env_for = envs.alloc(env);
-    defer(envs.dealloc(env_for));
-    Try(const_walk(env_for, &nodes->datas[idx.idx].for_.body));
+    Try(const_walk(env, &data.for_.iterable));
+    Try(const_walk(env, &data.for_.body));
   } break;
 
   case Ast_defer: {
-    Try(const_walk(env, &nodes->datas[idx.idx].defer.value));
+    Try(const_walk(env, &data.defer.value));
   } break;
 
   case Ast_assign: {
-    auto &assign = nodes->datas[idx.idx].assign;
-    Try(const_walk(env, &assign.value));
-    Try(coerce_slot_to(&assign.value, get_type(assign.lhs)));
+    Try(const_walk(env, &data.assign.value));
   } break;
 
   case Ast_builtin: {
-    auto &builtin = nodes->datas[idx.idx].builtin;
-    Assert(builtin.kind == Builtin_print);
+    Assert(data.builtin.kind == Builtin_print);
 
-    for (u32 i = 0; i < builtin.args.len(); i++) {
-      Try(const_walk(env, &builtin.args[i]));
-    }
-
-    if (builtin.args.len() > 0) {
-      Try(coerce_slot_to(&builtin.args[0], types->type.slice_u8));
+    for (u32 i = 0; i < data.builtin.args.len(); i++) {
+      Try(const_walk(env, &data.builtin.args[i]));
     }
   } break;
 
   case Ast_root: {
+    // Is this case ever encountered??
     auto &items = nodes->datas[idx.idx].root.items;
     for (u32 i = 0; i < items.len(); i++) {
       Try(const_walk(env, &items[i]));
@@ -1348,7 +1104,7 @@ b32 Interpreter::eval_place(
 
     ValueIndex idx_value;
     Try(eval_expr(env, inode.index_at, &idx_value));
-    u64 i = get_uint(idx_value);
+    u64 i; Todo();
 
     auto      bt = types->get(base_type);
     TypeIndex elem_type;
@@ -1374,7 +1130,7 @@ b32 Interpreter::eval_place(
   return false;
 }
 
-b32 Interpreter::call_function(
+b32 Interpreter::eval_call(
   Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
 ) {
   auto node_index    = *cast<NodeIndex *>(function->data);
@@ -1388,33 +1144,15 @@ b32 Interpreter::call_function(
   defer(envs.dealloc(env_args));
 
   for (u32 i = 0; i < arguments.len(); i++) {
-    auto param_type = function_type->function.param_types[i];
-
-    Value *pv;
-    auto   param_value_idx = values.alloc_value(&pv);
-    auto   data            = values.alloc_data(types->size_info(param_type));
-    *pv                    = {.type = param_type, .data = data};
-    Try(coerce_value(param_type, arguments[i], data));
-
     auto param_node  = function_node.param_names[i];
     auto token_index = nodes->data(param_node).identifier.token_index;
     auto str         = get_token_str(token_index);
     auto key         = strings->add(str);
 
-    env_args->insert(key, param_value_idx);
+    env_args->insert(key, arguments[i]);
   }
 
-  ValueIndex body_result;
-  Try(eval_expr(env_args, function_node.body, &body_result));
-
-  TypeIndex return_type_idx = function_type->function.return_type;
-
-  Value *v;
-  *result   = values.alloc_value(&v);
-  auto data = values.alloc_data(types->size_info(return_type_idx));
-  *v        = {.type = return_type_idx, .data = data};
-
-  Try(coerce_value(return_type_idx, body_result, data));
+  eval_expr(env_args, function_node.body, result);
 
   return true;
 }
@@ -1424,14 +1162,123 @@ TypeIndex Interpreter::get_type(NodeIndex node_index) {
     return node_types[node_index.idx];
   } else {
     Value *v = values.get({node_index.idx});
-    return *cast<TypeIndex *>(v->data);
+    return v->type;
+    // return *cast<TypeIndex *>(v->data);
   }
 }
 
 b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *result) {
+  // You may assume that the cast is valid, since it got past the type checker.
+
   Value *val = values.get(val_idx);
 
-  if (types->is_coercible_to(val->type, type_idx_dst)) {
+  TypeIndex type_idx_src = val->type;
+
+  if (type_idx_dst == type_idx_src) {
+    *result = val_idx;
+    return true;
+  }
+
+  Type *type_dst = types->get(type_idx_dst);
+  Type *type_src = types->get(type_idx_src);
+
+  if (type_src->kind == Type_literal_function && type_dst->kind == Type_function) {
+    Value *cast_value;
+    *result     = values.alloc_value(&cast_value);
+    auto data   = values.alloc_data(types->size_info(type_idx_dst));
+    *cast_value = {.type = type_idx_dst, .data = data};
+
+    memcpy(data, val->data, sizeof(NodeIndex));
+
+    return true;
+  }
+
+  if (type_src->kind == Type_literal_int && type_dst->kind == Type_integer) {
+    i64 i = *cast<i64 *>(val->data);
+
+    auto signedness = type_dst->integer.signedness;
+    auto bitwidth   = type_dst->integer.bitwidth;
+
+    if (signedness == Signed) {
+      i64 min_value = int_value_min(bitwidth);
+      i64 max_value = int_value_max(bitwidth);
+      if (i < min_value || i > max_value) {
+        messages->error("integer constant out of range of destination type.");
+        return false;
+      }
+    } else {
+      u64 max_value = uint_value_max(bitwidth);
+      if (i < 0 || cast<u64>(i) > max_value) {
+        messages->error("integer constant out of range of destination type.");
+        return false;
+      }
+    }
+
+    Value *cast_value;
+    *result     = values.alloc_value(&cast_value);
+    auto data   = values.alloc_data(types->size_info(type_idx_dst));
+    *cast_value = {.type = type_idx_dst, .data = data};
+
+    // clang-format off
+    switch (bitwidth) {
+    case  8: signedness == Signed ? (*cast<i8  *>(data) = cast<i8 >(i)) : (*cast<u8  *>(data) = cast<u8 >(i)); break;
+    case 16: signedness == Signed ? (*cast<i16 *>(data) = cast<i16>(i)) : (*cast<u16 *>(data) = cast<u16>(i)); break;
+    case 32: signedness == Signed ? (*cast<i32 *>(data) = cast<i32>(i)) : (*cast<u32 *>(data) = cast<u32>(i)); break;
+    case 64: signedness == Signed ? (*cast<i64 *>(data) = cast<i64>(i)) : (*cast<u64 *>(data) = cast<u64>(i)); break;
+    default: Unreachable();
+    }
+    // clang-format on
+
+    return true;
+  }
+
+  if (type_src->kind == Type_integer && type_dst->kind == Type_integer) {
+    if (type_dst->integer.signedness == Signed && type_src->integer.signedness == Signed) {
+      i64 i = get_as_i64(val_idx);
+
+      i64 lo = int_value_min(type_dst->integer.bitwidth);
+      i64 hi = int_value_max(type_dst->integer.bitwidth);
+
+      if (i < lo || i > hi) {
+        Todo("invalid cast: value out of range");
+      }
+    } else if (type_dst->integer.signedness == Unsigned && type_src->integer.signedness == Signed) {
+      i64 i = get_as_i64(val_idx);
+
+      if (i < 0) {
+        Todo("invalid cast: value out of range");
+      }
+
+      if (type_src->integer.bitwidth > type_dst->integer.bitwidth) {
+        u64 u = cast<u64>(i);
+
+        u64 hi = uint_value_max(type_dst->integer.bitwidth);
+
+        if (u > hi) {
+          Todo("invalid cast: value out of range");
+        }
+      }
+    } else if (type_dst->integer.signedness == Signed && type_src->integer.signedness == Unsigned) {
+      u64 i = get_as_u64(val_idx);
+
+      u64 hi = cast<u64>(int_value_max(type_dst->integer.bitwidth));
+
+      if (i > hi) {
+        Todo("invalid cast: value out of range");
+      }
+    } else if (type_dst->integer.signedness == Unsigned &&
+               type_src->integer.signedness == Unsigned) {
+      u64 i = get_as_u64(val_idx);
+
+      u64 hi = uint_value_max(type_dst->integer.bitwidth);
+
+      if (i > hi) {
+        Todo("invalid cast: value out of range");
+      }
+    } else {
+      Unreachable();
+    }
+
     Value *v;
     *result = values.alloc_value(&v);
 
@@ -1443,88 +1290,62 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
       .data = data,
     };
 
-    return coerce_value(type_idx_dst, val_idx, data);
+    memcpy(data, val->data, size_info.size);
+
+    return true;
   }
 
-  Type *type_dst = types->get(type_idx_dst);
-  Type *type_val = types->get(val->type);
+  if (type_src->kind == Type_array && type_dst->kind == Type_slice) {
+    u32 count = type_src->array.size;
 
-  if (type_dst->kind == Type_integer) {
-    if (type_val->kind == Type_integer) {
-      if (type_dst->integer.signedness == Signed && type_val->integer.signedness == Signed) {
-        i64 i = get_as_i64(val_idx);
+    Value *v;
+    *result = values.alloc_value(&v);
 
-        i64 lo = int_value_min(type_dst->integer.bitwidth);
-        i64 hi = int_value_max(type_dst->integer.bitwidth);
+    auto size_info = types->size_info(type_idx_dst);
+    auto data      = values.alloc_data(size_info);
 
-        if (i < lo || i > hi) {
-          Todo("invalid cast: value out of range");
-        }
-      } else if (type_dst->integer.signedness == Unsigned &&
-                 type_val->integer.signedness == Signed) {
-        i64 i = get_as_i64(val_idx);
+    *cast<ValueSlice *>(data) = {
+      .len   = count,
+      .items = v->data,
+    };
 
-        if (i < 0) {
-          Todo("invalid cast: value out of range");
-        }
+    return true;
+  }
 
-        if (type_val->integer.bitwidth > type_dst->integer.bitwidth) {
-          u64 u = cast<u64>(i);
-
-          u64 hi = uint_value_max(type_dst->integer.bitwidth);
-
-          if (u > hi) {
-            Todo("invalid cast: value out of range");
-          }
-        }
-      } else if (type_dst->integer.signedness == Signed &&
-                 type_val->integer.signedness == Unsigned) {
-        u64 i = get_as_u64(val_idx);
-
-        u64 hi = cast<u64>(int_value_max(type_dst->integer.bitwidth));
-
-        if (i > hi) {
-          Todo("invalid cast: value out of range");
-        }
-      } else if (type_dst->integer.signedness == Unsigned &&
-                 type_val->integer.signedness == Unsigned) {
-        u64 i = get_as_u64(val_idx);
-
-        u64 hi = uint_value_max(type_dst->integer.bitwidth);
-
-        if (i > hi) {
-          Todo("invalid cast: value out of range");
-        }
-      } else {
-        Unreachable();
-      }
-
-      Value *v;
-      *result = values.alloc_value(&v);
-
-      auto size_info = types->size_info(type_idx_dst);
-      auto data      = values.alloc_data(size_info);
-
-      *v = {
-        .type = type_idx_dst,
-        .data = data,
-      };
-
-      memcpy(data, val->data, size_info.size);
-
-      return true;
+  if (type_src->kind == Type_sequence) {
+    TypeIndex base_type;
+    if (type_dst->kind == Type_slice) {
+      base_type = type_dst->slice.base_type;
+    } else if (type_dst->kind == Type_array) {
+      base_type = type_dst->array.base_type;
+    } else {
+      Unreachable();
     }
+
+    u32  count     = type_src->sequence.count;
+    auto size_info = types->size_info(base_type);
+
+    ValueIndex *sequence_items = cast<ValueIndex *>(val->data);
+
+    Todo();
+
+    // auto items = values.alloc_data(size_info, count);
+    // for (u32 i = 0; i < count; i++) {
+    //   Try(coerce_value(base_type, sequence_items[i], ptr_offset(items, size_info.stride * i)));
+    // }
+
+    // if (type_dst->kind == Type_array) {
+    //   *cast<void **>(out) = items;
+    // } else {
+    //   *cast<ValueSlice *>(out) = {.len = count, .items = items};
+    // }
+
+    return true;
   }
 
   Todo();
 
   return true;
-}
-
-u64 Interpreter::get_uint(ValueIndex idx) {
-  u64 res;
-  Try(coerce_value(types->type.uint, idx, &res));
-  return res;
 }
 
 void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
@@ -1640,7 +1461,8 @@ void Interpreter::insert_cast_to(TypeIndex type_dst, NodeIndex *node) {
     node_index,
     {
       Ast_cast,
-      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in `AstNodes`
+      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
+                  // `AstNodes`
       {.cast = cast},
     }
   );
