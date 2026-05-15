@@ -992,6 +992,11 @@ struct Interpreter {
   // - Evaluates all the `const` code and inserts computed values into AST.
   bool prepare_code();
 
+  // Replaces type coercions with explicit casts. 
+  b32 coercion_resolve_walk(NodeIndex *node);
+  void resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node);
+  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
+
   bool run_main(ValueIndex *result);
 
   OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {
@@ -1013,12 +1018,6 @@ struct Interpreter {
   b32 eval_binary_op(
     BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
   );
-
-  // Replaces type coercions with explicit casts. 
-  b32 coercion_resolve_walk(NodeIndex *node);
-  void resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node);
-
-  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   void builtin_print(Str format, Slice<ValueIndex> args);
 

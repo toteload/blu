@@ -225,7 +225,12 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   } break;
 
   case Ast_call: {
-    Todo();
+    TypeIndex type_idx_callee = get_type(data.call.callee);
+    auto type_callee = types->get(type_idx_callee);
+    Assert(type_callee->kind == Type_function);
+    for (u32 i = 0; i < type_callee->function.param_count; i++) {
+      resolve_possible_coercion(type_callee->function.param_types[i], &data.call.args[i]);
+    }
   } break;
 
   case Ast_function: {
@@ -298,7 +303,6 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   } break;
 
   case Ast_builtin: {
-    Todo();
   } break;
 
   case Ast_for: {
@@ -316,15 +320,14 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
     coercion_resolve_walk(&data.cast.value);
   } break;
   case Ast_literal_sequence: {
-    Todo();
+    for (u32 i = 0; i < data.literal_sequence.items.len(); i++) {
+      coercion_resolve_walk(&data.literal_sequence.items[i]);
+    }
   } break;
 
   case Ast_type_function:
-    break;
   case Ast_type_array:
-    break;
   case Ast_type_slice:
-    break;
   case Ast_identifier:
   case Ast_literal_int:
   case Ast_literal_string:
