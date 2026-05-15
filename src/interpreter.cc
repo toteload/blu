@@ -478,11 +478,11 @@ TypeIndex Interpreter::slot_type(NodeIndex slot) {
   return get_type(slot);
 }
 
-b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
-  Assert(slot->is_some());
+b32 Interpreter::coerce_slot_to(NodeIndex *node, TypeIndex dst_type) {
+  Assert(node->is_some());
 
-  if (slot->kind == NodeIndex_value) {
-    ValueIndex val_idx{slot->idx};
+  if (node->kind == NodeIndex_value) {
+    ValueIndex val_idx{node->idx};
     Value     *v = values.get(val_idx);
 
     if (v->type == dst_type) {
@@ -500,15 +500,15 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
 
     Try(coerce_value(dst_type, val_idx, data));
 
-    *slot = NodeIndex{NodeIndex_value, new_idx.idx};
+    *node = NodeIndex{NodeIndex_value, new_idx.idx};
 
     return true;
   }
 
-  auto kind = nodes->kind(*slot);
+  auto kind = nodes->kind(*node);
   switch (kind) {
   case Ast_block: {
-    auto &block = nodes->datas[slot->idx].block;
+    auto &block = nodes->datas[node->idx].block;
     if (block.items.len() == 0) {
       break;
     }
@@ -516,20 +516,20 @@ b32 Interpreter::coerce_slot_to(NodeIndex *slot, TypeIndex dst_type) {
     Try(coerce_slot_to(&block.items[block.items.len() - 1], dst_type));
   } break;
   case Ast_if_else: {
-    auto &ie = nodes->datas[slot->idx].if_else;
+    auto &ie = nodes->datas[node->idx].if_else;
     Try(coerce_slot_to(&ie.then, dst_type));
     if (ie.otherwise.is_some()) {
       Try(coerce_slot_to(&ie.otherwise, dst_type));
     }
   } break;
   default: {
-    TypeIndex type_src = get_type(*slot);
+    TypeIndex type_src = get_type(*node);
     if (type_src == dst_type) {
       break;
     }
 
     // We got through the type checker so this cast must be valid.
-    insert_cast_to(dst_type, slot);
+    insert_cast_to(dst_type, node);
   } break;
   }
 

@@ -1,5 +1,6 @@
 #include "stdlib.hh"
 #include <stdio.h>
+#include <stdlib.h>
 
 static void *stdlib_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   if (!Is_null(p) && new_byte_size == 0) {

@@ -2,6 +2,11 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+// stddef.h HAS TO BE INCLUDED.
+// This is some sort of clang + MSVC mixup, I think.
+// If I don't included this I get an error saying that 'std' is not a namespace for nullptr...
+#include <stddef.h>
+
 namespace ttld::os {
 #ifdef _WIN32
 #include <Windows.h>
