@@ -263,6 +263,8 @@ void TypeInterner::init(
   map.init(map_allocator, work_arena);
   list.init(list_allocator);
 
+  list.push_empty(); // Reserve one spot for the null value.
+
 #define Add_type(Identifier, T)                                                                    \
   {                                                                                                \
     auto _tmp  = T;                                                                                \

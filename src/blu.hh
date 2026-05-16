@@ -22,7 +22,7 @@ enum NodeIndexKind : u8 {
 struct NodeIndex {
   NodeIndexKind kind;
 
-  // A value of 0 means not valid or nil.
+  // An index value of 0 means not valid.
   union {
   u32 idx;
   ValueIndex value_idx;
@@ -1000,8 +1000,7 @@ struct Interpreter {
   bool prepare_code();
 
   // Replaces type coercions with explicit casts.
-  b32  coercion_resolve_walk(NodeIndex *node);
-  void resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node);
+  void coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected={0});
   b32  const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   bool run_main(ValueIndex *result);

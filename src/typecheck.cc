@@ -201,6 +201,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
 
     result = types->add(ty);
   } break;
+
   case Ast_type_slice: {
     auto      slice = source->nodes->data(node_index).type_slice;
     TypeIndex base_type;
@@ -211,6 +212,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     };
     result = types->add(&type);
   } break;
+
   case Ast_type_array: {
     auto array = source->nodes->data(node_index).type_array;
 
@@ -236,6 +238,7 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     };
     result = types->add(&type);
   } break;
+
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
 
@@ -318,6 +321,7 @@ b32 TypeChecker::check_expression(
 
     result = types->type.type;
   } break;
+
   case Ast_type_slice: {
     result = types->type.type;
   } break;
@@ -340,6 +344,7 @@ b32 TypeChecker::check_expression(
     };
     result = types->add(&type);
   } break;
+
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
 
@@ -368,26 +373,16 @@ b32 TypeChecker::check_expression(
   } break;
 
   case Ast_function: {
+    Assert(hint);
+
+    Type *hint_type = types->get(hint->type);
+
+    Assert(hint_type->kind == Type_function);
+
     auto f           = source->nodes->data(node_index).function;
+
     u32  param_count = cast<u32>(f.param_names.len());
-
-    Type *hint_type = nullptr;
-    if (hint) {
-      auto ht = types->get(hint->type);
-      if (ht->kind == Type_function) {
-        hint_type = ht;
-      }
-    }
-
-    if (param_count > 0 && !hint_type) {
-      messages->error(
-        node_index,
-        "Cannot infer function parameter types without a function-type annotation."
-      );
-      return false;
-    }
-
-    if (hint_type && hint_type->function.param_count != param_count) {
+    if (hint_type->function.param_count != param_count) {
       messages->error(
         node_index,
         "Function literal has wrong number of parameters for type {type}.",
@@ -411,20 +406,9 @@ b32 TypeChecker::check_expression(
 
     TypeIndex body_type;
     Try(check_expression(env_params, f.body, nullptr, &body_type));
+    Try(check_coercion(hint_type->function.return_type, body_type, f.body));
 
-    if (hint_type) {
-      Try(check_coercion(hint_type->function.return_type, body_type, f.body));
-      result = hint->type;
-    } else {
-      Type function_type = {
-        .kind             = Type_literal_function,
-        .literal_function = {
-          .return_type = body_type,
-          .param_count = param_count,
-        },
-      };
-      result = types->add(&function_type);
-    }
+    result = hint->type;
   } break;
 
   case Ast_block: {
@@ -444,6 +428,7 @@ b32 TypeChecker::check_expression(
 
     Try(check_expression(env_block, block.items[block.items.len() - 1], nullptr, &result));
   } break;
+
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
 
@@ -462,11 +447,9 @@ b32 TypeChecker::check_expression(
     TypeIndex otherwise_type;
     Try(check_expression(env, if_else.otherwise, nullptr, &otherwise_type));
 
-    TypeIndex final_type;
-    Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &final_type));
-
-    result = final_type;
+    Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &result));
   } break;
+
   case Ast_declaration: {
     auto decl = source->nodes->data(node_index).declaration;
     auto key  = intern_identifier(decl.name);
@@ -481,10 +464,9 @@ b32 TypeChecker::check_expression(
 
     TypeIndex value_type;
     Try(check_expression(env, decl.value, &hint, &value_type));
-
     Try(check_coercion(declared_type, value_type, decl.value));
 
-    // TODO: You probably want a unification of the declared type and the actual type here.
+    // TODO: Eventually, you probably want a unification of the declared type and the actual type here.
 
     Declaration d;
     if (declared_type == types->type.type) {
@@ -503,10 +485,12 @@ b32 TypeChecker::check_expression(
 
     result = types->type.nil;
   } break;
+
   case Ast_literal_sequence: {
     auto seq = source->nodes->data(node_index).literal_sequence;
 
     auto type = alloc_type_sequence(work_arena, seq.items.len());
+
     *type     = {
           .kind     = Type_sequence,
           .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},

@@ -428,7 +428,7 @@ b32 Parser::parse_function(NodeIndex *out) {
   ));
   Try(expect_token(Tok_bar));
 
-  Try(parse_block(&function.body));
+  Try(parse_expression(&function.body));
 
   nodes->set(
     node_index,
@@ -615,13 +615,8 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   case Tok_builtin_print:    Try(parse_builtin_print(&base));  break;
   case Tok_keyword_const:    Try(parse_const(&base));          break;
   case Tok_keyword_cast:     Try(parse_cast(&base));           break;
+  case Tok_brace_open:       Try(parse_block(&base));          break;
     // clang-format on
-
-  case Tok_brace_open: {
-    next();
-    Try(parse_expression(&base));
-    Try(expect_token(Tok_brace_close));
-  } break;
 
   case Tok_dot: {
     next();

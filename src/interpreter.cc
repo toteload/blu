@@ -119,7 +119,7 @@ bool Interpreter::prepare_code() {
 
   // Insert explicit cast for coercions.
   for (u32 i = 0; i < root_items.len(); i++) {
-    Try(coercion_resolve_walk(&root_items[i]));
+    coercion_resolve_walk(&root_items[i]);
   }
 
   // Evaluate all the const code.
@@ -157,10 +157,14 @@ bool Interpreter::run_main(ValueIndex *result) {
   return true;
 }
 
-b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
+bool type_is_some(TypeIndex t) {
+  return t.idx != 0;
+}
+
+void Interpreter::coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected) {
   Assert(node->kind == NodeIndex_ast_node);
 
-  // NOTE: instead of a recursive walk, this can probably be replaced with a linear walk.
+  auto type_node = get_type(*node);
 
   auto kind = nodes->kind(*node);
   auto data = nodes->data(*node);
@@ -168,25 +172,28 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   switch (kind) {
   case Ast_declaration: {
     auto declared_type = get_type(data.declaration.type);
-    resolve_possible_coercion(declared_type, &data.declaration.value);
+    coercion_resolve_walk(&data.declaration.value, declared_type);
   } break;
 
   case Ast_if_else: {
-    resolve_possible_coercion(types->type.bool_, &data.if_else.cond);
+    coercion_resolve_walk(&data.if_else.cond, types->type.bool_);
+
     if (data.if_else.otherwise.is_some()) {
-      TypeIndex type_expr = get_type(*node);
-      resolve_possible_coercion(type_expr, &data.if_else.then);
-      resolve_possible_coercion(type_expr, &data.if_else.otherwise);
+      coercion_resolve_walk(&data.if_else.then, type_node);
+      coercion_resolve_walk(&data.if_else.otherwise, type_node);
+    } else {
+      coercion_resolve_walk(&data.if_else.then);
     }
   } break;
 
   case Ast_assign: {
     auto type_lhs = get_type(data.assign.lhs);
-    resolve_possible_coercion(type_lhs, &data.assign.value);
+    coercion_resolve_walk(&data.assign.value, type_lhs);
   } break;
 
   case Ast_index: {
-    resolve_possible_coercion(types->type.uint, &data.index.index_at);
+    coercion_resolve_walk(&data.index.indexable);
+    coercion_resolve_walk(&data.index.index_at, types->type.uint);
   } break;
 
   case Ast_binary_op: {
@@ -201,8 +208,8 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
     case Cmp_greater_equal: {
       TypeIndex t;
       types->unify(get_type(data.binary_op.lhs), get_type(data.binary_op.rhs), &t);
-      resolve_possible_coercion(t, &data.binary_op.lhs);
-      resolve_possible_coercion(t, &data.binary_op.lhs);
+      coercion_resolve_walk(&data.binary_op.lhs, t);
+      coercion_resolve_walk(&data.binary_op.lhs, t);
     } break;
 
     case Mul:
@@ -216,44 +223,66 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
     case Bit_or:
     case Bit_xor: {
       TypeIndex type_expr = get_type(*node);
-      resolve_possible_coercion(type_expr, &data.binary_op.lhs);
-      resolve_possible_coercion(type_expr, &data.binary_op.rhs);
+      coercion_resolve_walk(&data.binary_op.lhs, type_expr);
+      coercion_resolve_walk(&data.binary_op.rhs, type_expr);
     } break;
 
     case Logical_and:
-    case Logical_or:
+    case Logical_or: {
+      coercion_resolve_walk(&data.binary_op.lhs);
+      coercion_resolve_walk(&data.binary_op.rhs);
+    } break;
     case BinaryOpKind_max:
       break;
     }
   } break;
 
   case Ast_call: {
+    coercion_resolve_walk(&data.call.callee);
+
     TypeIndex type_idx_callee = get_type(data.call.callee);
     auto      type_callee     = types->get(type_idx_callee);
     Assert(type_callee->kind == Type_function);
     for (u32 i = 0; i < type_callee->function.param_count; i++) {
-      resolve_possible_coercion(type_callee->function.param_types[i], &data.call.args[i]);
+      coercion_resolve_walk(&data.call.args[i], type_callee->function.param_types[i]);
     }
   } break;
 
   case Ast_function: {
+    Type     *type_fn              = types->get(type_node);
+    TypeIndex type_idx_return_type = type_fn->function.return_type;
+
+    coercion_resolve_walk(&data.function.body, type_idx_return_type);
   } break;
   case Ast_block: {
+    auto len = data.block.items.len();
+    if (len == 0) {
+      break;
+    }
+
+    for (u32 i = 0; i < len - 1; i++) {
+      coercion_resolve_walk(&data.block.items[i]);
+    }
+
+    coercion_resolve_walk(&data.block.items[len - 1], type_expected);
   } break;
 
   case Ast_builtin: {
     switch (data.builtin.kind) {
     case Builtin_print: {
-      resolve_possible_coercion(types->type.slice_u8, &data.builtin.args[0]);
+      coercion_resolve_walk(&data.builtin.args[0], types->type.slice_u8);
     } break;
     }
+  } break;
+
+  case Ast_unary_op: {
+    Todo();
   } break;
 
   case Ast_identifier:
   case Ast_type_slice:
   case Ast_type_array:
   case Ast_type_function:
-  case Ast_unary_op:
   case Ast_root:
   case Ast_literal_int:
   case Ast_literal_string:
@@ -269,95 +298,9 @@ b32 Interpreter::coercion_resolve_walk(NodeIndex *node) {
   } break;
   }
 
-  switch (kind) {
-  case Ast_declaration: {
-    coercion_resolve_walk(&data.declaration.value);
-  } break;
-  case Ast_if_else: {
-    coercion_resolve_walk(&data.if_else.cond);
-    coercion_resolve_walk(&data.if_else.then);
-    coercion_resolve_walk(&data.if_else.otherwise);
-  } break;
-  case Ast_assign: {
-    coercion_resolve_walk(&data.assign.lhs);
-    coercion_resolve_walk(&data.assign.value);
-  } break;
-  case Ast_index: {
-    coercion_resolve_walk(&data.index.indexable);
-    coercion_resolve_walk(&data.index.index_at);
-  } break;
-  case Ast_binary_op: {
-    coercion_resolve_walk(&data.binary_op.lhs);
-    coercion_resolve_walk(&data.binary_op.rhs);
-  } break;
-  case Ast_call: {
-    coercion_resolve_walk(&data.call.callee);
-    for (u32 i = 0; i < data.call.args.len(); i++) {
-      coercion_resolve_walk(&data.call.args[i]);
-    }
-  } break;
-  case Ast_unary_op: {
-    coercion_resolve_walk(&data.unary_op.value);
-  } break;
-  case Ast_block: {
-    for (u32 i = 0; i < data.block.items.len(); i++) {
-      coercion_resolve_walk(&data.block.items[i]);
-    }
-  } break;
-  case Ast_function: {
-    coercion_resolve_walk(&data.function.body);
-  } break;
-
-  case Ast_builtin: {
-  } break;
-
-  case Ast_for: {
-    coercion_resolve_walk(&data.for_.iterable);
-    coercion_resolve_walk(&data.for_.body);
-  } break;
-
-  case Ast_defer: {
-    coercion_resolve_walk(&data.defer.value);
-  } break;
-  case Ast_const: {
-    coercion_resolve_walk(&data.const_.expr);
-  } break;
-  case Ast_cast: {
-    coercion_resolve_walk(&data.cast.value);
-  } break;
-  case Ast_literal_sequence: {
-    for (u32 i = 0; i < data.literal_sequence.items.len(); i++) {
-      coercion_resolve_walk(&data.literal_sequence.items[i]);
-    }
-  } break;
-
-  case Ast_type_function:
-  case Ast_type_array:
-  case Ast_type_slice:
-  case Ast_identifier:
-  case Ast_literal_int:
-  case Ast_literal_string:
-    break;
-
-  case Ast_root:
-  case Ast_kind_max: {
-    Todo();
-  } break;
+  if (type_is_some(type_expected) && type_node != type_expected) {
+    insert_cast_to(type_expected, node);
   }
-
-  return true;
-}
-
-void Interpreter::resolve_possible_coercion(TypeIndex type_dst, NodeIndex *node) {
-  Assert(node->kind == NodeIndex_ast_node);
-
-  auto type = get_type(*node);
-
-  if (type == type_dst) {
-    return;
-  }
-
-  insert_cast_to(type_dst, node);
 }
 
 void Interpreter::copy_value(TypeIndex type, ValueIndex src, void *dst) {
@@ -1104,7 +1047,8 @@ b32 Interpreter::eval_place(
 
     ValueIndex idx_value;
     Try(eval_expr(env, inode.index_at, &idx_value));
-    u64 i; Todo();
+    u64 i;
+    Todo();
 
     auto      bt = types->get(base_type);
     TypeIndex elem_type;
