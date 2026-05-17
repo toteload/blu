@@ -879,18 +879,24 @@ b32 Parser::parse_expression(NodeIndex *out, u32 prev_op) {
 }
 
 b32 Parser::parse_identifier(NodeIndex *out) {
-  auto start = at;
+  auto node_index = nodes->alloc();
+  auto start      = at;
 
-  AstAtom identifier;
+  AstAtom identifier{};
   identifier.token_index = at;
 
   Try(expect_token(Tok_identifier));
 
-  *out = nodes->add({
-    Ast_identifier,
-    {start, at},
-    {.identifier = identifier},
-  });
+  nodes->set(
+    node_index,
+    {
+      Ast_identifier,
+      {start, at},
+      {.identifier = identifier},
+    }
+  );
+
+  *out = node_index;
 
   return true;
 }

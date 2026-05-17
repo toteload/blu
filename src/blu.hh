@@ -637,6 +637,7 @@ struct AstNodes {
   Vector<Span<TokenIndex>> spans;
   Vector<AstNodeData>      datas;
   Vector<TypeIndex>        types;
+  Vector<u8>               is_consts;
 
   Allocator segment_allocator;
 
@@ -645,11 +646,13 @@ struct AstNodes {
     spans.init(vector_allocator);
     datas.init(vector_allocator);
     types.init(vector_allocator);
+    is_consts.init(vector_allocator);
 
     kinds.push({});
     spans.push({});
     datas.push({});
     types.push({});
+    is_consts.push({});
 
     this->segment_allocator = segment_allocator;
   }
@@ -659,6 +662,7 @@ struct AstNodes {
     spans.deinit();
     datas.deinit();
     types.deinit();
+    is_consts.deinit();
 
     memset(this, 0, sizeof(*this));
   }
@@ -682,6 +686,7 @@ struct AstNodes {
     spans.push_empty();
     datas.push_empty();
     types.push({0});
+    is_consts.push_empty();
 
     return res;
   }
@@ -694,23 +699,11 @@ struct AstNodes {
     datas[idx.idx] = node.data;
   }
 
-  NodeIndex add(AstNode node) {
-    NodeIndex res = {
-      .kind = NodeIndex_ast_node,
-      .idx  = cast<u32>(kinds.len()),
-    };
-
-    kinds.push(node.kind);
-    spans.push(node.span);
-    datas.push(node.data);
-
-    return res;
-  }
-
   AstKind          &kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx]; }
   AstNodeData      &data(NodeIndex idx) { return datas[idx.idx]; }
   TypeIndex        &type(NodeIndex idx) { return types[idx.idx]; }
+  u8               &is_const(NodeIndex idx) { return is_consts[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
@@ -986,12 +979,12 @@ struct Interpreter {
   Env<ValueIndex>       *env_root;
 
   // Externally owned
-  TypeInterner    *types;
-  StringInterner  *strings;
-  Messages        *messages;
-  Str              text;
-  Tokens          *tokens;
-  AstNodes        *nodes;
+  TypeInterner   *types;
+  StringInterner *strings;
+  Messages       *messages;
+  Str             text;
+  Tokens         *tokens;
+  AstNodes       *nodes;
 
   struct {
     ValueIndex nil;
@@ -1088,8 +1081,8 @@ struct SourceUnit {
 
   Interpreter interpreter;
 
-  Tokens            tokens;
-  AstNodes          nodes;
+  Tokens   tokens;
+  AstNodes nodes;
 
   void init(Str filename, Str text);
   void deinit();
@@ -1103,7 +1096,7 @@ struct SourceUnit {
   void print_messages();
 };
 
-enum DeclarationKind {
+enum DeclarationKind : u8 {
   Declaration_of_type,
   Declaration_of_value,
 
@@ -1113,6 +1106,7 @@ enum DeclarationKind {
 
 struct Declaration {
   DeclarationKind kind;
+  u8              is_const;
   union {
     TypeIndex type;
     NodeIndex node_index;
@@ -1139,11 +1133,11 @@ enum PrettyPrintMode : u32 {
 };
 
 struct AstPrettyPrintContext {
-  Str              text;
-  Tokens          *tokens;
-  TypeInterner    *types;
-  AstNodes        *nodes;
-  ValueStore      *values;
+  Str           text;
+  Tokens       *tokens;
+  TypeInterner *types;
+  AstNodes     *nodes;
+  ValueStore   *values;
 };
 
 void pretty_print(AstPrettyPrintContext *context, PrettyPrintMode mode, NodeIndex idx);

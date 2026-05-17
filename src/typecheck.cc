@@ -17,6 +17,8 @@ struct TypeChecker {
 
   b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
 
+  b32 is_const(Env<Declaration> *env, NodeIndex node_index);
+
   b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
   b32 check_expression(
     Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
@@ -39,6 +41,14 @@ struct TypeChecker {
   b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
 };
 
+struct ConstFinder {
+  AstNodes                *nodes;
+  bool                     is_const_context;
+  EnvManager<Declaration> *envs;
+
+  b32 identify_const_expressions(Env<Declaration> *env, NodeIndex node_index);
+};
+
 struct RootEnvPopulator {
   Env<Declaration> *env;
   StringInterner   *strings;
@@ -46,7 +56,14 @@ struct RootEnvPopulator {
 
   void insert(DeclarationKind kind, Str s, TypeIndex type) {
     auto key = strings->add(s);
-    env->insert(key, {.kind = kind, .type = type});
+    env->insert(
+      key,
+      {
+        .kind     = kind,
+        .is_const = true,
+        .type     = type,
+      }
+    );
   }
 
   void populate();
@@ -104,6 +121,12 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
   }
   auto env = envs->alloc(env_root);
 
+  ConstFinder const_finder{};
+  const_finder.nodes            = source->nodes;
+  const_finder.is_const_context = false;
+
+  Try(const_finder.identify_const_expressions(env, idx_root));
+
   // Add all root level declarations to the environment.
   auto root = source->nodes->data(idx_root).root;
   for (u32 i = 0; i < root.items.len(); i++) {
@@ -117,6 +140,7 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
       key,
       {
         .kind       = Declaration_unresolved,
+        .is_const   = false,
         .node_index = root.items[i],
       }
     );
@@ -125,6 +149,144 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
   for (u32 i = 0; i < root.items.len(); i++) {
     Try(resolve_declaration(env, root.items[i]));
   }
+
+  return true;
+}
+
+b32 ConstFinder::identify_const_expressions(Env<Declaration> *env, NodeIndex node_index) {
+  auto  kind = nodes->kind(node_index);
+  auto &data = nodes->data(node_index);
+
+  bool is_const_node = false;
+
+  switch (kind) {
+
+  case Ast_kind_max:
+    Todo();
+    break;
+
+  case Ast_function: {
+    Try(identify_const_expressions(env, data.function.body));
+  } break;
+
+  case Ast_for: {
+  } break;
+
+  case Ast_defer: {
+  } break;
+
+  case Ast_const: {
+    is_const_context = true;
+    defer(is_const_context = false);
+
+    is_const_node = true;
+    Try(identify_const_expressions(env, data.const_.expr));
+  } break;
+
+  case Ast_binary_op: {
+    Try(identify_const_expressions(env, data.binary_op.lhs));
+    Try(identify_const_expressions(env, data.binary_op.rhs));
+
+    if (nodes->is_const(data.binary_op.lhs) && nodes->is_const(data.binary_op.rhs)) {
+      is_const_node = true;
+    }
+  } break;
+
+  case Ast_unary_op: {
+    Try(identify_const_expressions(env, data.unary_op.value));
+
+    if (nodes->is_const(data.unary_op.value)) {
+      is_const_node = true;
+    }
+  } break;
+
+  case Ast_if_else: {
+    Try(identify_const_expressions(env, data.if_else.cond));
+    Try(identify_const_expressions(env, data.if_else.then));
+
+    auto otherwise_is_some = data.if_else.otherwise.is_some();
+
+    if (otherwise_is_some) {
+      Try(identify_const_expressions(env, data.if_else.otherwise));
+      if (nodes->is_const(data.if_else.cond) && nodes->is_const(data.if_else.then) &&
+          nodes->is_const(data.if_else.otherwise)) {
+        is_const_node = true;
+      }
+    }
+  } break;
+
+  case Ast_block: {
+    auto env_block = envs->alloc(env);
+    defer(envs->dealloc(env_block));
+
+    for (u32 i = 0; i < data.block.items.len(); i++) {
+      Try(identify_const_expressions(env, data.block.items[i]));
+    }
+  } break;
+
+  case Ast_assign: {
+    Try(identify_const_expressions(env, data.assign.lhs));
+    Try(identify_const_expressions(env, data.assign.value));
+  } break;
+
+  case Ast_root:
+    Todo();
+    break;
+
+  case Ast_type_slice: {
+    is_const_context = true;
+    defer(is_const_context = false);
+
+    is_const_node = true;
+    Try(identify_const_expressions(env, data.type_slice.base));
+  } break;
+  case Ast_type_array: {
+    is_const_context = true;
+    defer(is_const_context = false);
+
+    is_const_node = true;
+    Try(identify_const_expressions(env, data.type_array.base));
+    Try(identify_const_expressions(env, data.type_array.size));
+  } break;
+
+  case Ast_type_function: {
+    is_const_context = true;
+    defer(is_const_context = false);
+
+    is_const_node = true;
+    Try(identify_const_expressions(env, data.type_function.return_type));
+
+    for (u32 i = 0; i < data.type_function.param_types.len(); i++) {
+      Try(identify_const_expressions(env, data.type_function.param_types[i]));
+    }
+  } break;
+
+  case Ast_literal_string:
+  case Ast_literal_sequence:
+  case Ast_literal_int: {
+    is_const_node = true;
+  } break;
+  case Ast_call:
+  case Ast_cast:
+
+  case Ast_declaration:
+  case Ast_identifier:
+    Todo();
+    break;
+
+  case Ast_index: {
+    Try(identify_const_expressions(env, data.index.indexable));
+    Try(identify_const_expressions(env, data.index.index_at));
+  }; break;
+
+  case Ast_builtin:
+    Todo();
+    break;
+  }
+
+  auto is_const = is_const_context || is_const_node;
+
+  nodes->is_const(node_index) = is_const;
 
   return true;
 }
@@ -147,7 +309,7 @@ b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex decl_node)
   if (declared_type == types->type.type) {
     TypeIndex value_type;
     Try(eval_type_expression(env, decl.value, &value_type));
-    env->insert(key, {.kind = Declaration_of_type, .type = value_type});
+    env->insert(key, {.kind = Declaration_of_type, .is_const = true, .type = value_type});
     return true;
   }
 
@@ -335,11 +497,11 @@ b32 TypeChecker::check_expression(
     auto s           = get_token_str(source->text, source->tokens, token_index);
     auto size        = string_literal_byte_size(s);
 
-    Type type        = {
-             .kind  = Type_array,
-             .array = {
-               .base_type = types->type.u8_,
-               .size      = size,
+    Type type = {
+      .kind  = Type_array,
+      .array = {
+        .base_type = types->type.u8_,
+        .size      = size,
       },
     };
 
@@ -417,7 +579,7 @@ b32 TypeChecker::check_expression(
     Try(check_coercion(return_type, body_type, f.body));
 
     if (return_type != body_type) {
-      source->nodes->type(f.body) = return_type; 
+      source->nodes->type(f.body) = return_type;
     }
 
     result = hint->type;
@@ -440,12 +602,15 @@ b32 TypeChecker::check_expression(
 
     auto last_item = block.items[block.items.len() - 1];
 
-    TypeIndex block_type;
-    Try(check_expression(env_block, last_item, hint, &block_type));
+    auto is_const_block = is_const(env, node_index);
+    auto hint_last_item = (!is_const_block) ? hint : nullptr;
 
-    if (hint && hint->type != block_type) {
-      Try(check_coercion(hint->type, block_type, last_item));
-      result = hint->type;
+    TypeIndex block_type;
+    Try(check_expression(env_block, last_item, hint_last_item, &block_type));
+
+    if (hint_last_item && hint_last_item->type != block_type) {
+      Try(check_coercion(hint_last_item->type, block_type, last_item));
+      result = hint_last_item->type;
     } else {
       result = block_type;
     }
@@ -454,12 +619,16 @@ b32 TypeChecker::check_expression(
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
 
+    auto is_const_if_else = is_const(env, node_index);
+
     TypeIndex cond_type;
     Try(check_expression(env, if_else.cond, nullptr, &cond_type));
     Try(check_coercion(types->type.bool_, cond_type, if_else.cond));
 
+    auto hint_branch = (!is_const_if_else) ? hint : nullptr;
+
     TypeIndex then_type;
-    Try(check_expression(env, if_else.then, hint, &then_type));
+    Try(check_expression(env, if_else.then, hint_branch, &then_type));
 
     if (if_else.otherwise.is_none()) {
       result = types->type.nil;
@@ -467,7 +636,7 @@ b32 TypeChecker::check_expression(
     }
 
     TypeIndex otherwise_type;
-    Try(check_expression(env, if_else.otherwise, hint, &otherwise_type));
+    Try(check_expression(env, if_else.otherwise, hint_branch, &otherwise_type));
 
     Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &result));
   } break;
@@ -494,13 +663,15 @@ b32 TypeChecker::check_expression(
     Declaration d;
     if (declared_type == types->type.type) {
       d = {
-        .kind = Declaration_of_type,
-        .type = value_type,
+        .kind     = Declaration_of_type,
+        .is_const = true,
+        .type     = value_type,
       };
     } else {
       d = {
-        .kind = Declaration_of_value,
-        .type = declared_type,
+        .kind     = Declaration_of_value,
+        .is_const = false,
+        .type     = declared_type,
       };
     }
 
@@ -698,7 +869,7 @@ b32 TypeChecker::check_expression(
 
     auto iterator_token = source->nodes->data(node.iterator).identifier.token_index;
     auto key            = intern_identifier(iterator_token);
-    env_loop->insert(key, {.kind = Declaration_of_value, .type = element_type});
+    env_loop->insert(key, {.kind = Declaration_of_value, .is_const = false, .type = element_type});
     source->nodes->type(node.iterator) = element_type;
 
     TypeIndex body_type;
@@ -851,4 +1022,82 @@ b32 TypeChecker::find_identifier(
   }
 
   return found;
+}
+
+b32 TypeChecker::is_const(Env<Declaration> *env, NodeIndex node_index) {
+  auto kind = source->nodes->kind(node_index);
+
+  auto &data = source->nodes->data(node_index);
+  switch (kind) {
+  case Ast_binary_op: {
+    auto is_const_lhs = is_const(env, data.binary_op.lhs);
+    auto is_const_rhs = is_const(env, data.binary_op.rhs);
+    return is_const_lhs && is_const_rhs;
+  } break;
+
+  case Ast_if_else: {
+    if (data.if_else.otherwise.is_none()) {
+      return false;
+    }
+
+    auto is_const_cond      = is_const(env, data.if_else.cond);
+    auto is_const_then      = is_const(env, data.if_else.then);
+    auto is_const_otherwise = is_const(env, data.if_else.otherwise);
+
+    return is_const_cond && is_const_then && is_const_otherwise;
+  } break;
+
+  case Ast_type_function:
+  case Ast_type_array:
+  case Ast_type_slice:
+    return true;
+
+  case Ast_function:
+  case Ast_literal_int:
+  case Ast_literal_sequence:
+  case Ast_literal_string:
+    return true;
+
+  case Ast_const:
+    return true;
+
+  case Ast_builtin: {
+    Todo();
+  } break;
+  case Ast_for: {
+    Todo();
+  } break;
+  case Ast_defer: {
+    Todo();
+  } break;
+  case Ast_identifier: {
+    return false;
+  } break;
+  case Ast_index: {
+    Todo();
+  } break;
+  case Ast_unary_op: {
+    Todo();
+  } break;
+  case Ast_call: {
+    Todo();
+  } break;
+  case Ast_assign: {
+    Todo();
+  } break;
+  case Ast_declaration: {
+    Todo();
+  } break;
+  case Ast_cast: {
+    Todo();
+  } break;
+  case Ast_block: {
+    return true;
+  } break;
+
+  case Ast_root:
+  case Ast_kind_max:
+    return false;
+  }
+  return true;
 }
