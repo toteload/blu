@@ -62,7 +62,6 @@ void Interpreter::init(InterpreterContext *context) {
   text       = context->text;
   tokens     = context->tokens;
   nodes      = context->nodes;
-  node_types = context->node_types;
 
   {
     Value *v;
@@ -157,9 +156,7 @@ bool Interpreter::run_main(ValueIndex *result) {
   return true;
 }
 
-bool type_is_some(TypeIndex t) {
-  return t.idx != 0;
-}
+bool type_is_some(TypeIndex t) { return t.idx != 0; }
 
 void Interpreter::coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected) {
   Assert(node->kind == NodeIndex_ast_node);
@@ -299,7 +296,27 @@ void Interpreter::coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected
   }
 
   if (type_is_some(type_expected) && type_node != type_expected) {
-    insert_cast_to(type_expected, node);
+    auto old_node_index = *node;
+    auto node_index     = nodes->alloc();
+    *node               = NodeIndex{NodeIndex_ast_node, {node_index.idx}};
+
+    auto val_idx = alloc_value_type(type_expected);
+
+    AstCast cast;
+    cast.type_dst = NodeIndex{NodeIndex_value, {val_idx.idx}};
+    cast.value    = old_node_index;
+
+    nodes->set(
+      node_index,
+      {
+        Ast_cast,
+        {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
+                    // `AstNodes`
+        {.cast = cast},
+      }
+    );
+
+    nodes->type(node_index) = type_expected;
   }
 }
 
@@ -791,6 +808,7 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     Try(const_walk(env, &data.if_else.then));
     Try(const_walk(env, &data.if_else.otherwise));
 
+    Todo();
     // TODO eval this
   } break;
 
@@ -1103,7 +1121,7 @@ b32 Interpreter::eval_call(
 
 TypeIndex Interpreter::get_type(NodeIndex node_index) {
   if (node_index.kind == NodeIndex_ast_node) {
-    return node_types[node_index.idx];
+    return nodes->type(node_index);
   } else {
     Value *v = values.get({node_index.idx});
     return v->type;
@@ -1390,24 +1408,4 @@ ValueIndex Interpreter::alloc_value_type(TypeIndex type) {
   return idx;
 }
 
-void Interpreter::insert_cast_to(TypeIndex type_dst, NodeIndex *node) {
-  auto old_node_index = *node;
-  auto node_index     = nodes->alloc();
-  *node               = NodeIndex{NodeIndex_ast_node, node_index.idx};
-
-  auto val_idx = alloc_value_type(type_dst);
-
-  AstCast cast;
-  cast.type_dst = NodeIndex{NodeIndex_value, val_idx.idx};
-  cast.value    = old_node_index;
-
-  nodes->set(
-    node_index,
-    {
-      Ast_cast,
-      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
-                  // `AstNodes`
-      {.cast = cast},
-    }
-  );
-}
+void Interpreter::insert_cast_to(TypeIndex type_dst, NodeIndex *node) { Todo(); }

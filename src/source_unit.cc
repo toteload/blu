@@ -30,7 +30,6 @@ void SourceUnit::deinit() {
   if (stage > Stage_typecheck) {
     types.deinit();
     strings.deinit();
-    node_types.deinit();
   }
 
   if (stage > Stage_run_const_code) {
@@ -86,10 +85,6 @@ bool SourceUnit::typecheck() {
   envs.init(stdlib_alloc, stdlib_alloc);
   defer(envs.deinit());
 
-  node_types.init(stdlib_alloc);
-  node_types.set_size(nodes.len());
-  memset(node_types.data, 0xff, nodes.len() * sizeof(TypeIndex));
-
   TypeCheckContext context{};
   context.messages   = &messages;
   context.envs       = &envs;
@@ -103,7 +98,7 @@ bool SourceUnit::typecheck() {
     .nodes  = &nodes,
   };
 
-  bool ok = ::typecheck(&context, &source, node_types.slice(), nodes.first_valid_index());
+  bool ok = ::typecheck(&context, &source, nodes.first_valid_index());
   if (!ok) {
     return false;
   }
@@ -123,7 +118,6 @@ bool SourceUnit::run_const_code() {
   context.text       = text;
   context.tokens     = &tokens;
   context.nodes      = &nodes;
-  context.node_types = node_types.slice();
 
   interpreter.init(&context);
 

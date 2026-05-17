@@ -13,8 +13,6 @@ struct TypeChecker {
   Arena                   *work_arena;
   ParsedSource            *source;
 
-  Slice<TypeIndex> annotations;
-
   b32 typecheck(NodeIndex idx_root);
 
   b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
@@ -78,17 +76,14 @@ void RootEnvPopulator::populate() {
   // clang-format on
 }
 
-b32 typecheck(
-  TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> annotations, NodeIndex idx_root
-) {
+b32 typecheck(TypeCheckContext *context, ParsedSource *source, NodeIndex idx_root) {
   TypeChecker checker = {
-    .messages    = context->messages,
-    .types       = context->types,
-    .envs        = context->envs,
-    .strings     = context->strings,
-    .work_arena  = context->work_arena,
-    .source      = source,
-    .annotations = annotations,
+    .messages   = context->messages,
+    .types      = context->types,
+    .envs       = context->envs,
+    .strings    = context->strings,
+    .work_arena = context->work_arena,
+    .source     = source,
   };
 
   return checker.typecheck(idx_root);
@@ -279,8 +274,9 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     return false;
   }
 
-  annotations[node_index.idx] = result;
-  *out                        = result;
+  source->nodes->type(node_index) = result;
+
+  *out = result;
 
   return true;
 }
@@ -325,16 +321,20 @@ b32 TypeChecker::check_expression(
   case Ast_type_slice: {
     result = types->type.type;
   } break;
+
   case Ast_type_array: {
     result = types->type.type;
   } break;
+
   case Ast_literal_int: {
     result = types->type.literal_int;
   } break;
+
   case Ast_literal_string: {
     auto token_index = source->nodes->data(node_index).literal_string.token_index;
     auto s           = get_token_str(source->text, source->tokens, token_index);
     auto size        = string_literal_byte_size(s);
+
     Type type        = {
              .kind  = Type_array,
              .array = {
@@ -342,6 +342,7 @@ b32 TypeChecker::check_expression(
                .size      = size,
       },
     };
+
     result = types->add(&type);
   } break;
 
@@ -379,9 +380,9 @@ b32 TypeChecker::check_expression(
 
     Assert(hint_type->kind == Type_function);
 
-    auto f           = source->nodes->data(node_index).function;
+    auto f = source->nodes->data(node_index).function;
 
-    u32  param_count = cast<u32>(f.param_names.len());
+    u32 param_count = cast<u32>(f.param_names.len());
     if (hint_type->function.param_count != param_count) {
       messages->error(
         node_index,
@@ -401,12 +402,23 @@ b32 TypeChecker::check_expression(
       auto param_type  = hint_type->function.param_types[i];
 
       env_params->insert(key, {.kind = Declaration_of_value, .type = param_type});
-      annotations[param_node.idx] = param_type;
+      source->nodes->type(param_node) = param_type;
     }
 
+    auto return_type = hint_type->function.return_type;
+
+    TypeHint hint_body = {
+      .type     = return_type,
+      .location = hint->location,
+    };
+
     TypeIndex body_type;
-    Try(check_expression(env_params, f.body, nullptr, &body_type));
-    Try(check_coercion(hint_type->function.return_type, body_type, f.body));
+    Try(check_expression(env_params, f.body, &hint_body, &body_type));
+    Try(check_coercion(return_type, body_type, f.body));
+
+    if (return_type != body_type) {
+      source->nodes->type(f.body) = return_type; 
+    }
 
     result = hint->type;
   } break;
@@ -426,7 +438,17 @@ b32 TypeChecker::check_expression(
       Try(check_expression(env_block, block.items[i], nullptr, &e));
     }
 
-    Try(check_expression(env_block, block.items[block.items.len() - 1], nullptr, &result));
+    auto last_item = block.items[block.items.len() - 1];
+
+    TypeIndex block_type;
+    Try(check_expression(env_block, last_item, hint, &block_type));
+
+    if (hint && hint->type != block_type) {
+      Try(check_coercion(hint->type, block_type, last_item));
+      result = hint->type;
+    } else {
+      result = block_type;
+    }
   } break;
 
   case Ast_if_else: {
@@ -437,7 +459,7 @@ b32 TypeChecker::check_expression(
     Try(check_coercion(types->type.bool_, cond_type, if_else.cond));
 
     TypeIndex then_type;
-    Try(check_expression(env, if_else.then, nullptr, &then_type));
+    Try(check_expression(env, if_else.then, hint, &then_type));
 
     if (if_else.otherwise.is_none()) {
       result = types->type.nil;
@@ -445,7 +467,7 @@ b32 TypeChecker::check_expression(
     }
 
     TypeIndex otherwise_type;
-    Try(check_expression(env, if_else.otherwise, nullptr, &otherwise_type));
+    Try(check_expression(env, if_else.otherwise, hint, &otherwise_type));
 
     Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &result));
   } break;
@@ -466,7 +488,8 @@ b32 TypeChecker::check_expression(
     Try(check_expression(env, decl.value, &hint, &value_type));
     Try(check_coercion(declared_type, value_type, decl.value));
 
-    // TODO: Eventually, you probably want a unification of the declared type and the actual type here.
+    // TODO: Eventually, you probably want a unification of the declared type and the actual type
+    // here.
 
     Declaration d;
     if (declared_type == types->type.type) {
@@ -491,9 +514,9 @@ b32 TypeChecker::check_expression(
 
     auto type = alloc_type_sequence(work_arena, seq.items.len());
 
-    *type     = {
-          .kind     = Type_sequence,
-          .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
+    *type = {
+      .kind     = Type_sequence,
+      .sequence = {.count = cast<u32>(seq.items.len()), .item_types = {}},
     };
 
     for (u32 i = 0; i < seq.items.len(); i++) {
@@ -676,7 +699,7 @@ b32 TypeChecker::check_expression(
     auto iterator_token = source->nodes->data(node.iterator).identifier.token_index;
     auto key            = intern_identifier(iterator_token);
     env_loop->insert(key, {.kind = Declaration_of_value, .type = element_type});
-    annotations[node.iterator.idx] = element_type;
+    source->nodes->type(node.iterator) = element_type;
 
     TypeIndex body_type;
     Try(check_expression(env_loop, node.body, nullptr, &body_type));
@@ -708,8 +731,8 @@ b32 TypeChecker::check_expression(
     return false;
   }
 
-  annotations[node_index.idx] = result;
-  *out                        = result;
+  source->nodes->type(node_index) = result;
+  *out                            = result;
 
   return true;
 }

@@ -24,8 +24,8 @@ struct NodeIndex {
 
   // An index value of 0 means not valid.
   union {
-  u32 idx;
-  ValueIndex value_idx;
+    u32        idx;
+    ValueIndex value_idx;
   };
 
   bool is_some() const { return idx != 0; }
@@ -636,6 +636,7 @@ struct AstNodes {
   Vector<AstKind>          kinds;
   Vector<Span<TokenIndex>> spans;
   Vector<AstNodeData>      datas;
+  Vector<TypeIndex>        types;
 
   Allocator segment_allocator;
 
@@ -643,10 +644,12 @@ struct AstNodes {
     kinds.init(vector_allocator);
     spans.init(vector_allocator);
     datas.init(vector_allocator);
+    types.init(vector_allocator);
 
-    kinds.push_empty();
-    spans.push_empty();
-    datas.push_empty();
+    kinds.push({});
+    spans.push({});
+    datas.push({});
+    types.push({});
 
     this->segment_allocator = segment_allocator;
   }
@@ -655,6 +658,7 @@ struct AstNodes {
     kinds.deinit();
     spans.deinit();
     datas.deinit();
+    types.deinit();
 
     memset(this, 0, sizeof(*this));
   }
@@ -677,6 +681,8 @@ struct AstNodes {
     kinds.push_empty();
     spans.push_empty();
     datas.push_empty();
+    types.push({0});
+
     return res;
   }
 
@@ -704,6 +710,7 @@ struct AstNodes {
   AstKind          &kind(NodeIndex idx) { return kinds[idx.idx]; }
   Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx]; }
   AstNodeData      &data(NodeIndex idx) { return datas[idx.idx]; }
+  TypeIndex        &type(NodeIndex idx) { return types[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
@@ -985,7 +992,6 @@ struct Interpreter {
   Str              text;
   Tokens          *tokens;
   AstNodes        *nodes;
-  Slice<TypeIndex> node_types;
 
   struct {
     ValueIndex nil;
@@ -1000,7 +1006,7 @@ struct Interpreter {
   bool prepare_code();
 
   // Replaces type coercions with explicit casts.
-  void coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected={0});
+  void coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected = {0});
   b32  const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   bool run_main(ValueIndex *result);
@@ -1021,8 +1027,12 @@ struct Interpreter {
 
   b32 eval_expr(Env<ValueIndex> *env, NodeIndex node_index, ValueIndex *result);
   b32 eval_declaration(Env<ValueIndex> *env, NodeIndex declaration, ValueIndex *result);
-  b32 eval_call( Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result);
-  b32 eval_binary_op( BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result);
+  b32 eval_call(
+    Env<ValueIndex> *env, Value *function, Slice<ValueIndex> arguments, ValueIndex *result
+  );
+  b32 eval_binary_op(
+    BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, NodeIndex expr, ValueIndex *result
+  );
   b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
 
   void builtin_print(Str format, Slice<ValueIndex> args);
@@ -1080,7 +1090,6 @@ struct SourceUnit {
 
   Tokens            tokens;
   AstNodes          nodes;
-  Vector<TypeIndex> node_types;
 
   void init(Str filename, Str text);
   void deinit();
@@ -1118,13 +1127,23 @@ struct TypeCheckContext {
   Arena                   *work_arena;
 };
 
-b32 typecheck(
-  TypeCheckContext *context, ParsedSource *source, Slice<TypeIndex> node_types, NodeIndex idx
-);
+b32 typecheck(TypeCheckContext *context, ParsedSource *source, NodeIndex idx);
 
 void debug_print_type(TypeInterner *types, TypeIndex type);
 u32  string_literal_byte_size(Str literal);
 u32  decode_string_literal(Str literal, char *out);
-void ast_pretty_print(
-  Str text, Tokens *tokens, TypeInterner *types, ValueStore *values, AstNodes *nodes, NodeIndex idx
-);
+
+enum PrettyPrintMode : u32 {
+  Print_basic,
+  Print_with_types,
+};
+
+struct AstPrettyPrintContext {
+  Str              text;
+  Tokens          *tokens;
+  TypeInterner    *types;
+  AstNodes        *nodes;
+  ValueStore      *values;
+};
+
+void pretty_print(AstPrettyPrintContext *context, PrettyPrintMode mode, NodeIndex idx);

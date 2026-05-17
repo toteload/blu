@@ -76,15 +76,15 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
+  AstPrettyPrintContext print_context{};
+  print_context.text   = source_text;
+  print_context.tokens = &unit.tokens;
+  print_context.types  = &unit.types;
+  print_context.nodes  = &unit.nodes;
+  print_context.values = &unit.interpreter.values;
+
   if (settings.verbose) {
-    ast_pretty_print(
-      source_text,
-      &unit.tokens,
-      &unit.types,
-      &unit.interpreter.values,
-      &unit.nodes,
-      unit.nodes.first_valid_index()
-    );
+    pretty_print(&print_context, Print_basic, unit.nodes.first_valid_index());
   }
 
   ok = unit.typecheck();
@@ -92,6 +92,10 @@ int main(i32 arg_count, char const *const *args) {
     printf("Typecheck error\n");
     unit.print_messages();
     return 1;
+  }
+
+  if (settings.verbose) {
+    pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
   }
 
   ok = unit.run_const_code();
@@ -102,14 +106,7 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   if (settings.verbose) {
-    ast_pretty_print(
-      unit.text,
-      &unit.tokens,
-      &unit.types,
-      &unit.interpreter.values,
-      &unit.nodes,
-      unit.nodes.first_valid_index()
-    );
+    pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
   }
 
   ValueIndex result;

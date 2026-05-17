@@ -9,6 +9,8 @@ You will still have to write the logic for what the language does, it will "just
 ### In progress
 
 - Create coerced values for values that should be coerced.
+- Explicit cast nodes will be added where coercion is to be performed.
+  - These added AST nodes also need to have their type added to `node_types` and need a special span.
 
 ### Basic
 

@@ -71,12 +71,14 @@ static u8 binop_prec_group(BinaryOpKind kind) {
 }
 
 struct AstPrinter {
-  Str           text;
-  Tokens       *tokens;
-  AstNodes     *nodes;
-  TypeInterner *types;
-  ValueStore   *values;
-  u32           indent;
+  Str              text;
+  Tokens          *tokens;
+  AstNodes        *nodes;
+  TypeInterner    *types;
+  ValueStore      *values;
+
+  u32             indent;
+  PrettyPrintMode mode;
 
   Str token_str(TokenIndex idx) { return get_token_str(text, tokens, idx); }
 
@@ -114,6 +116,40 @@ struct AstPrinter {
   }
 };
 
+bool node_kind_has_type(AstKind kind) {
+  switch (kind) {
+  case Ast_block:
+  case Ast_builtin:
+  case Ast_declaration:
+  case Ast_defer:
+  case Ast_assign:
+  case Ast_literal_sequence:
+  case Ast_literal_int:
+  case Ast_literal_string:
+  case Ast_identifier:
+  case Ast_call:
+  case Ast_index:
+  case Ast_binary_op:
+  case Ast_unary_op:
+  case Ast_function:
+  case Ast_if_else:
+  case Ast_const:
+  case Ast_for:
+  case Ast_cast:
+    return true;
+
+  // unsure
+  case Ast_type_array:
+  case Ast_type_slice:
+  case Ast_type_function:
+    return false;
+
+  case Ast_root:
+  case Ast_kind_max:
+    return false;
+  }
+}
+
 void AstPrinter::print(NodeIndex node) {
   if (node.kind == NodeIndex_value) {
     char buf[256] = {0};
@@ -124,6 +160,19 @@ void AstPrinter::print(NodeIndex node) {
 
   auto kind = nodes->kind(node);
   auto data = nodes->data(node);
+
+  if (mode == Print_with_types && node_kind_has_type(kind)) {
+    TypeIndex type_idx = nodes->type(node);
+    printf("\e[1;36m");
+    if (type_idx.idx == 0) {
+      printf("{?}");
+    } else {
+      char buf[256]{};
+      u32  len = types->type_to_string(type_idx, buf, 256);
+      printf("{%.*s}", cast<int>(len), buf);
+    }
+    printf("\e[0m");
+  }
 
   switch (kind) {
   case Ast_root: {
@@ -319,20 +368,15 @@ void AstPrinter::print(NodeIndex node) {
   }
 }
 
-void ast_pretty_print(
-  Str text, Tokens *tokens, TypeInterner *types, ValueStore *values, AstNodes *nodes, NodeIndex idx
-) {
-  if (nodes->len() == 0) {
-    return;
-  }
-
+void pretty_print(AstPrettyPrintContext *context, PrettyPrintMode mode, NodeIndex idx) {
   AstPrinter printer = {
-    .text   = text,
-    .tokens = tokens,
-    .nodes  = nodes,
-    .types  = types,
-    .values = values,
-    .indent = 0,
+    .text       = context->text,
+    .tokens     = context->tokens,
+    .nodes      = context->nodes,
+    .types      = context->types,
+    .values     = context->values,
+    .indent     = 0,
+    .mode       = mode,
   };
 
   printer.print(idx);
