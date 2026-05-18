@@ -30,6 +30,7 @@ void SourceUnit::deinit() {
   if (stage > Stage_typecheck) {
     types.deinit();
     strings.deinit();
+    values.deinit();
   }
 
   if (stage > Stage_run_const_code) {
@@ -80,6 +81,7 @@ bool SourceUnit::typecheck() {
 
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
   types.init(&work_arena, arena.as_allocator(), stdlib_alloc, stdlib_alloc);
+  values.init(stdlib_alloc);
 
   EnvManager<Declaration> envs;
   envs.init(stdlib_alloc, stdlib_alloc);
@@ -91,6 +93,7 @@ bool SourceUnit::typecheck() {
   context.types      = &types;
   context.strings    = &strings;
   context.work_arena = &work_arena;
+  context.values = &values;
 
   ParsedSource source = {
     .text   = text,
@@ -112,12 +115,12 @@ bool SourceUnit::run_const_code() {
   Assert(stage == Stage_run_const_code);
 
   InterpreterContext context{};
-  context.types      = &types;
-  context.strings    = &strings;
-  context.messages   = &messages;
-  context.text       = text;
-  context.tokens     = &tokens;
-  context.nodes      = &nodes;
+  context.types    = &types;
+  context.strings  = &strings;
+  context.messages = &messages;
+  context.text     = text;
+  context.tokens   = &tokens;
+  context.nodes    = &nodes;
 
   interpreter.init(&context);
 

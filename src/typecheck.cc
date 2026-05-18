@@ -5,24 +5,36 @@ struct TypeHint {
   NodeIndex location;
 };
 
+struct CoercionLocation {
+  TypeIndex type_dst;
+
+  // Storing a pointer to a NodeIndex is unsafe.
+  // The AstNodeData is stored in a vector which may relocate memory.
+  // When we start adding cast AstNodes for the coercions the vector may relocate memory and invalidate our pointers.
+  NodeIndex *location;
+};
+
 struct TypeChecker {
   Messages                *messages;
   TypeInterner            *types;
   EnvManager<Declaration> *envs;
   StringInterner          *strings;
   Arena                   *work_arena;
+  ValueStore              *values;
   ParsedSource            *source;
+
+  Vector<CoercionLocation> coercions;
+
+  bool is_const_in_expression;
 
   b32 typecheck(NodeIndex idx_root);
 
+  TypeIndex get_type(NodeIndex idx) { return source->nodes->type(idx); }
+
   b32 resolve_declaration(Env<Declaration> *env, NodeIndex decl_node);
-
-  b32 is_const(Env<Declaration> *env, NodeIndex node_index);
-
-  b32 eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *result);
-  b32 check_expression(
-    Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *result
-  );
+  b32 resolve_type_expression(Env<Declaration> *env, NodeIndex node_index);
+  b32 resolve_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint *hint);
+  b32 resolve_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *node_to_coerce);
 
   b32 check_coercion(TypeIndex type_dst, TypeIndex type_src, NodeIndex node_index_src);
   b32 check_unification(
@@ -38,15 +50,9 @@ struct TypeChecker {
 
   StrKey intern_identifier(TokenIndex identifier);
 
-  b32 find_identifier(Env<Declaration> *env, TokenIndex identifier, Declaration *result);
-};
-
-struct ConstFinder {
-  AstNodes                *nodes;
-  bool                     is_const_context;
-  EnvManager<Declaration> *envs;
-
-  b32 identify_const_expressions(Env<Declaration> *env, NodeIndex node_index);
+  b32 find_declaration_of_identifier(
+    Env<Declaration> *env, TokenIndex identifier, Declaration *result
+  );
 };
 
 struct RootEnvPopulator {
@@ -59,9 +65,12 @@ struct RootEnvPopulator {
     env->insert(
       key,
       {
-        .kind     = kind,
-        .is_const = true,
-        .type     = type,
+        .kind           = kind,
+        .resolve_status = ResolveStatus_type_resolved,
+        .is_const       = true,
+        .data           = {
+          .type = type,
+        },
       }
     );
   }
@@ -101,6 +110,7 @@ b32 typecheck(TypeCheckContext *context, ParsedSource *source, NodeIndex idx_roo
     .strings    = context->strings,
     .work_arena = context->work_arena,
     .source     = source,
+    .values = context->values,
   };
 
   return checker.typecheck(idx_root);
@@ -121,15 +131,10 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
   }
   auto env = envs->alloc(env_root);
 
-  ConstFinder const_finder{};
-  const_finder.nodes            = source->nodes;
-  const_finder.is_const_context = false;
-
-  Try(const_finder.identify_const_expressions(env, idx_root));
-
   // Add all root level declarations to the environment.
   auto root = source->nodes->data(idx_root).root;
   for (u32 i = 0; i < root.items.len(); i++) {
+    // TODO allow const declarations
     Assert(source->nodes->kind(root.items[i]) == Ast_declaration);
 
     auto decl = source->nodes->data(root.items[i]).declaration;
@@ -139,9 +144,10 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
     env->insert(
       key,
       {
-        .kind       = Declaration_unresolved,
-        .is_const   = false,
-        .node_index = root.items[i],
+        .kind           = Declaration_of_unknown,
+        .resolve_status = ResolveStatus_type_unresolved,
+        .is_const       = false,
+        .data           = {.node_index = root.items[i]},
       }
     );
   }
@@ -153,186 +159,71 @@ b32 TypeChecker::typecheck(NodeIndex idx_root) {
   return true;
 }
 
-b32 ConstFinder::identify_const_expressions(Env<Declaration> *env, NodeIndex node_index) {
-  auto  kind = nodes->kind(node_index);
-  auto &data = nodes->data(node_index);
+b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex node_index) {
+  auto &data = source->nodes->data(node_index);
+  auto  key  = intern_identifier(data.declaration.name);
 
-  bool is_const_node = false;
+  Declaration *decl;
+  auto        found = env->lookup_ptr(key, &decl);
 
-  switch (kind) {
+  Assert(found);
 
-  case Ast_kind_max:
-    Todo();
-    break;
-
-  case Ast_function: {
-    Try(identify_const_expressions(env, data.function.body));
-  } break;
-
-  case Ast_for: {
-  } break;
-
-  case Ast_defer: {
-  } break;
-
-  case Ast_const: {
-    is_const_context = true;
-    defer(is_const_context = false);
-
-    is_const_node = true;
-    Try(identify_const_expressions(env, data.const_.expr));
-  } break;
-
-  case Ast_binary_op: {
-    Try(identify_const_expressions(env, data.binary_op.lhs));
-    Try(identify_const_expressions(env, data.binary_op.rhs));
-
-    if (nodes->is_const(data.binary_op.lhs) && nodes->is_const(data.binary_op.rhs)) {
-      is_const_node = true;
-    }
-  } break;
-
-  case Ast_unary_op: {
-    Try(identify_const_expressions(env, data.unary_op.value));
-
-    if (nodes->is_const(data.unary_op.value)) {
-      is_const_node = true;
-    }
-  } break;
-
-  case Ast_if_else: {
-    Try(identify_const_expressions(env, data.if_else.cond));
-    Try(identify_const_expressions(env, data.if_else.then));
-
-    auto otherwise_is_some = data.if_else.otherwise.is_some();
-
-    if (otherwise_is_some) {
-      Try(identify_const_expressions(env, data.if_else.otherwise));
-      if (nodes->is_const(data.if_else.cond) && nodes->is_const(data.if_else.then) &&
-          nodes->is_const(data.if_else.otherwise)) {
-        is_const_node = true;
-      }
-    }
-  } break;
-
-  case Ast_block: {
-    auto env_block = envs->alloc(env);
-    defer(envs->dealloc(env_block));
-
-    for (u32 i = 0; i < data.block.items.len(); i++) {
-      Try(identify_const_expressions(env, data.block.items[i]));
-    }
-  } break;
-
-  case Ast_assign: {
-    Try(identify_const_expressions(env, data.assign.lhs));
-    Try(identify_const_expressions(env, data.assign.value));
-  } break;
-
-  case Ast_root:
-    Todo();
-    break;
-
-  case Ast_type_slice: {
-    is_const_context = true;
-    defer(is_const_context = false);
-
-    is_const_node = true;
-    Try(identify_const_expressions(env, data.type_slice.base));
-  } break;
-  case Ast_type_array: {
-    is_const_context = true;
-    defer(is_const_context = false);
-
-    is_const_node = true;
-    Try(identify_const_expressions(env, data.type_array.base));
-    Try(identify_const_expressions(env, data.type_array.size));
-  } break;
-
-  case Ast_type_function: {
-    is_const_context = true;
-    defer(is_const_context = false);
-
-    is_const_node = true;
-    Try(identify_const_expressions(env, data.type_function.return_type));
-
-    for (u32 i = 0; i < data.type_function.param_types.len(); i++) {
-      Try(identify_const_expressions(env, data.type_function.param_types[i]));
-    }
-  } break;
-
-  case Ast_literal_string:
-  case Ast_literal_sequence:
-  case Ast_literal_int: {
-    is_const_node = true;
-  } break;
-  case Ast_call:
-  case Ast_cast:
-
-  case Ast_declaration:
-  case Ast_identifier:
-    Todo();
-    break;
-
-  case Ast_index: {
-    Try(identify_const_expressions(env, data.index.indexable));
-    Try(identify_const_expressions(env, data.index.index_at));
-  }; break;
-
-  case Ast_builtin:
-    Todo();
-    break;
-  }
-
-  auto is_const = is_const_context || is_const_node;
-
-  nodes->is_const(node_index) = is_const;
-
-  return true;
-}
-
-b32 TypeChecker::resolve_declaration(Env<Declaration> *env, NodeIndex decl_node) {
-  auto decl = source->nodes->data(decl_node).declaration;
-  auto key  = intern_identifier(decl.name);
-
-  Declaration existing;
-  if (env->lookup(key, &existing) && existing.kind != Declaration_unresolved) {
+  if (decl->resolve_status == ResolveStatus_type_resolved) {
     return true;
   }
 
-  // Mark as in-progress so recursive references during resolution can be detected as cycles.
-  env->insert(key, {.kind = Declaration_resolving, .node_index = decl_node});
+  if (decl->resolve_status == ResolveStatus_type_resolving) {
+    Todo();
+    return false;
+  }
 
-  TypeIndex declared_type;
-  Try(eval_type_expression(env, decl.type, &declared_type));
+  decl->resolve_status = ResolveStatus_type_resolving;
 
-  if (declared_type == types->type.type) {
-    TypeIndex value_type;
-    Try(eval_type_expression(env, decl.value, &value_type));
-    env->insert(key, {.kind = Declaration_of_type, .is_const = true, .type = value_type});
+  Try(resolve_type_expression(env, data.declaration.type));
+
+  auto type_declared = get_type(data.declaration.type);
+
+  if (type_declared == types->type.type) {
+    Try(resolve_type_expression(env, data.declaration.value));
+
+    auto type = get_type(data.declaration.value);
+
+    *decl =  {
+        .kind           = Declaration_of_type,
+        .resolve_status = ResolveStatus_type_resolved,
+        .is_const       = true,
+        .data           = {.type = type},
+      };
+
     return true;
   }
 
-  // Insert with the declared type up front so that recursive references
-  // inside the value expression can be resolved.
-  env->insert(key, {.kind = Declaration_of_value, .type = declared_type});
+    *decl = {
+      .kind           = Declaration_of_value,
+      .resolve_status = ResolveStatus_type_resolved,
+      .is_const       = is_const_in_expression,
+      .data           = {.type = type_declared},
+    };
 
   TypeHint hint = {
-    .type     = declared_type,
-    .location = decl.type,
+    .type     = type_declared,
+    .location = data.declaration.type,
   };
 
-  TypeIndex value_type;
-  Try(check_expression(env, decl.value, &hint, &value_type));
-  Try(check_coercion(declared_type, value_type, decl.value));
+  Try(resolve_expression(env, data.declaration.value, &hint));
+
+  TypeIndex type_value = get_type(data.declaration.value);
+  Try(check_coercion(type_declared, type_value, data.declaration.value));
+
+  source->nodes->type(node_index) = types->type.nil;
 
   return true;
 }
 
-b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_index, TypeIndex *out) {
+b32 TypeChecker::resolve_type_expression(Env<Declaration> *env, NodeIndex node_index) {
   auto kind = source->nodes->kind(node_index);
 
-  TypeIndex result;
+  TypeIndex type_node;
 
   switch (kind) {
   case Ast_type_function: {
@@ -350,37 +241,46 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
       },
     };
 
-    Try(eval_type_expression(env, f.return_type, &ty->function.return_type));
+    Try(resolve_type_expression(env, f.return_type));
+
+    ty->function.return_type = get_type(f.return_type);
 
     for (u32 i = 0; i < param_count; i++) {
-      Try(eval_type_expression(env, f.param_types[i], &ty->function.param_types[i]));
+      Try(resolve_type_expression(env, f.param_types[i]));
+
+      ty->function.param_types[i] = get_type(f.param_types[i]);
     }
 
-    result = types->add(ty);
+    type_node = types->add(ty);
   } break;
 
   case Ast_type_slice: {
-    auto      slice = source->nodes->data(node_index).type_slice;
-    TypeIndex base_type;
-    Try(eval_type_expression(env, slice.base, &base_type));
+    auto slice = source->nodes->data(node_index).type_slice;
+
+    Try(resolve_type_expression(env, slice.base));
+
+    TypeIndex base_type = get_type(slice.base);
+
     Type type = {
       .kind  = Type_slice,
       .slice = {.base_type = base_type},
     };
-    result = types->add(&type);
+
+    type_node = types->add(&type);
   } break;
 
   case Ast_type_array: {
     auto array = source->nodes->data(node_index).type_array;
 
-    TypeIndex size_type;
-    Try(check_expression(env, array.size, nullptr, &size_type));
+    is_const_in_expression = true;
+    Try(resolve_expression(env, array.size, nullptr));
+    TypeIndex size_type    = get_type(array.size);
+    is_const_in_expression = false;
 
-    // For now hardcode that the size must be a literal int.
-    Try(check_coercion(types->type.literal_int, size_type, array.size));
+    Try(resolve_coercion(env, types->type.uint, &array.size));
 
-    TypeIndex base_type;
-    Try(eval_type_expression(env, array.base, &base_type));
+    Try(resolve_type_expression(env, array.base));
+    TypeIndex base_type = get_type(array.base);
 
     auto token_index = source->nodes->data(array.size).literal_int.token_index;
     auto str         = get_token_str(source->text, source->tokens, token_index);
@@ -393,24 +293,25 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
         .size      = size,
       },
     };
-    result = types->add(&type);
+
+    type_node = types->add(&type);
   } break;
 
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
 
     Declaration decl;
-    Try(find_identifier(env, token_index, &decl));
+    Try(find_declaration_of_identifier(env, token_index, &decl));
 
-    if (decl.kind == Declaration_unresolved) {
-      Try(resolve_declaration(env, decl.node_index));
-      Try(find_identifier(env, token_index, &decl));
+    if (decl.resolve_status == ResolveStatus_type_unresolved) {
+      Try(resolve_declaration(env, decl.data.node_index));
+      Try(find_declaration_of_identifier(env, token_index, &decl));
     }
 
     Try(check_is_declaration_resolved(decl, node_index));
     Try(check_is_declaration_of_type(decl, node_index));
 
-    result = decl.type;
+    type_node = decl.data.type;
   } break;
 
   case Ast_block:
@@ -436,60 +337,69 @@ b32 TypeChecker::eval_type_expression(Env<Declaration> *env, NodeIndex node_inde
     return false;
   }
 
-  source->nodes->type(node_index) = result;
-
-  *out = result;
+  source->nodes->type(node_index)     = type_node;
+  source->nodes->is_const(node_index) = true;
 
   return true;
 }
 
-b32 TypeChecker::check_expression(
-  Env<Declaration> *env, NodeIndex node_index, TypeHint *hint, TypeIndex *out
-) {
+b32 TypeChecker::resolve_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint *hint) {
   auto kind = source->nodes->kind(node_index);
 
-  TypeIndex result;
+  bool is_const_node = false;
+
+  TypeIndex type_node{};
 
   switch (kind) {
   case Ast_cast: {
     auto node = source->nodes->data(node_index);
 
-    TypeIndex type_dst;
-    Try(eval_type_expression(env, node.cast.type_dst, &type_dst));
+    Try(resolve_type_expression(env, node.cast.type_dst));
+    TypeIndex type_dst = get_type(node.cast.type_dst);
 
-    TypeIndex expr_type;
-    Try(check_expression(env, node.cast.value, nullptr, &expr_type));
+    Try(resolve_expression(env, node.cast.value, nullptr));
+    TypeIndex expr_type = get_type(node.cast.value);
+
     Try(check_is_valid_cast(node_index, type_dst, expr_type));
 
-    result = type_dst;
+    type_node = type_dst;
   } break;
 
   case Ast_type_function: {
     auto f = source->nodes->data(node_index).type_function;
 
-    TypeIndex return_type;
-    Try(check_expression(env, f.return_type, nullptr, &return_type));
+    is_const_in_expression = true;
+    defer(is_const_in_expression = false);
+
+    Try(resolve_expression(env, f.return_type, nullptr));
+
+    TypeIndex return_type = get_type(f.return_type);
     Try(check_is_of_type(f.return_type, return_type, types->type.type));
 
     for (u32 i = 0; i < f.param_types.len(); i++) {
-      TypeIndex param_type;
-      Try(check_expression(env, f.param_types[i], nullptr, &param_type));
+      Try(resolve_expression(env, f.param_types[i], nullptr));
+
+      TypeIndex param_type = get_type(f.param_types[i]);
       Try(check_is_of_type(f.param_types[i], param_type, types->type.type));
     }
 
-    result = types->type.type;
+    type_node     = types->type.type;
+    is_const_node = true;
   } break;
 
   case Ast_type_slice: {
-    result = types->type.type;
+    type_node     = types->type.type;
+    is_const_node = true;
   } break;
 
   case Ast_type_array: {
-    result = types->type.type;
+    type_node     = types->type.type;
+    is_const_node = true;
   } break;
 
   case Ast_literal_int: {
-    result = types->type.literal_int;
+    type_node     = types->type.literal_int;
+    is_const_node = true;
   } break;
 
   case Ast_literal_string: {
@@ -505,31 +415,33 @@ b32 TypeChecker::check_expression(
       },
     };
 
-    result = types->add(&type);
+    type_node     = types->add(&type);
+    is_const_node = true;
   } break;
 
   case Ast_identifier: {
     auto token_index = source->nodes->data(node_index).identifier.token_index;
 
     Declaration decl;
-    Try(find_identifier(env, token_index, &decl));
+    Try(find_declaration_of_identifier(env, token_index, &decl));
 
-    if (decl.kind == Declaration_unresolved) {
-      Try(resolve_declaration(env, decl.node_index));
-      Try(find_identifier(env, token_index, &decl));
+    if (decl.resolve_status == ResolveStatus_type_unresolved) {
+      Try(resolve_declaration(env, decl.data.node_index));
+      Try(find_declaration_of_identifier(env, token_index, &decl));
     }
 
     Try(check_is_declaration_resolved(decl, node_index));
 
+    is_const_node = decl.is_const;
+
     switch (decl.kind) {
     case Declaration_of_value:
-      result = decl.type;
+      type_node = decl.data.type;
       break;
     case Declaration_of_type:
-      result = types->type.type;
+      type_node = types->type.type;
       break;
-    case Declaration_unresolved:
-    case Declaration_resolving:
+    case Declaration_of_unknown:
       Unreachable();
       break;
     }
@@ -563,7 +475,12 @@ b32 TypeChecker::check_expression(
       auto key         = intern_identifier(token_index);
       auto param_type  = hint_type->function.param_types[i];
 
-      env_params->insert(key, {.kind = Declaration_of_value, .type = param_type});
+      env_params->insert(
+        key,
+        {.kind           = Declaration_of_value,
+         .resolve_status = ResolveStatus_type_resolved,
+         .data           = {.type = param_type}}
+      );
       source->nodes->type(param_node) = param_type;
     }
 
@@ -574,21 +491,22 @@ b32 TypeChecker::check_expression(
       .location = hint->location,
     };
 
-    TypeIndex body_type;
-    Try(check_expression(env_params, f.body, &hint_body, &body_type));
+    Try(resolve_expression(env_params, f.body, &hint_body));
+    TypeIndex body_type = get_type(f.body);
+
     Try(check_coercion(return_type, body_type, f.body));
 
     if (return_type != body_type) {
       source->nodes->type(f.body) = return_type;
     }
 
-    result = hint->type;
+    type_node = hint->type;
   } break;
 
   case Ast_block: {
     auto block = source->nodes->data(node_index).block;
     if (block.items.len() == 0) {
-      result = types->type.nil;
+      type_node = types->type.nil;
       break;
     }
 
@@ -596,88 +514,86 @@ b32 TypeChecker::check_expression(
     defer(envs->dealloc(env_block));
 
     for (u32 i = 0; i < block.items.len() - 1; i++) {
-      TypeIndex e;
-      Try(check_expression(env_block, block.items[i], nullptr, &e));
+      Try(resolve_expression(env_block, block.items[i], nullptr));
     }
 
     auto last_item = block.items[block.items.len() - 1];
 
-    auto is_const_block = is_const(env, node_index);
-    auto hint_last_item = (!is_const_block) ? hint : nullptr;
+    Try(resolve_expression(env_block, last_item, hint));
 
-    TypeIndex block_type;
-    Try(check_expression(env_block, last_item, hint_last_item, &block_type));
-
-    if (hint_last_item && hint_last_item->type != block_type) {
-      Try(check_coercion(hint_last_item->type, block_type, last_item));
-      result = hint_last_item->type;
+    TypeIndex block_type = get_type(last_item);
+    if (hint && hint->type != block_type) {
+      Try(resolve_coercion(env, hint->type, &block.items[block.items.len() - 1]));
+      // Try(check_coercion(hint_last_item->type, block_type, last_item));
+      type_node = hint->type;
     } else {
-      result = block_type;
+      type_node = block_type;
     }
   } break;
 
   case Ast_if_else: {
     auto if_else = source->nodes->data(node_index).if_else;
 
-    auto is_const_if_else = is_const(env, node_index);
+    Try(resolve_expression(env, if_else.cond, nullptr));
 
-    TypeIndex cond_type;
-    Try(check_expression(env, if_else.cond, nullptr, &cond_type));
-    Try(check_coercion(types->type.bool_, cond_type, if_else.cond));
+    TypeIndex cond_type = get_type(if_else.cond);
 
-    auto hint_branch = (!is_const_if_else) ? hint : nullptr;
+    Try(check_is_of_type(if_else.cond, cond_type, types->type.bool_));
 
-    TypeIndex then_type;
-    Try(check_expression(env, if_else.then, hint_branch, &then_type));
+    Try(resolve_expression(env, if_else.then, hint));
 
     if (if_else.otherwise.is_none()) {
-      result = types->type.nil;
+      type_node = types->type.nil;
       break;
     }
 
-    TypeIndex otherwise_type;
-    Try(check_expression(env, if_else.otherwise, hint_branch, &otherwise_type));
+    Try(resolve_expression(env, if_else.otherwise, hint));
 
-    Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &result));
+    TypeIndex then_type      = get_type(if_else.then);
+    TypeIndex otherwise_type = get_type(if_else.otherwise);
+
+    Try(check_unification(if_else.then, then_type, if_else.otherwise, otherwise_type, &type_node));
   } break;
 
   case Ast_declaration: {
     auto decl = source->nodes->data(node_index).declaration;
     auto key  = intern_identifier(decl.name);
 
-    TypeIndex declared_type;
-    Try(eval_type_expression(env, decl.type, &declared_type));
+    Try(resolve_type_expression(env, decl.type));
+
+    TypeIndex declared_type = get_type(decl.type);
 
     TypeHint hint = {
       .type     = declared_type,
       .location = decl.type,
     };
 
-    TypeIndex value_type;
-    Try(check_expression(env, decl.value, &hint, &value_type));
-    Try(check_coercion(declared_type, value_type, decl.value));
+    Try(resolve_expression(env, decl.value, &hint));
 
-    // TODO: Eventually, you probably want a unification of the declared type and the actual type
-    // here.
+    TypeIndex value_type = get_type(decl.value);
+
+    Try(resolve_coercion(env, declared_type, &decl.value));
 
     Declaration d;
     if (declared_type == types->type.type) {
       d = {
         .kind     = Declaration_of_type,
+        .resolve_status = ResolveStatus_type_resolved,
         .is_const = true,
-        .type     = value_type,
+        .data     = {.type = value_type},
       };
     } else {
       d = {
         .kind     = Declaration_of_value,
+        .resolve_status = ResolveStatus_type_resolved,
         .is_const = false,
-        .type     = declared_type,
+        .data     = {.type = declared_type},
       };
     }
 
     env->insert(key, d);
 
-    result = types->type.nil;
+    type_node = types->type.nil;
   } break;
 
   case Ast_literal_sequence: {
@@ -691,22 +607,29 @@ b32 TypeChecker::check_expression(
     };
 
     for (u32 i = 0; i < seq.items.len(); i++) {
-      Try(check_expression(env, seq.items[i], nullptr, &type->sequence.item_types[i]));
+      Try(resolve_expression(env, seq.items[i], nullptr));
+      type->sequence.item_types[i] = get_type(seq.items[i]);
     }
 
-    result = types->add(type);
+    type_node = types->add(type);
   } break;
 
   case Ast_index: {
     auto node = source->nodes->data(node_index).index;
 
-    TypeIndex type_indexable;
-    Try(check_expression(env, node.indexable, nullptr, &type_indexable));
+    Try(resolve_expression(env, node.indexable, nullptr));
+
+    TypeIndex type_indexable = get_type(node.indexable);
     Try(check_is_indexable(type_indexable, node.indexable));
 
-    TypeIndex type_index_at;
-    Try(check_expression(env, node.index_at, nullptr, &type_index_at));
-    Try(check_coercion(types->type.uint, type_index_at, node.index_at));
+    TypeHint hint_index_at = {
+      .type     = types->type.uint,
+      .location = node.index_at,
+    };
+
+    Try(resolve_expression(env, node.index_at, &hint_index_at));
+
+    Try(resolve_coercion(env, types->type.uint, &node.index_at));
 
     auto ty = types->get(type_indexable);
 
@@ -721,24 +644,24 @@ b32 TypeChecker::check_expression(
       Unreachable();
     }
 
-    result = base_type;
+    type_node = base_type;
   } break;
 
   case Ast_binary_op: {
     auto node = source->nodes->data(node_index).binary_op;
 
-    TypeIndex type_lhs;
-    Try(check_expression(env, node.lhs, nullptr, &type_lhs));
+    Try(resolve_expression(env, node.lhs, nullptr));
+    Try(resolve_expression(env, node.rhs, nullptr));
 
-    TypeIndex type_rhs;
-    Try(check_expression(env, node.rhs, nullptr, &type_rhs));
+    TypeIndex type_lhs = get_type(node.lhs);
+    TypeIndex type_rhs = get_type(node.rhs);
 
     switch (node.kind) {
     case Logical_and:
     case Logical_or:
       Try(check_is_of_type(node.lhs, type_lhs, types->type.bool_));
       Try(check_is_of_type(node.rhs, type_lhs, types->type.bool_));
-      result = types->type.bool_;
+      type_node = types->type.bool_;
       break;
     case Cmp_equal:
     case Cmp_not_equal:
@@ -748,7 +671,7 @@ b32 TypeChecker::check_expression(
     case Cmp_greater_equal: {
       TypeIndex _unified;
       Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &_unified));
-      result = types->type.bool_;
+      type_node = types->type.bool_;
     } break;
     case Mul:
     case Div:
@@ -760,7 +683,7 @@ b32 TypeChecker::check_expression(
     case Bit_and:
     case Bit_or:
     case Bit_xor:
-      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &result));
+      Try(check_unification(node.lhs, type_lhs, node.rhs, type_rhs, &type_node));
       break;
     case BinaryOpKind_max:
       Unreachable();
@@ -778,32 +701,33 @@ b32 TypeChecker::check_expression(
         return false;
       }
 
-      TypeIndex arg_type;
-      Try(check_expression(env, builtin.args[0], nullptr, &arg_type));
+      Try(resolve_expression(env, builtin.args[0], nullptr));
+
+      TypeIndex arg_type = get_type(builtin.args[0]);
       Try(check_coercion(types->type.slice_u8, arg_type, builtin.args[0]));
 
-      result = types->type.nil;
+      type_node = types->type.nil;
     } break;
     }
   } break;
 
   case Ast_defer: {
-    auto      defer_ = source->nodes->data(node_index).defer;
-    TypeIndex deferred_type;
-    Try(check_expression(env, defer_.value, nullptr, &deferred_type));
-    result = types->type.nil;
+    auto defer_ = source->nodes->data(node_index).defer;
+    Try(resolve_expression(env, defer_.value, nullptr));
+    type_node = types->type.nil;
   } break;
 
   case Ast_const: {
     auto node = source->nodes->data(node_index);
-    Try(check_expression(env, node.const_.expr, nullptr, &result));
+    Try(resolve_expression(env, node.const_.expr, hint));
+    type_node = get_type(node_index);
   } break;
 
   case Ast_call: {
     auto node = source->nodes->data(node_index).call;
 
-    TypeIndex callee_type;
-    Try(check_expression(env, node.callee, nullptr, &callee_type));
+    Try(resolve_expression(env, node.callee, nullptr));
+    TypeIndex callee_type = get_type(node.callee);
 
     auto ty = types->get(callee_type);
 
@@ -833,23 +757,25 @@ b32 TypeChecker::check_expression(
         .location = node.callee, // TODO improve this location
       };
 
-      TypeIndex arg_type;
-      Try(check_expression(env, node.args[i], &type_hint_arg, &arg_type));
+      Try(resolve_expression(env, node.args[i], &type_hint_arg));
+
+      TypeIndex arg_type = get_type(node.args[i]);
 
       if (ty->kind == Type_function) {
         Try(check_coercion(ty->function.param_types[i], arg_type, node.args[i]));
       }
     }
 
-    result =
+    type_node =
       ty->kind == Type_function ? ty->function.return_type : ty->literal_function.return_type;
   } break;
 
   case Ast_for: {
     auto node = source->nodes->data(node_index).for_;
 
-    TypeIndex iterable_type;
-    Try(check_expression(env, node.iterable, nullptr, &iterable_type));
+    Try(resolve_expression(env, node.iterable, nullptr));
+
+    TypeIndex iterable_type = get_type(node.iterable);
     Try(check_is_indexable(iterable_type, node.iterable));
 
     auto ty = types->get(iterable_type);
@@ -869,13 +795,18 @@ b32 TypeChecker::check_expression(
 
     auto iterator_token = source->nodes->data(node.iterator).identifier.token_index;
     auto key            = intern_identifier(iterator_token);
-    env_loop->insert(key, {.kind = Declaration_of_value, .is_const = false, .type = element_type});
+    env_loop->insert(
+      key,
+      {.kind           = Declaration_of_value,
+       .resolve_status = ResolveStatus_type_resolved,
+       .is_const       = false,
+       .data           = {.type = element_type}}
+    );
     source->nodes->type(node.iterator) = element_type;
 
-    TypeIndex body_type;
-    Try(check_expression(env_loop, node.body, nullptr, &body_type));
+    Try(resolve_expression(env_loop, node.body, nullptr));
 
-    result = types->type.nil;
+    type_node = types->type.nil;
   } break;
 
   case Ast_assign: {
@@ -883,16 +814,23 @@ b32 TypeChecker::check_expression(
 
     Assert(node.kind == Assign_normal);
 
-    TypeIndex lhs_type;
-    Try(check_expression(env, node.lhs, nullptr, &lhs_type));
+    Try(resolve_expression(env, node.lhs, nullptr));
+
+    TypeIndex lhs_type = get_type(node.lhs);
+
+    TypeHint hint_value = {
+      .type     = lhs_type,
+      .location = node.lhs,
+    };
+
+    Try(resolve_expression(env, node.value, &hint_value));
+
     Try(check_is_assignable(node.lhs));
 
-    TypeIndex value_type;
-    Try(check_expression(env, node.value, nullptr, &value_type));
-
+    TypeIndex value_type = get_type(node.value);
     Try(check_coercion(lhs_type, value_type, node.value));
 
-    result = types->type.nil;
+    type_node = types->type.nil;
   } break;
 
   case Ast_unary_op:
@@ -902,8 +840,53 @@ b32 TypeChecker::check_expression(
     return false;
   }
 
-  source->nodes->type(node_index) = result;
-  *out                            = result;
+  Assert(type_node.idx != 0);
+
+  bool is_const_result = is_const_node || is_const_in_expression;
+
+  source->nodes->type(node_index)     = type_node;
+  source->nodes->is_const(node_index) = is_const_result;
+
+  return true;
+}
+
+b32 TypeChecker::resolve_coercion(
+  Env<Declaration> *env, TypeIndex type_dst, NodeIndex *node_to_coerce
+) {
+  TypeIndex type_src = get_type(*node_to_coerce);
+
+  Try(check_coercion(type_dst, type_src, *node_to_coerce));
+
+  if (type_dst == type_src) {
+    return true;
+  }
+
+  auto old_node_index = *node_to_coerce;
+  auto node_index     = source->nodes->alloc();
+  *node_to_coerce     = NodeIndex{NodeIndex_ast_node, {node_index.idx}};
+
+  Value *val;
+  auto   val_idx               = values->alloc_value(&val);
+  auto   data              = values->alloc_data<TypeIndex>();
+  *cast<TypeIndex *>(data) = type_dst;
+
+  *val = {.type = types->type.type, .data = data};
+
+  AstCast cast;
+  cast.type_dst = NodeIndex{NodeIndex_value, {val_idx.idx}};
+  cast.value    = old_node_index;
+
+  source->nodes->set(
+    node_index,
+    {
+      Ast_cast,
+      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
+                  // `AstNodes`
+      {.cast = cast},
+    }
+  );
+
+  source->nodes->type(node_index) = type_dst;
 
   return true;
 }
@@ -938,8 +921,9 @@ b32 TypeChecker::check_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex
   Type *t_dst = types->get(type_dst);
   Type *t_src = types->get(type_expr);
 
-  if (t_dst->kind == Type_integer &&
-      (t_src->kind == Type_integer || t_src->kind == Type_literal_int)) {
+  if (
+    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
+  ) {
     return true;
   }
 
@@ -981,7 +965,7 @@ b32 TypeChecker::check_is_indexable(TypeIndex type, NodeIndex at) {
 }
 
 b32 TypeChecker::check_is_declaration_resolved(Declaration decl, NodeIndex at) {
-  if (decl.kind != Declaration_resolving) {
+  if (decl.resolve_status == ResolveStatus_type_resolved) {
     return true;
   }
 
@@ -1010,7 +994,7 @@ StrKey TypeChecker::intern_identifier(TokenIndex identifier) {
   return strings->add(s);
 }
 
-b32 TypeChecker::find_identifier(
+b32 TypeChecker::find_declaration_of_identifier(
   Env<Declaration> *env, TokenIndex identifier, Declaration *result
 ) {
   auto key = intern_identifier(identifier);
@@ -1022,82 +1006,4 @@ b32 TypeChecker::find_identifier(
   }
 
   return found;
-}
-
-b32 TypeChecker::is_const(Env<Declaration> *env, NodeIndex node_index) {
-  auto kind = source->nodes->kind(node_index);
-
-  auto &data = source->nodes->data(node_index);
-  switch (kind) {
-  case Ast_binary_op: {
-    auto is_const_lhs = is_const(env, data.binary_op.lhs);
-    auto is_const_rhs = is_const(env, data.binary_op.rhs);
-    return is_const_lhs && is_const_rhs;
-  } break;
-
-  case Ast_if_else: {
-    if (data.if_else.otherwise.is_none()) {
-      return false;
-    }
-
-    auto is_const_cond      = is_const(env, data.if_else.cond);
-    auto is_const_then      = is_const(env, data.if_else.then);
-    auto is_const_otherwise = is_const(env, data.if_else.otherwise);
-
-    return is_const_cond && is_const_then && is_const_otherwise;
-  } break;
-
-  case Ast_type_function:
-  case Ast_type_array:
-  case Ast_type_slice:
-    return true;
-
-  case Ast_function:
-  case Ast_literal_int:
-  case Ast_literal_sequence:
-  case Ast_literal_string:
-    return true;
-
-  case Ast_const:
-    return true;
-
-  case Ast_builtin: {
-    Todo();
-  } break;
-  case Ast_for: {
-    Todo();
-  } break;
-  case Ast_defer: {
-    Todo();
-  } break;
-  case Ast_identifier: {
-    return false;
-  } break;
-  case Ast_index: {
-    Todo();
-  } break;
-  case Ast_unary_op: {
-    Todo();
-  } break;
-  case Ast_call: {
-    Todo();
-  } break;
-  case Ast_assign: {
-    Todo();
-  } break;
-  case Ast_declaration: {
-    Todo();
-  } break;
-  case Ast_cast: {
-    Todo();
-  } break;
-  case Ast_block: {
-    return true;
-  } break;
-
-  case Ast_root:
-  case Ast_kind_max:
-    return false;
-  }
-  return true;
 }

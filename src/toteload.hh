@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>  // stderr
+#include <stdlib.h> // abort
 
 // ---
 

@@ -81,7 +81,7 @@ int main(i32 arg_count, char const *const *args) {
   print_context.tokens = &unit.tokens;
   print_context.types  = &unit.types;
   print_context.nodes  = &unit.nodes;
-  print_context.values = &unit.interpreter.values;
+  print_context.values = &unit.values;
 
   if (settings.verbose) {
     pretty_print(&print_context, Print_basic, unit.nodes.first_valid_index());
@@ -117,6 +117,6 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  i32 result_code = *cast<i32 *>(unit.interpreter.values.get(result)->data);
+  i32 result_code = *cast<i32 *>(unit.values.get(result)->data);
   return result_code;
 }

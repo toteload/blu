@@ -82,13 +82,16 @@ struct AstPrinter {
 
   Str token_str(TokenIndex idx) { return get_token_str(text, tokens, idx); }
 
+  void esc_code(u8 code) { printf("\e[%um", code); }
+  void esc_code_reset() { esc_code(0); }
+
   void print_indent() {
     for (u32 i = 0; i < indent; i++) {
       fputs("  ", stdout);
     }
   }
 
-  void print(NodeIndex node);
+  void print(NodeIndex node, bool print_type=false);
 
   void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right) {
     if (nodes->kind(node) == Ast_binary_op) {
@@ -96,61 +99,27 @@ struct AstPrinter {
       bool need_parens = child_group > parent_group || (child_group == parent_group && is_right);
       if (need_parens) {
         fputs("{", stdout);
-        print(node);
+        print(node, true);
         fputs("}", stdout);
         return;
       }
     }
-    print(node);
+    print(node, true);
   }
 
   void print_unary_operand(NodeIndex node) {
     auto kind = nodes->kind(node);
     if (kind == Ast_binary_op || kind == Ast_unary_op) {
       fputs("{", stdout);
-      print(node);
+      print(node, true);
       fputs("}", stdout);
       return;
     }
-    print(node);
+    print(node, true);
   }
 };
 
-bool node_kind_has_type(AstKind kind) {
-  switch (kind) {
-  case Ast_block:
-  case Ast_builtin:
-  case Ast_declaration:
-  case Ast_defer:
-  case Ast_assign:
-  case Ast_literal_sequence:
-  case Ast_literal_int:
-  case Ast_literal_string:
-  case Ast_identifier:
-  case Ast_call:
-  case Ast_index:
-  case Ast_binary_op:
-  case Ast_unary_op:
-  case Ast_function:
-  case Ast_if_else:
-  case Ast_const:
-  case Ast_for:
-  case Ast_cast:
-    return true;
-
-  // unsure
-  case Ast_type_array:
-  case Ast_type_slice:
-  case Ast_type_function:
-    return false;
-
-  case Ast_root:
-  case Ast_kind_max:
-    return false;
-  }
-}
-
-void AstPrinter::print(NodeIndex node) {
+void AstPrinter::print(NodeIndex node, bool print_type) {
   if (node.kind == NodeIndex_value) {
     char buf[256] = {0};
     u32  len      = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
@@ -161,9 +130,9 @@ void AstPrinter::print(NodeIndex node) {
   auto kind = nodes->kind(node);
   auto data = nodes->data(node);
 
-  if (mode == Print_with_types && node_kind_has_type(kind)) {
+  if (mode == Print_with_types && print_type) {
     TypeIndex type_idx = nodes->type(node);
-    printf("\e[1;36m");
+    esc_code(36);
     if (type_idx.idx == 0) {
       printf("{?}");
     } else {
@@ -171,7 +140,12 @@ void AstPrinter::print(NodeIndex node) {
       u32  len = types->type_to_string(type_idx, buf, 256);
       printf("{%.*s}", cast<int>(len), buf);
     }
-    printf("\e[0m");
+    esc_code_reset();
+  }
+
+  if (nodes->is_const(node)) {
+    esc_code(4);
+    defer(esc_code_reset());
   }
 
   switch (kind) {
@@ -181,7 +155,7 @@ void AstPrinter::print(NodeIndex node) {
         fputs("\n", stdout);
       }
       print_indent();
-      print(data.root.items[i]);
+      print(data.root.items[i], true);
       fputs("\n", stdout);
     }
   } break;
@@ -195,7 +169,7 @@ void AstPrinter::print(NodeIndex node) {
     indent += 1;
     for (u32 i = 0; i < data.block.items.len(); i++) {
       print_indent();
-      print(data.block.items[i]);
+      print(data.block.items[i], true);
       fputs("\n", stdout);
     }
     indent -= 1;
@@ -247,19 +221,19 @@ void AstPrinter::print(NodeIndex node) {
     printf("%.*s : ", cast<int>(name.len()), name.str);
     print(data.declaration.type);
     fputs(" = ", stdout);
-    print(data.declaration.value);
+    print(data.declaration.value, true);
   } break;
 
   case Ast_const: {
     fputs("const {", stdout);
-    print(data.const_.expr);
+    print(data.const_.expr, true);
     fputs("}", stdout);
   } break;
 
   case Ast_assign: {
     print(data.assign.lhs);
     fputs(" = ", stdout);
-    print(data.assign.value);
+    print(data.assign.value, true);
   } break;
 
   case Ast_literal_sequence: {
@@ -289,21 +263,21 @@ void AstPrinter::print(NodeIndex node) {
   } break;
 
   case Ast_call: {
-    print(data.call.callee);
+    print(data.call.callee, true);
     fputs("(", stdout);
     for (u32 i = 0; i < data.call.args.len(); i++) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.call.args[i]);
+      print(data.call.args[i], true);
     }
     fputs(")", stdout);
   } break;
 
   case Ast_index: {
-    print(data.index.indexable);
+    print(data.index.indexable, true);
     fputs("[", stdout);
-    print(data.index.index_at);
+    print(data.index.index_at, true);
     fputs("]", stdout);
   } break;
 
@@ -328,39 +302,39 @@ void AstPrinter::print(NodeIndex node) {
       print(data.function.param_names[i]);
     }
     fputs("| ", stdout);
-    print(data.function.body);
+    print(data.function.body, true);
   } break;
 
   case Ast_cast: {
     fputs("cast(", stdout);
     print(data.cast.type_dst);
     fputs(") ", stdout);
-    print(data.cast.value);
+    print(data.cast.value, true);
   } break;
 
   case Ast_if_else: {
     fputs("if ", stdout);
-    print(data.if_else.cond);
+    print(data.if_else.cond, true);
     fputs(" ", stdout);
-    print(data.if_else.then);
+    print(data.if_else.then, true);
     if (data.if_else.otherwise.is_some()) {
       fputs(" else ", stdout);
-      print(data.if_else.otherwise);
+      print(data.if_else.otherwise, true);
     }
   } break;
 
   case Ast_for: {
     fputs("for ", stdout);
-    print(data.for_.iterable);
+    print(data.for_.iterable, true);
     fputs(" do ", stdout);
-    print(data.for_.iterator);
+    print(data.for_.iterator, true);
     fputs(" ", stdout);
-    print(data.for_.body);
+    print(data.for_.body, true);
   } break;
 
   case Ast_defer: {
     fputs("defer ", stdout);
-    print(data.defer.value);
+    print(data.defer.value, true);
   } break;
 
   case Ast_kind_max:

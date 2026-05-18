@@ -8,7 +8,7 @@ is_macos = platform.system() == 'Darwin'
 is_windows = platform.system() == 'Windows'
 
 ROOT = Path(__file__).resolve().parent
-BLU = ROOT / "out" / "blu.exe" if is_windows else "blu"
+BLU = ROOT / "out" / ("blu.exe" if is_windows else "blu")
 TEST_DIR = ROOT / "test" / "basic"
 
 

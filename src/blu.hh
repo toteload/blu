@@ -632,6 +632,15 @@ struct AstNode {
   AstNodeData      data;
 };
 
+enum NodeTypeKind : u8 {
+  NodeType_type_of_expression,
+  NodeType_type,
+};
+
+struct NodeType {
+  NodeTypeKind kind;
+};
+
 struct AstNodes {
   Vector<AstKind>          kinds;
   Vector<Span<TokenIndex>> spans;
@@ -838,15 +847,23 @@ template<typename T> struct Env {
   }
 
   void insert(StrKey identifier, T val) { map.insert(identifier, val); }
+
   bool lookup(StrKey identifier, T *out) {
+    T *p;
+    auto res = lookup_ptr(identifier, &p);
+    *out = *p;
+    return res;
+  }
+
+  bool lookup_ptr(StrKey identifier, T **out) {
     T *p = map.get_ptr(identifier);
     if (p) {
-      *out = *p;
+      *out = p;
       return true;
     }
 
     if (parent) {
-      return parent->lookup(identifier, out);
+      return parent->lookup_ptr(identifier, out);
     }
 
     return false;
@@ -969,12 +986,11 @@ struct InterpreterContext {
   Str              text;
   Tokens          *tokens;
   AstNodes        *nodes;
-  Slice<TypeIndex> node_types;
+  ValueStore *values;
 };
 
 struct Interpreter {
   EnvManager<ValueIndex> envs;
-  ValueStore             values;
   Arena                  work_arena;
   Env<ValueIndex>       *env_root;
 
@@ -985,6 +1001,7 @@ struct Interpreter {
   Str             text;
   Tokens         *tokens;
   AstNodes       *nodes;
+  ValueStore     *values;
 
   struct {
     ValueIndex nil;
@@ -994,13 +1011,10 @@ struct Interpreter {
   void deinit();
 
   // - Creates root env and add roots declarations.
-  // - Inserts explicit casts for all type coercions.
   // - Evaluates all the `const` code and inserts computed values into AST.
   bool prepare_code();
 
-  // Replaces type coercions with explicit casts.
-  void coercion_resolve_walk(NodeIndex *node, TypeIndex type_expected = {0});
-  b32  const_walk(Env<ValueIndex> *env, NodeIndex *slot);
+  b32 const_walk(Env<ValueIndex> *env, NodeIndex *slot);
 
   bool run_main(ValueIndex *result);
 
@@ -1078,6 +1092,7 @@ struct SourceUnit {
 
   StringInterner strings;
   TypeInterner   types;
+  ValueStore values;
 
   Interpreter interpreter;
 
@@ -1097,20 +1112,25 @@ struct SourceUnit {
 };
 
 enum DeclarationKind : u8 {
+  Declaration_of_unknown,
   Declaration_of_type,
   Declaration_of_value,
+};
 
-  Declaration_unresolved,
-  Declaration_resolving,
+enum ResolveStatus : u8 {
+  ResolveStatus_type_unresolved,
+  ResolveStatus_type_resolving,
+  ResolveStatus_type_resolved,
 };
 
 struct Declaration {
   DeclarationKind kind;
+  ResolveStatus   resolve_status;
   u8              is_const;
   union {
     TypeIndex type;
     NodeIndex node_index;
-  };
+  } data;
 };
 
 struct TypeCheckContext {
@@ -1118,6 +1138,7 @@ struct TypeCheckContext {
   EnvManager<Declaration> *envs;
   TypeInterner            *types;
   StringInterner          *strings;
+  ValueStore          *values;
   Arena                   *work_arena;
 };
 
