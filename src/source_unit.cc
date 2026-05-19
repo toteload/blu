@@ -93,7 +93,7 @@ bool SourceUnit::typecheck() {
   context.types      = &types;
   context.strings    = &strings;
   context.work_arena = &work_arena;
-  context.values = &values;
+  context.values     = &values;
 
   ParsedSource source = {
     .text   = text,
@@ -121,6 +121,7 @@ bool SourceUnit::run_const_code() {
   context.text     = text;
   context.tokens   = &tokens;
   context.nodes    = &nodes;
+  context.values = &values;
 
   interpreter.init(&context);
 

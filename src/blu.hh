@@ -849,9 +849,9 @@ template<typename T> struct Env {
   void insert(StrKey identifier, T val) { map.insert(identifier, val); }
 
   bool lookup(StrKey identifier, T *out) {
-    T *p;
+    T   *p;
     auto res = lookup_ptr(identifier, &p);
-    *out = *p;
+    *out     = *p;
     return res;
   }
 
@@ -867,6 +867,16 @@ template<typename T> struct Env {
     }
 
     return false;
+  }
+
+  bool find_and_replace(StrKey identifier, T val) {
+    T   *p;
+    auto found = lookup_ptr(identifier, &p);
+    if (!found) {
+      return false;
+    }
+    *p = val;
+    return found;
   }
 };
 
@@ -983,9 +993,9 @@ struct InterpreterContext {
   StringInterner *strings;
   Messages       *messages;
 
-  Str              text;
-  Tokens          *tokens;
-  AstNodes        *nodes;
+  Str         text;
+  Tokens     *tokens;
+  AstNodes   *nodes;
   ValueStore *values;
 };
 
@@ -1092,7 +1102,7 @@ struct SourceUnit {
 
   StringInterner strings;
   TypeInterner   types;
-  ValueStore values;
+  ValueStore     values;
 
   Interpreter interpreter;
 
@@ -1138,7 +1148,7 @@ struct TypeCheckContext {
   EnvManager<Declaration> *envs;
   TypeInterner            *types;
   StringInterner          *strings;
-  ValueStore          *values;
+  ValueStore              *values;
   Arena                   *work_arena;
 };
 
