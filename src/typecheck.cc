@@ -5,16 +5,6 @@ struct TypeHint {
   NodeIndex location;
 };
 
-struct CoercionLocation {
-  TypeIndex type_dst;
-
-  // Storing a pointer to a NodeIndex is unsafe.
-  // The AstNodeData is stored in a vector which may relocate memory.
-  // When we start adding cast AstNodes for the coercions the vector may relocate memory and
-  // invalidate our pointers.
-  NodeIndex *location;
-};
-
 struct TypeChecker {
   Messages                *messages;
   TypeInterner            *types;

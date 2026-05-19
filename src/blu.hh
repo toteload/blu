@@ -72,7 +72,6 @@ enum TypeKind : u8 {
   Type_never,
   Type_slice,
   Type_array,
-  Type_distinct,
   Type_sequence,
   Type_type,
 };
@@ -632,21 +631,11 @@ struct AstNode {
   AstNodeData      data;
 };
 
-enum NodeTypeKind : u8 {
-  NodeType_type_of_expression,
-  NodeType_type,
-};
-
-struct NodeType {
-  NodeTypeKind kind;
-};
-
 struct AstNodes {
   Vector<AstKind>          kinds;
   Vector<Span<TokenIndex>> spans;
   Vector<AstNodeData>      datas;
   Vector<TypeIndex>        types;
-  Vector<u8>               is_consts;
 
   Allocator segment_allocator;
 
@@ -775,6 +764,17 @@ ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) {
 ttld_inline u32 hash_node_index(void *context, NodeIndex a) {
   return (cast<u32>(a.kind) << 30) | a.idx;
 }
+
+// How are different types stored in memory?
+//
+// - Integer types allocate the number of bytes appropriate for their size: 8-bit integers use 1 byte, etc...
+// - A slice allocates a `ValueSlice`: a 64-bit length and a pointer to its items.
+// - An array allocates however many bytes are needed for its size N and base type T: stride(T) * N.
+// - A bool allocates 1 byte
+// - A literal int allocates 8 bytes and internally is a 64-bit integer.
+// - nil allocates 0 bytes.
+// - never allocates 0 bytes.
+// - type allocates sizeof(TypeIndex) bytes.
 
 struct ValueSlice {
   u64   len;
@@ -988,6 +988,11 @@ ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
   return text.sub(span.start, span.end);
 }
 
+// - May insert casts into AST
+// - May replace nodes with values.
+void typecheck_expression(CompileContext *context, Env<> *env, NodeIndex node_index);
+void eval_expression(CompileContext *context, Env<> *env, NodeIndex node_index);
+
 struct InterpreterContext {
   TypeInterner   *types;
   StringInterner *strings;
@@ -1109,22 +1114,15 @@ struct SourceUnit {
   Tokens   tokens;
   AstNodes nodes;
 
-  void init(Str filename, Str text);
+  void init();
   void deinit();
 
-  bool tokenize();
+  bool tokenize(Str filename, Str text);
   bool parse();
-  bool typecheck();
-  bool run_const_code();
+  bool typecheck_and_run_const_code();
   bool run_main(ValueIndex *result);
 
   void print_messages();
-};
-
-enum DeclarationKind : u8 {
-  Declaration_of_unknown,
-  Declaration_of_type,
-  Declaration_of_value,
 };
 
 enum ResolveStatus : u8 {
@@ -1134,13 +1132,11 @@ enum ResolveStatus : u8 {
 };
 
 struct Declaration {
-  DeclarationKind kind;
   ResolveStatus   resolve_status;
   u8              is_const;
-  union {
-    TypeIndex type;
-    NodeIndex node_index;
-  } data;
+
+  // If the resolve status is resolved then the node_index always references a value.
+  NodeIndex node_index;
 };
 
 struct TypeCheckContext {

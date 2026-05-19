@@ -6,4 +6,7 @@ Typecheck a bit of code, then evaluate it, which results in a type, which you ca
 I knew this, but I did not adapt my compiler to this. Why not?!?!
 I feel stupid about this :( but not defeated. I can fix it.
 
-
+1. tokenize
+1. parse
+1. typecheck + const evaluation
+1. evaluate program

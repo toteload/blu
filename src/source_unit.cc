@@ -1,16 +1,13 @@
 #include "blu.hh"
 #include "utils/stdlib.hh"
 
-void SourceUnit::init(Str filename, Str text) {
+void SourceUnit::init() {
   stage = Stage_tokenize;
 
   arena.init(MiB(2));
   work_arena.init(MiB(8));
 
   messages.init(stdlib_alloc);
-
-  this->filename = filename;
-  this->text     = text;
 }
 
 void SourceUnit::deinit() {
@@ -40,8 +37,11 @@ void SourceUnit::deinit() {
   memset(this, 0, sizeof(*this));
 }
 
-bool SourceUnit::tokenize() {
+bool SourceUnit::tokenize(Str filename, Str text) {
   Assert(stage == Stage_tokenize);
+
+  this->filename = filename;
+  this->text = text;
 
   tokens.init(stdlib_alloc);
 
@@ -76,7 +76,7 @@ bool SourceUnit::parse() {
   return true;
 }
 
-bool SourceUnit::typecheck() {
+bool SourceUnit::typecheck_and_run_const_code() {
   Assert(stage == Stage_typecheck);
 
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
