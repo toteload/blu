@@ -71,10 +71,6 @@ u32 TypeInterner::type_to_string(TypeIndex idx, char *buf, u32 buf_size) {
     Update(snprintf(buf, buf_size, "[]"));
     Update(type_to_string(type->slice.base_type, buf, buf_size));
   } break;
-  case Type_distinct: {
-    Update(snprintf(buf, buf_size, "distinct(%d) ", type->distinct.uid));
-    Update(type_to_string(type->distinct.base_type, buf, buf_size));
-  } break;
   case Type_function: {
     Update(snprintf(buf, buf_size, "("));
     if (type->function.param_count > 0) {
@@ -122,7 +118,6 @@ TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
   case Type_sequence:
   case Type_nil:
   case Type_never:
-  case Type_distinct:
     Todo();
     return {};
   }
@@ -172,9 +167,6 @@ b32 type_eq(void *context, Type *a, Type *b) {
 
     return true;
   }
-  case Type_distinct: {
-    return a->distinct.uid == b->distinct.uid;
-  }
   case Type_integer:
     return a->integer.signedness == b->integer.signedness &&
            a->integer.bitwidth == b->integer.bitwidth;
@@ -209,9 +201,6 @@ u32 push_type_data(Arena *arena, Type *x) {
   case Type_boolean:
   case Type_type:
     break;
-  case Type_distinct: {
-    Push_data(x->distinct.uid);
-  } break;
   case Type_integer: {
     Push_data(x->integer.signedness);
     Push_data(x->integer.bitwidth);
@@ -319,16 +308,6 @@ TypeIndex TypeInterner::add(Type *type) {
   bucket->val = index;
 
   return index;
-}
-
-TypeIndex TypeInterner::add_as_distinct(Type *type) {
-  Type *distinct_type = storage.alloc<Type>();
-
-  distinct_type->kind               = Type_distinct;
-  distinct_type->distinct.uid       = _get_new_distinct_uid();
-  distinct_type->distinct.base_type = add(type);
-
-  return add(distinct_type);
 }
 
 bool TypeInterner::is_coercible_to(TypeIndex src, TypeIndex dst) {

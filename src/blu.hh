@@ -8,14 +8,17 @@
 #include "index.hh"
 #include "string_interner.hh"
 
-typedef u32 SourceIdx;
+struct Tag_ValueIndex {};
+struct Tag_TypeIndex {};
+struct Tag_TokenIndex {};
 
-struct ValueIndexTag {};
-using ValueIndex         = Index<u32, ValueIndexTag>;
-using OptionalValueIndex = OptionalIndex<u32, ValueIndexTag>;
+using NodeIndexT = u32;
+using ValueIndex = Index<NodeIndexT, Tag_ValueIndex>;
+using TypeIndex  = Index<u32, Tag_TypeIndex>;
+using TokenIndex = Index<u32, Tag_TokenIndex>;
 
 enum NodeIndexKind : u8 {
-  NodeIndex_ast_node,
+  NodeIndex_ast,
   NodeIndex_value,
 };
 
@@ -24,23 +27,27 @@ struct NodeIndex {
 
   // An index value of 0 means not valid.
   union {
-    u32        idx;
-    ValueIndex value_idx;
-  };
+    NodeIndexT ast;
+    ValueIndex value;
+  } idx;
 
-  bool is_some() const { return idx != 0; }
-  bool is_none() const { return idx == 0; }
+  bool is_some() const { return idx.value.is_some(); }
+  bool is_none() const { return idx.value.is_none(); }
 
   static NodeIndex none() {
     return {
-      .kind = NodeIndex_ast_node, // The kind is invalid if `idx == 0`.
-      .idx  = 0,
+      .kind = NodeIndex_ast, // The kind is invalid if `idx == 0`.
+      .idx  = {.ast = 0},
+    };
+  }
+
+  static NodeIndex from_value(ValueIndex value) {
+    return {
+      .kind = NodeIndex_value,
+      .idx = { .value = value },
     };
   }
 };
-
-struct TypeIndexTag {};
-using TypeIndex = Index<u32, TypeIndexTag>;
 
 struct SourceLocation {
   u32 line = 0;
@@ -158,10 +165,6 @@ struct Type {
       TypeIndex param_types[0];
     } function;
     struct {
-      u32       uid;
-      TypeIndex base_type;
-    } distinct;
-    struct {
       u32       count;
       TypeIndex item_types[0];
     } sequence;
@@ -176,7 +179,6 @@ struct Type {
     case Type_never:
     case Type_slice:
     case Type_array:
-    case Type_distinct:
     case Type_type:
     case Type_boolean:
       return sizeof(*this);
@@ -259,10 +261,6 @@ struct TypeInterner {
 
   TypeIndex add(Type *type);
 
-  // Intern the provided type, but make it distinct as well.
-  // Two calls to this function with the same pointer will result in two different types returned.
-  TypeIndex add_as_distinct(Type *type);
-
   Type *get(TypeIndex idx) { return list[idx.idx]; }
 
   TypeSizeInfo size_info(TypeIndex idx);
@@ -272,6 +270,7 @@ struct TypeInterner {
 
   u32 type_to_string(TypeIndex type, char *buf, u32 buf_size);
 };
+
 template<typename T> struct Span {
   T start;
   T end;
@@ -338,11 +337,6 @@ enum TokenKind : u8 {
   Tok_kind_max,
 };
 
-// TODO: use Index type.
-struct TokenIndex {
-  u32 idx;
-};
-
 struct Tokens {
   Vector<TokenKind> kinds;
 
@@ -407,6 +401,7 @@ ttld_inline char const *token_kind_string(u32 kind) {
 
   return token_string[kind];
 }
+
 struct TokenizeContext {
   Messages *messages;
 };
@@ -644,13 +639,11 @@ struct AstNodes {
     spans.init(vector_allocator);
     datas.init(vector_allocator);
     types.init(vector_allocator);
-    is_consts.init(vector_allocator);
 
     kinds.push({});
     spans.push({});
     datas.push({});
     types.push({});
-    is_consts.push({});
 
     this->segment_allocator = segment_allocator;
   }
@@ -660,15 +653,14 @@ struct AstNodes {
     spans.deinit();
     datas.deinit();
     types.deinit();
-    is_consts.deinit();
 
     memset(this, 0, sizeof(*this));
   }
 
   NodeIndex first_valid_index() const {
     return {
-      .kind = NodeIndex_ast_node,
-      .idx  = 1,
+      .kind = NodeIndex_ast,
+      .idx  = {.ast = 1},
     };
   }
 
@@ -676,32 +668,27 @@ struct AstNodes {
 
   NodeIndex alloc() {
     NodeIndex res = {
-      .kind = NodeIndex_ast_node,
-      .idx  = cast<u32>(kinds.len()),
+      .idx = {.ast = cast<u32>(kinds.len())},
     };
 
     kinds.push_empty();
     spans.push_empty();
     datas.push_empty();
     types.push({0});
-    is_consts.push_empty();
 
     return res;
   }
 
   void set(NodeIndex idx, AstNode node) {
-    Debug_assert(idx.kind == NodeIndex_ast_node && idx.is_some());
-
-    kinds[idx.idx] = node.kind;
-    spans[idx.idx] = node.span;
-    datas[idx.idx] = node.data;
+    kinds[idx.idx.ast] = node.kind;
+    spans[idx.idx.ast] = node.span;
+    datas[idx.idx.ast] = node.data;
   }
 
-  AstKind          &kind(NodeIndex idx) { return kinds[idx.idx]; }
-  Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx]; }
-  AstNodeData      &data(NodeIndex idx) { return datas[idx.idx]; }
-  TypeIndex        &type(NodeIndex idx) { return types[idx.idx]; }
-  u8               &is_const(NodeIndex idx) { return is_consts[idx.idx]; }
+  AstKind          &kind(NodeIndex idx) { return kinds[idx.idx.ast]; }
+  Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx.ast]; }
+  AstNodeData      &data(NodeIndex idx) { return datas[idx.idx.ast]; }
+  TypeIndex        &type(NodeIndex idx) { return types[idx.idx.ast]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
@@ -759,15 +746,16 @@ struct ParseContext {
 b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *out);
 
 ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) {
-  return a.kind == b.kind && a.idx == b.idx;
+  return a.kind == b.kind && a.idx.ast == b.idx.ast;
 }
 ttld_inline u32 hash_node_index(void *context, NodeIndex a) {
-  return (cast<u32>(a.kind) << 30) | a.idx;
+  return (cast<u32>(a.kind) << 30) | a.idx.ast;
 }
 
 // How are different types stored in memory?
 //
-// - Integer types allocate the number of bytes appropriate for their size: 8-bit integers use 1 byte, etc...
+// - Integer types allocate the number of bytes appropriate for their size: 8-bit integers use 1
+// byte, etc...
 // - A slice allocates a `ValueSlice`: a 64-bit length and a pointer to its items.
 // - An array allocates however many bytes are needed for its size N and base type T: stride(T) * N.
 // - A bool allocates 1 byte
@@ -847,6 +835,7 @@ template<typename T> struct Env {
   }
 
   void insert(StrKey identifier, T val) { map.insert(identifier, val); }
+  b32  has(StrKey identifier) { return map.has(identifier); }
 
   bool lookup(StrKey identifier, T *out) {
     T   *p;
@@ -988,10 +977,82 @@ ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
   return text.sub(span.start, span.end);
 }
 
-// - May insert casts into AST
-// - May replace nodes with values.
-void typecheck_expression(CompileContext *context, Env<> *env, NodeIndex node_index);
-void eval_expression(CompileContext *context, Env<> *env, NodeIndex node_index);
+enum ResolveStatus : u8 {
+  ResolveStatus_type_unresolved,
+  ResolveStatus_type_resolving,
+  ResolveStatus_type_resolved,
+};
+
+struct Declaration {
+  ResolveStatus resolve_status;
+  u8            is_const;
+
+  // If the resolve status is resolved then the node_index always references a value.
+  NodeIndex node_index;
+};
+
+struct TypeHint {
+  TypeIndex type;
+  NodeIndex location;
+
+  bool is_some() const { return type.is_some(); }
+
+  static TypeHint none() {
+    return {
+      .type = TypeIndex::none(),
+      .location = NodeIndex::none(),
+    };
+  }
+};
+
+struct Builder {
+  // Non-owning
+  EnvManager<Declaration> *envs;
+
+  TypeInterner   *types;
+  StringInterner *strings;
+  Messages       *messages;
+  ValueStore     *values;
+  Arena          *arena_tmp;
+
+  Str       text;
+  Tokens   *tokens;
+  AstNodes *nodes;
+
+  // Owning
+  Env<Declaration> *env_root;
+
+  void init();
+  void deinit();
+
+  b32 typecheck_and_eval_const_code();
+
+  b32 check_root_declaration(Env<Declaration> *env, NodeIndex node_index);
+  b32 check_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint hint=TypeHint::none());
+
+  // Only call `eval_expression` on expressions that have been checked.
+  b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
+
+  // 1. Checks that the expression is valid.
+  // 2. Evaluates the expression.
+  // 3. Checks that the result of the expression is a type.
+  b32 check_and_eval_type_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
+
+  b32 check_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual);
+
+  b32 resolve_possible_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *value);
+
+  void env_populate_with_builtins(Env<Declaration> *env);
+  void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);
+
+  void copy_value_data(ValueIndex value_idx, void *dst) {
+    Value *v = values->get(value_idx);
+    memcpy(dst, v->data, types->size_info(v->type).size);
+  }
+
+  ValueIndex alloc_type(TypeIndex type_idx);
+  ValueIndex alloc_bool(u8 val);
+};
 
 struct InterpreterContext {
   TypeInterner   *types;
@@ -1033,15 +1094,15 @@ struct Interpreter {
 
   bool run_main(ValueIndex *result);
 
-  OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {
-    ValueIndex idx;
-    b32        found = env->lookup(strings->add(identifier), &idx);
-    if (!found) {
-      return OptionalValueIndex::none();
-    }
+  // OptionalValueIndex _lookup(Env<ValueIndex> *env, Str identifier) {
+  //   ValueIndex idx;
+  //   b32        found = env->lookup(strings->add(identifier), &idx);
+  //   if (!found) {
+  //     return OptionalValueIndex::none();
+  //   }
 
-    return OptionalValueIndex::from_index(idx);
-  }
+  //  return OptionalValueIndex::from_index(idx);
+  //}
 
   TypeIndex get_type(NodeIndex node_index);
 
@@ -1123,20 +1184,6 @@ struct SourceUnit {
   bool run_main(ValueIndex *result);
 
   void print_messages();
-};
-
-enum ResolveStatus : u8 {
-  ResolveStatus_type_unresolved,
-  ResolveStatus_type_resolving,
-  ResolveStatus_type_resolved,
-};
-
-struct Declaration {
-  ResolveStatus   resolve_status;
-  u8              is_const;
-
-  // If the resolve status is resolved then the node_index always references a value.
-  NodeIndex node_index;
 };
 
 struct TypeCheckContext {

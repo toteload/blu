@@ -14,8 +14,6 @@ struct TypeChecker {
   ValueStore              *values;
   ParsedSource            *source;
 
-  Vector<CoercionLocation> coercions;
-
   bool is_const_in_expression;
 
   b32 typecheck(NodeIndex idx_root);
@@ -69,29 +67,7 @@ struct RootEnvPopulator {
   void populate();
 };
 
-void RootEnvPopulator::populate() {
-  // clang-format off
-  insert(Declaration_of_type, STR("i8"),  types->type.i8_);
-  insert(Declaration_of_type, STR("i16"), types->type.i16_);
-  insert(Declaration_of_type, STR("i32"), types->type.i32_);
-  insert(Declaration_of_type, STR("i64"), types->type.i64_);
-
-  insert(Declaration_of_type, STR("u8"),  types->type.u8_);
-  insert(Declaration_of_type, STR("u16"), types->type.u16_);
-  insert(Declaration_of_type, STR("u32"), types->type.u32_);
-  insert(Declaration_of_type, STR("u64"), types->type.u64_);
-
-  insert(Declaration_of_type, STR("uint"), types->type.uint);
-
-  insert(Declaration_of_type, STR("bool"),  types->type.bool_);
-  insert(Declaration_of_type, STR("nil"),   types->type.nil);
-  insert(Declaration_of_type, STR("never"), types->type.never);
-  insert(Declaration_of_type, STR("type"),  types->type.type);
-
-  insert(Declaration_of_value, STR("true"),  types->type.bool_);
-  insert(Declaration_of_value, STR("false"), types->type.bool_);
-  // clang-format on
-}
+void RootEnvPopulator::populate() {}
 
 b32 typecheck(TypeCheckContext *context, ParsedSource *source, NodeIndex idx_root) {
   TypeChecker checker = {
@@ -345,7 +321,7 @@ b32 TypeChecker::resolve_type_expression(Env<Declaration> *env, NodeIndex node_i
 }
 
 b32 TypeChecker::resolve_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint *hint) {
-  auto kind = source->nodes->kind(node_index);
+  auto  kind = source->nodes->kind(node_index);
   auto &data = source->nodes->data(node_index);
 
   bool is_const_node = false;
@@ -545,11 +521,17 @@ b32 TypeChecker::resolve_expression(Env<Declaration> *env, NodeIndex node_index,
     TypeIndex then_type      = get_type(data.if_else.then);
     TypeIndex otherwise_type = get_type(data.if_else.otherwise);
 
-    Try(check_unification(data.if_else.then, then_type, data.if_else.otherwise, otherwise_type, &type_node));
+    Try(check_unification(
+      data.if_else.then,
+      then_type,
+      data.if_else.otherwise,
+      otherwise_type,
+      &type_node
+    ));
   } break;
 
   case Ast_declaration: {
-    auto key  = intern_identifier(data.declaration.name);
+    auto key = intern_identifier(data.declaration.name);
 
     Try(resolve_type_expression(env, data.declaration.type));
 

@@ -125,28 +125,30 @@ bool Interpreter::prepare_code() {
 }
 
 bool Interpreter::run_main(ValueIndex *result) {
-  auto main = values->get(_lookup(env_root, STR("main")).as_index());
+  // auto main = values->get(_lookup(env_root, STR("main")).as_index());
 
-  TypeIndex main_function_type;
-  {
-    auto snapshot = work_arena.take_snapshot();
-    defer(work_arena.restore(snapshot));
+  // TypeIndex main_function_type;
+  //{
+  //   auto snapshot = work_arena.take_snapshot();
+  //   defer(work_arena.restore(snapshot));
 
-    Type *t = alloc_type_function(&work_arena, 0);
+  //  Type *t = alloc_type_function(&work_arena, 0);
 
-    *t = {
-      .kind     = Type_function,
-      .function = {
-        .return_type = types->type.i32_,
-        .param_count = 0,
-        .param_types = {},
-      },
-    };
+  //  *t = {
+  //    .kind     = Type_function,
+  //    .function = {
+  //      .return_type = types->type.i32_,
+  //      .param_count = 0,
+  //      .param_types = {},
+  //    },
+  //  };
 
-    main_function_type = types->add(t);
-  }
+  //  main_function_type = types->add(t);
+  //}
 
-  Try(eval_call(env_root, main, {}, result));
+  // Try(eval_call(env_root, main, {}, result));
+
+  Todo();
 
   return true;
 }

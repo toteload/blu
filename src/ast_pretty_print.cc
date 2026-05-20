@@ -122,7 +122,7 @@ struct AstPrinter {
 void AstPrinter::print(NodeIndex node, bool print_type) {
   if (node.kind == NodeIndex_value) {
     char buf[256] = {0};
-    u32  len      = values->value_to_string(types, ValueIndex{node.idx}, buf, 256);
+    u32  len      = values->value_to_string(types, node.idx.value, buf, 256);
     printf("%.*s", cast<int>(len), buf);
     return;
   }
@@ -141,11 +141,6 @@ void AstPrinter::print(NodeIndex node, bool print_type) {
       printf("{%.*s}", cast<int>(len), buf);
     }
     esc_code_reset();
-  }
-
-  if (nodes->is_const(node)) {
-    esc_code(4);
-    defer(esc_code_reset());
   }
 
   switch (kind) {

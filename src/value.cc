@@ -69,9 +69,6 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
   case Type_array: {
     Todo();
   } break;
-  case Type_distinct: {
-    Todo();
-  } break;
   case Type_sequence: {
     Todo();
   } break;

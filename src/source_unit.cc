@@ -41,7 +41,7 @@ bool SourceUnit::tokenize(Str filename, Str text) {
   Assert(stage == Stage_tokenize);
 
   this->filename = filename;
-  this->text = text;
+  this->text     = text;
 
   tokens.init(stdlib_alloc);
 
@@ -121,7 +121,7 @@ bool SourceUnit::run_const_code() {
   context.text     = text;
   context.tokens   = &tokens;
   context.nodes    = &nodes;
-  context.values = &values;
+  context.values   = &values;
 
   interpreter.init(&context);
 
