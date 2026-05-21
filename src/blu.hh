@@ -1072,7 +1072,7 @@ struct Builder {
   b32 ensure_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr);
   b32 ensure_is_assignable(NodeIndex node_index);
 
-  b32 resolve_possible_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *value);
+  b32 check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value);
 
   void env_populate_with_builtins(Env<Declaration> *env);
   void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);

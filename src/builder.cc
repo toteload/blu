@@ -108,12 +108,12 @@ b32 Builder::check_and_eval_type_expression(
   Env<Declaration> *env, NodeIndex *node_index, ValueIndex *result
 ) {
 
-    TypeHint hint_must_be_type = {
+    TypeHint must_be_type = {
       .type     = types->type.type,
       .location = *node_index,
     };
 
-  Try(check_expression(env, node_index, hint_must_be_type));
+  Try(check_expression(env, node_index, must_be_type));
 
   ValueIndex value_declared_type;
   Try(eval_expression(env, *node_index, &value_declared_type));
@@ -165,7 +165,7 @@ b32 Builder::resolve_declaration(
 
   Try(check_expression(env, &ast_decl.value, hint));
 
-  Try(resolve_possible_coercion(env, type_declared, &ast_decl.value));
+  Try(check_and_resolve_coercion(env, hint, &ast_decl.value));
 
   Todo();
 
@@ -184,7 +184,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
   case Ast_declaration: {
     Declaration decl;
-    resolve_declaration(env, *node_index, data.declaration.name, &decl);
+    Try(resolve_declaration(env, *node_index, data.declaration.name, &decl));
     nodes->type(*node_index) = types->type.nil;
   } break;
 
@@ -236,7 +236,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Try(check_expression(env, &data.assign.value, hint_value));
 
-    Try(resolve_possible_coercion(env, lhs_type, &data.assign.value));
+    Try(check_and_resolve_coercion(env, hint_value, &data.assign.value));
 
     nodes->type(*node_index) = types->type.nil;
   } break;
@@ -322,9 +322,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Try(check_expression(env_params, &data.function.body, hint_body));
 
-    Try(resolve_possible_coercion(env, return_type, &data.function.body));
-
-    nodes->type(*node_index) = hint.type;
+    Todo();
   } break;
 
   case Ast_literal_int: {
@@ -351,6 +349,8 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     Todo();
     break;
   }
+
+  Try(check_and_resolve_coercion(env, hint, node_index));
 
   return true;
 }
@@ -470,10 +470,10 @@ ValueIndex Builder::alloc_bool(u8 b) {
   return idx;
 }
 
-b32 Builder::resolve_possible_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *value) {
+b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value) {
   auto type_src = get_type(*value);
 
-  if (type_src == type_dst) {
+  if (type_src == expected.type) {
     return true;
   }
 
