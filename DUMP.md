@@ -50,7 +50,7 @@ This presents an issue: the AST is modelled as having a token span for each node
 A solution to this is to use a 0-length span to denote compiler inserted nodes.
 The span can still point to a location in the token stream and may be used to point to the token location before which this code was inserted.
 
-### Values inserted into AST by const evaluation
+### Values inserted into AST by `eval`/const evaluation
 
 During compilation certain expressions must be evaluated.
 These expressions produce values that replace their expression in the AST.
@@ -69,12 +69,23 @@ For the coercion of a `const function` to a fully typed function one of the foll
 1. The `const function` is fully annotated.
 
 > Question: Are you allowed to bind a `const function` to a `const` variable?
+>
 > Answer: Yes, its type will be `const_function` or `function_literal` or something like that.
 > It may not be used in this state, but it can be cast/coerced to a fully typed function at a later point. 
 
 ### Coercion of `const list`
 
 ...
+
+## `eval`, compile time evaluation
+
+At first, I had the idea of using the `const` keyword for both denoting const 'bindings' (identifiers whose value must be known at compile time and references to these values are inlined) and forcing the compile time evaluation of arbitrary expressions. 
+However, this is not possible if you want to have `const` has a qualifier on types.
+Example: `const a`, is this a type `a` with a `const` qualifier (meaning no values of this type are allowed at runtime) or is this an expression `a` that we want to evaluate at compile time?
+This would make the meaning of `const` context-dependent, which I don't want.
+A solution is to introduce another keyword: `eval`. 
+`const` is always used as a qualifier on types or bindings.
+`eval` is used to evaluate an expression at compile time.
 
 ## Types
 

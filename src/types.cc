@@ -375,3 +375,22 @@ bool TypeInterner::unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result) {
 
   return false;
 }
+
+b32 TypeInterner::is_valid_cast(TypeIndex from, TypeIndex to) {
+  if (is_coercible_to(from, to)) {
+    return true;
+  }
+
+  Type *t_dst = get(to);
+  Type *t_src = get(from);
+
+  if (
+    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
+  ) {
+    return true;
+  }
+
+  Todo();
+
+  return false;
+}

@@ -882,19 +882,6 @@ b32 TypeChecker::check_unification(
 }
 
 b32 TypeChecker::check_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr) {
-  if (types->is_coercible_to(type_expr, type_dst)) {
-    return true;
-  }
-
-  Type *t_dst = types->get(type_dst);
-  Type *t_src = types->get(type_expr);
-
-  if (
-    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
-  ) {
-    return true;
-  }
-
   Todo();
 
   return false;

@@ -3,14 +3,11 @@
 Build an AST interpreter first.
 Performance is not that important.
 It is not compiled ahead of time.
-All checks are performed at runtime.
-You will still have to write the logic for what the language does, it will "just" be done at a different time compared to an AOT compiler.
 
-### In progress
+### In progress notes
 
-- Create coerced values for values that should be coerced.
-- Explicit cast nodes will be added where coercion is to be performed.
-  - These added AST nodes also need to have their type added to `node_types` and need a special span.
+- I don't think that `Ast_type_function` should exist in `eval_expression`.
+  `Ast_type_function` is a compile time only allowed construct and I want only runtime code in `eval_expression`.
 
 ### Basic
 

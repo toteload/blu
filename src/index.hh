@@ -19,5 +19,9 @@ struct Index {
 
   bool is_some() const { return idx != 0; }
   bool is_none() const { return idx == 0; }
+
+  static Index none() {
+    return { .idx = 0, };
+  }
 };
 

@@ -13,3 +13,4 @@ clang-format -i src/string_interner.cc
 clang-format -i src/typecheck.cc
 clang-format -i src/interpreter.cc
 clang-format -i src/messages.cc
+clang-format -i src/builder.cc

@@ -48,75 +48,112 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  SourceUnit unit{};
-  unit.init(filename, source_text);
-  defer(unit.deinit());
+  Arena arena;
+  arena.init(MiB(2));
 
-  bool ok;
-  ok = unit.tokenize();
+  Arena arena_tmp;
+  arena_tmp.init(MiB(2));
+
+  Messages messages{};
+  messages.init(stdlib_alloc);
+
+  Tokens tokens{};
+  tokens.init(stdlib_alloc);
+
+  AstNodes nodes{};
+  nodes.init(stdlib_alloc, arena.as_allocator());
+
+  StringInterner strings{};
+  strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
+
+  TypeInterner types{};
+  types.init(&arena_tmp, arena.as_allocator(), stdlib_alloc, stdlib_alloc);
+
+  EnvManager<Declaration> envs{};
+  envs.init(stdlib_alloc, stdlib_alloc);
+
+  ValueStore values{};
+  values.init(stdlib_alloc);
+
+  b32 ok;
+  {
+    TokenizeContext context{};
+    context.messages = &messages;
+    ok               = tokenize(&context, source_text, &tokens);
+  }
   if (!ok) {
-    printf("Tokenize error\n");
-    unit.print_messages();
+    printf("error: tokenization\n");
     return 1;
   }
 
-  //  if (settings.verbose) {
-  //    auto snapshot = work_arena.take_snapshot();
-  //
-  //    write_tokens(&tokens, source_text, &work_arena);
-  //    printf("%.*s", (int)snapshot.size(), (char *)snapshot.at);
-  //
-  //    work_arena.restore(snapshot);
-  //  }
-
-  ok = unit.parse();
+  {
+    ParseContext context{};
+    context.messages = &messages;
+    ok               = parse_root(&context, &tokens, &nodes);
+  }
   if (!ok) {
-    printf("Parse error\n");
-    unit.print_messages();
+    printf("error: parsing\n");
     return 1;
   }
 
   AstPrettyPrintContext print_context{};
   print_context.text   = source_text;
-  print_context.tokens = &unit.tokens;
-  print_context.types  = &unit.types;
-  print_context.nodes  = &unit.nodes;
-  print_context.values = &unit.values;
+  print_context.tokens = &tokens;
+  print_context.types  = &types;
+  print_context.nodes  = &nodes;
+  print_context.values = &values;
 
   if (settings.verbose) {
-    pretty_print(&print_context, Print_basic, unit.nodes.first_valid_index());
+    pretty_print(&print_context, Print_basic, nodes.first_valid_index());
   }
 
-  ok = unit.typecheck();
+  Builder builder{};
+  builder.envs      = &envs;
+  builder.types     = &types;
+  builder.strings   = &strings;
+  builder.messages  = &messages;
+  builder.values    = &values;
+  builder.arena_tmp = &arena_tmp;
+  builder.text      = source_text;
+  builder.tokens    = &tokens;
+  builder.nodes     = &nodes;
+
+  builder.init();
+  defer(builder.deinit());
+
+  ok = builder.typecheck_and_eval_const_code();
   if (!ok) {
-    printf("Typecheck error\n");
-    unit.print_messages();
+    MessageContext context;
+    context.text    = source_text;
+    context.tokens  = &tokens;
+    context.nodes   = &nodes;
+    context.types   = &types;
+    context.strings = &strings;
+    messages.print_messages(&context);
     return 1;
   }
 
+  // ok = unit.typecheck();
+  // if (!ok) {
+  //   printf("Typecheck error\n");
+  //   unit.print_messages();
+  //   return 1;
+  // }
+
+  // if (settings.verbose) {
+  //   pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
+  // }
+
+  // ok = unit.run_const_code();
+  // if (!ok) {
+  //   printf("Const code evaluation error\n");
+  //   unit.print_messages();
+  //   return 1;
+  // }
+
   if (settings.verbose) {
-    pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
+    pretty_print(&print_context, Print_with_types, nodes.first_valid_index());
   }
 
-  ok = unit.run_const_code();
-  if (!ok) {
-    printf("Const code evaluation error\n");
-    unit.print_messages();
-    return 1;
-  }
-
-  if (settings.verbose) {
-    pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
-  }
-
-  ValueIndex result;
-  ok = unit.run_main(&result);
-  if (!ok) {
-    printf("Runtime error\n");
-    unit.print_messages();
-    return 1;
-  }
-
-  i32 result_code = *cast<i32 *>(unit.values.get(result)->data);
-  return result_code;
+  return 0;
 }

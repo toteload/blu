@@ -24,8 +24,8 @@ b32 Builder::typecheck_and_eval_const_code() {
     if (kind == Ast_const) {
       Todo();
     } else if (kind == Ast_declaration) {
-      auto &data = nodes->data(idx_item);
-      StrKey key; Todo();
+      auto  &data = nodes->data(idx_item);
+      StrKey key  = intern_identifier(data.declaration.name);
 
       if (env_root->has(key)) {
         Todo();
@@ -45,49 +45,8 @@ b32 Builder::typecheck_and_eval_const_code() {
   }
 
   for (u32 i = 0; i < root.items.len(); i++) {
-    auto idx_item = root.items[i];
-
-    Try(resolve_declaration(env_root, idx_item));
+    Try(check_expression(env_root, &root.items[i], common.hint_nil));
   }
-}
-
-b32 Builder::resolve_declaration(Env<Declaration> *env, NodeIndex idx) {
-  Assert(nodes->kind(idx) == Ast_declaration);
-
-  auto &data = nodes->data(idx);
-  auto  key  = intern_identifier(data.declaration.name);
-
-  {
-    Declaration *decl;
-    auto         found = env->lookup_ptr(key, &decl);
-
-    Assert(found);
-
-    if (decl->resolve_status == ResolveStatus_type_resolved) {
-      return true;
-    }
-
-    if (decl->resolve_status == ResolveStatus_type_resolving) {
-      Todo();
-      return false;
-    }
-
-    decl->resolve_status = ResolveStatus_type_resolving;
-  }
-
-  ValueIndex value_declared_type;
-  Try(check_and_eval_type_expression(env, data.declaration.type, &value_declared_type));
-
-  Try(check_expression(env, data.declaration.value));
-
-  TypeIndex type_declared;
-  copy_value_data(value_declared_type, &type_declared);
-
-  Try(resolve_possible_coercion(env, type_declared, &data.declaration.value));
-
-  Todo();
-
-  return true;
 }
 
 b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result) {
@@ -96,439 +55,345 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     return true;
   }
 
-  auto kind = nodes->kind(node_index);
+  auto  kind = nodes->kind(node_index);
+  auto &data = nodes->data(node_index);
 
   switch (kind) {
-  case Ast_cast: {
-    auto node = nodes->data(node_index).cast;
+  case Ast_type_function: {
+    auto &f = data.type_function;
 
-    TypeIndex type_dst = get_type(node.type_dst);
+    u32 param_count = f.param_types.len();
 
-    ValueIndex val_idx;
-    Try(eval_expr(env, node.value, &val_idx));
-    Try(eval_cast(type_dst, val_idx, result));
-  } break;
+    ValueIndex value_return_type;
+    Try(eval_expression(env, f.return_type, &value_return_type));
 
-  case Ast_builtin: {
-    auto builtin = nodes->data(node_index).builtin;
-    switch (builtin.kind) {
-    case Builtin_print: {
-      ValueIndex arg_format;
-      Try(eval_expr(env, builtin.args[0], &arg_format));
+    auto ty = alloc_type_function(arena_tmp, param_count);
 
-      ValueSlice slice;
-      copy_value_data(arg_format, &slice);
-
-      auto snapshot = work_arena.take_snapshot();
-      defer(work_arena.restore(snapshot));
-
-      auto args = work_arena.alloc_slice<ValueIndex>(builtin.args.len() - 1);
-      for (u32 i = 1; i < builtin.args.len(); i++) {
-        Try(eval_expr(env, builtin.args[i], &args[i - 1]));
-      }
-
-      Str format = Str::from_ptr_and_len(cast<char const *>(slice.items), slice.len);
-
-      builtin_print(format, args);
-
-      *result = common.nil;
-    } break;
-    }
-  } break;
-
-  case Ast_block: {
-    auto block = nodes->data(node_index).block;
-    if (block.items.len() == 0) {
-      *result = common.nil;
-      break;
-    }
-
-    auto env_block = envs.alloc(env);
-    defer(envs.dealloc(env_block));
-
-    auto snapshot = work_arena.take_snapshot();
-    defer(work_arena.restore(snapshot));
-
-    NodeIndex *defers      = work_arena.alloc<NodeIndex>(block.items.len());
-    u32        defer_count = 0;
-
-    ValueIndex last = common.nil;
-
-    for (u32 i = 0; i < block.items.len(); i++) {
-      auto item = block.items[i];
-      if (nodes->kind(item) == Ast_defer) {
-        defers[defer_count++] = nodes->data(item).defer.value;
-        last                  = common.nil;
-      } else {
-        Try(eval_expr(env_block, item, &last));
-      }
-    }
-
-    *result = last;
-
-    for (u32 i = defer_count; i > 0; i--) {
-      ValueIndex e;
-      Try(eval_expr(env_block, defers[i - 1], &e));
-    }
-  } break;
-
-  case Ast_function: {
-    Value *v;
-    *result   = values->alloc_value(&v);
-    auto data = values->alloc_data<NodeIndex>();
-
-    *data = node_index;
-
-    *v = {
-      .type = get_type(node_index),
-      .data = data,
+    *ty = {
+      .kind     = Type_function,
+      .function = {
+        .return_type = get_type(NodeIndex::from_value(value_return_type)),
+        .param_count = param_count,
+        .param_types = {},
+      },
     };
+
+    for (u32 i = 0; i < param_count; i++) {
+      ValueIndex value_param_type;
+      Try(eval_expression(env, f.param_types[i], &value_param_type));
+      ty->function.param_types[i] = get_type(NodeIndex::from_value(value_param_type));
+    }
+
+    TypeIndex type_idx = types->add(ty);
+    *result            = alloc_type(type_idx);
   } break;
 
   case Ast_identifier: {
-    *result = lookup_identifier(env, node_index);
+    auto        key = intern_identifier(data.identifier.token_index);
+    Declaration decl;
+    env->lookup(key, &decl);
+    *result = decl.node_index.as_value_idx();
   } break;
 
-  case Ast_if_else: {
-    auto if_else = nodes->data(node_index).if_else;
-
-    ValueIndex cond;
-    Try(eval_expr(env, if_else.cond, &cond));
-
-    auto v = values->get(cond);
-
-    if (*cast<u8 *>(v->data) == 1) {
-      Try(eval_expr(env, if_else.then, result));
-    } else if (if_else.otherwise.is_some()) {
-      Try(eval_expr(env, if_else.otherwise, result));
-    } else {
-      *result = common.nil;
-    }
-  } break;
-
-  case Ast_declaration: {
-    Try(eval_declaration(env, node_index, result));
-  } break;
-
-  case Ast_binary_op: {
-    auto binop = nodes->data(node_index).binary_op;
-    auto op    = binop.kind;
-
-    ValueIndex lhs;
-    Try(eval_expr(env, binop.lhs, &lhs));
-
-    ValueIndex rhs;
-    Try(eval_expr(env, binop.rhs, &rhs));
-
-    Try(eval_binary_op(op, lhs, rhs, node_index, result));
-  } break;
-
-  case Ast_index: {
-    auto node = nodes->data(node_index).index;
-
-    ValueIndex idx_indexable;
-    Try(eval_expr(env, node.indexable, &idx_indexable));
-
-    ValueIndex idx_index_at;
-    Try(eval_expr(env, node.index_at, &idx_index_at));
-
-    u64 i;
+  default:
+    puts(ast_kind_string(kind));
     Todo();
-
-    auto indexable      = values->get(idx_indexable);
-    auto type_indexable = types->get(indexable->type);
-
-    TypeIndex base_type;
-    void     *elem_ptr;
-
-    if (type_indexable->kind == Type_slice) {
-      base_type  = type_indexable->slice.base_type;
-      auto slice = cast<ValueSlice *>(indexable->data);
-      elem_ptr   = ptr_offset(slice->items, i * types->size_info(base_type).stride);
-    } else if (type_indexable->kind == Type_array) {
-      base_type = type_indexable->array.base_type;
-      elem_ptr  = ptr_offset(indexable->data, i * types->size_info(base_type).stride);
-    } else {
-      Todo("implement indexing for other types");
-      break;
-    }
-
-    auto elem_size_info = types->size_info(base_type);
-    auto data           = values->alloc_data(elem_size_info);
-    memcpy(data, elem_ptr, elem_size_info.size);
-
-    Value *vout;
-    *result = values->alloc_value(&vout);
-    *vout   = {.type = base_type, .data = data};
-  } break;
-
-  case Ast_literal_string: {
-    auto ty    = get_type(node_index);
-    auto t     = types->get(ty);
-    u32  count = t->array.size;
-
-    Value *v;
-    auto   res   = values->alloc_value(&v);
-    void  *bytes = values->alloc_data(types->size_info(t->array.base_type), count);
-
-    *v = {
-      .type = ty,
-      .data = bytes,
-    };
-
-    auto token_index = nodes->data(node_index).literal_string.token_index;
-    auto literal     = get_token_str(token_index);
-
-    decode_string_literal(literal, cast<char *>(bytes));
-
-    *result = res;
-  } break;
-
-  case Ast_defer: {
-    auto       defer_ = nodes->data(node_index).defer;
-    ValueIndex e;
-    Try(eval_expr(env, defer_.value, &e));
-    *result = common.nil;
-  } break;
-
-  case Ast_call: {
-    auto call = nodes->data(node_index).call;
-
-    ValueIndex callee_idx;
-    Try(eval_expr(env, call.callee, &callee_idx));
-
-    u32 arg_count = cast<u32>(call.args.len());
-
-    auto snapshot = work_arena.take_snapshot();
-    defer(work_arena.restore(snapshot));
-
-    ValueIndex *args = work_arena.alloc<ValueIndex>(arg_count);
-    for (u32 i = 0; i < arg_count; i++) {
-      Try(eval_expr(env, call.args[i], &args[i]));
-    }
-
-    auto callee = values->get(callee_idx);
-    Try(eval_call(env, callee, {args, arg_count}, result));
-  } break;
-
-  case Ast_for: {
-    auto node = nodes->data(node_index).for_;
-
-    ValueIndex iterable_idx;
-    Try(eval_expr(env, node.iterable, &iterable_idx));
-
-    auto iterable      = values->get(iterable_idx);
-    auto iterable_type = types->get(iterable->type);
-
-    u64       count;
-    void     *items;
-    TypeIndex element_type;
-
-    if (iterable_type->kind == Type_array) {
-      count        = iterable_type->array.size;
-      items        = iterable->data;
-      element_type = iterable_type->array.base_type;
-    } else if (iterable_type->kind == Type_slice) {
-      auto slice   = cast<ValueSlice *>(iterable->data);
-      count        = slice->len;
-      items        = slice->items;
-      element_type = iterable_type->slice.base_type;
-    } else {
-      Unreachable();
-    }
-
-    auto elem_size_info = types->size_info(element_type);
-
-    auto iterator_token = nodes->data(node.iterator).identifier.token_index;
-    auto iter_str       = get_token_str(iterator_token);
-    auto iter_key       = strings->add(iter_str);
-
-    auto env_loop = envs.alloc(env);
-    defer(envs.dealloc(env_loop));
-
-    for (u64 i = 0; i < count; i++) {
-      Value *v;
-      auto   iter_value_idx = values->alloc_value(&v);
-      auto   data           = values->alloc_data(elem_size_info);
-      memcpy(data, ptr_offset(items, i * elem_size_info.stride), elem_size_info.size);
-      *v = {.type = element_type, .data = data};
-
-      env_loop->insert(iter_key, iter_value_idx);
-
-      ValueIndex body_result;
-      Try(eval_expr(env_loop, node.body, &body_result));
-    }
-
-    *result = common.nil;
-  } break;
-
-  case Ast_assign: {
-    auto node = nodes->data(node_index).assign;
-
-    Assert(node.kind == Assign_normal);
-
-    void     *lhs_ptr;
-    TypeIndex lhs_type;
-    Try(eval_place(env, node.lhs, &lhs_ptr, &lhs_type));
-
-    ValueIndex value_idx;
-    Try(eval_expr(env, node.value, &value_idx));
-
-    copy_value(lhs_type, value_idx, lhs_ptr);
-
-    *result = common.nil;
-  } break;
-
-  // Should only be called during const evaluation.
-  case Ast_literal_int: {
-    auto token_index = nodes->data(node_index).literal_int.token_index;
-    auto str         = get_token_str(token_index);
-    auto i           = parse_i64(str);
-
-    Value *v;
-    *result   = values->alloc_value(&v);
-    auto data = values->alloc_data<i64>();
-    *data     = i;
-
-    *v = {
-      .type = types->type.literal_int,
-      .data = data,
-    };
-  } break;
-
-  case Ast_literal_sequence: {
-    auto seq   = nodes->data(node_index).literal_sequence;
-    auto count = seq.items.len();
-
-    Value      *v;
-    auto        res   = values->alloc_value(&v);
-    ValueIndex *items = values->alloc_data<ValueIndex>(count);
-
-    *v = {
-      .type = get_type(node_index),
-      .data = items,
-    };
-
-    for (u32 i = 0; i < count; i++) {
-      Try(eval_expr(env, seq.items[i], &items[i]));
-    }
-
-    *result = res;
-  } break;
-
-  case Ast_const: {
-    Todo("should not exist at runtime");
-    // return eval_expr(env, nodes->data(node_index).const_.expr, result);
-  } break;
-
-  case Ast_type_function: {
-    auto &param_types = data.type_function.param_types;
-
-    auto snapshot = arena_tmp.take_snapshot();
-    defer(arena_tmp.restore(snapshot));
-
-    Type *t = alloc_type_function(arena_tmp, param_types.len());
-
-    t->function.param_count = param_types.len();
-
-    ValueIndex value_return_type;
-    Try(check_and_eval_type_expression(env, data.type_function.return_type, &value_return_type));
-    copy_value_data(value_return_type, &t->function.return_type);
-
-    for (u32 i = 0; i < param_types.len(); i++) {
-      ValueIndex value_param;
-      Try(check_and_eval_type_expression(env, param_types[i], &value_param));
-      copy_value_data(value_param, t->function.param_types[i]);
-    }
-
-    TypeIndex type_idx = types->add(t);
-    *result = alloc_type(type_idx);
-  } break;
-
-  case Ast_type_slice:
-  case Ast_type_array:
-  case Ast_unary_op:
-  case Ast_kind_max:
-  case Ast_root:
-    Todo();
+    break;
   }
+
+  return true;
 }
 
-b32 Builder::check_and_eval_type_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result) {
-  Try(check_expression(env, node_index));
+b32 Builder::check_and_eval_type_expression(
+  Env<Declaration> *env, NodeIndex *node_index, ValueIndex *result
+) {
+
+    TypeHint hint_must_be_type = {
+      .type     = types->type.type,
+      .location = *node_index,
+    };
+
+  Try(check_expression(env, node_index, hint_must_be_type));
 
   ValueIndex value_declared_type;
-  Try(eval_expression(env, node_index, &value_declared_type));
-  Try(check_is_expected_type(node_index, types->type.type, value_declared_type->type)); 
+  Try(eval_expression(env, *node_index, &value_declared_type));
+
+  Value *v = values->get(value_declared_type);
+  Try(ensure_is_expected_type(*node_index, types->type.type, v->type));
 
   *result = value_declared_type;
 
   return true;
 }
 
-b32 Builder::check_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint hint) {
-  auto kind = nodes->kind(node_index);
-  auto &data = nodes->data(node_index);
+b32 Builder::resolve_declaration(
+  Env<Declaration> *env, NodeIndex location, TokenIndex identifier, Declaration *declaration
+) {
+  AstDeclaration ast_decl{};
+  auto           key = intern_identifier(identifier);
+
+  Declaration *decl;
+  auto         found = env->lookup_ptr(key, &decl);
+
+  if (!found) {
+    Todo();
+  }
+
+  if (decl->resolve_status == ResolveStatus_type_resolved) {
+    *declaration = *decl;
+    return true;
+  }
+
+  if (decl->resolve_status == ResolveStatus_type_resolving) {
+    Todo();
+    return false;
+  }
+
+  decl->resolve_status = ResolveStatus_type_resolving;
+
+  ast_decl = nodes->data(decl->node_index).declaration;
+
+  ValueIndex value_declared_type;
+  Try(check_and_eval_type_expression(env, &ast_decl.type, &value_declared_type));
+
+  TypeIndex type_declared;
+  copy_value_data(value_declared_type, &type_declared);
+
+  TypeHint hint{};
+  hint.type     = type_declared;
+  hint.location = ast_decl.type;
+
+  Try(check_expression(env, &ast_decl.value, hint));
+
+  Try(resolve_possible_coercion(env, type_declared, &ast_decl.value));
+
+  Todo();
+
+  // The stored declaration needs to be updated to reference a Value instead of an AST node.
+  // The value always needs to have a type.
+  // The value needs to hold a value if the declaration is const.
+
+  return true;
+}
+
+b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, TypeHint hint) {
+  auto  kind = nodes->kind(*node_index);
+  auto &data = nodes->data(*node_index);
 
   switch (kind) {
+
+  case Ast_declaration: {
+    Declaration decl;
+    resolve_declaration(env, *node_index, data.declaration.name, &decl);
+    nodes->type(*node_index) = types->type.nil;
+  } break;
+
+  case Ast_identifier: {
+    Declaration decl;
+    Try(resolve_declaration(env, *node_index, data.identifier.token_index, &decl));
+    nodes->type(*node_index) = get_type(decl.node_index);
+  } break;
+
   case Ast_cast: {
     ValueIndex value_type_dst;
-    Try(check_and_eval_type_expression(env, data.cast.type_dst, &value_type_dst));
+    Try(check_and_eval_type_expression(env, &data.cast.type_dst, &value_type_dst));
 
-    Try(check_expression(env, data.cast.value));
+    Try(check_expression(env, &data.cast.value));
 
     TypeIndex type_expr = get_type(data.cast.value);
 
     TypeIndex type_dst;
     copy_value_data(value_type_dst, &type_dst);
 
-    Try(check_is_valid_cast(node_index, type_dst, type_expr));
+    Try(ensure_is_valid_cast(*node_index, type_dst, type_expr));
 
     data.cast.type_dst = NodeIndex::from_value(value_type_dst);
 
-    nodes->type(node_index) = type_dst;
+    nodes->type(*node_index) = type_dst;
   } break;
 
   case Ast_const: {
-    Try(check_expression(env, data.const.expr));
+    Try(check_expression(env, &data.const_.expr));
 
     ValueIndex val;
-    Try(eval_expression(env, data.const.expr, &val));
+    Try(eval_expression(env, data.const_.expr, &val));
 
-    data.const.expr = NodeIndex::from_value(val);
-
-    nodes->type(node_index) = get_type(data.const.expr);
+    *node_index = NodeIndex::from_value(val);
   } break;
 
   case Ast_assign: {
     Assert(data.assign.kind == Assign_normal);
 
-    Try(check_expression(env, node.lhs));
-    Try(check_is_assignable(node.lhs));
+    Try(check_expression(env, &data.assign.lhs));
+    Try(ensure_is_assignable(data.assign.lhs));
 
-    TypeIndex lhs_type = get_type(node.lhs);
+    TypeIndex lhs_type = get_type(data.assign.lhs);
 
     TypeHint hint_value = {
       .type     = lhs_type,
-      .location = node.lhs,
+      .location = data.assign.lhs,
     };
 
-    Try(check_expression(env, node.value, hint_value));
+    Try(check_expression(env, &data.assign.value, hint_value));
 
-    Try(resolve_possible_coercion(env, lhs_type, &node.value));
+    Try(resolve_possible_coercion(env, lhs_type, &data.assign.value));
 
-    nodes->type(node_index) = types->type.nil;
+    nodes->type(*node_index) = types->type.nil;
   } break;
 
   case Ast_type_function: {
-    Todo();
-    // TODO recurse on its individual bits and make sure they are all types
-    nodes->type(node_index) = types->type.type;
+    auto &f = data.type_function;
+
+    u32 param_count = f.param_types.len();
+
+    ValueIndex value_return_type;
+    Try(check_and_eval_type_expression(env, &f.return_type, &value_return_type));
+
+    auto snapshot = arena_tmp->take_snapshot();
+    defer(arena_tmp->restore(snapshot));
+
+    auto ty = alloc_type_function(arena_tmp, param_count);
+
+    *ty = {
+      .kind     = Type_function,
+      .function = {
+        .return_type = get_type(NodeIndex::from_value(value_return_type)),
+        .param_count = param_count,
+        .param_types = {},
+      },
+    };
+
+    for (u32 i = 0; i < param_count; i++) {
+      ValueIndex value_param_type;
+      Try(check_and_eval_type_expression(env, &f.param_types[i], &value_param_type));
+      ty->function.param_types[i] = get_type(NodeIndex::from_value(value_param_type));
+    }
+
+    TypeIndex type_idx = types->add(ty);
+    ValueIndex val = alloc_type(type_idx);
+
+    *node_index = NodeIndex::from_value(val);
   } break;
 
+  case Ast_function: {
+    // - If there is a hint, then the type of this function MUST be coercible to the hint type.
+    // - If there is no hint, then the type of this function MUST be fully known.
+    //   This means that all its parameters have a type annotation and its return type is given.
+
+    Assert(hint.is_some());
+
+    auto &f = data.function;
+
+    Type *type_hint = types->get(hint.type);
+
+    Assert(type_hint->kind == Type_function);
+
+    auto env_params = envs->alloc(env);
+    defer(envs->dealloc(env_params));
+
+    for (u32 i = 0; i < data.function.param_names.len(); i++) {
+      auto param_node  = data.function.param_names[i];
+      auto token_index = nodes->data(param_node).identifier.token_index;
+      auto key         = intern_identifier(token_index);
+
+      auto param_type = type_hint->function.param_types[i];
+
+      Value *value_param;
+      auto   value_idx_param = values->alloc_value(&value_param);
+      *value_param           = {
+        .type = param_type,
+        .data = nullptr,
+      };
+
+      env_params->insert(
+        key,
+        {.resolve_status = ResolveStatus_type_resolved,
+         .is_const       = false,
+         .node_index     = NodeIndex::from_value(value_idx_param)}
+      );
+    }
+
+    auto return_type = type_hint->function.return_type;
+
+    TypeHint hint_body = {
+      .type     = return_type,
+      .location = hint.location, // could be more precise
+    };
+
+    Try(check_expression(env_params, &data.function.body, hint_body));
+
+    Try(resolve_possible_coercion(env, return_type, &data.function.body));
+
+    nodes->type(*node_index) = hint.type;
+  } break;
+
+  case Ast_literal_int: {
+    auto token_index = data.literal_int.token_index;
+    auto str         = get_token_str(text, tokens, token_index);
+    i64  i           = parse_i64(str);
+
+    Value     *v;
+    ValueIndex value_idx = values->alloc_value(&v);
+
+    auto data = values->alloc_data<i64>();
+    memcpy(data, &i, sizeof(i64));
+
+    *v = {
+      .type = types->type.literal_int,
+      .data = data,
+    };
+
+    *node_index = NodeIndex::from_value(value_idx);
+  } break;
+
+  default:
+    puts(ast_kind_string(kind));
+    Todo();
+    break;
   }
 
   return true;
+}
+
+StrKey Builder::intern_identifier(TokenIndex identifier) {
+  auto s = get_token_str(text, tokens, identifier);
+  return strings->add(s);
+}
+
+b32 Builder::ensure_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual) {
+  if (actual == expected) {
+    return true;
+  }
+
+  messages->error(location, "Expected {type}, but got {type}.", expected, actual);
+
+  return false;
+}
+
+b32 Builder::ensure_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr) {
+  if (types->is_valid_cast(type_expr, type_dst)) {
+    return true;
+  }
+
+  Todo();
+
+  return false;
+}
+
+b32 Builder::ensure_is_assignable(NodeIndex node_index) {
+  auto kind = nodes->kind(node_index);
+
+  if (kind == Ast_identifier) {
+    return true;
+  }
+
+  if (kind == Ast_index) {
+    return ensure_is_assignable(nodes->data(node_index).index.indexable);
+  }
+
+  messages->error(node_index, "Cannot assign");
+
+  return false;
 }
 
 void Builder::env_populate_with_builtins(Env<Declaration> *env) {
@@ -604,3 +469,29 @@ ValueIndex Builder::alloc_bool(u8 b) {
 
   return idx;
 }
+
+b32 Builder::resolve_possible_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *value) {
+  auto type_src = get_type(*value);
+
+  if (type_src == type_dst) {
+    return true;
+  }
+
+  Todo();
+
+  // This function needs to:
+  // - update the recorded type at ast index of `value` (if necessary).
+  // - insert a cast if necessary.
+
+  return true;
+}
+
+TypeIndex Builder::get_type(NodeIndex node_index) {
+  if (node_index.kind == NodeIndex_ast) {
+    return nodes->type(node_index);
+  } else {
+    Value *v = values->get(node_index.idx.value);
+    return v->type;
+  }
+}
+

@@ -34,6 +34,11 @@ struct NodeIndex {
   bool is_some() const { return idx.value.is_some(); }
   bool is_none() const { return idx.value.is_none(); }
 
+  ValueIndex as_value_idx() const {
+    Assert(kind == NodeIndex_value);
+    return idx.value;
+  }
+
   static NodeIndex none() {
     return {
       .kind = NodeIndex_ast, // The kind is invalid if `idx == 0`.
@@ -44,7 +49,7 @@ struct NodeIndex {
   static NodeIndex from_value(ValueIndex value) {
     return {
       .kind = NodeIndex_value,
-      .idx = { .value = value },
+      .idx  = {.value = value},
     };
   }
 };
@@ -269,6 +274,8 @@ struct TypeInterner {
   bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);
 
   u32 type_to_string(TypeIndex type, char *buf, u32 buf_size);
+
+  b32 is_valid_cast(TypeIndex from, TypeIndex to);
 };
 
 template<typename T> struct Span {
@@ -985,9 +992,14 @@ enum ResolveStatus : u8 {
 
 struct Declaration {
   ResolveStatus resolve_status;
-  u8            is_const;
 
-  // If the resolve status is resolved then the node_index always references a value.
+  u8 is_const;
+
+  // If the resolve status is resolved then `node_index` always references a value.
+  // Otherwise `node_index` references the AstNode with the declaration.
+  //
+  // The value associated with a resolved declaration always has a type, but
+  // only has accompanied data if the declaration is `const` or it is runtime.
   NodeIndex node_index;
 };
 
@@ -999,7 +1011,7 @@ struct TypeHint {
 
   static TypeHint none() {
     return {
-      .type = TypeIndex::none(),
+      .type     = TypeIndex::none(),
       .location = NodeIndex::none(),
     };
   }
@@ -1022,13 +1034,26 @@ struct Builder {
   // Owning
   Env<Declaration> *env_root;
 
+  struct {
+    TypeHint hint_nil;
+  } common;
+
   void init();
   void deinit();
 
   b32 typecheck_and_eval_const_code();
 
-  b32 check_root_declaration(Env<Declaration> *env, NodeIndex node_index);
-  b32 check_expression(Env<Declaration> *env, NodeIndex node_index, TypeHint hint=TypeHint::none());
+  // - `check_expression` adds type annotations to the `AstNodes`.
+  // - Make sure there are no type violations.
+  // - Add explicit casts in place of coercions.
+  // - Evaluate const code and insert the value into the AST.
+  b32 check_expression(
+    Env<Declaration> *env, NodeIndex *node_index, TypeHint hint = TypeHint::none()
+  );
+
+  b32 resolve_declaration(
+    Env<Declaration> *env, NodeIndex location, TokenIndex identifier, Declaration *declaration
+  );
 
   // Only call `eval_expression` on expressions that have been checked.
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
@@ -1036,9 +1061,16 @@ struct Builder {
   // 1. Checks that the expression is valid.
   // 2. Evaluates the expression.
   // 3. Checks that the result of the expression is a type.
-  b32 check_and_eval_type_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
+  b32 check_and_eval_type_expression(
+    Env<Declaration> *env, NodeIndex *node_index, ValueIndex *result
+  );
 
-  b32 check_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual);
+  // All functions starting with "ensure" test for a certain condition.
+  // If the condition does not hold it will produce an error message describing the problem.
+  // They do not evaluate any expressions.
+  b32 ensure_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual);
+  b32 ensure_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr);
+  b32 ensure_is_assignable(NodeIndex node_index);
 
   b32 resolve_possible_coercion(Env<Declaration> *env, TypeIndex type_dst, NodeIndex *value);
 
@@ -1049,6 +1081,9 @@ struct Builder {
     Value *v = values->get(value_idx);
     memcpy(dst, v->data, types->size_info(v->type).size);
   }
+
+  StrKey    intern_identifier(TokenIndex identifier);
+  TypeIndex get_type(NodeIndex node_index);
 
   ValueIndex alloc_type(TypeIndex type_idx);
   ValueIndex alloc_bool(u8 val);
