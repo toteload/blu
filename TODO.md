@@ -6,8 +6,10 @@ It is not compiled ahead of time.
 
 ### In progress notes
 
-- I don't think that `Ast_type_function` should exist in `eval_expression`.
-  `Ast_type_function` is a compile time only allowed construct and I want only runtime code in `eval_expression`.
+- There is a bug in `Builder`: I am keeping pointers around to AST nodes while potentially
+  adding new nodes, which can cause a relocation of the nodes and invalidate the pointers.
+  - A solution is to use a segment list instead of a vector.
+  - A solution is to use a Vector backed by virtual memory.
 
 ### Basic
 
@@ -55,17 +57,16 @@ It is not compiled ahead of time.
 
 ### Misc
 
-- [ ] Make the TypeIndex invalid value 0.
-- [ ] Make the TokenIndex invalid value 0.
-- [ ] Add tests to check that integer overflows are caught at runtime.
-- [ ] Add tests to check that out of range integer casts at runtime.
+- [x] Make the TypeIndex invalid value 0.
+- [x] Make the TokenIndex invalid value 0.
+- [x] Add tests to check that integer overflows are caught at runtime.
+- [x] Add tests to check that out of range integer casts at runtime.
 - [ ] Properly free values that are no longer used in the interpreter.
-- [ ] Currently `coerce_value` in `interpreter.cc` can fail if the value of the integer constant is too big for the destination type.
-      This should be checked at an earlier stage. The coercion in the interpreter is expected to never fail.
 
 ### Errors
 
 Maybe not implement this in the language itself.
+Maybe DO implement this in the language itself.
 
 - [ ] Add error type and add syntax for functions to return errors.
 - [ ] Add `try` and `catch`.

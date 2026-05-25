@@ -55,7 +55,7 @@ u32 ValueStore::value_to_string(TypeInterner *types, ValueIndex idx, char *buf, 
     Todo();
   } break;
   case Type_function: {
-    Update(snprintf(buf, buf_size, "<function TODO>"));
+    Update(snprintf(buf, buf_size, "<function @%u>", cast<NodeIndex *>(v->data)->idx.ast));
   } break;
   case Type_nil: {
     Update(snprintf(buf, buf_size, "nil"));

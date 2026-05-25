@@ -105,6 +105,7 @@ int main(i32 arg_count, char const *const *args) {
 
   if (settings.verbose) {
     pretty_print(&print_context, Print_basic, nodes.first_valid_index());
+    table_print_ast(&print_context);
   }
 
   Builder builder{};
@@ -153,6 +154,15 @@ int main(i32 arg_count, char const *const *args) {
 
   if (settings.verbose) {
     pretty_print(&print_context, Print_with_types, nodes.first_valid_index());
+    table_print_ast(&print_context);
+
+    for (auto it = builder.env_root->map.first_valid_entry(); it != builder.env_root->map.end();
+         it      = builder.env_root->map.next(it)) {
+      auto s = strings.get(it->key);
+      char buf[256]{};
+      u32  len = values.value_to_string(&types, it->val.node_index.as_value_idx(), buf, 256);
+      printf("%.*s = %.*s\n", cast<int>(s.len()), s.str, cast<int>(len), buf);
+    }
   }
 
   return 0;

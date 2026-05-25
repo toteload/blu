@@ -71,11 +71,11 @@ static u8 binop_prec_group(BinaryOpKind kind) {
 }
 
 struct AstPrinter {
-  Str              text;
-  Tokens          *tokens;
-  AstNodes        *nodes;
-  TypeInterner    *types;
-  ValueStore      *values;
+  Str           text;
+  Tokens       *tokens;
+  AstNodes     *nodes;
+  TypeInterner *types;
+  ValueStore   *values;
 
   u32             indent;
   PrettyPrintMode mode;
@@ -91,7 +91,7 @@ struct AstPrinter {
     }
   }
 
-  void print(NodeIndex node, bool print_type=false);
+  void print(NodeIndex node, bool print_type = false);
 
   void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right) {
     if (nodes->kind(node) == Ast_binary_op) {
@@ -339,14 +339,201 @@ void AstPrinter::print(NodeIndex node, bool print_type) {
 
 void pretty_print(AstPrettyPrintContext *context, PrettyPrintMode mode, NodeIndex idx) {
   AstPrinter printer = {
-    .text       = context->text,
-    .tokens     = context->tokens,
-    .nodes      = context->nodes,
-    .types      = context->types,
-    .values     = context->values,
-    .indent     = 0,
-    .mode       = mode,
+    .text   = context->text,
+    .tokens = context->tokens,
+    .nodes  = context->nodes,
+    .types  = context->types,
+    .values = context->values,
+    .indent = 0,
+    .mode   = mode,
   };
 
   printer.print(idx);
+}
+
+struct TablePrinter {
+  Str           text;
+  Tokens       *tokens;
+  TypeInterner *types;
+  AstNodes     *nodes;
+  ValueStore   *values;
+
+  void print();
+  void print_node_data(AstKind kind, AstNodeData data);
+};
+
+void TablePrinter::print() {
+  for (u32 i = 1; i < nodes->len(); i++) {
+    NodeIndex idx  = {.kind = NodeIndex_ast, .idx = {.ast = i}};
+    auto      kind = nodes->kind(idx);
+    printf("%4d | %16s | ", i, ast_kind_string(kind));
+    print_node_data(kind, nodes->data(idx));
+    printf("\n");
+  }
+}
+
+void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
+  auto print_idx = [this](NodeIndex n) {
+    if (n.is_none()) {
+      fputs("_", stdout);
+    } else if (n.kind == NodeIndex_value) {
+      printf("v%u(", n.idx.value.idx);
+      char buf[256]{};
+      u32  len = values->value_to_string(types, n.as_value_idx(), buf, 256);
+      printf("%.*s)", len, buf);
+    } else {
+      printf("%u", n.idx.ast);
+    }
+  };
+
+  auto print_token = [&](TokenIndex tok) {
+    Str s = get_token_str(text, tokens, tok);
+    printf("%.*s", cast<int>(s.len()), s.str);
+  };
+
+  switch (kind) {
+  case Ast_root:
+    printf("items=%llu", data.root.items.len());
+    break;
+
+  case Ast_block:
+    printf("items=%llu", data.block.items.len());
+    break;
+
+  case Ast_type_slice:
+    fputs("base=", stdout);
+    print_idx(data.type_slice.base);
+    break;
+
+  case Ast_type_array:
+    fputs("size=", stdout);
+    print_idx(data.type_array.size);
+    fputs(" base=", stdout);
+    print_idx(data.type_array.base);
+    break;
+
+  case Ast_type_function:
+    printf("params=%llu return=", data.type_function.param_types.len());
+    print_idx(data.type_function.return_type);
+    break;
+
+  case Ast_builtin:
+    switch (data.builtin.kind) {
+    case Builtin_print:
+      printf("#print args=%llu", data.builtin.args.len());
+      break;
+    }
+    break;
+
+  case Ast_declaration:
+    fputs("name=", stdout);
+    print_token(data.declaration.name);
+    fputs(" type=", stdout);
+    print_idx(data.declaration.type);
+    fputs(" value=", stdout);
+    print_idx(data.declaration.value);
+    break;
+
+  case Ast_assign:
+    fputs("lhs=", stdout);
+    print_idx(data.assign.lhs);
+    fputs(" value=", stdout);
+    print_idx(data.assign.value);
+    break;
+
+  case Ast_literal_sequence:
+    printf("items=%llu", data.literal_sequence.items.len());
+    break;
+
+  case Ast_literal_int:
+    print_token(data.literal_int.token_index);
+    break;
+
+  case Ast_literal_string:
+    print_token(data.literal_string.token_index);
+    break;
+
+  case Ast_identifier:
+    print_token(data.identifier.token_index);
+    break;
+
+  case Ast_call:
+    fputs("callee=", stdout);
+    print_idx(data.call.callee);
+    printf(" args=%llu", data.call.args.len());
+    break;
+
+  case Ast_index:
+    fputs("indexable=", stdout);
+    print_idx(data.index.indexable);
+    fputs(" index_at=", stdout);
+    print_idx(data.index.index_at);
+    break;
+
+  case Ast_unary_op:
+    printf("%s value=", unary_op_src_string(data.unary_op.kind));
+    print_idx(data.unary_op.value);
+    break;
+
+  case Ast_binary_op:
+    printf("%s lhs=", binary_op_src_string(data.binary_op.kind));
+    print_idx(data.binary_op.lhs);
+    fputs(" rhs=", stdout);
+    print_idx(data.binary_op.rhs);
+    break;
+
+  case Ast_function:
+    printf("params=%llu body=", data.function.param_names.len());
+    print_idx(data.function.body);
+    break;
+
+  case Ast_if_else:
+    fputs("cond=", stdout);
+    print_idx(data.if_else.cond);
+    fputs(" then=", stdout);
+    print_idx(data.if_else.then);
+    fputs(" otherwise=", stdout);
+    print_idx(data.if_else.otherwise);
+    break;
+
+  case Ast_for:
+    fputs("iterable=", stdout);
+    print_idx(data.for_.iterable);
+    fputs(" iterator=", stdout);
+    print_idx(data.for_.iterator);
+    fputs(" body=", stdout);
+    print_idx(data.for_.body);
+    break;
+
+  case Ast_defer:
+    fputs("value=", stdout);
+    print_idx(data.defer.value);
+    break;
+
+  case Ast_const:
+    fputs("expr=", stdout);
+    print_idx(data.const_.expr);
+    break;
+
+  case Ast_cast:
+    fputs("type_dst=", stdout);
+    print_idx(data.cast.type_dst);
+    fputs(" value=", stdout);
+    print_idx(data.cast.value);
+    break;
+
+  case Ast_kind_max:
+    break;
+  }
+}
+
+void table_print_ast(AstPrettyPrintContext *context) {
+  TablePrinter printer = {
+    .text   = context->text,
+    .tokens = context->tokens,
+    .types  = context->types,
+    .nodes  = context->nodes,
+    .values = context->values,
+  };
+  printer.print();
 }

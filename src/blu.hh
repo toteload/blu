@@ -675,7 +675,8 @@ struct AstNodes {
 
   NodeIndex alloc() {
     NodeIndex res = {
-      .idx = {.ast = cast<u32>(kinds.len())},
+      .kind = NodeIndex_ast,
+      .idx  = {.ast = cast<u32>(kinds.len())},
     };
 
     kinds.push_empty();
@@ -842,7 +843,18 @@ template<typename T> struct Env {
   }
 
   void insert(StrKey identifier, T val) { map.insert(identifier, val); }
-  b32  has(StrKey identifier) { return map.has(identifier); }
+
+  b32 has(StrKey identifier) {
+    if (map.has(identifier)) {
+      return true;
+    }
+
+    if (parent) {
+      return parent->has(identifier);
+    }
+
+    return false;
+  }
 
   bool lookup(StrKey identifier, T *out) {
     T   *p;
@@ -1032,6 +1044,7 @@ struct Builder {
   AstNodes *nodes;
 
   // Owning
+  Env<Declaration> *env_builtin;
   Env<Declaration> *env_root;
 
   struct {
@@ -1051,18 +1064,21 @@ struct Builder {
     Env<Declaration> *env, NodeIndex *node_index, TypeHint hint = TypeHint::none()
   );
 
-  b32 resolve_declaration(
-    Env<Declaration> *env, NodeIndex location, TokenIndex identifier, Declaration *declaration
-  );
+  b32 resolve_declaration(Env<Declaration> *env, TokenIndex identifier, Declaration *declaration);
 
   // Only call `eval_expression` on expressions that have been checked.
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
+  b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
 
   // 1. Checks that the expression is valid.
   // 2. Evaluates the expression.
   // 3. Checks that the result of the expression is a type.
   b32 check_and_eval_type_expression(
     Env<Declaration> *env, NodeIndex *node_index, ValueIndex *result
+  );
+
+  b32 check_and_eval_expression(
+    Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
   );
 
   // All functions starting with "ensure" test for a certain condition.
@@ -1077,13 +1093,45 @@ struct Builder {
   void env_populate_with_builtins(Env<Declaration> *env);
   void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);
 
-  void copy_value_data(ValueIndex value_idx, void *dst) {
+  inline void copy_value_data(ValueIndex value_idx, void *dst) {
     Value *v = values->get(value_idx);
     memcpy(dst, v->data, types->size_info(v->type).size);
   }
 
   StrKey    intern_identifier(TokenIndex identifier);
   TypeIndex get_type(NodeIndex node_index);
+
+  // Reads a signed integer value and extends it to i64
+  i64 read_value_i64(ValueIndex idx) {
+    i64 res;
+
+    Value *v = values->get(idx);
+    Type  *t = types->get(v->type);
+
+    // clang-format off
+    switch (t->integer.bitwidth) {
+    case 8:  { i8  x; memcpy(&x, v->data, 1); res = x; } break;
+    case 16: { i16 x; memcpy(&x, v->data, 2); res = x; } break;
+    case 32: { i32 x; memcpy(&x, v->data, 4); res = x; } break;
+    case 64: { i64 x; memcpy(&x, v->data, 8); res = x; } break;
+    default: Unreachable();
+    }
+    // clang-format on
+
+    return res;
+  }
+
+  // Reads an unsigned integer value and extends it to u64
+  u64 read_value_u64(ValueIndex idx) {
+
+    Value *v = values->get(idx);
+    Type  *t = types->get(v->type);
+
+    u64 res = 0;
+    memcpy(&res, v->data, t->integer.bitwidth / 8);
+
+    return res;
+  }
 
   ValueIndex alloc_type(TypeIndex type_idx);
   ValueIndex alloc_bool(u8 val);
@@ -1232,9 +1280,12 @@ struct TypeCheckContext {
 
 b32 typecheck(TypeCheckContext *context, ParsedSource *source, NodeIndex idx);
 
+u32 string_literal_byte_size(Str literal);
+u32 decode_string_literal(Str literal, char *out);
+
+// ---
+
 void debug_print_type(TypeInterner *types, TypeIndex type);
-u32  string_literal_byte_size(Str literal);
-u32  decode_string_literal(Str literal, char *out);
 
 enum PrettyPrintMode : u32 {
   Print_basic,
@@ -1250,3 +1301,5 @@ struct AstPrettyPrintContext {
 };
 
 void pretty_print(AstPrettyPrintContext *context, PrettyPrintMode mode, NodeIndex idx);
+
+void table_print_ast(AstPrettyPrintContext *context);

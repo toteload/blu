@@ -37,6 +37,21 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
 
   V   get(K key) { return *get_ptr(key); }
   b32 has(K key) { return get_bucket(key) != nullptr; }
+  u32 cap() const { return mask + 1; }
+
+  Bucket<K, V> const *end() const { return buckets + cap(); }
+  Bucket<K, V> const *next(Bucket<K, V> const *at) const {
+    u32 i_at = ptr_diff(at, buckets) / sizeof(Bucket<K, V>);
+
+    for (u32 i = i_at + 1; i < cap(); i++) {
+      if (is_occupied(meta[i])) {
+        return &buckets[i];
+      }
+    }
+
+    return end();
+  }
+  Bucket<K, V> const *first_valid_entry() const { return next(buckets); }
 
   Bucket<K, V> *insert_key_and_get_bucket(K key, b32 *was_occupied);
   Bucket<K, V> *remove_key(K key);

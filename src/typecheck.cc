@@ -58,7 +58,7 @@ struct RootEnvPopulator {
         .resolve_status = ResolveStatus_type_resolved,
         .is_const       = true,
         .data           = {
-          .type = type,
+                    .type = type,
         },
       }
     );

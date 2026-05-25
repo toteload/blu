@@ -384,9 +384,8 @@ b32 TypeInterner::is_valid_cast(TypeIndex from, TypeIndex to) {
   Type *t_dst = get(to);
   Type *t_src = get(from);
 
-  if (
-    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
-  ) {
+  if (t_dst->kind == Type_integer &&
+      (t_src->kind == Type_integer || t_src->kind == Type_literal_int)) {
     return true;
   }
 
