@@ -61,7 +61,7 @@ int main(i32 arg_count, char const *const *args) {
   tokens.init(stdlib_alloc);
 
   AstNodes nodes{};
-  nodes.init(stdlib_alloc, arena.as_allocator());
+  nodes.init(arena.as_allocator(), arena.as_allocator());
 
   StringInterner strings{};
   strings.init(arena.as_allocator(), stdlib_alloc, stdlib_alloc);
@@ -134,24 +134,6 @@ int main(i32 arg_count, char const *const *args) {
     return 1;
   }
 
-  // ok = unit.typecheck();
-  // if (!ok) {
-  //   printf("Typecheck error\n");
-  //   unit.print_messages();
-  //   return 1;
-  // }
-
-  // if (settings.verbose) {
-  //   pretty_print(&print_context, Print_with_types, unit.nodes.first_valid_index());
-  // }
-
-  // ok = unit.run_const_code();
-  // if (!ok) {
-  //   printf("Const code evaluation error\n");
-  //   unit.print_messages();
-  //   return 1;
-  // }
-
   if (settings.verbose) {
     pretty_print(&print_context, Print_with_types, nodes.first_valid_index());
     table_print_ast(&print_context);
@@ -164,6 +146,30 @@ int main(i32 arg_count, char const *const *args) {
       printf("%.*s = %.*s\n", cast<int>(s.len()), s.str, cast<int>(len), buf);
     }
   }
+
+  auto key = strings.add(STR("main"));
+  Declaration decl_main;
+  b32 found = builder.env_root->lookup(key, &decl_main);
+  Assert(found);
+
+  ValueIndex result;
+  ok = builder.eval_call(builder.env_root, decl_main.node_index.as_value_idx(), {}, &result);
+  if (!ok) {
+    MessageContext context;
+    context.text    = source_text;
+    context.tokens  = &tokens;
+    context.nodes   = &nodes;
+    context.types   = &types;
+    context.strings = &strings;
+
+    messages.print_messages(&context);
+
+    return 1;
+  }
+
+  char buf[256]{};
+  u32  len = values.value_to_string(&types, result, buf, 256);
+  printf("%.*s\n", cast<int>(len), buf);
 
   return 0;
 }

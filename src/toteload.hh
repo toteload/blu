@@ -199,8 +199,8 @@ ttld_inline b32 str_eq(Str a, Str b) {
 }
 
 template<typename T> struct Slice {
-  T    *data = nullptr;
-  usize _len = 0;
+  T    *data;
+  usize _len;
 
   T       &operator[](usize idx) { return data[idx]; }
   usize    len() { return _len; }

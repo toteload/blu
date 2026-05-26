@@ -107,6 +107,29 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
   return true;
 }
 
+b32 Builder::eval_call(Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result) {
+  Value *f = values->get(function);
+
+  auto env_args = envs->alloc(env);
+  defer(envs->dealloc(env_args));
+
+  NodeIndex ast_function = *cast<NodeIndex*>(f->data);
+  auto &data = nodes->data(ast_function);
+
+  for (u32 i = 0; i < data.function.param_names.len(); i++) {
+    auto token_index = nodes->data(data.function.param_names[i]).identifier.token_index;
+    auto key = intern_identifier(token_index);
+
+    env_args->insert(key, {
+        .resolve_status = ResolveStatus_type_resolved,
+        .is_const = false,
+        .node_index = NodeIndex::from_value(args[i]),
+        });
+  } 
+
+  return eval_expression(env_args, data.function.body, result);
+}
+
 b32 Builder::check_and_eval_expression(
   Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
 ) {
@@ -140,7 +163,8 @@ b32 Builder::resolve_declaration(
   auto         found = env->lookup_ptr(key, &decl);
 
   if (!found) {
-    Todo();
+    messages->error("Could not find identifier {strkey}.", key);
+    return false;
   }
 
   if (decl->resolve_status == ResolveStatus_type_resolved) {
@@ -188,8 +212,36 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
   switch (kind) {
 
   case Ast_declaration: {
-    Declaration decl;
-    Try(resolve_declaration(env, data.declaration.name, &decl));
+    ValueIndex value_declared_type;
+    Try(check_and_eval_type_expression(env, &data.declaration.type, &value_declared_type));
+
+    TypeIndex type_declared;
+    copy_value_data(value_declared_type, &type_declared);
+
+    TypeHint hint{};
+    hint.type     = type_declared;
+    hint.location = data.declaration.type;
+
+    Try(check_expression(env, &data.declaration.value, hint));
+
+    Value *val;
+    ValueIndex val_idx = values->alloc_value(&val);
+
+    *val = {
+      .type = type_declared,
+      .data = nullptr,
+    };
+
+    auto key = intern_identifier(data.declaration.name);
+    env->insert(
+      key,
+      {
+        .resolve_status = ResolveStatus_type_resolved,
+        .is_const = false, // TODO: this is potentially incorrect
+        .node_index = NodeIndex::from_value(val_idx),
+      }
+    );
+
     nodes->type(*node_index) = types->type.nil;
   } break;
 
@@ -229,17 +281,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
   case Ast_assign: {
     Assert(data.assign.kind == Assign_normal);
 
-    Try(check_expression(env, &data.assign.lhs));
-    Try(ensure_is_assignable(data.assign.lhs));
-
-    TypeIndex lhs_type = get_type(data.assign.lhs);
-
-    TypeHint hint_value = {
-      .type     = lhs_type,
-      .location = data.assign.lhs,
-    };
-
-    Try(check_expression(env, &data.assign.value, hint_value));
+    Todo();
 
     nodes->type(*node_index) = types->type.nil;
   } break;

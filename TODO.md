@@ -6,10 +6,11 @@ It is not compiled ahead of time.
 
 ### In progress notes
 
-- There is a bug in `Builder`: I am keeping pointers around to AST nodes while potentially
-  adding new nodes, which can cause a relocation of the nodes and invalidate the pointers.
-  - A solution is to use a segment list instead of a vector.
-  - A solution is to use a Vector backed by virtual memory.
+- [x] Get `main.blu` to run.
+- [ ] Harden the compiler: resolve all TODOs.
+- [ ] Fix the most important issues from `AUDIT.md`.
+- [ ] Get `arithmetic.blu` to run.
+- [ ] Get `if_else.blu` to run.
 
 ### Basic
 
@@ -79,7 +80,5 @@ Maybe DO implement this in the language itself.
 
 - [ ] Bounds checking
 - [ ] Integer overflow checks
-
-- [ ] Compile time code execution.
 
 - [ ] Pattern matching (?)

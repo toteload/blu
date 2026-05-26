@@ -1012,7 +1012,7 @@ struct Declaration {
   // Otherwise `node_index` references the AstNode with the declaration.
   //
   // The value associated with a resolved declaration always has a type, but
-  // only has accompanied data if the declaration is `const` or it is runtime.
+  // only has accompanied data if the declaration is `const`.
   NodeIndex node_index;
 };
 
@@ -1070,6 +1070,7 @@ struct Builder {
   // Only call `eval_expression` on expressions that have been checked.
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
   b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
+  b32 eval_call(Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result);
 
   b32 check_and_eval_expression(
     Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result

@@ -80,7 +80,7 @@ For the coercion of a `const function` to a fully typed function one of the foll
 ## `eval`, compile time evaluation
 
 At first, I had the idea of using the `const` keyword for both denoting const 'bindings' (identifiers whose value must be known at compile time and references to these values are inlined) and forcing the compile time evaluation of arbitrary expressions. 
-However, this is not possible if you want to have `const` has a qualifier on types.
+However, this is not possible if you want to have `const` as a qualifier on types.
 Example: `const a`, is this a type `a` with a `const` qualifier (meaning no values of this type are allowed at runtime) or is this an expression `a` that we want to evaluate at compile time?
 This would make the meaning of `const` context-dependent, which I don't want.
 A solution is to introduce another keyword: `eval`. 
