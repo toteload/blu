@@ -201,7 +201,7 @@ static void *arena_alloc_fn(void *ctx, void *ptr, usize old_byte_size, usize new
     return arena->raw_alloc(new_byte_size, align);
   }
 
-  if (new_byte_size >= 0) {
+  if (new_byte_size > old_byte_size) {
     void *p = arena->raw_alloc(new_byte_size, align);
     memcpy(p, ptr, old_byte_size);
     return p;

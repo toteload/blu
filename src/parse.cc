@@ -31,6 +31,10 @@ struct Parser {
 
   // - Helpers -
 
+  void report_error_unexpected_end() {
+    messages->error(at, "Unexpectedly encountered end of tokens.");
+  }
+
   template<typename ParseItem>
   b32 parse_comma_separated_items_until(
     SegmentList<NodeIndex> *items, ParseItem parse, TokenKind terminator
@@ -57,6 +61,7 @@ struct Parser {
 
   b32 next(TokenKind *out = nullptr) {
     if (is_token_index_end(at)) {
+      report_error_unexpected_end();
       return false;
     }
 
@@ -95,6 +100,7 @@ struct Parser {
 
   b32 peek(TokenKind *out) {
     if (is_token_index_end(at)) {
+      report_error_unexpected_end();
       return false;
     }
 
@@ -107,6 +113,7 @@ struct Parser {
     TokenIndex lookahead = advance(at);
 
     if (is_token_index_end(lookahead)) {
+      report_error_unexpected_end();
       return false;
     }
 
@@ -297,6 +304,11 @@ b32 Parser::parse_type(NodeIndex *out) {
     );
   } break;
   default:
+    messages->error(
+        at,
+        "Unexpected token ({tokenkind}) encountered in type expression.",
+        tok
+    );
     return false;
   }
 
@@ -626,6 +638,11 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
       Try(parse_literal_sequence(&base));
       break;
     default:
+      messages->error(
+          at,
+          "Unexpected token ({tokenkind}) encountered after '.' in expression.",
+          tok
+          );
       return false;
     }
   } break;
@@ -677,6 +694,10 @@ b32 Parser::parse_base_expression(NodeIndex *out) {
   } break;
 
   default:
+    messages->error(at,
+        "Unexpected token encountered ({tokenkind}) at start of expression.",
+        tok
+        );
     return false;
   }
 

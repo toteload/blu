@@ -182,10 +182,10 @@ The biggest realistic security risk is `read_file`: reading `ftell` into a `u32`
 If triaging just a handful of fixes, in order:
 
 1. ~Fix `ttld::os::mem_commit` on macOS (return value inverted) — `src/toteload.cc:57-59`.~
-2. Fix `arena_alloc_fn` free/realloc unreachable branch — `src/toteload.cc:147-161`.
+2. ~Fix `arena_alloc_fn` free/realloc unreachable branch — `src/toteload.cc:147-161`.~
 3. Fix the infinite-loop in `HashMap::grow_and_rehash` and the NULL-deref in `HashMap::get` / `Env::lookup`.
 4. ~Fix `Vector::ensure_capacity` to record the actual allocated capacity.~
 5. Fix `read_file`'s leaks and `u32` size truncation; null-check `fopen` in `write_file`.
-6. Fix `Builder::eval_cast`'s array-to-slice `items = v->data` (should be `val->data`).
+6. ~Fix `Builder::eval_cast`'s array-to-slice `items = v->data` (should be `val->data`).~
 7. Fix `parse_type`'s silent-success-with-uninitialized-node fall-through.
-8. Replace user-facing `Todo()` calls in builder/parser with real diagnostics.
+8. ~Replace user-facing `Todo()` calls in builder/parser with real diagnostics.~

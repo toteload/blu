@@ -75,6 +75,7 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
   void grow_and_rehash(u32 size);
   u32  get_occupied_index(K key);
   u32  get_insert_index(u32 hash, K key);
+  b32  rehash_to(void *memory, u32 size);
 };
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
@@ -114,6 +115,97 @@ void HashMap<K, V, cmp_key, hash_key>::deinit() {
 }
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
+b32 HashMap<K, V, cmp_key, hash_key>::rehash_to(void *mem, u32 size) {
+  u32 cap = mask + 1;
+
+  Bucket<K,V> *nbuckets = cast<Bucket<K,V>*>(mem);
+  u32 *nmeta = cast<u32*>(nbuckets + size);
+
+  memcpy(nbuckets, buckets, cap * sizeof(Bucket<K,V>));
+
+  memcpy(nmeta, meta, cap * sizeof(u32));
+  memset(nmeta + cap, 0, (size - cap) * sizeof(u32));
+
+  // Mark occupied slots as stale and remove tombstones.
+  ForEachIndex(i, cap) {
+    if (is_occupied(nmeta[i])) {
+      nmeta[i] |= mask_is_stale;
+    } else if (has_tombstone(nmeta[i])) {
+      nmeta[i] = 0;
+    }
+  }
+
+  u32 nmask = size - 1;
+
+  ForEachIndex(i, cap) {
+    if (!is_stale(nmeta[i])) {
+      continue;
+    }
+
+    Bucket<K, V> bi = nbuckets[i];
+
+    u32 hash  = hash_key(context, bi.key);
+    u32 start = hash & nmask;
+
+    u32 idx = index_not_found;
+    ForEachIndex(k, max_search_depth) {
+      idx = (start + k) & nmask;
+      if (is_empty(nmeta[idx]) || is_stale(nmeta[idx])) {
+        break;
+      }
+    }
+
+    if (idx == index_not_found) {
+      return false;
+    }
+
+    if (i == idx) {
+      nmeta[idx] = fingerprint32(hash) | mask_is_occupied;
+      continue;
+    }
+
+    nmeta[i] = 0;
+
+    if (is_empty(nmeta[idx])) {
+      nmeta[idx]    = fingerprint32(hash) | mask_is_occupied;
+      nbuckets[idx] = bi;
+      continue;
+    }
+
+    if (is_stale(nmeta[idx])) {
+      nmeta[idx] = fingerprint32(hash) | mask_is_occupied;
+      swap(bi, nbuckets[idx]);
+    }
+
+    ForEachIndex(j, cap) {
+      u32 hash  = hash_key(context, bi.key);
+      u32 start = hash & nmask;
+
+      ForEachIndex(k, max_search_depth) {
+        u32 idx = (start + k) & nmask;
+
+        if (is_empty(nmeta[idx])) {
+          nmeta[idx]     = fingerprint32(hash) | mask_is_occupied;
+          nbuckets[idx] = bi;
+          goto next;
+        }
+
+        if (is_stale(meta[idx])) {
+          nmeta[idx] = fingerprint32(hash) | mask_is_occupied;
+          swap(bi, nbuckets[idx]);
+          break;
+        }
+      }
+    }
+
+  next:
+    continue;
+  }
+
+  return true;
+}
+
+template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
 void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
   u32 cap = mask + 1;
   if (cap >= size) {
@@ -126,95 +218,28 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
   // The buckets array is stored first in memory followed by the meta array.
   // No padding is needed between the two if the minimum capacity of the hashmap is 4.
 
-  u64 current_size = cap * (sizeof(u32) + sizeof(Bucket<K, V>));
-  u64 new_size     = size * (sizeof(u32) + sizeof(Bucket<K, V>));
+  // There is a chance that rehashing fails because it cannot find a slot for a bucket during rehashing
+  // within the maximally allowed distance from its ideal position.
+  // When this happens we just grow again and try rehashing again.
 
-  Bucket<K, V> *_buckets =
-    cast<Bucket<K, V> *>(alloc.raw_realloc(buckets, current_size, new_size, 8));
+  while (true) {
+    u64 new_byte_size = size * (sizeof(u32) + sizeof(Bucket<K, V>));
 
-  u32 *old_meta = cast<u32 *>(ptr_offset(_buckets, cap * sizeof(Bucket<K, V>)));
-  u32 *meta     = cast<u32 *>(ptr_offset(_buckets, size * sizeof(Bucket<K, V>)));
+    void *mem = alloc.raw_alloc(new_byte_size);
 
-  memmove(meta, old_meta, cap * sizeof(u32));
-  memset(meta + cap, 0, cap * sizeof(u32));
-
-  // Mark occupied slots as stale and remove tombstones.
-  ForEachIndex(i, cap) {
-    if (is_occupied(meta[i])) {
-      meta[i] |= mask_is_stale;
-    } else if (has_tombstone(meta[i])) {
-      meta[i] = 0;
+    b32 ok = rehash_to(mem, size);
+    if (ok) {
+      u64 old_byte_size = cap * (sizeof(u32) + sizeof(Bucket<K, V>));
+      alloc.free(buckets, old_byte_size);
+      buckets = cast<Bucket<K, V> *>(mem);
+      meta = cast<u32*>(buckets + size);
+      mask = size - 1;
+      break;
     }
+
+    alloc.raw_free(mem, new_byte_size);
+    size *= 2;
   }
-
-  u32 nmask = size - 1;
-
-  ForEachIndex(i, cap) {
-    if (!is_stale(meta[i])) {
-      continue;
-    }
-
-    Bucket<K, V> bi = _buckets[i];
-
-    u32 hash  = hash_key(context, bi.key);
-    u32 start = hash & nmask;
-
-    u32 idx = index_not_found;
-    ForEachIndex(k, max_search_depth) {
-      idx = (start + k) & nmask;
-      if (is_empty(meta[idx]) || is_stale(meta[idx])) {
-        break;
-      }
-    }
-
-    // assert(idx != Index_not_found);
-
-    if (i == idx) {
-      meta[idx] = fingerprint32(hash) | mask_is_occupied;
-      continue;
-    }
-
-    meta[i] = 0;
-
-    if (is_empty(meta[idx])) {
-      meta[idx]     = fingerprint32(hash) | mask_is_occupied;
-      _buckets[idx] = bi;
-      continue;
-    }
-
-    if (is_stale(meta[idx])) {
-      meta[idx] = fingerprint32(hash) | mask_is_occupied;
-      swap(bi, _buckets[idx]);
-    }
-
-    while (true) {
-      u32 hash  = hash_key(context, bi.key);
-      u32 start = hash & nmask;
-
-      ForEachIndex(k, max_search_depth) {
-        u32 idx = (start + k) & nmask;
-
-        if (is_empty(meta[idx])) {
-          meta[idx]     = fingerprint32(hash) | mask_is_occupied;
-          _buckets[idx] = bi;
-          goto next;
-        }
-
-        if (is_stale(meta[idx])) {
-          meta[idx] = fingerprint32(hash) | mask_is_occupied;
-          swap(bi, _buckets[idx]);
-          break;
-        }
-      }
-    }
-
-  next:
-    continue;
-  }
-
-  this->mask    = nmask;
-  this->meta    = meta;
-  this->buckets = _buckets;
 }
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>

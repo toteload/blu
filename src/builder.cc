@@ -173,7 +173,7 @@ b32 Builder::resolve_declaration(
   }
 
   if (decl->resolve_status == ResolveStatus_type_resolving) {
-    Todo();
+    messages->error("Circular declaration encountered.");
     return false;
   }
 
