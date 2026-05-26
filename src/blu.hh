@@ -18,6 +18,7 @@ using TypeIndex  = Index<u32, Tag_TypeIndex>;
 using TokenIndex = Index<u32, Tag_TokenIndex>;
 
 enum NodeIndexKind : u8 {
+  NodeIndex_none,
   NodeIndex_ast,
   NodeIndex_value,
 };
@@ -31,8 +32,8 @@ struct NodeIndex {
     ValueIndex value;
   } idx;
 
-  bool is_some() const { return idx.value.is_some(); }
-  bool is_none() const { return idx.value.is_none(); }
+  bool is_some() const { return kind != NodeIndex_none; }
+  bool is_none() const { return kind == NodeIndex_none; }
 
   ValueIndex as_value_idx() const {
     Assert(kind == NodeIndex_value);
@@ -41,8 +42,8 @@ struct NodeIndex {
 
   static NodeIndex none() {
     return {
-      .kind = NodeIndex_ast, // The kind is invalid if `idx == 0`.
-      .idx  = {.ast = 0},
+      .kind = NodeIndex_none,
+      .idx  = {},
     };
   }
 

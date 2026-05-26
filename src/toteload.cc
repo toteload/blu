@@ -55,13 +55,63 @@ void *mem_reserve(usize size) {
 }
 
 b32 mem_commit(void *p, usize size) {
-  return 0 != mprotect(p, size, PROT_READ | PROT_WRITE);
+  return 0 == mprotect(p, size, PROT_READ | PROT_WRITE);
 }
 
 void mem_release(void *p, usize size) {
   munmap(p, size);
 }
 #endif
+}
+
+void VMemBlock::init(usize reserve_size) {
+  usize page_size = ttld::os::page_size();
+  usize rounded_reserve_size = round_up_to_power_of_two(reserve_size, page_size);
+
+  base = ttld::os::mem_reserve(rounded_reserve_size);
+  commit_end = base;
+  reserve_end = ptr_offset(base, rounded_reserve_size);
+}
+
+void VMemBlock::deinit() {
+  if (base) {
+    ttld::os::mem_release(base, ptr_diff(reserve_end, base));
+  }
+}
+
+void VMemBlock::ensure_commited(usize commit_size) {
+  usize commited_size = ptr_diff(commit_end, base);
+  if (commit_size <= commited_size) {
+    return;
+  }
+
+  usize page_size = ttld::os::page_size();
+  usize rounded_commit_size = round_up_to_power_of_two(commit_size, page_size);
+
+  b32 ok = ttld::os::mem_commit(base, rounded_commit_size);
+  Assert(ok);
+}
+
+void *vmemblock_alloc(void *ctx, void *ptr, usize old_byte_size, usize new_byte_size, u32 align) {
+  Todo();
+  VMemBlock *block = cast<VMemBlock*>(ctx);
+
+  if (new_byte_size > 0) {
+    // alloc/realloc
+    block->ensure_commited(new_byte_size);
+    return block->base;
+  }
+
+  // We do not shrink the amount of commited memory.
+
+  return nullptr;
+}
+
+Allocator VMemBlock::as_allocator() {
+  return {
+    .fn = vmemblock_alloc,
+    .ctx = this,
+  };
 }
 
 constexpr usize default_commit_growth_size = KiB(16);

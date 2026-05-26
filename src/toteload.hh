@@ -269,6 +269,21 @@ template<typename T> T *Allocator::realloc(T *p, usize count, usize new_count) {
 
 template<typename T> void Allocator::free(T *p, usize count) { raw_free(p, count * sizeof(T)); }
 
+// @vmemblock
+
+struct VMemBlock {
+  void *base;
+  void *commit_end;
+  void *reserve_end;
+
+  void init(usize reserve_size);
+  void deinit();
+
+  void ensure_commited(usize commit_size);
+
+  Allocator as_allocator();
+};
+
 // @arena
 
 struct Arena;

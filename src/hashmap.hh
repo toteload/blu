@@ -5,6 +5,21 @@ constexpr u32 max_search_depth = 32;
 constexpr u32 index_not_found  = UINT32_MAX;
 constexpr f32 max_load_factor  = 0.8f;
 
+constexpr u32 mask_is_occupied  = 0x00000001;
+constexpr u32 mask_is_tombstone = 0x00000002;
+constexpr u32 mask_is_stale     = 0x00000003;
+constexpr u32 mask_fingerprint  = 0xfffffffc;
+
+ttld_inline b32 is_empty(u32 x) { return x == 0; }
+
+ttld_inline b32 is_occupied(u32 x) { return !!(x & mask_is_occupied); }
+
+ttld_inline b32 has_tombstone(u32 x) { return !!(x & mask_is_tombstone); }
+
+ttld_inline b32 is_stale(u32 x) { return (x & mask_is_stale) == mask_is_stale; }
+
+ttld_inline u32 fingerprint32(u32 hash) { return hash & mask_fingerprint; }
+
 template<typename K> using HashFn = u32(void *context, K key);
 
 template<typename K> using KeyCmpFn = b32(void *context, K a, K b);
@@ -61,21 +76,6 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
   u32  get_occupied_index(K key);
   u32  get_insert_index(u32 hash, K key);
 };
-
-constexpr u32 mask_is_occupied  = 0x00000001;
-constexpr u32 mask_is_tombstone = 0x00000002;
-constexpr u32 mask_is_stale     = 0x00000003;
-constexpr u32 mask_fingerprint  = 0xfffffffc;
-
-ttld_inline b32 is_empty(u32 x) { return x == 0; }
-
-ttld_inline b32 is_occupied(u32 x) { return !!(x & mask_is_occupied); }
-
-ttld_inline b32 has_tombstone(u32 x) { return !!(x & mask_is_tombstone); }
-
-ttld_inline b32 is_stale(u32 x) { return (x & mask_is_stale) == mask_is_stale; }
-
-ttld_inline u32 fingerprint32(u32 hash) { return hash & mask_fingerprint; }
 
 template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
 void HashMap<K, V, cmp_key, hash_key>::init(Allocator alloc, void *context, u32 size) {

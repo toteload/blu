@@ -675,7 +675,12 @@ b32 Builder::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *r
 
     *cast<ValueSlice *>(data) = {
       .len   = count,
-      .items = v->data,
+      .items = val->data,
+    };
+
+    *v = {
+      .type = type_idx_dst,
+      .data = data,
     };
 
     return true;

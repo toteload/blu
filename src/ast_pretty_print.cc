@@ -393,11 +393,11 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
 
   switch (kind) {
   case Ast_root:
-    printf("items=%llu", data.root.items.len());
+    printf("items=%lu", data.root.items.len());
     break;
 
   case Ast_block:
-    printf("items=%llu", data.block.items.len());
+    printf("items=%lu", data.block.items.len());
     break;
 
   case Ast_type_slice:
@@ -413,14 +413,14 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_type_function:
-    printf("params=%llu return=", data.type_function.param_types.len());
+    printf("params=%lu return=", data.type_function.param_types.len());
     print_idx(data.type_function.return_type);
     break;
 
   case Ast_builtin:
     switch (data.builtin.kind) {
     case Builtin_print:
-      printf("#print args=%llu", data.builtin.args.len());
+      printf("#print args=%lu", data.builtin.args.len());
       break;
     }
     break;
@@ -442,7 +442,7 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_literal_sequence:
-    printf("items=%llu", data.literal_sequence.items.len());
+    printf("items=%lu", data.literal_sequence.items.len());
     break;
 
   case Ast_literal_int:
@@ -460,7 +460,7 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
   case Ast_call:
     fputs("callee=", stdout);
     print_idx(data.call.callee);
-    printf(" args=%llu", data.call.args.len());
+    printf(" args=%lu", data.call.args.len());
     break;
 
   case Ast_index:
@@ -483,7 +483,7 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_function:
-    printf("params=%llu body=", data.function.param_names.len());
+    printf("params=%lu body=", data.function.param_names.len());
     print_idx(data.function.body);
     break;
 

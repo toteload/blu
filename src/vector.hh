@@ -27,6 +27,8 @@ template<typename T> struct Vector {
   Slice<T> slice() { return Slice<T>{data, _len}; }
 
   T shift_left() {
+    Assert(!is_empty());
+
     T res = data[0];
 
     memmove(data, data + 1, (_len - 1) * sizeof(T));
@@ -64,11 +66,11 @@ template<typename T> void Vector<T>::grow() {
 
 template<typename T> void Vector<T>::ensure_capacity(usize minimum_capacity) {
   usize new_capacity = max(cap, round_up_to_nearest_power_of_two(minimum_capacity));
-  if (new_capacity == cap) {
+  if (new_capacity <= cap) {
     return;
   }
   data = alloc.realloc(data, cap, new_capacity);
-  cap  = minimum_capacity;
+  cap  = new_capacity;
 }
 
 template<typename T> void Vector<T>::ensure_free_capacity(usize minimum_free_capacity) {
