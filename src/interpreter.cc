@@ -15,8 +15,8 @@ struct PopulateRootEnv {
     auto   data = values->alloc_data<T>();
     *data       = val;
     *v          = {
-               .type = type,
-               .data = data,
+      .type = type,
+      .data = data,
     };
 
     env->insert(key, idx);
@@ -590,8 +590,9 @@ b32 Interpreter::const_walk(Env<ValueIndex> *env, NodeIndex *slot) {
     Try(const_walk(env, &data.index.indexable));
     Try(const_walk(env, &data.index.index_at));
 
-    if (data.index.indexable.kind == NodeIndex_value &&
-        data.index.index_at.kind == NodeIndex_value) {
+    if (
+      data.index.indexable.kind == NodeIndex_value && data.index.index_at.kind == NodeIndex_value
+    ) {
       Try(eval_expr(env, idx, &slot->value_idx));
     }
   } break;
@@ -1061,8 +1062,9 @@ b32 Interpreter::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueInde
       if (i > hi) {
         Todo("invalid cast: value out of range");
       }
-    } else if (type_dst->integer.signedness == Unsigned &&
-               type_src->integer.signedness == Unsigned) {
+    } else if (
+      type_dst->integer.signedness == Unsigned && type_src->integer.signedness == Unsigned
+    ) {
       u64 i = get_as_u64(val_idx);
 
       u64 hi = uint_value_max(type_dst->integer.bitwidth);
@@ -1150,8 +1152,10 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
     char c = format[i];
 
     // "{{}}" — emit a verbatim "{}"
-    if (c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
-        format[i + 3] == '}') {
+    if (
+      c == '{' && i + 3 < format.len() && format[i + 1] == '{' && format[i + 2] == '}' &&
+      format[i + 3] == '}'
+    ) {
       fputs("{}", stdout);
       i += 4;
       continue;
@@ -1200,8 +1204,10 @@ void Interpreter::builtin_print(Str format, Slice<ValueIndex> args) {
         fputs(val ? "true" : "false", stdout);
       } break;
       case Type_slice: {
-        if (types->get(t->slice.base_type)->kind == Type_integer &&
-            types->get(t->slice.base_type)->integer.bitwidth == 8) {
+        if (
+          types->get(t->slice.base_type)->kind == Type_integer &&
+          types->get(t->slice.base_type)->integer.bitwidth == 8
+        ) {
           auto s = cast<ValueSlice *>(v->data);
           printf("%.*s", cast<int>(s->len), cast<char const *>(s->items));
         } else {

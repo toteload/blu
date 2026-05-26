@@ -69,8 +69,6 @@ void Messages::print_message(MessageContext *ctx, Message *msg) {
   case Error:
     printf("[error] ");
     break;
-  default:
-    Todo();
   }
 
   switch (msg->location.kind) {

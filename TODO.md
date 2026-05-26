@@ -6,9 +6,6 @@ It is not compiled ahead of time.
 
 ### In progress notes
 
-- [x] Get `main.blu` to run.
-- [ ] Harden the compiler: resolve all TODOs.
-- [ ] Fix the most important issues from `AUDIT.md`.
 - [ ] Get `arithmetic.blu` to run.
 - [ ] Get `if_else.blu` to run.
 

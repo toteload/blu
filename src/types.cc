@@ -22,8 +22,8 @@ u32 TypeInterner::type_to_string(TypeIndex idx, char *buf, u32 buf_size) {
   do {                                                                                             \
     u32 _offset = (Code);                                                                          \
     if (_offset >= buf_size) {                                                                     \
-      buf_size  = 0;                                                                               \
       buf      += buf_size;                                                                        \
+      buf_size  = 0;                                                                               \
     } else {                                                                                       \
       buf_size -= _offset;                                                                         \
       buf      += _offset;                                                                         \
@@ -384,12 +384,11 @@ b32 TypeInterner::is_valid_cast(TypeIndex from, TypeIndex to) {
   Type *t_dst = get(to);
   Type *t_src = get(from);
 
-  if (t_dst->kind == Type_integer &&
-      (t_src->kind == Type_integer || t_src->kind == Type_literal_int)) {
+  if (
+    t_dst->kind == Type_integer && (t_src->kind == Type_integer || t_src->kind == Type_literal_int)
+  ) {
     return true;
   }
-
-  Todo();
 
   return false;
 }

@@ -107,25 +107,30 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
   return true;
 }
 
-b32 Builder::eval_call(Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result) {
+b32 Builder::eval_call(
+  Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result
+) {
   Value *f = values->get(function);
 
   auto env_args = envs->alloc(env);
   defer(envs->dealloc(env_args));
 
-  NodeIndex ast_function = *cast<NodeIndex*>(f->data);
-  auto &data = nodes->data(ast_function);
+  NodeIndex ast_function = *cast<NodeIndex *>(f->data);
+  auto     &data         = nodes->data(ast_function);
 
   for (u32 i = 0; i < data.function.param_names.len(); i++) {
     auto token_index = nodes->data(data.function.param_names[i]).identifier.token_index;
-    auto key = intern_identifier(token_index);
+    auto key         = intern_identifier(token_index);
 
-    env_args->insert(key, {
+    env_args->insert(
+      key,
+      {
         .resolve_status = ResolveStatus_type_resolved,
-        .is_const = false,
-        .node_index = NodeIndex::from_value(args[i]),
-        });
-  } 
+        .is_const       = false,
+        .node_index     = NodeIndex::from_value(args[i]),
+      }
+    );
+  }
 
   return eval_expression(env_args, data.function.body, result);
 }
@@ -224,7 +229,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Try(check_expression(env, &data.declaration.value, hint));
 
-    Value *val;
+    Value     *val;
     ValueIndex val_idx = values->alloc_value(&val);
 
     *val = {
@@ -237,8 +242,8 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
       key,
       {
         .resolve_status = ResolveStatus_type_resolved,
-        .is_const = false, // TODO: this is potentially incorrect
-        .node_index = NodeIndex::from_value(val_idx),
+        .is_const       = false, // TODO: this is potentially incorrect
+        .node_index     = NodeIndex::from_value(val_idx),
       }
     );
 
@@ -352,8 +357,8 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
       Value *value_param;
       auto   value_idx_param = values->alloc_value(&value_param);
       *value_param           = {
-                  .type = param_type,
-                  .data = nullptr,
+        .type = param_type,
+        .data = nullptr,
       };
 
       env_params->insert(
@@ -426,7 +431,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
   case Ast_if_else: {
     TypeHint hint_bool{
-      .type = types->type.bool_,
+      .type     = types->type.bool_,
       .location = data.if_else.cond,
     };
 
@@ -474,7 +479,13 @@ StrKey Builder::intern_identifier(TokenIndex identifier) {
   return strings->add(s);
 }
 
-b32 Builder::check_unification(NodeIndex node_lhs, TypeIndex type_lhs, NodeIndex node_rhs, TypeIndex type_rhs, TypeIndex *type_unified) {
+b32 Builder::check_unification(
+  NodeIndex  node_lhs,
+  TypeIndex  type_lhs,
+  NodeIndex  node_rhs,
+  TypeIndex  type_rhs,
+  TypeIndex *type_unified
+) {
   if (types->unify(type_lhs, type_rhs, type_unified)) {
     return true;
   }
@@ -739,8 +750,9 @@ b32 Builder::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *r
       if (i > hi) {
         Todo("invalid cast: value out of range");
       }
-    } else if (type_dst->integer.signedness == Unsigned &&
-               type_src->integer.signedness == Unsigned) {
+    } else if (
+      type_dst->integer.signedness == Unsigned && type_src->integer.signedness == Unsigned
+    ) {
       u64 i = read_value_u64(val_idx);
 
       u64 hi = uint_value_max(type_dst->integer.bitwidth);

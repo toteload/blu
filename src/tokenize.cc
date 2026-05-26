@@ -3,7 +3,7 @@
 enum TokenizerResult : u32 {
   TokResult_ok,
   TokResult_end,
-  TokResult_unrecognized_token,
+  TokResult_error,
 };
 
 struct Tokenizer {
@@ -165,7 +165,8 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     }
 
     if (is_at_end()) {
-      Todo();
+      messages->error("End of source encountered while parsing string literal.");
+      return
     }
 
     step();
@@ -206,11 +207,14 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
     Return_token(Tok_identifier);
   }
 
-  return TokResult_unrecognized_token;
+  messages->error("Unrecognized token encountered.");
+
+  return TokResult_error;
 }
 
 b32 tokenize(TokenizeContext *context, Str source, Tokens *tokens) {
   Tokenizer tokenizer;
+  tokenizer.messages = context->messages;
   tokenizer.init(source);
 
   TokenizerResult res;
@@ -232,8 +236,6 @@ b32 tokenize(TokenizeContext *context, Str source, Tokens *tokens) {
     tokens->kind(i) = kind;
     tokens->span(i) = span;
   }
-
-  context->messages->error("Unrecognized token encountered.");
 
   return res == TokResult_end;
 }

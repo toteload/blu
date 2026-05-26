@@ -118,10 +118,10 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key>
 b32 HashMap<K, V, cmp_key, hash_key>::rehash_to(void *mem, u32 size) {
   u32 cap = mask + 1;
 
-  Bucket<K,V> *nbuckets = cast<Bucket<K,V>*>(mem);
-  u32 *nmeta = cast<u32*>(nbuckets + size);
+  Bucket<K, V> *nbuckets = cast<Bucket<K, V> *>(mem);
+  u32          *nmeta    = cast<u32 *>(nbuckets + size);
 
-  memcpy(nbuckets, buckets, cap * sizeof(Bucket<K,V>));
+  memcpy(nbuckets, buckets, cap * sizeof(Bucket<K, V>));
 
   memcpy(nmeta, meta, cap * sizeof(u32));
   memset(nmeta + cap, 0, (size - cap) * sizeof(u32));
@@ -149,8 +149,9 @@ b32 HashMap<K, V, cmp_key, hash_key>::rehash_to(void *mem, u32 size) {
 
     u32 idx = index_not_found;
     ForEachIndex(k, max_search_depth) {
-      idx = (start + k) & nmask;
-      if (is_empty(nmeta[idx]) || is_stale(nmeta[idx])) {
+      u32 j = (start + k) & nmask;
+      if (is_empty(nmeta[j]) || is_stale(nmeta[j])) {
+        idx = j;
         break;
       }
     }
@@ -185,17 +186,22 @@ b32 HashMap<K, V, cmp_key, hash_key>::rehash_to(void *mem, u32 size) {
         u32 idx = (start + k) & nmask;
 
         if (is_empty(nmeta[idx])) {
-          nmeta[idx]     = fingerprint32(hash) | mask_is_occupied;
+          nmeta[idx]    = fingerprint32(hash) | mask_is_occupied;
           nbuckets[idx] = bi;
           goto next;
         }
 
-        if (is_stale(meta[idx])) {
+        if (is_stale(nmeta[idx])) {
           nmeta[idx] = fingerprint32(hash) | mask_is_occupied;
           swap(bi, nbuckets[idx]);
-          break;
+          goto place_next_bucket_in_chain;
         }
       }
+
+      return false;
+
+    place_next_bucket_in_chain:
+      continue;
     }
 
   next:
@@ -218,9 +224,9 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
   // The buckets array is stored first in memory followed by the meta array.
   // No padding is needed between the two if the minimum capacity of the hashmap is 4.
 
-  // There is a chance that rehashing fails because it cannot find a slot for a bucket during rehashing
-  // within the maximally allowed distance from its ideal position.
-  // When this happens we just grow again and try rehashing again.
+  // There is a chance that rehashing fails because it cannot find a slot for a bucket during
+  // rehashing within the maximally allowed distance from its ideal position. When this happens we
+  // just grow again and try rehashing again.
 
   while (true) {
     u64 new_byte_size = size * (sizeof(u32) + sizeof(Bucket<K, V>));
@@ -232,8 +238,8 @@ void HashMap<K, V, cmp_key, hash_key>::grow_and_rehash(u32 size) {
       u64 old_byte_size = cap * (sizeof(u32) + sizeof(Bucket<K, V>));
       alloc.free(buckets, old_byte_size);
       buckets = cast<Bucket<K, V> *>(mem);
-      meta = cast<u32*>(buckets + size);
-      mask = size - 1;
+      meta    = cast<u32 *>(buckets + size);
+      mask    = size - 1;
       break;
     }
 

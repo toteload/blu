@@ -15,35 +15,7 @@ Note: `interpreter.cc`, `source_unit.cc`, and `typecheck.cc` are commented out o
 
 ## 1. Memory safety / undefined behavior
 
-### Critical
-
-- **`src/toteload.cc:147-161` — `arena_alloc_fn` free path is unreachable; reallocs OOB-memcpy.**
-  `if (new_byte_size >= 0)` is always true (`usize` is unsigned).
-  So when `Allocator::raw_free` is called via an arena allocator (`new_byte_size == 0`), it takes the realloc branch: allocates 0 bytes (returns NULL on the stdlib path, valid pointer with no room on the arena path), then `memcpy(p, ptr, old_byte_size)` writes/reads garbage.
-  Currently masked because arenas don't actually free, but the moment someone reuses this allocator interface for anything else they'll get a SIGSEGV.
-
-- **`src/hashmap.hh:190-209` — `grow_and_rehash` inner `while(true)` can spin forever.**
-  The inner `ForEachIndex(k, max_search_depth)` only exits via `goto next` (empty slot found) or via `break` (stale slot found, then re-enters outer while).
-  If `max_search_depth` (32) is exhausted with neither condition, the outer `while(true)` re-runs the same scan with the same `bi` and same hash — infinite loop.
-  Reachable on adversarial input or just dense maps.
-  - A solution is to put a bound on the `while (true)` loop and add detection to finding out if the map cannot be succesfully rehashed at this size.
-    If this is the case, the map should grow again and retry rehashing.
-    To make this possible the memory for the new map should be a new allocation instead of a reallocation.
-    The alternative is that you have to continue rehashing with your partially rehashed hashmap, which is just a headache and may not even be possible.
-
-- **`src/utils/stdlib.cc:21-48` — `read_file` never `fclose`s, leaks `data` on short read, can use `f` as NULL.**
-  Multiple resource leaks (`f` never closed in any branch, `data` leaked on `fread` failure), and `ftell` result is cast to `u32` (silent truncation on files > 4GB).
-  Also `write_file` (`:50-59`) calls `fwrite` on the result of `fopen` with no NULL check.
-
 ### High
-
-- **`src/toteload.cc:100-128` — `Arena::raw_alloc` ignores `mem_commit` result and has off-by-one OOM.**
-  Combined with the macOS `mem_commit` bug above, allocations after a partial commit failure silently succeed and return a pointer into uncommitted memory → SIGBUS on first write.
-  Also `if (at_after_alloc >= reserve_end)` rejects allocations that exactly fit (`>` would be correct).
-
-- **`src/toteload.cc:130-145` — `push_format_string` does `at = ptr_offset(at, -1)` to strip the null terminator.**
-  If `vsnprintf` returns a negative value on error, `len+1` is 0 (no allocation), then the `at` pointer rolls back into the previous allocation.
-  Also `len = -1` is then cast to `u32`, producing a `Str` whose length is `UINT32_MAX`.
 
 - **`src/types.cc:21-31` — `Update` macro in `type_to_string` advances `buf` by 0 on overflow.**
   ```cpp

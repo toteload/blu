@@ -93,7 +93,6 @@ void VMemBlock::ensure_commited(usize commit_size) {
 }
 
 void *vmemblock_alloc(void *ctx, void *ptr, usize old_byte_size, usize new_byte_size, u32 align) {
-  Todo();
   VMemBlock *block = cast<VMemBlock*>(ctx);
 
   if (new_byte_size > 0) {
@@ -183,10 +182,13 @@ Str Arena::push_format_string(char const *format, ...) {
   i32 len = vsnprintf(nullptr, 0, format, vl);
   va_end(vl);
 
+  // Should never happen.
+  Assert(len >= 0);
+
   va_start(vl, format);
   char *s = alloc<char>(len+1);
   vsnprintf(s, len+1, format, vl);
-  // vsnprint always writes a null-terminator, but I don't want a null-terminator.
+  // vsnprintf always writes a null-terminator, but I don't want a null-terminator.
   // We do allocate enough memory for a null-terminator to be written, but then
   // jump back one byte to remove it.
   at = ptr_offset(at, -1);
@@ -201,13 +203,17 @@ static void *arena_alloc_fn(void *ctx, void *ptr, usize old_byte_size, usize new
     return arena->raw_alloc(new_byte_size, align);
   }
 
+  if (new_byte_size == 0) {
+    return nullptr;
+  }
+
   if (new_byte_size > old_byte_size) {
     void *p = arena->raw_alloc(new_byte_size, align);
     memcpy(p, ptr, old_byte_size);
     return p;
   }
 
-  return nullptr;
+  return ptr;
 }
 
 Allocator Arena::as_allocator() {

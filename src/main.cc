@@ -147,9 +147,9 @@ int main(i32 arg_count, char const *const *args) {
     }
   }
 
-  auto key = strings.add(STR("main"));
+  auto        key = strings.add(STR("main"));
   Declaration decl_main;
-  b32 found = builder.env_root->lookup(key, &decl_main);
+  b32         found = builder.env_root->lookup(key, &decl_main);
   Assert(found);
 
   ValueIndex result;

@@ -1070,7 +1070,9 @@ struct Builder {
   // Only call `eval_expression` on expressions that have been checked.
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
   b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
-  b32 eval_call(Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result);
+  b32 eval_call(
+    Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result
+  );
 
   b32 check_and_eval_expression(
     Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
@@ -1091,7 +1093,13 @@ struct Builder {
   b32 ensure_is_assignable(NodeIndex node_index);
 
   b32 check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value);
-  b32 check_unification(NodeIndex node_lhs, TypeIndex type_lhs, NodeIndex node_rhs, TypeIndex type_rhs, TypeIndex *type_unified);
+  b32 check_unification(
+    NodeIndex  node_lhs,
+    TypeIndex  type_lhs,
+    NodeIndex  node_rhs,
+    TypeIndex  type_rhs,
+    TypeIndex *type_unified
+  );
 
   void env_populate_with_builtins(Env<Declaration> *env);
   void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);
