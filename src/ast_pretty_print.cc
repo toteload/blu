@@ -397,7 +397,12 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_block:
-    printf("items=%lu", data.block.items.len());
+    printf("items=%lu ", data.block.items.len());
+    for (u32 i = 0; i < data.block.items.len(); i++) {
+      printf("[%u]=", i);
+      print_idx(data.block.items[i]);
+      printf(", ");
+    }
     break;
 
   case Ast_type_slice:

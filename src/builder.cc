@@ -362,6 +362,60 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     *node_index = NodeIndex::from_value(value_idx);
   } break;
 
+  case Ast_block: {
+    if (data.block.items.len() == 0) {
+      nodes->type(*node_index) = types->type.nil;
+      break;
+    }
+
+    auto env_block = envs->alloc(env);
+    defer(envs->dealloc(env_block));
+
+    for (u32 i = 0; i < data.block.items.len() - 1; i++) {
+      Try(check_expression(env_block, &data.block.items[i], common.hint_nil));
+    }
+
+    auto &last_item = data.block.items[data.block.items.len() - 1];
+
+    Try(check_expression(env_block, &last_item, hint));
+
+    nodes->type(*node_index) = get_type(last_item);
+  } break;
+
+  case Ast_if_else: {
+    TypeHint hint_bool{
+      .type = types->type.bool_,
+      .location = data.if_else.cond,
+    };
+
+    Try(check_expression(env, &data.if_else.cond, hint_bool));
+
+    TypeIndex cond_type = get_type(data.if_else.cond);
+
+    Try(check_expression(env, &data.if_else.then, hint));
+
+    if (data.if_else.otherwise.is_none()) {
+      nodes->type(*node_index) = types->type.nil;
+      break;
+    }
+
+    Try(check_expression(env, &data.if_else.otherwise, hint));
+
+    TypeIndex then_type      = get_type(data.if_else.then);
+    TypeIndex otherwise_type = get_type(data.if_else.otherwise);
+
+    TypeIndex type_unified;
+    Try(check_unification(
+      data.if_else.then,
+      then_type,
+      data.if_else.otherwise,
+      otherwise_type,
+      &type_unified
+    ));
+
+    nodes->type(*node_index) = type_unified;
+  } break;
+
   default:
     puts(ast_kind_string(kind));
     Todo();
@@ -376,6 +430,16 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 StrKey Builder::intern_identifier(TokenIndex identifier) {
   auto s = get_token_str(text, tokens, identifier);
   return strings->add(s);
+}
+
+b32 Builder::check_unification(NodeIndex node_lhs, TypeIndex type_lhs, NodeIndex node_rhs, TypeIndex type_rhs, TypeIndex *type_unified) {
+  if (types->unify(type_lhs, type_rhs, type_unified)) {
+    return true;
+  }
+
+  messages->error(node_lhs, "Cannot unify types {type} and {type}.", type_lhs, type_rhs);
+
+  return false;
 }
 
 b32 Builder::ensure_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual) {
@@ -500,9 +564,6 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
     return false;
   }
 
-  if (value->kind == NodeIndex_ast) {
-    nodes->type(*value) = expected.type;
-  }
 
   auto old_node_index = *value;
   auto node_index     = nodes->alloc();
@@ -514,6 +575,7 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
   cast.type_dst = NodeIndex::from_value(val_idx);
   cast.value    = old_node_index;
 
+  nodes->type(node_index) = expected.type;
   nodes->set(
     node_index,
     {

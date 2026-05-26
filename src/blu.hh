@@ -635,32 +635,32 @@ struct AstNode {
 };
 
 struct AstNodes {
-  Vector<AstKind>          kinds;
-  Vector<Span<TokenIndex>> spans;
-  Vector<AstNodeData>      datas;
-  Vector<TypeIndex>        types;
+  SegmentList<AstKind>          kinds;
+  SegmentList<Span<TokenIndex>> spans;
+  SegmentList<AstNodeData>      datas;
+  SegmentList<TypeIndex>        types;
 
   Allocator segment_allocator;
 
   void init(Allocator vector_allocator, Allocator segment_allocator) {
-    kinds.init(vector_allocator);
-    spans.init(vector_allocator);
-    datas.init(vector_allocator);
-    types.init(vector_allocator);
-
-    kinds.push({});
-    spans.push({});
-    datas.push({});
-    types.push({});
-
     this->segment_allocator = segment_allocator;
+
+    kinds.init();
+    spans.init();
+    datas.init();
+    types.init();
+
+    kinds.push(segment_allocator);
+    spans.push(segment_allocator);
+    datas.push(segment_allocator);
+    types.push(segment_allocator);
   }
 
   void deinit() {
-    kinds.deinit();
-    spans.deinit();
-    datas.deinit();
-    types.deinit();
+    kinds.deinit(segment_allocator);
+    spans.deinit(segment_allocator);
+    datas.deinit(segment_allocator);
+    types.deinit(segment_allocator);
 
     memset(this, 0, sizeof(*this));
   }
@@ -680,10 +680,10 @@ struct AstNodes {
       .idx  = {.ast = cast<u32>(kinds.len())},
     };
 
-    kinds.push_empty();
-    spans.push_empty();
-    datas.push_empty();
-    types.push({0});
+    kinds.push(segment_allocator);
+    spans.push(segment_allocator);
+    datas.push(segment_allocator);
+    types.append(segment_allocator, {0});
 
     return res;
   }
@@ -1071,15 +1071,15 @@ struct Builder {
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
   b32 eval_cast(TypeIndex type_dst, ValueIndex val, ValueIndex *result);
 
+  b32 check_and_eval_expression(
+    Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
+  );
+
   // 1. Checks that the expression is valid.
   // 2. Evaluates the expression.
   // 3. Checks that the result of the expression is a type.
   b32 check_and_eval_type_expression(
     Env<Declaration> *env, NodeIndex *node_index, ValueIndex *result
-  );
-
-  b32 check_and_eval_expression(
-    Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
   );
 
   // All functions starting with "ensure" test for a certain condition.
@@ -1090,6 +1090,7 @@ struct Builder {
   b32 ensure_is_assignable(NodeIndex node_index);
 
   b32 check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value);
+  b32 check_unification(NodeIndex node_lhs, TypeIndex type_lhs, NodeIndex node_rhs, TypeIndex type_rhs, TypeIndex *type_unified);
 
   void env_populate_with_builtins(Env<Declaration> *env);
   void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);
