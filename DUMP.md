@@ -108,3 +108,14 @@ To facilitate this you can use the same environment as the "builtin identifiers 
 This is convenient, because it automatically gives you detection for identical user-defined top-level identifiers: which are ambiguous and thus illegal.
 As a consequence, the root environment will contain many items relative to block scope or function scope environments.
 This presents an optimization opportunity.
+
+## Ideas
+
+### Coercion of `[1]T` to `T`
+
+This has the benefit of having ASCII character literals for free by using the string literals.
+The type of `"A"` is `[1]u8`
+
+### Coercion of `bool` to integer types
+
+`true -> 1` and `false -> 0`.

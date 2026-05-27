@@ -81,7 +81,8 @@ void Messages::print_message(MessageContext *ctx, Message *msg) {
     if (node_index.kind == NodeIndex_value) {
       break;
     }
-    auto token_span = ctx->nodes->span(node_index);
+    auto ast_index  = node_index.as_ast_idx();
+    auto token_span = ctx->nodes->span(ast_index);
     auto span       = ctx->tokens->span(token_span.start);
     auto loc        = find_source_location(ctx->text, span.start);
     printf("%d:%d: ", loc.line, loc.col);

@@ -111,7 +111,7 @@ int main(i32 arg_count, char const *const *args) {
   print_context.values = &values;
 
   if (settings.verbose) {
-    pretty_print(&print_context, Print_basic, nodes.first_valid_index());
+    pretty_print(&print_context, Print_basic, NodeIndex::from_ast_index(nodes.first_valid_index()));
     table_print_ast(&print_context);
   }
 
@@ -136,7 +136,11 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   if (settings.verbose) {
-    pretty_print(&print_context, Print_with_types, nodes.first_valid_index());
+    pretty_print(
+      &print_context,
+      Print_with_types,
+      NodeIndex::from_ast_index(nodes.first_valid_index())
+    );
     table_print_ast(&print_context);
 
     for (auto it = builder.env_root->map.first_valid_entry(); it != builder.env_root->map.end();

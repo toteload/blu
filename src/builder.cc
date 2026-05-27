@@ -31,13 +31,13 @@ void Builder::deinit() {
 }
 
 b32 Builder::typecheck_and_eval_const_code() {
-  NodeIndex idx_root = nodes->first_valid_index();
+  AstIndex idx_root = nodes->first_valid_index();
 
   Assert(nodes->kind(idx_root) == Ast_root);
 
   auto &root = nodes->data(idx_root).root;
   for (u32 i = 0; i < root.items.len(); i++) {
-    auto idx_item = root.items[i];
+    auto idx_item = root.items[i].as_ast_idx();
     auto kind     = nodes->kind(idx_item);
 
     if (kind == Ast_const) {
@@ -57,7 +57,7 @@ b32 Builder::typecheck_and_eval_const_code() {
         {
           .resolve_status = ResolveStatus_type_unresolved,
           .is_const       = false,
-          .node_index     = idx_item,
+          .node_index     = NodeIndex::from_ast_index(idx_item),
         }
       );
     } else {
@@ -66,12 +66,12 @@ b32 Builder::typecheck_and_eval_const_code() {
   }
 
   for (u32 i = 0; i < root.items.len(); i++) {
-    auto *item = &root.items[i];
-    auto  kind = nodes->kind(*item);
+    auto item = root.items[i].as_ast_idx();
+    auto kind = nodes->kind(item);
 
     Assert(kind == Ast_declaration);
 
-    auto &data = nodes->data(*item);
+    auto &data = nodes->data(item);
 
     Declaration decl;
     Try(resolve_declaration(env_root, data.declaration.name, &decl));
@@ -86,8 +86,10 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     return true;
   }
 
-  auto  kind = nodes->kind(node_index);
-  auto &data = nodes->data(node_index);
+  AstIndex ast_index = node_index.as_ast_idx();
+
+  auto  kind = nodes->kind(ast_index);
+  auto &data = nodes->data(ast_index);
 
   switch (kind) {
 
@@ -107,8 +109,23 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     *result = decl.node_index.as_value_idx();
   } break;
 
+  case Ast_declaration: {
+    auto       key = intern_identifier(data.declaration.name);
+    ValueIndex value;
+    Try(eval_expression(env, data.declaration.value, &value));
+    env->insert(
+      key,
+      {
+        .resolve_status = ResolveStatus_type_resolved,
+        .is_const       = false,
+        .node_index     = NodeIndex::from_value(value),
+      }
+    );
+    *result = common.val.nil;
+  } break;
+
   case Ast_block: {
-    auto &block = nodes->data(node_index).block;
+    auto &block = data.block;
     if (block.items.len() == 0) {
       *result = common.val.nil;
       break;
@@ -127,12 +144,18 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
 
     for (u32 i = 0; i < block.items.len(); i++) {
       auto item = block.items[i];
-      if (nodes->kind(item) == Ast_defer) {
-        defers[defer_count++] = nodes->data(item).defer.value;
-        last                  = common.val.nil;
-      } else {
-        Try(eval_expression(env_block, item, &last));
+
+      if (item.kind == NodeIndex_ast) {
+        auto ast_index_item = item.as_ast_idx();
+        auto kind_item      = nodes->kind(ast_index_item);
+        if (kind_item == Ast_defer) {
+          defers[defer_count++] = nodes->data(ast_index_item).defer.value;
+          last                  = common.val.nil;
+          continue;
+        }
       }
+
+      Try(eval_expression(env_block, item, &last));
     }
 
     *result = last;
@@ -144,7 +167,7 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
   } break;
 
   case Ast_if_else: {
-    auto if_else = nodes->data(node_index).if_else;
+    auto &if_else = data.if_else;
 
     ValueIndex cond;
     Try(eval_expression(env, if_else.cond, &cond));
@@ -160,12 +183,200 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     }
   } break;
 
+  case Ast_binary_op: {
+    auto binop = data.binary_op;
+
+    ValueIndex lhs;
+    Try(eval_expression(env, binop.lhs, &lhs));
+
+    ValueIndex rhs;
+    Try(eval_expression(env, binop.rhs, &rhs));
+
+    Try(eval_binary_op(binop.kind, lhs, rhs, result));
+  } break;
+
   default:
     puts(ast_kind_string(kind));
     Todo();
     break;
   }
 
+  return true;
+}
+
+b32 Builder::eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, ValueIndex *result) {
+  switch (op) {
+  case Cmp_equal:
+  case Cmp_not_equal:
+  case Cmp_less_than:
+  case Cmp_less_equal:
+  case Cmp_greater_than:
+  case Cmp_greater_equal: {
+    auto left      = values->get(lhs);
+    auto left_type = types->get(left->type);
+
+    Assert(left_type->is_integer_or_literal_int());
+
+    bool is_unsigned = left_type->kind == Type_integer && left_type->integer.signedness == Unsigned;
+
+    bool res;
+    if (is_unsigned) {
+      u64 a = read_value_u64(lhs);
+      u64 b = read_value_u64(rhs);
+      // clang-format off
+      switch (op) {
+      case Cmp_equal: res = a == b; break;
+      case Cmp_not_equal: res = a != b; break;
+      case Cmp_less_than: res = a < b; break;
+      case Cmp_less_equal: res = a <= b; break;
+      case Cmp_greater_than: res = a > b; break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
+      }
+      // clang-format on
+    } else {
+      i64 a = read_value_i64(lhs);
+      i64 b = read_value_i64(rhs);
+      // clang-format off
+      switch (op) {
+      case Cmp_equal: res = a == b; break;
+      case Cmp_not_equal: res = a != b; break;
+      case Cmp_less_than: res = a < b; break;
+      case Cmp_less_equal: res = a <= b; break;
+      case Cmp_greater_than: res = a > b; break;
+      case Cmp_greater_equal: res = a >= b; break;
+      default: Unreachable();
+      }
+      // clang-format on
+    }
+
+    Value *v;
+    auto   idx  = values->alloc_value(&v);
+    auto   data = cast<u8 *>(values->alloc_data(types->size_info(types->type.bool_)));
+    *data       = res ? 1 : 0;
+    *v          = {.type = types->type.bool_, .data = data};
+    *result     = idx;
+
+    return true;
+  } break;
+  case Mul:
+  case Div:
+  case Mod:
+  case Add:
+  case Sub: {
+    auto left  = values->get(lhs);
+    auto right = values->get(rhs);
+
+    auto left_type  = types->get(left->type);
+    auto right_type = types->get(right->type);
+
+    Assert(left_type->is_integer_or_literal_int() && right_type->is_integer_or_literal_int());
+
+    auto signedness = left_type->integer.signedness;
+
+    if (signedness == Signed) {
+      i64  a        = read_value_i64(lhs);
+      i64  b        = read_value_i64(rhs);
+      bool overflow = false;
+      i64  res;
+
+      // clang-format off
+      switch (op) {
+      case Div: res = a / b; break;
+      case Mod: res = a % b; break;
+      case Add: overflow = __builtin_add_overflow(a, b, &res); break;
+      case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
+      case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
+      default: Unreachable(); break;
+      }
+      // clang-format on
+
+      if (overflow) {
+        Todo();
+      }
+
+      TypeIndex result_type_idx;
+      types->unify(left->type, right->type, &result_type_idx);
+
+      auto result_type = types->get(result_type_idx);
+
+      if (result_type->kind == Type_integer) {
+        i64 min_value = int_value_min(result_type->integer.bitwidth);
+        i64 max_value = int_value_max(result_type->integer.bitwidth);
+
+        if (res > max_value || res < min_value) {
+          Todo();
+        }
+      }
+
+      auto   size_info = types->size_info(result_type_idx);
+      Value *v;
+      auto   idx       = values->alloc_value(&v);
+      void  *data      = values->alloc_data(size_info);
+      u32    byte_size = size_info.size;
+      memcpy(data, &res, byte_size);
+      *v = {
+        .type = result_type_idx,
+        .data = data,
+      };
+
+      *result = idx;
+
+      return true;
+    } else {
+      u64  a        = read_value_u64(lhs);
+      u64  b        = read_value_u64(rhs);
+      bool overflow = false;
+      u64  res;
+
+      // clang-format off
+      switch (op) {
+      case Div: res = a / b; break;
+      case Mod: res = a % b; break;
+      case Add: overflow = __builtin_add_overflow(a, b, &res); break;
+      case Sub: overflow = __builtin_sub_overflow(a, b, &res); break;
+      case Mul: overflow = __builtin_mul_overflow(a, b, &res); break;
+      default: Unreachable(); break;
+      }
+      // clang-format on
+
+      if (overflow) {
+        Todo();
+      }
+
+      TypeIndex result_type_idx;
+      types->unify(left->type, right->type, &result_type_idx);
+
+      auto result_type = types->get(result_type_idx);
+
+      if (result_type->kind == Type_integer) {
+        u64 max_value = uint_value_max(result_type->integer.bitwidth);
+
+        if (res > max_value) {
+          Todo();
+        }
+      }
+
+      auto   size_info = types->size_info(result_type_idx);
+      Value *v;
+      auto   idx       = values->alloc_value(&v);
+      void  *data      = values->alloc_data(size_info);
+      u32    byte_size = size_info.size;
+      memcpy(data, &res, byte_size);
+      *v = {
+        .type = result_type_idx,
+        .data = data,
+      };
+
+      *result = idx;
+
+      return true;
+    }
+  } break;
+  default:
+    Todo();
+    break;
+  }
   return true;
 }
 
@@ -177,12 +388,13 @@ b32 Builder::eval_call(
   auto env_args = envs->alloc(env);
   defer(envs->dealloc(env_args));
 
-  NodeIndex ast_function = *cast<NodeIndex *>(f->data);
-  auto     &data         = nodes->data(ast_function);
+  AstIndex ast_function = *cast<AstIndex *>(f->data);
+  auto    &data         = nodes->data(ast_function);
 
   for (u32 i = 0; i < data.function.param_names.len(); i++) {
-    auto token_index = nodes->data(data.function.param_names[i]).identifier.token_index;
-    auto key         = intern_identifier(token_index);
+    auto ast_index_param = data.function.param_names[i].as_ast_idx();
+    auto token_index     = nodes->data(ast_index_param).identifier.token_index;
+    auto key             = intern_identifier(token_index);
 
     env_args->insert(
       key,
@@ -246,7 +458,7 @@ b32 Builder::resolve_declaration(
 
   decl->resolve_status = ResolveStatus_type_resolving;
 
-  auto &data = nodes->data(decl->node_index);
+  auto &data = nodes->data(decl->node_index.as_ast_idx());
 
   ValueIndex value_declared_type;
   Try(check_and_eval_type_expression(env, &data.declaration.type, &value_declared_type));
@@ -273,8 +485,10 @@ b32 Builder::resolve_declaration(
 }
 
 b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, TypeHint hint) {
-  auto  kind = nodes->kind(*node_index);
-  auto &data = nodes->data(*node_index);
+  AstIndex ast_index = node_index->as_ast_idx();
+
+  auto  kind = nodes->kind(ast_index);
+  auto &data = nodes->data(ast_index);
 
   switch (kind) {
 
@@ -309,13 +523,13 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
       }
     );
 
-    nodes->type(*node_index) = types->type.nil;
+    nodes->type(ast_index) = types->type.nil;
   } break;
 
   case Ast_identifier: {
     Declaration decl;
     Try(resolve_declaration(env, data.identifier.token_index, &decl));
-    nodes->type(*node_index) = get_type(decl.node_index);
+    nodes->type(ast_index) = get_type(decl.node_index);
   } break;
 
   case Ast_cast: {
@@ -333,7 +547,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     data.cast.type_dst = NodeIndex::from_value(value_type_dst);
 
-    nodes->type(*node_index) = type_dst;
+    nodes->type(ast_index) = type_dst;
   } break;
 
   case Ast_const: {
@@ -350,7 +564,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Todo();
 
-    nodes->type(*node_index) = types->type.nil;
+    nodes->type(ast_index) = types->type.nil;
   } break;
 
   case Ast_type_function: {
@@ -410,7 +624,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     defer(envs->dealloc(env_params));
 
     for (u32 i = 0; i < data.function.param_names.len(); i++) {
-      auto param_node  = data.function.param_names[i];
+      auto param_node  = data.function.param_names[i].as_ast_idx();
       auto token_index = nodes->data(param_node).identifier.token_index;
       auto key         = intern_identifier(token_index);
 
@@ -442,8 +656,8 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Value *value_function;
     auto   value_idx_function = values->alloc_value(&value_function);
-    auto   payload            = values->alloc_data<NodeIndex>();
-    memcpy(payload, node_index, sizeof(NodeIndex));
+    auto   payload            = values->alloc_data<AstIndex>();
+    memcpy(payload, &ast_index, sizeof(AstIndex));
     *value_function = {
       .type = hint.type,
       .data = payload,
@@ -473,7 +687,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
   case Ast_block: {
     if (data.block.items.len() == 0) {
-      nodes->type(*node_index) = types->type.nil;
+      nodes->type(ast_index) = types->type.nil;
       break;
     }
 
@@ -488,7 +702,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Try(check_expression(env_block, &last_item, hint));
 
-    nodes->type(*node_index) = get_type(last_item);
+    nodes->type(ast_index) = get_type(last_item);
   } break;
 
   case Ast_if_else: {
@@ -504,7 +718,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     Try(check_expression(env, &data.if_else.then, hint));
 
     if (data.if_else.otherwise.is_none()) {
-      nodes->type(*node_index) = types->type.nil;
+      nodes->type(ast_index) = types->type.nil;
       break;
     }
 
@@ -522,7 +736,55 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
       &type_unified
     ));
 
-    nodes->type(*node_index) = type_unified;
+    nodes->type(ast_index) = type_unified;
+  } break;
+
+  case Ast_binary_op: {
+    NodeIndex &lhs = data.binary_op.lhs;
+    NodeIndex &rhs = data.binary_op.rhs;
+
+    Try(check_expression(env, &lhs, hint));
+    Try(check_expression(env, &rhs, hint));
+
+    TypeIndex type_lhs = get_type(lhs);
+    TypeIndex type_rhs = get_type(rhs);
+
+    switch (data.binary_op.kind) {
+    case Logical_and:
+    case Logical_or:
+      Try(ensure_is_expected_type(lhs, types->type.bool_, type_lhs));
+      Try(ensure_is_expected_type(rhs, types->type.bool_, type_rhs));
+      nodes->type(ast_index) = types->type.bool_;
+      break;
+    case Cmp_equal:
+    case Cmp_not_equal:
+    case Cmp_less_than:
+    case Cmp_less_equal:
+    case Cmp_greater_than:
+    case Cmp_greater_equal: {
+      TypeIndex type_unified;
+      Try(check_unification(lhs, type_lhs, rhs, type_rhs, &type_unified));
+      Try(ensure_is_type_comparable(ast_index, type_unified));
+      nodes->type(ast_index) = types->type.bool_;
+    } break;
+    case Mul:
+    case Div:
+    case Mod:
+    case Sub:
+    case Add:
+    case Bit_shift_left:
+    case Bit_shift_right:
+    case Bit_and:
+    case Bit_or:
+    case Bit_xor: {
+      TypeIndex type_unified;
+      Try(check_unification(lhs, type_lhs, rhs, type_rhs, &type_unified));
+      nodes->type(ast_index) = type_unified;
+    } break;
+    case BinaryOpKind_max:
+      Unreachable();
+      return false;
+    }
   } break;
 
   default:
@@ -578,20 +840,24 @@ b32 Builder::ensure_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex ty
 }
 
 b32 Builder::ensure_is_assignable(NodeIndex node_index) {
-  auto kind = nodes->kind(node_index);
+  AstIndex ast_index = node_index.as_ast_idx();
+
+  auto kind = nodes->kind(ast_index);
 
   if (kind == Ast_identifier) {
     return true;
   }
 
   if (kind == Ast_index) {
-    return ensure_is_assignable(nodes->data(node_index).index.indexable);
+    return ensure_is_assignable(nodes->data(ast_index).index.indexable);
   }
 
   messages->error(node_index, "Cannot assign");
 
   return false;
 }
+
+b32 Builder::ensure_is_type_comparable(AstIndex location, TypeIndex type) { return true; }
 
 void Builder::env_populate_with_builtins(Env<Declaration> *env) {
   // clang-format on
@@ -680,8 +946,8 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
   }
 
   auto old_node_index = *value;
-  auto node_index     = nodes->alloc();
-  *value     = node_index;
+  auto ast_index     = nodes->alloc();
+  *value     = NodeIndex::from_ast_index(ast_index);
 
   auto   val_idx           = alloc_type(expected.type);
 
@@ -689,9 +955,9 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
   cast.type_dst = NodeIndex::from_value(val_idx);
   cast.value    = old_node_index;
 
-  nodes->type(node_index) = expected.type;
+  nodes->type(ast_index) = expected.type;
   nodes->set(
-    node_index,
+    ast_index,
     {
       Ast_cast,
       {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
@@ -705,9 +971,9 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
 
 TypeIndex Builder::get_type(NodeIndex node_index) {
   if (node_index.kind == NodeIndex_ast) {
-    return nodes->type(node_index);
+    return nodes->type(node_index.as_ast_idx());
   } else {
-    Value *v = values->get(node_index.idx.value);
+    Value *v = values->get(node_index.as_value_idx());
     return v->type;
   }
 }
@@ -733,7 +999,7 @@ b32 Builder::eval_cast(TypeIndex type_idx_dst, ValueIndex val_idx, ValueIndex *r
     auto data   = values->alloc_data(types->size_info(type_idx_dst));
     *cast_value = {.type = type_idx_dst, .data = data};
 
-    memcpy(data, val->data, sizeof(NodeIndex));
+    memcpy(data, val->data, sizeof(AstIndex));
 
     return true;
   }

@@ -115,7 +115,7 @@ template<typename T> constexpr T round_up_to_nearest_power_of_two(T x) {
     return 1;
   }
 
-  return 1 << bitwidth(x);
+  return cast<T>(1) << bitwidth(x);
 }
 template<typename T> constexpr b32 is_zero_or_power_of_two(T x) { return ((((x)-1) & (x)) == 0); }
 
@@ -193,9 +193,12 @@ struct Str {
 #define STR(s) Str_make(s)
 
 ttld_inline b32 str_eq(Str a, Str b) {
-  b32 is_same_len     = a.len() == b.len();
+  if (a.len() != b.len()) {
+    return false;
+  }
+
   b32 is_same_content = memcmp(a.str, b.str, a.len()) == 0;
-  return is_same_len && is_same_content;
+  return is_same_content;
 }
 
 template<typename T> struct Slice {
@@ -304,8 +307,8 @@ struct Arena {
   void init(usize reserve_size);
   void deinit();
 
-  usize commit_size() const { return ptr_diff(commit_end, at); }
-  usize reserve_size() const { return ptr_diff(reserve_end, at); }
+  usize commit_size() const { return ptr_diff(commit_end, base); }
+  usize reserve_size() const { return ptr_diff(reserve_end, base); }
 
   void commit(usize commit_size);
 
@@ -364,7 +367,7 @@ template<typename T> struct ObjectPool {
 
   T *alloc() {
     if (freelist == nullptr) {
-      grow(KiB(2));
+      grow(1000);
     }
 
     Item *p  = freelist;

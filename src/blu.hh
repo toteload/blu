@@ -8,11 +8,13 @@
 #include "index.hh"
 #include "string_interner.hh"
 
+struct Tag_AstIndex {};
 struct Tag_ValueIndex {};
 struct Tag_TypeIndex {};
 struct Tag_TokenIndex {};
 
 using NodeIndexT = u32;
+using AstIndex   = Index<NodeIndexT, Tag_AstIndex>;
 using ValueIndex = Index<NodeIndexT, Tag_ValueIndex>;
 using TypeIndex  = Index<u32, Tag_TypeIndex>;
 using TokenIndex = Index<u32, Tag_TokenIndex>;
@@ -28,7 +30,7 @@ struct NodeIndex {
 
   // An index value of 0 means not valid.
   union {
-    NodeIndexT ast;
+    AstIndex   ast;
     ValueIndex value;
   } idx;
 
@@ -38,6 +40,11 @@ struct NodeIndex {
   ValueIndex as_value_idx() const {
     Assert(kind == NodeIndex_value);
     return idx.value;
+  }
+
+  AstIndex as_ast_idx() const {
+    Assert(kind == NodeIndex_ast);
+    return idx.ast;
   }
 
   static NodeIndex none() {
@@ -51,6 +58,13 @@ struct NodeIndex {
     return {
       .kind = NodeIndex_value,
       .idx  = {.value = value},
+    };
+  }
+
+  static NodeIndex from_ast_index(AstIndex ast) {
+    return {
+      .kind = NodeIndex_ast,
+      .idx  = {.ast = ast},
     };
   }
 };
@@ -574,7 +588,7 @@ struct AstCall {
   SegmentList<NodeIndex> args;
 };
 
-struct AstIndex {
+struct AstIndexData {
   NodeIndex indexable;
   NodeIndex index_at;
 };
@@ -617,7 +631,7 @@ union AstNodeData {
   AstAtom            identifier;
   AstFieldAccess     access;
   AstCall            call;
-  AstIndex           index;
+  AstIndexData       index;
   AstUnaryOp         unary_op;
   AstBinaryOp        binary_op;
   AstFunction        function;
@@ -665,20 +679,12 @@ struct AstNodes {
     memset(this, 0, sizeof(*this));
   }
 
-  NodeIndex first_valid_index() const {
-    return {
-      .kind = NodeIndex_ast,
-      .idx  = {.ast = 1},
-    };
-  }
+  AstIndex first_valid_index() const { return {.idx = 1}; }
 
   usize len() { return kinds.len(); }
 
-  NodeIndex alloc() {
-    NodeIndex res = {
-      .kind = NodeIndex_ast,
-      .idx  = {.ast = cast<u32>(kinds.len())},
-    };
+  AstIndex alloc() {
+    AstIndex res = {.idx = cast<u32>(kinds.len())};
 
     kinds.push(segment_allocator);
     spans.push(segment_allocator);
@@ -688,16 +694,16 @@ struct AstNodes {
     return res;
   }
 
-  void set(NodeIndex idx, AstNode node) {
-    kinds[idx.idx.ast] = node.kind;
-    spans[idx.idx.ast] = node.span;
-    datas[idx.idx.ast] = node.data;
+  void set(AstIndex idx, AstNode node) {
+    kinds[idx.idx] = node.kind;
+    spans[idx.idx] = node.span;
+    datas[idx.idx] = node.data;
   }
 
-  AstKind          &kind(NodeIndex idx) { return kinds[idx.idx.ast]; }
-  Span<TokenIndex> &span(NodeIndex idx) { return spans[idx.idx.ast]; }
-  AstNodeData      &data(NodeIndex idx) { return datas[idx.idx.ast]; }
-  TypeIndex        &type(NodeIndex idx) { return types[idx.idx.ast]; }
+  AstKind          &kind(AstIndex idx) { return kinds[idx.idx]; }
+  Span<TokenIndex> &span(AstIndex idx) { return spans[idx.idx]; }
+  AstNodeData      &data(AstIndex idx) { return datas[idx.idx]; }
+  TypeIndex        &type(AstIndex idx) { return types[idx.idx]; }
 };
 
 constexpr char const *ast_string[Ast_kind_max + 1] = {
@@ -753,13 +759,6 @@ struct ParseContext {
 };
 
 b32 parse_root(ParseContext *ctx, Tokens *tokens, AstNodes *out);
-
-ttld_inline b32 eq_node_index(void *context, NodeIndex a, NodeIndex b) {
-  return a.kind == b.kind && a.idx.ast == b.idx.ast;
-}
-ttld_inline u32 hash_node_index(void *context, NodeIndex a) {
-  return (cast<u32>(a.kind) << 30) | a.idx.ast;
-}
 
 // How are different types stored in memory?
 //
@@ -859,9 +858,12 @@ template<typename T> struct Env {
 
   bool lookup(StrKey identifier, T *out) {
     T   *p;
-    auto res = lookup_ptr(identifier, &p);
-    *out     = *p;
-    return res;
+    auto found = lookup_ptr(identifier, &p);
+    if (!found) {
+      return false;
+    }
+    *out = *p;
+    return found;
   }
 
   bool lookup_ptr(StrKey identifier, T **out) {
@@ -1077,6 +1079,7 @@ struct Builder {
   b32 eval_call(
     Env<Declaration> *env, ValueIndex function, Slice<ValueIndex> args, ValueIndex *result
   );
+  b32 eval_binary_op(BinaryOpKind op, ValueIndex lhs, ValueIndex rhs, ValueIndex *result);
 
   b32 check_and_eval_expression(
     Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
@@ -1095,6 +1098,7 @@ struct Builder {
   b32 ensure_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual);
   b32 ensure_is_valid_cast(NodeIndex at, TypeIndex type_dst, TypeIndex type_expr);
   b32 ensure_is_assignable(NodeIndex node_index);
+  b32 ensure_is_type_comparable(AstIndex location, TypeIndex type);
 
   b32 check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value);
   b32 check_unification(

@@ -1,13 +1,5 @@
-## The plan
-
-Build an AST interpreter first.
-Performance is not that important.
-It is not compiled ahead of time.
-
 ### In progress notes
 
-- [ ] Get `if_else.blu` to run.
-- [ ] Get `arithmetic.blu` to run.
 
 ### Basic
 
@@ -39,27 +31,26 @@ It is not compiled ahead of time.
 
 ### Types
 
-- [ ] `struct` type
 - [ ] Allow type annotations on params on function literals and a return type annotation.
 - [ ] Update declaration syntax to allow optional omission of declaration type.
+- [ ] `struct` type
 - [ ] `enum` definitions.
   - I think something like `Direction := enum { north, east, south, west }` is good.
   - Effectively, the enum values are named integer constants. So `Direction` does not have a size.
+    - Then what is the type of `Direction`? I am guessing `distinct enum`.
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
-  - Sized booleans? `u32(bool)`
+  - Sized booleans? `u32(bool)`. `bool := enum { false, true }` 
 
 ### Metaprogramming
 
-- [ ] Add `const` expression.
-  - Similar to zig, this will run the expression at compile time. In order to weave the compile time evaluated values
-    into the AST I want to change `NodeIndex` such that it can refer to both AST nodes and values.
+- [ ] Add `eval` keyword and `const` qualifier.
 
 ### Misc
 
 - [x] Make the TypeIndex invalid value 0.
 - [x] Make the TokenIndex invalid value 0.
-- [x] Add tests to check that integer overflows are caught at runtime.
-- [x] Add tests to check that out of range integer casts at runtime.
+- [ ] Add tests to check that integer overflows are caught at runtime.
+- [ ] Add tests to check that out of range integer casts are caught at runtime.
 - [ ] Properly free values that are no longer used in the interpreter.
 
 ### Errors

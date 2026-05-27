@@ -91,11 +91,24 @@ struct AstPrinter {
     }
   }
 
+  void print_value(ValueIndex value) {
+    char buf[256] = {0};
+    u32  len      = values->value_to_string(types, value, buf, 256);
+    printf("%.*s", cast<int>(len), buf);
+  }
+
   void print(NodeIndex node, bool print_type = false);
 
   void print_binop_operand(NodeIndex node, u8 parent_group, bool is_right) {
-    if (nodes->kind(node) == Ast_binary_op) {
-      u8   child_group = binop_prec_group(nodes->data(node).binary_op.kind);
+    if (node.kind == NodeIndex_value) {
+      print_value(node.as_value_idx());
+      return;
+    }
+
+    AstIndex ast_index = node.as_ast_idx();
+
+    if (nodes->kind(ast_index) == Ast_binary_op) {
+      u8   child_group = binop_prec_group(nodes->data(ast_index).binary_op.kind);
       bool need_parens = child_group > parent_group || (child_group == parent_group && is_right);
       if (need_parens) {
         fputs("{", stdout);
@@ -108,30 +121,38 @@ struct AstPrinter {
   }
 
   void print_unary_operand(NodeIndex node) {
-    auto kind = nodes->kind(node);
+    if (node.kind == NodeIndex_value) {
+      print_value(node.as_value_idx());
+      return;
+    }
+
+    AstIndex ast_index = node.as_ast_idx();
+
+    auto kind = nodes->kind(ast_index);
     if (kind == Ast_binary_op || kind == Ast_unary_op) {
       fputs("{", stdout);
       print(node, true);
       fputs("}", stdout);
       return;
     }
+
     print(node, true);
   }
 };
 
 void AstPrinter::print(NodeIndex node, bool print_type) {
   if (node.kind == NodeIndex_value) {
-    char buf[256] = {0};
-    u32  len      = values->value_to_string(types, node.idx.value, buf, 256);
-    printf("%.*s", cast<int>(len), buf);
+    print_value(node.as_value_idx());
     return;
   }
 
-  auto kind = nodes->kind(node);
-  auto data = nodes->data(node);
+  auto ast_index = node.as_ast_idx();
+
+  auto kind = nodes->kind(ast_index);
+  auto data = nodes->data(ast_index);
 
   if (mode == Print_with_types && print_type) {
-    TypeIndex type_idx = nodes->type(node);
+    TypeIndex type_idx = nodes->type(ast_index);
     esc_code(36);
     if (type_idx.idx == 0) {
       printf("{?}");
@@ -364,7 +385,7 @@ struct TablePrinter {
 
 void TablePrinter::print() {
   for (u32 i = 1; i < nodes->len(); i++) {
-    NodeIndex idx  = {.kind = NodeIndex_ast, .idx = {.ast = i}};
+    AstIndex idx  = {.idx=i};
     auto      kind = nodes->kind(idx);
     printf("%4d | %16s | ", i, ast_kind_string(kind));
     print_node_data(kind, nodes->data(idx));

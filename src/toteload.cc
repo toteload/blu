@@ -4,7 +4,7 @@
 
 // stddef.h HAS TO BE INCLUDED.
 // This is some sort of clang + MSVC mixup, I think.
-// If I don't included this I get an error saying that 'std' is not a namespace for nullptr...
+// If I don't include this I get an error saying that 'std' is not a namespace for nullptr or something.
 #include <stddef.h>
 
 namespace ttld::os {
@@ -16,6 +16,7 @@ SYSTEM_INFO sys_info;
 u32 page_size() {
   if (!is_sys_info_initialized) {
     GetSystemInfo(&sys_info);
+    is_sys_info_initialized = true;
   }
 
   return sys_info.dwPageSize;
@@ -156,7 +157,7 @@ void *Arena::raw_alloc(usize byte_size, u32 align) {
   }
 
   if (at_after_alloc >= reserve_end) {
-    // TODO OOM
+    Panic("Out of memory");
     return NULL;
   }
 
@@ -167,8 +168,6 @@ void *Arena::raw_alloc(usize byte_size, u32 align) {
 
   // TODO check for error? Can this even realistically happen?
   ttld::os::mem_commit(commit_end, commit_size);
-
-  memset(commit_end, 0xaa, commit_size);
 
   at = at_after_alloc;
   commit_end = ptr_offset(commit_end, commit_size);

@@ -1,163 +1,388 @@
-# Code Audit: `src/` — Bugs and Security Issues
+# Codebase Audit
+
+Performed on 2025-05-27 against the `const-eval` branch.
+Files excluded: `interpreter.cc`, `typecheck.cc`.
+
+---
+
+## Critical — Crashes or silent data corruption
+
+### 1. `Env::lookup` dereferences uninitialized pointer on failed lookup
+
+`src/blu.hh:861-866`
+
+```cpp
+bool lookup(StrKey identifier, T *out) {
+  T   *p;
+  auto res = lookup_ptr(identifier, &p);
+  *out     = *p;   // p is uninitialized when res == false
+  return res;
+}
+```
+
+If the identifier is not found, `lookup_ptr` returns `false` and never writes to `p`.
+The next line dereferences whatever garbage `p` contains.
+
+### 2. `str_eq` reads past the shorter buffer
+
+`src/toteload.hh:195-199`
+
+```cpp
+b32 is_same_len     = a.len() == b.len();
+b32 is_same_content = memcmp(a.str, b.str, a.len()) == 0;
+return is_same_len && is_same_content;
+```
+
+Both variables are evaluated eagerly.
+When `b` is shorter than `a`, `memcmp` reads past `b`'s valid memory.
+Fix: short-circuit (`if (!is_same_len) return false;`) or use `min(a.len(), b.len())`.
+
+### 3. `Arena::commit_size()` returns remaining space but `Arena::commit()` treats it as total
+
+`src/toteload.hh:307` / `src/toteload.cc:135-147`
+
+```cpp
+// Returns remaining committed-but-unallocated bytes
+usize commit_size() const { return ptr_diff(commit_end, at); }
+```
+
+```cpp
+void Arena::commit(usize commit_size_in_bytes) {
+  ...
+  usize current_commit_size = commit_size();       // remaining, not total
+  if (rounded_commit_size <= current_commit_size) { // compared against desired total
+    return;
+  }
+  ttld::os::mem_commit(base, rounded_commit_size);
+  commit_end = ptr_offset(base, rounded_commit_size); // can move commit_end BACKWARDS
+}
+```
+
+After the arena has allocated some bytes, `commit_size()` returns a small number.
+A caller passing a modest total (e.g. `ArenaItemPool::reserve_index`) can cause `commit_end` to be set to an address before `at`, corrupting the arena's internal state.
+
+### 4. `HashMap::first_valid_entry()` skips bucket at index 0
+
+`src/hashmap.hh:58-69`
+
+```cpp
+Bucket<K, V> const *next(Bucket<K, V> const *at) const {
+  u32 i_at = ptr_diff(at, buckets) / sizeof(Bucket<K, V>);
+  for (u32 i = i_at + 1; i < cap(); i++) { // starts at i_at + 1
+```
+
+```cpp
+Bucket<K, V> const *first_valid_entry() const { return next(buckets); }
+```
+
+`next(buckets)` computes `i_at = 0`, then starts from index 1.
+Any entry hashed to bucket 0 is silently skipped during iteration.
+Currently affects the verbose debug output loop in `main.cc:142`.
+
+### 5. `check_and_resolve_coercion` dereferences garbage type when called without a hint
+
+`src/builder.cc:705-715`
+
+When `check_expression` is called without a type hint (e.g. for the value inside `Ast_cast`), `hint.type` is `TypeIndex{0}`.
+`check_and_resolve_coercion` compares the expression's type against `TypeIndex{0}`, finds them unequal, and calls `types->is_coercible_to(type_src, TypeIndex{0})`.
+This calls `types->get(TypeIndex{0})` which returns `list[0]` — a slot reserved by `push_empty()` during init that contains an uninitialized pointer.
+Dereferencing it is undefined behavior.
+
+### 6. `Builder::eval_expression` ignores `lookup` failure for identifiers
+
+`src/builder.cc:106-109`
+
+```cpp
+case Ast_identifier: {
+  auto        key = intern_identifier(data.identifier.token_index);
+  Declaration decl;
+  env->lookup(key, &decl);  // return value ignored
+  *result = decl.node_index.as_value_idx();
+```
+
+If the lookup fails, `decl` is filled with garbage (see issue #1), and `as_value_idx()` asserts or returns nonsense.
+
+### 7. `round_up_to_nearest_power_of_two` has undefined behavior for large inputs
+
+`src/toteload.hh:113-119`
+
+```cpp
+template<typename T> constexpr T round_up_to_nearest_power_of_two(T x) {
+  if (x <= 1) { return 1; }
+  return 1 << bitwidth(x);
+}
+```
+
+`1` is an `int` (32-bit).
+When `x` is large enough that `bitwidth(x) >= 32`, `1 << 32` is undefined behavior.
+For `u64` values the shift can be up to 64.
+Should be `T(1) << bitwidth(x)`.
+
+### 8. `Arena::raw_alloc` returns NULL on OOM — no caller checks
+
+`src/toteload.cc:158-161`
+
+```cpp
+if (at_after_alloc >= reserve_end) {
+  // TODO OOM
+  return NULL;
+}
+```
+
+Every caller blindly writes through the returned pointer.
+An OOM in any arena silently corrupts memory at address 0 or crashes.
+
+---
+
+## High — Incorrect behavior or build failures
+
+### 9. `parse_if_else` fails when if-without-else is at end of tokens
+
+`src/parse.cc:524-525`
+
+```cpp
+TokenKind tok;
+Try(peek(&tok));           // returns false at end-of-tokens
+if (tok != Tok_keyword_else) {
+```
+
+If the if-expression is the last thing in a block and there is no `else`, `peek` returns false (no more tokens) and `Try` propagates the failure as a parse error.
+An `if` without `else` at the end of a file or block is valid and should succeed.
+
+### 10. `parse_type` falls through silently for unexpected tokens after `[`
+
+`src/parse.cc:233-266`
+
+After consuming `[`, only `]` (slice) and `Tok_literal_int` (array) are handled.
+Any other token falls through the entire `case Tok_bracket_open` block without setting the AST node, leaving the output node in an indeterminate state.
+
+### 11. `Builder::eval_binary_op` is not defined for `Builder`
+
+`src/builder.cc:180`
+
+```cpp
+Try(eval_binary_op(binop.kind, lhs, rhs, node_index, result));
+```
+
+`eval_binary_op` is only declared on `Interpreter`, not `Builder`.
+This is a compile error in the current state of `builder.cc` if the `Ast_binary_op` code path is reached during compilation.
+
+### 12. `Arena::raw_alloc` writes debug pattern `0xaa` in all builds
+
+`src/toteload.cc:171`
+
+```cpp
+memset(commit_end, 0xaa, commit_size);
+```
+
+This poisons freshly committed pages in every build, not just debug builds.
+In release builds it wastes time and can mask uninitialized-memory bugs that sanitizers would otherwise catch.
+
+### 13. `type_to_string` missing commas between function parameters
+
+`src/types.cc:76-83`
+
+```cpp
+if (type->function.param_count > 0) {
+  Update(type_to_string(type->function.param_types[0], buf, buf_size));
+}
+for (u32 i = 1; i < type->function.param_count; i += 1) {
+  Update(type_to_string(type->function.param_types[i], buf, buf_size));
+  // no comma printed between parameters
+}
+```
+
+A function type like `(i32, i32): bool` prints as `(i32i32): bool`.
+
+### 14. `parse_i64` has no overflow detection
+
+`src/toteload.cc:223-237`
+
+```cpp
+i64 acc = 0;
+for (u32 i = 0; i < s.len(); i++) {
+  acc *= 10;
+  acc += s[i] - '0';
+}
+```
+
+Very large integer literals in source files silently wrap around.
+
+### 15. `tokenviewer.cc` is completely broken
+
+`src/tools/tokenviewer.cc:218-233`
+
+References `Source` (struct removed), `messages.init` with wrong signature, `messages.source` (field removed), and `tokenize(&messages, text, &tokens)` (wrong signature).
+Also line 213: `arena.init(MiB(1))` re-initializes `arena` instead of `work_arena`.
+
+### 16. `SourceUnit::run_const_code()` defined but not declared
+
+`src/source_unit.cc:114`
+
+The method `bool SourceUnit::run_const_code()` is defined in the `.cc` file but never declared in the `SourceUnit` struct in `blu.hh`.
+This is a compile error if `source_unit.cc` is included in the build.
+
+### 17. `SourceUnit::deinit` doesn't clean up partially initialized state
+
+`src/source_unit.cc:13-38`
+
+If `tokenize()` fails, `tokens` was already `init()`-ed but `stage` stays at `Stage_tokenize`, so `deinit()` won't call `tokens.deinit()` — memory leak.
+Same pattern applies to all subsequent stages: if a stage fails after initializing its resources but before advancing the stage counter, those resources are leaked.
+
+---
+
+## Medium — Semantic bugs or portability issues
+
+### 18. `HashMap::deinit` and `grow_and_rehash` pass wrong size to `alloc.free`
+
+`src/hashmap.hh:107-109, 238-239`
+
+```cpp
+u32 byte_size = cap * (sizeof(Bucket<K, V>) + sizeof(u32));
+alloc.free(buckets, byte_size);
+```
+
+`alloc.free<Bucket<K,V>>(buckets, byte_size)` internally does `raw_free(p, byte_size * sizeof(Bucket<K,V>))`.
+The intent is to pass the total byte size, but the template multiplies again by `sizeof(T)`.
+Not harmful with the current `stdlib_alloc` (which ignores size in `free`), but would corrupt state with a size-aware allocator.
+
+### 19. `ObjectPool::grow(KiB(2))` allocates 2048 items, not 2 KiB of items
+
+`src/toteload.hh:367`
+
+`KiB(2)` is 2048.
+If `Item` (a union of `T` and `Item*`) is large, this allocates `sizeof(Block) + 2048 * sizeof(Item)` bytes in a single malloc — potentially many megabytes.
+
+### 20. No Linux platform support
+
+`src/toteload.cc:10-64`
+
+Only `_WIN32` and `__APPLE__` are handled.
+On Linux, `page_size()`, `mem_reserve()`, `mem_commit()`, and `mem_release()` are undefined — linker errors.
+
+### 21. Windows `VirtualFree` called with wrong flags
+
+`src/toteload.cc:34`
+
+```cpp
+VirtualFree(p, size, MEM_RELEASE);
+```
+
+When using `MEM_RELEASE`, the size parameter must be 0.
+Passing non-zero silently fails the call, leaking the virtual memory.
+
+### 22. Windows `is_sys_info_initialized` never set to true
+
+`src/toteload.cc:14-19`
+
+`GetSystemInfo` is called every time `page_size()` is invoked because the flag is never set.
+
+### 23. `TypeInterner::deinit()` is empty
+
+`src/types.cc:290`
+
+All interned types allocated via `storage.raw_alloc` are leaked.
+The `map` and `list` are also not cleaned up.
+
+### 24. `StringInterner::deinit()` leaks storage memory
+
+`src/string_interner.cc:16-21`
+
+Has a TODO acknowledging the leak.
+All strings copied into `storage` are never freed.
+
+### 25. `Arena::push_format_string` truncates length to `u32`
+
+`src/toteload.cc:193`
+
+```cpp
+return { s, cast<u32>(len), };
+```
+
+`Str._len` is `usize` (64-bit on most platforms).
+The cast silently truncates for strings exceeding 4 GB (unlikely, but semantically wrong).
+
+### 26. Zero-length arrays are non-standard C++
+
+`src/blu.hh:185, 189` / `src/toteload.hh:352`
+
+`TypeIndex param_types[0]`, `TypeIndex item_types[0]`, `Item items[0]` — flexible array members are a C99 feature, not valid C++.
+Works on GCC/Clang as an extension but is not portable.
+
+### 27. `ObjectPool::allocation_count` is never initialized or used
+
+`src/toteload.hh:358`
+
+Dead field.
+
+---
+
+## Low — Resource management, style, minor issues
+
+### 28. `read_file` leaks file handle and memory on error paths
+
+`src/utils/stdlib.cc:16-48`
+
+- If `malloc(size + 1)` returns null, `fclose(f)` is never called.
+- If `fread` reads fewer bytes than expected, `data` is leaked (only `buf` is freed).
+
+### 29. `read_file` uses `ftell` stored in `u32`
+
+`src/utils/stdlib.cc:29`
+
+`ftell` returns `long` (signed), cast to `u32`.
+Returns -1 on error, which becomes `UINT32_MAX`.
+Files larger than 2 GB are also silently mishandled.
+
+### 30. `main.cc` doesn't clean up most resources on exit
+
+`src/main.cc`
+
+Arenas, tokens, nodes, strings, types, envs, values, and messages are allocated but never `deinit`-ed.
+The OS reclaims everything on process exit, but this makes leak-detection tools noisy.
+
+### 31. `Queue::pop_front` is O(n)
+
+`src/vector.hh:29-37`
+
+`shift_left()` does a `memmove` of the entire backing array.
+Fine for small queues, but degrades badly at scale.
+
+### 32. `VMemBlock::ensure_commited` — typo
+
+`src/toteload.cc:82`
+
+"commited" should be "committed".
+
+### 33. `Str::is_ok()` returns false for valid empty strings
+
+`src/toteload.hh:161`
+
+`return str && _len;` — an empty string with a valid pointer returns false.
+This is inconsistent with `is_empty()` which only checks length.
+
+### 34. `tokenviewer` leaks `StringBuilder` buffers
+
+`src/tools/tokenviewer.cc`
+
+Multiple `StringBuilder` objects are created, their internal `Vector<char>` is heap-allocated, but `deinit` is never called.
+
+### 35. `tokenviewer` XSS
+
+`src/tools/tokenviewer.cc:138-141`
+
+Source text is inserted into HTML unescaped.
+Source code containing `<script>` tags would execute.
+Not user-facing, but worth noting.
+
+---
 
 ## Summary
 
-Blu is an early-stage, single-user interpreter for `.blu` source files.
-It has no networking, no privilege boundary, and no untrusted code execution surface beyond the source file passed on the command line, so most findings are correctness/robustness issues rather than security vulnerabilities in the classical sense.
-That said, several findings would let a crafted input file crash, hang, or corrupt the process, and a few are real C/C++ memory-safety footguns sitting in the foundational utilities that everything else builds on.
-
-Findings are organized by category and ranked by impact (Critical / High / Medium / Low).
-"Critical" means definitely-broken-now or trivially-exploitable; "High" means a correctness bug that almost certainly fires on real input; "Medium/Low" are latent or quality-of-implementation issues.
-
-Note: `interpreter.cc`, `source_unit.cc`, and `typecheck.cc` are commented out of `build.py` and don't even compile against the current `blu.hh`, so they were excluded from severity ranking (they're dead code).
-
----
-
-## 1. Memory safety / undefined behavior
-
-### High
-
-- **`src/types.cc:21-31` — `Update` macro in `type_to_string` advances `buf` by 0 on overflow.**
-  ```cpp
-  if (_offset >= buf_size) {
-    buf_size  = 0;
-    buf      += buf_size;   // adds 0 — should be _offset
-  } else { ... }
-  ```
-  After a truncating write, subsequent `snprintf` calls write *over the previous chars* (technically harmless because `buf_size == 0` from then on and `snprintf` with size 0 writes nothing, but the intent is clearly broken and the pattern is bug-prone).
-
-- **`src/types.cc:96-124` — `size_info` returns wrong sizes for arrays and sequences.**
-  `Type_array` returns `sizeof(void*)` (8 bytes) — arrays are stored inline so this should be `stride(base) * size`.
-  `Type_sequence` falls through to a `Todo()` that returns `{}` (size 0), but coercion paths actually use sequences.
-
-- **`src/parse.cc:222-256` — `parse_type` silently succeeds with an uninitialized node.**
-  After `Tok_bracket_open`, if the next token is neither `Tok_bracket_close` nor `Tok_literal_int`, the switch case falls through without calling `nodes->set(...)`.
-  The function returns `true` and `*out` references a node whose `kind/span/data` are whatever `push_empty()` left there.
-  Later passes will misinterpret it.
-
-- **`src/messages.cc:5-18` — `count_args` is fragile.**
-  Counts every literal `}` in the format string, including the second `}` of a `{{` (which `next_arg_offset` actually treats as an escape) and any stray `}`.
-  `_error` then reads exactly that many `va_arg`s — wrong count → reads uninitialized stack memory.
-
-- **`src/builder.cc:94-99` — `eval_expression` for `Ast_identifier` ignores `env->lookup` result.**
-  `env->lookup(key, &decl)` return value is discarded; if lookup fails `decl` is uninitialized and `decl.node_index.as_value_idx()` returns garbage.
-  `Env::lookup` itself dereferences a NULL `p` (`*out = *p`) when `map.get_ptr` returns NULL — see `blu.hh:859-864`.
-
-- **`src/blu.hh:859-864` — `Env::lookup` dereferences NULL on miss.**
-  ```cpp
-  bool lookup(StrKey identifier, T *out) {
-    T *p;
-    auto res = lookup_ptr(identifier, &p);
-    *out = *p;     // crashes when lookup_ptr returned false → p never assigned
-    return res;
-  }
-  ```
-
-- **`src/hashmap.hh:53` — `HashMap::get(k)` dereferences NULL on miss.**
-  `V get(K key) { return *get_ptr(key); }` with `get_ptr` returning `nullptr` on miss.
-
-### Medium
-
-- **`src/messages.cc:49-65` — `find_source_location` asserts `offset < source.len()`** but is called for end-of-file tokens (whose span may equal `source.len()`).
-
-- **`src/utils.cc:19-40` — `string_literal_byte_size` / `decode_string_literal` underflow on empty literals.**
-  `for (usize i = 1; i < literal.len() - 1; ...)`: if `literal.len() < 2` then `len() - 1` wraps to `SIZE_MAX`.
-  Practically the tokenizer only emits length-≥2 string tokens, but no preconditions are checked.
-
-- **`src/tokenize.cc:101-154` — multi-char operators read past EOF via the source's null terminator.**
-  `if (c == '=') { if (*at == '=') ... }` only works because `read_file` happens to null-terminate.
-  Any tokenizer entry point that bypasses `read_file` would read OOB.
-
-- **`src/tokenize.cc:156-174` — string literal with EOF after `\\` calls `Todo()` (abort).**
-  Malformed source crashes the process instead of producing an error message.
-
-- **`src/toteload.cc:170-184` — `parse_i64` has no overflow check, no validation, returns 0 for empty string.**
-  Allows literal `"99999999999999999999"` (more than `i64`) to produce undefined wrapping.
-
-- **`src/blu.hh:34-35` — `NodeIndex::is_some()` always reads `idx.value.is_some()`** regardless of `kind`.
-  Works because both union members have `idx` at the same offset, but is type-unsafe and a refactoring hazard.
-
-### Low
-
-- **`src/ast_pretty_print.cc:85-86` — ANSI escape codes (`esc_code`) emitted unconditionally**, garbling output when stdout isn't a TTY.
-
-- **`src/ast_pretty_print.cc:396-446` — `%lu` used for `usize len()`**; `usize` is `u64` on macOS/Linux but `unsigned long` is 32-bit on Windows.
-
-- **`src/index.hh:19-25` — index `0` is the sentinel for `none()`**, so the zeroth element of every backing store is unusable.
-  Consistently respected today (stores skip slot 0), but a foot-gun.
-
----
-
-## 2. Error handling / robustness
-
-### High
-
-- **`src/builder.cc:539-718` (`eval_cast`) — every unimplemented cast path is a `Todo()` (abort)** rather than producing a typed error.
-  Crafted-but-type-correct source can hit them.
-- **`src/builder.cc:43, 55, 143, 152, 396` — many normal user errors are `Todo()`** (e.g. duplicate top-level declaration, missing identifier, circular declaration).
-  User input that isn't pristine aborts the process.
-- **`src/typecheck.cc` (entire file) — references fields that don't exist on the current `Declaration`/`NodeIndex` types** (`Declaration::kind`, `Declaration::data`, `NodeIndex_ast_node`, `is_const(node)`).
-  It's commented out of the build, but it lives in `src/` and will be confusing/dangerous to anyone trying to revive it.
-- **`src/messages.cc:67-138` — non-`Error` severities call `Todo()`.**
-  Once `Warning`/`Info` are issued they'll abort.
-
-### Medium
-
-- **`src/parse.cc:299, 624-630, 679` — many parse errors return `false` without emitting any message.**
-  Caller in `main.cc` just prints `"error: parsing"` with no location.
-- **`src/tokenize.cc:209, 236` — `TokResult_unrecognized_token`** is detected but never reported (`// TODO add message of unrecognized token if necessary`).
-  Unknown chars silently truncate the token stream.
-
----
-
-## 3. Resource / lifecycle
-
-### High
-
-- **`src/utils/stdlib.cc:21-48` — `read_file` file-handle and buffer leaks** (covered above).
-
-### Medium
-
-- **`src/string_interner.cc:16-21` — `deinit` explicitly leaks** (`// TODO Currently we are leaking the storage memory`).
-  Not a security issue in a short-lived process but is technical debt.
-- **`src/builder.cc:134-182` — `resolve_declaration` sets `ResolveStatus_type_resolving` but does not reset it on error.**
-  Re-entry after error returns `false` via the `Todo()` in the `resolving` branch.
-  Tolerable today because we exit on first error.
-
----
-
-## 4. Concurrency / signals
-
-None — code is single-threaded throughout.
-Globals (`stdlib_alloc`, `macos_page_size`) use no synchronization, which is fine as long as that holds.
-
----
-
-## 5. Security-relevant observations
-
-This is not a sandbox or a network service.
-The only attacker-controlled input is the source file path and contents.
-Concrete exposure:
-
-- **Process crash via malformed source**: most `Todo()`/`Unreachable()`/assertion sites in the tokenizer/parser/typechecker are reachable with crafted input (`Tokenize::Todo()` on dangling backslash, `parse_type` returning uninit, every `Todo()` cast).
-- **DoS via hashmap rehash loop**: the `hashmap.hh:190-209` infinite loop is reachable via a long enough sequence of declarations that hash-collide on the low bits.
-- **No format-string vulnerabilities** — `printf`/`snprintf` always take constant format strings or use the safe `%.*s` pattern.
-- **No `system`/`exec`/`popen` calls.**
-- **No untrusted code execution** — the interpreter walks an AST it just parsed; the only side effect is `#print`.
-
-The biggest realistic security risk is `read_file`: reading `ftell` into a `u32` and `malloc`ing `size + 1` would integer-overflow on a 4GB+ file (returning a small allocation and then `fread`-ing into it), enabling a heap buffer overflow if an attacker can hand the binary such a file.
-
----
-
-## Recommendation priorities
-
-If triaging just a handful of fixes, in order:
-
-1. ~Fix `ttld::os::mem_commit` on macOS (return value inverted) — `src/toteload.cc:57-59`.~
-2. ~Fix `arena_alloc_fn` free/realloc unreachable branch — `src/toteload.cc:147-161`.~
-3. Fix the infinite-loop in `HashMap::grow_and_rehash` and the NULL-deref in `HashMap::get` / `Env::lookup`.
-4. ~Fix `Vector::ensure_capacity` to record the actual allocated capacity.~
-5. Fix `read_file`'s leaks and `u32` size truncation; null-check `fopen` in `write_file`.
-6. ~Fix `Builder::eval_cast`'s array-to-slice `items = v->data` (should be `val->data`).~
-7. Fix `parse_type`'s silent-success-with-uninitialized-node fall-through.
-8. ~Replace user-facing `Todo()` calls in builder/parser with real diagnostics.~
+| Severity | Count |
+|----------|-------|
+| Critical | 8     |
+| High     | 9     |
+| Medium   | 10    |
+| Low      | 8     |
+| **Total**| **35**|

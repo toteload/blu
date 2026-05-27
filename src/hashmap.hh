@@ -66,7 +66,16 @@ template<typename K, typename V, KeyCmpFn<K> cmp_key, HashFn<K> hash_key> struct
 
     return end();
   }
-  Bucket<K, V> const *first_valid_entry() const { return next(buckets); }
+
+  Bucket<K, V> const *first_valid_entry() const {
+    for (u32 i = 0; i < cap(); i++) {
+      if (is_occupied(meta[i])) {
+        return &buckets[i];
+      }
+    }
+
+    return end();
+  }
 
   Bucket<K, V> *insert_key_and_get_bucket(K key, b32 *was_occupied);
   Bucket<K, V> *remove_key(K key);
