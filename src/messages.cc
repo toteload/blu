@@ -65,17 +65,23 @@ SourceLocation find_source_location(Str source, u32 offset) {
 }
 
 void Messages::print_message(MessageContext *ctx, Message *msg) {
+  // clang-format off
   switch (msg->severity) {
-  case Error:
-    printf("[error] ");
-    break;
+  case Error:   printf("[error] "); break;
+  case Warning: printf("[warn] ");  break;
+  case Info:    printf("[info] ");  break;
   }
+  // clang-format on
 
   switch (msg->location.kind) {
   case MessageLocation_none:
     break;
   case MessageLocation_node_index: {
-    auto token_span = ctx->nodes->span(msg->location.data.node_index);
+    auto node_index = msg->location.data.node_index;
+    if (node_index.kind == NodeIndex_value) {
+      break;
+    }
+    auto token_span = ctx->nodes->span(node_index);
     auto span       = ctx->tokens->span(token_span.start);
     auto loc        = find_source_location(ctx->text, span.start);
     printf("%d:%d: ", loc.line, loc.col);

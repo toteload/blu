@@ -11,6 +11,8 @@ struct Tokenizer {
   char const *at;
   char const *end;
 
+  Messages *messages;
+
   void init(Str source);
 
   TokenizerResult next(TokenKind *kind, Span<u32> *span);
@@ -166,7 +168,7 @@ TokenizerResult Tokenizer::next(TokenKind *kind, Span<u32> *span) {
 
     if (is_at_end()) {
       messages->error("End of source encountered while parsing string literal.");
-      return
+      return TokResult_error;
     }
 
     step();

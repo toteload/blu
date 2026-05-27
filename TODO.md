@@ -6,8 +6,8 @@ It is not compiled ahead of time.
 
 ### In progress notes
 
-- [ ] Get `arithmetic.blu` to run.
 - [ ] Get `if_else.blu` to run.
+- [ ] Get `arithmetic.blu` to run.
 
 ### Basic
 
@@ -46,6 +46,7 @@ It is not compiled ahead of time.
   - I think something like `Direction := enum { north, east, south, west }` is good.
   - Effectively, the enum values are named integer constants. So `Direction` does not have a size.
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
+  - Sized booleans? `u32(bool)`
 
 ### Metaprogramming
 

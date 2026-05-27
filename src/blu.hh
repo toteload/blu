@@ -1050,6 +1050,10 @@ struct Builder {
 
   struct {
     TypeHint hint_nil;
+
+    struct {
+      ValueIndex nil;
+    } val;
   } common;
 
   void init();

@@ -182,9 +182,6 @@ Str Arena::push_format_string(char const *format, ...) {
   i32 len = vsnprintf(nullptr, 0, format, vl);
   va_end(vl);
 
-  // Should never happen.
-  Assert(len >= 0);
-
   va_start(vl, format);
   char *s = alloc<char>(len+1);
   vsnprintf(s, len+1, format, vl);

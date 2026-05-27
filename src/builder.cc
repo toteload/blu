@@ -9,6 +9,15 @@ void Builder::init() {
     .type     = types->type.nil,
     .location = NodeIndex::none(),
   };
+
+  {
+    Value *v;
+    common.val.nil = values->alloc_value(&v);
+    *v             = {
+      .type = types->type.nil,
+      .data = nullptr,
+    };
+  }
 }
 
 void Builder::deinit() {
@@ -96,6 +105,59 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     Declaration decl;
     env->lookup(key, &decl);
     *result = decl.node_index.as_value_idx();
+  } break;
+
+  case Ast_block: {
+    auto &block = nodes->data(node_index).block;
+    if (block.items.len() == 0) {
+      *result = common.val.nil;
+      break;
+    }
+
+    auto env_block = envs->alloc(env);
+    defer(envs->dealloc(env_block));
+
+    auto snapshot = arena_tmp->take_snapshot();
+    defer(arena_tmp->restore(snapshot));
+
+    NodeIndex *defers      = arena_tmp->alloc<NodeIndex>(block.items.len());
+    u32        defer_count = 0;
+
+    ValueIndex last = common.val.nil;
+
+    for (u32 i = 0; i < block.items.len(); i++) {
+      auto item = block.items[i];
+      if (nodes->kind(item) == Ast_defer) {
+        defers[defer_count++] = nodes->data(item).defer.value;
+        last                  = common.val.nil;
+      } else {
+        Try(eval_expression(env_block, item, &last));
+      }
+    }
+
+    *result = last;
+
+    for (u32 i = defer_count; i > 0; i--) {
+      ValueIndex e;
+      Try(eval_expression(env_block, defers[i - 1], &e));
+    }
+  } break;
+
+  case Ast_if_else: {
+    auto if_else = nodes->data(node_index).if_else;
+
+    ValueIndex cond;
+    Try(eval_expression(env, if_else.cond, &cond));
+
+    Value *v = values->get(cond);
+
+    if (*cast<u8 *>(v->data) == 1) {
+      Try(eval_expression(env, if_else.then, result));
+    } else if (if_else.otherwise.is_some()) {
+      Try(eval_expression(env, if_else.otherwise, result));
+    } else {
+      *result = common.val.nil;
+    }
   } break;
 
   default:
@@ -613,10 +675,9 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
   }
 
   if (!types->is_coercible_to(type_src, expected.type)) {
-    Todo();
+    messages->error(*value, "Cannot coerce a {type} to a {type}.", type_src, expected.type);
     return false;
   }
-
 
   auto old_node_index = *value;
   auto node_index     = nodes->alloc();

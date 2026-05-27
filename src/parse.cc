@@ -77,7 +77,12 @@ struct Parser {
     auto cur = at;
 
     TokenKind tok;
-    Try(next(&tok));
+    b32 has_next_token = next(&tok);
+    if (!has_next_token) {
+      messages->error("Expected token {tokenkind}, but encountered end of source.",
+          expected_kind);
+      return false;
+    }
 
     if (tok != expected_kind) {
       messages->error(
@@ -606,7 +611,11 @@ b32 Parser::parse_cast(NodeIndex *out) {
 
 b32 Parser::parse_base_expression(NodeIndex *out) {
   TokenKind tok;
-  Try(peek(&tok));
+  b32 has_next_token = peek(&tok);
+  if (!has_next_token) {
+    messages->error("Unexpected end of source, while trying to parse base expression.");
+    return false;
+  }
 
   NodeIndex base;
   switch (tok) {

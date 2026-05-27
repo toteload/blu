@@ -75,6 +75,13 @@ int main(i32 arg_count, char const *const *args) {
   ValueStore values{};
   values.init(stdlib_alloc);
 
+  MessageContext message_context{};
+  message_context.text    = source_text;
+  message_context.tokens  = &tokens;
+  message_context.nodes   = &nodes;
+  message_context.types   = &types;
+  message_context.strings = &strings;
+
   b32 ok;
   {
     TokenizeContext context{};
@@ -82,7 +89,7 @@ int main(i32 arg_count, char const *const *args) {
     ok               = tokenize(&context, source_text, &tokens);
   }
   if (!ok) {
-    printf("error: tokenization\n");
+    messages.print_messages(&message_context);
     return 1;
   }
 
@@ -92,7 +99,7 @@ int main(i32 arg_count, char const *const *args) {
     ok               = parse_root(&context, &tokens, &nodes);
   }
   if (!ok) {
-    printf("error: parsing\n");
+    messages.print_messages(&message_context);
     return 1;
   }
 
@@ -124,13 +131,7 @@ int main(i32 arg_count, char const *const *args) {
 
   ok = builder.typecheck_and_eval_const_code();
   if (!ok) {
-    MessageContext context;
-    context.text    = source_text;
-    context.tokens  = &tokens;
-    context.nodes   = &nodes;
-    context.types   = &types;
-    context.strings = &strings;
-    messages.print_messages(&context);
+    messages.print_messages(&message_context);
     return 1;
   }
 
@@ -150,20 +151,16 @@ int main(i32 arg_count, char const *const *args) {
   auto        key = strings.add(STR("main"));
   Declaration decl_main;
   b32         found = builder.env_root->lookup(key, &decl_main);
-  Assert(found);
+  if (!found) {
+    messages.error("No 'main' declaration found.");
+    messages.print_messages(&message_context);
+    return 1;
+  }
 
   ValueIndex result;
   ok = builder.eval_call(builder.env_root, decl_main.node_index.as_value_idx(), {}, &result);
   if (!ok) {
-    MessageContext context;
-    context.text    = source_text;
-    context.tokens  = &tokens;
-    context.nodes   = &nodes;
-    context.types   = &types;
-    context.strings = &strings;
-
-    messages.print_messages(&context);
-
+    messages.print_messages(&message_context);
     return 1;
   }
 
