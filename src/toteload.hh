@@ -19,6 +19,8 @@ typedef int32_t  i32;
 typedef uint32_t u32;
 typedef int64_t  i64;
 typedef uint64_t u64;
+typedef __int128_t  i128;
+typedef __uint128_t u128;
 
 typedef uintptr_t usize;
 typedef intptr_t  isize;

@@ -22,7 +22,7 @@ Wants:
 
 - No surprising implicit conversion to 32-bit signed integers.
 - Language provided defer. You don't have to rely on compiler-dependent extensions.
-- A different model to code organization. No header files or includes.
+- A different model to code organization. No header files or text based includes.
 - Primitive slice type.
 - Checking for overflows and out of bounds access.
 
@@ -108,14 +108,3 @@ To facilitate this you can use the same environment as the "builtin identifiers 
 This is convenient, because it automatically gives you detection for identical user-defined top-level identifiers: which are ambiguous and thus illegal.
 As a consequence, the root environment will contain many items relative to block scope or function scope environments.
 This presents an optimization opportunity.
-
-## Ideas
-
-### Coercion of `[1]T` to `T`
-
-This has the benefit of having ASCII character literals for free by using the string literals.
-The type of `"A"` is `[1]u8`
-
-### Coercion of `bool` to integer types
-
-`true -> 1` and `false -> 0`.
