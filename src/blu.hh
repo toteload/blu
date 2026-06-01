@@ -453,6 +453,7 @@ enum AstKind : u8 {
   Ast_unary_op,
   Ast_binary_op,
   Ast_function,
+  Ast_param,
   Ast_if_else,
   Ast_for,
   Ast_defer,
@@ -546,13 +547,15 @@ struct AstLiteralSequence {
   SegmentList<NodeIndex> items;
 };
 
-struct AstFunction {
-  SegmentList<NodeIndex> param_names;
+struct AstParam {
+  TokenIndex name;
+  NodeIndex  type;
+};
 
-  // NOTE: `NodeIndex body` could be removed.
-  // You can say that the next node is the body and then you no longer have to
-  // explicitly reference it.
-  NodeIndex body; // always a block
+struct AstFunction {
+  SegmentList<NodeIndex> params;
+  NodeIndex              return_type;
+  NodeIndex              body;
 };
 
 struct AstIfElse {
@@ -597,10 +600,6 @@ struct AstDefer {
   NodeIndex value;
 };
 
-struct AstAtom {
-  TokenIndex token_index;
-};
-
 struct AstAssign {
   AssignKind kind;
   NodeIndex  lhs;
@@ -626,15 +625,16 @@ union AstNodeData {
   AstDeclaration     declaration;
   AstAssign          assign;
   AstLiteralSequence literal_sequence;
-  AstAtom            literal_int;
-  AstAtom            literal_string;
-  AstAtom            identifier;
+  TokenIndex         literal_int;
+  TokenIndex         literal_string;
+  TokenIndex         identifier;
   AstFieldAccess     access;
   AstCall            call;
   AstIndexData       index;
   AstUnaryOp         unary_op;
   AstBinaryOp        binary_op;
   AstFunction        function;
+  AstParam           param;
   AstIfElse          if_else;
   AstFor             for_;
   AstDefer           defer;
@@ -712,9 +712,9 @@ constexpr char const *ast_string[Ast_kind_max + 1] = {
   "declaration", "assign",         "literal-sequence",
   "literal-int", "literal-string", "identifier",
   "call",        "index",          "unary-op",
-  "binary-op",   "function",       "if-else",
-  "while",       "defer",          "const",
-  "cast",        "illegal",
+  "binary-op",   "function",       "param",
+  "if-else",     "while",          "defer",
+  "const",       "cast",           "illegal",
 };
 
 ttld_inline char const *ast_kind_string(u32 kind) {
@@ -1000,22 +1000,30 @@ ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
 }
 
 enum ResolveStatus : u8 {
-  ResolveStatus_type_unresolved,
-  ResolveStatus_type_resolving,
-  ResolveStatus_type_resolved,
+  ResolveStatus_unresolved,
+  ResolveStatus_resolving_type,
+  ResolveStatus_resolving_value,
+  ResolveStatus_resolved,
 };
 
 struct Declaration {
   ResolveStatus resolve_status;
+  u8            is_const;
+  AstIndex      ast_index;
 
-  u8 is_const;
-
-  // If the resolve status is resolved then `node_index` always references a value.
-  // Otherwise `node_index` references the AstNode with the declaration.
+  // If `resolve_status == ResolveStatus_type_unresolved`
+  // - `value` holds no type.
+  // - `value` holds no data.
   //
-  // The value associated with a resolved declaration always has a type, but
-  // only has accompanied data if the declaration is `const`.
-  NodeIndex node_index;
+  // If `resolve_status == ResolveStatus_type_resolving`
+  // - `value` holds a type if the declaration has a declared type.
+  // - `value` holds no data.
+  //
+  // If `resolve_status == ResolveStatus_type_resolved`
+  // - `value` holds a type.
+  // - `value` holds data.
+
+  ValueIndex value;
 };
 
 struct TypeHint {
@@ -1023,6 +1031,7 @@ struct TypeHint {
   NodeIndex location;
 
   bool is_some() const { return type.is_some(); }
+  bool is_none() const { return type.is_none(); }
 
   static TypeHint none() {
     return {
@@ -1071,7 +1080,9 @@ struct Builder {
     Env<Declaration> *env, NodeIndex *node_index, TypeHint hint = TypeHint::none()
   );
 
-  b32 resolve_declaration(Env<Declaration> *env, TokenIndex identifier, Declaration *declaration);
+  b32 find_declaration(Env<Declaration> *env, TokenIndex identifier, Declaration **decl);
+  b32 resolve_declaration_type(Env<Declaration> *env, Declaration *decl, TypeIndex *type);
+  b32 resolve_declaration(Env<Declaration> *env, TokenIndex identifier);
 
   // Only call `eval_expression` on expressions that have been checked.
   b32 eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueIndex *result);
@@ -1100,13 +1111,9 @@ struct Builder {
   b32 ensure_is_assignable(NodeIndex node_index);
   b32 ensure_is_type_comparable(AstIndex location, TypeIndex type);
 
-  b32 check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value);
-  b32 check_unification(
-    NodeIndex  node_lhs,
-    TypeIndex  type_lhs,
-    NodeIndex  node_rhs,
-    TypeIndex  type_rhs,
-    TypeIndex *type_unified
+  b32 check_and_resolve_coercion(TypeHint expected, NodeIndex *value);
+  b32 check_and_resolve_unification(
+    NodeIndex *node_lhs, NodeIndex *node_rhs, TypeIndex *type_unified
   );
 
   void env_populate_with_builtins(Env<Declaration> *env);
@@ -1116,6 +1123,8 @@ struct Builder {
     Value *v = values->get(value_idx);
     memcpy(dst, v->data, types->size_info(v->type).size);
   }
+
+  void insert_cast(NodeIndex *value, TypeIndex type_dst);
 
   StrKey    intern_identifier(TokenIndex identifier);
   TypeIndex get_type(NodeIndex node_index);

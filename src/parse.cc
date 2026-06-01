@@ -26,29 +26,23 @@ struct Parser {
   b32 parse_base_expression(NodeIndex *out);
   b32 parse_expression(NodeIndex *out, u32 prev_op = Op_count);
   b32 parse_identifier(NodeIndex *out);
+  b32 parse_param(NodeIndex *out);
 
   b32 parse_builtin_print(NodeIndex *out);
 
   // - Helpers -
-
-  void report_error_unexpected_end() {
-    messages->error(at, "Unexpectedly encountered end of tokens.");
-  }
 
   template<typename ParseItem>
   b32 parse_comma_separated_items_until(
     SegmentList<NodeIndex> *items, ParseItem parse, TokenKind terminator
   ) {
     while (true) {
+      consume_if_match(Tok_comma);
+
       TokenKind tok;
-      Try(peek(&tok));
+      b32       has_next = peek(&tok);
 
-      if (tok == Tok_comma) {
-        next();
-        Try(peek(&tok));
-      }
-
-      if (tok == terminator) {
+      if (!has_next || tok == terminator) {
         break;
       }
 
@@ -121,6 +115,18 @@ struct Parser {
     *out = tokens->kind(lookahead);
 
     return true;
+  }
+
+  b32 consume_if_match(TokenKind match) {
+    TokenKind tok;
+    Try(peek(&tok));
+
+    if (tok == match) {
+      next();
+      return true;
+    }
+
+    return false;
   }
 
   b32 is_token_index_end(TokenIndex idx) { return idx.idx == tokens->end().idx; }
@@ -290,8 +296,7 @@ b32 Parser::parse_type(NodeIndex *out) {
     );
   } break;
   case Tok_identifier: {
-    AstAtom identifier;
-    identifier.token_index = at;
+    TokenIndex identifier = at;
 
     next();
 
@@ -349,8 +354,7 @@ b32 Parser::parse_literal_int(NodeIndex *out) {
   auto ast_index = nodes->alloc();
   auto start     = at;
 
-  AstAtom literal_int;
-  literal_int.token_index = at;
+  TokenIndex literal_int = at;
 
   Try(expect_token(Tok_literal_int));
 
@@ -373,8 +377,7 @@ b32 Parser::parse_literal_string(NodeIndex *out) {
   auto ast_index = nodes->alloc();
   auto start     = at;
 
-  AstAtom literal_string;
-  literal_string.token_index = at;
+  TokenIndex literal_string = at;
 
   Try(expect_token(Tok_literal_string));
 
@@ -422,20 +425,51 @@ b32 Parser::parse_literal_sequence(NodeIndex *out) {
   return true;
 }
 
+b32 Parser::parse_param(NodeIndex *out) {
+  auto ast_index = nodes->alloc();
+  auto start     = at;
+
+  AstParam param{};
+  param.name = at;
+
+  Try(expect_token(Tok_identifier));
+
+  if (consume_if_match(Tok_colon)) {
+    Try(parse_type(&param.type));
+  }
+
+  nodes->set(
+    ast_index,
+    {
+      Ast_param,
+      {start, at},
+      {.param = param},
+    }
+  );
+
+  *out = NodeIndex::from_ast_index(ast_index);
+
+  return true;
+}
+
 b32 Parser::parse_function(NodeIndex *out) {
   auto ast_index = nodes->alloc();
   auto start     = at;
 
   AstFunction function;
-  function.param_names.init();
+  function.params.init();
 
   Try(expect_token(Tok_bar));
   Try(parse_comma_separated_items_until(
-    &function.param_names,
-    [this](NodeIndex *out) { return parse_identifier(out); },
+    &function.params,
+    [this](NodeIndex *out) { return parse_param(out); },
     Tok_bar
   ));
   Try(expect_token(Tok_bar));
+
+  if (consume_if_match(Tok_colon)) {
+    Try(parse_type(&function.return_type));
+  }
 
   Try(parse_expression(&function.body));
 
@@ -898,8 +932,7 @@ b32 Parser::parse_identifier(NodeIndex *out) {
   auto ast_index = nodes->alloc();
   auto start     = at;
 
-  AstAtom identifier{};
-  identifier.token_index = at;
+  TokenIndex identifier = at;
 
   Try(expect_token(Tok_identifier));
 

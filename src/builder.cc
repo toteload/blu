@@ -55,9 +55,9 @@ b32 Builder::typecheck_and_eval_const_code() {
       env_root->insert(
         key,
         {
-          .resolve_status = ResolveStatus_type_unresolved,
+          .resolve_status = ResolveStatus_unresolved,
           .is_const       = false,
-          .node_index     = NodeIndex::from_ast_index(idx_item),
+          .ast_index      = idx_item,
         }
       );
     } else {
@@ -73,8 +73,7 @@ b32 Builder::typecheck_and_eval_const_code() {
 
     auto &data = nodes->data(item);
 
-    Declaration decl;
-    Try(resolve_declaration(env_root, data.declaration.name, &decl));
+    Try(resolve_declaration(env_root, data.declaration.name));
   }
 
   return true;
@@ -103,10 +102,12 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
   } break;
 
   case Ast_identifier: {
-    auto        key = intern_identifier(data.identifier.token_index);
+    auto        key = intern_identifier(data.identifier);
     Declaration decl;
-    env->lookup(key, &decl);
-    *result = decl.node_index.as_value_idx();
+    b32 found = env->lookup(key, &decl);
+    Assert(found);
+    Assert(decl.resolve_status == ResolveStatus_resolved);
+    *result = decl.value;
   } break;
 
   case Ast_declaration: {
@@ -116,9 +117,9 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     env->insert(
       key,
       {
-        .resolve_status = ResolveStatus_type_resolved,
+        .resolve_status = ResolveStatus_resolved,
         .is_const       = false,
-        .node_index     = NodeIndex::from_value(value),
+        .value          = value,
       }
     );
     *result = common.val.nil;
@@ -193,6 +194,10 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     Try(eval_expression(env, binop.rhs, &rhs));
 
     Try(eval_binary_op(binop.kind, lhs, rhs, result));
+  } break;
+
+  case Ast_call: {
+    Todo();
   } break;
 
   default:
@@ -391,17 +396,18 @@ b32 Builder::eval_call(
   AstIndex ast_function = *cast<AstIndex *>(f->data);
   auto    &data         = nodes->data(ast_function);
 
-  for (u32 i = 0; i < data.function.param_names.len(); i++) {
-    auto ast_index_param = data.function.param_names[i].as_ast_idx();
-    auto token_index     = nodes->data(ast_index_param).identifier.token_index;
+  for (u32 i = 0; i < data.function.params.len(); i++) {
+    auto ast_index_param = data.function.params[i].as_ast_idx();
+    auto data_param      = nodes->data(ast_index_param).param;
+    auto token_index     = data_param.name;
     auto key             = intern_identifier(token_index);
 
     env_args->insert(
       key,
       {
-        .resolve_status = ResolveStatus_type_resolved,
+        .resolve_status = ResolveStatus_resolved,
         .is_const       = false,
-        .node_index     = NodeIndex::from_value(args[i]),
+        .value          = args[i],
       }
     );
   }
@@ -413,12 +419,7 @@ b32 Builder::check_and_eval_expression(
   Env<Declaration> *env, NodeIndex *node_index, TypeHint hint, ValueIndex *result
 ) {
   Try(check_expression(env, node_index, hint));
-
-  ValueIndex value_declared_type;
-  Try(eval_expression(env, *node_index, &value_declared_type));
-
-  *result = value_declared_type;
-
+  Try(eval_expression(env, *node_index, result));
   return true;
 }
 
@@ -433,53 +434,80 @@ b32 Builder::check_and_eval_type_expression(
   return check_and_eval_expression(env, node_index, must_be_type, result);
 }
 
-b32 Builder::resolve_declaration(
-  Env<Declaration> *env, TokenIndex identifier, Declaration *declaration
-) {
+b32 Builder::find_declaration(Env<Declaration> *env, TokenIndex identifier, Declaration **decl) {
   auto key = intern_identifier(identifier);
 
-  Declaration *decl;
-  auto         found = env->lookup_ptr(key, &decl);
+  auto found = env->lookup_ptr(key, decl);
 
   if (!found) {
     messages->error("Could not find identifier {strkey}.", key);
     return false;
   }
 
-  if (decl->resolve_status == ResolveStatus_type_resolved) {
-    *declaration = *decl;
-    return true;
-  }
+  return true;
+}
 
-  if (decl->resolve_status == ResolveStatus_type_resolving) {
+b32 Builder::resolve_declaration_type(
+  Env<Declaration> *env, Declaration *decl, TypeIndex *type_declaration
+) {
+  if (decl->resolve_status == ResolveStatus_resolving_type) {
     messages->error("Circular declaration encountered.");
     return false;
   }
 
-  decl->resolve_status = ResolveStatus_type_resolving;
+  if (decl->resolve_status >= ResolveStatus_resolving_value) {
+    Value *val        = values->get(decl->value);
+    *type_declaration = val->type;
+    return true;
+  }
 
-  auto &data = nodes->data(decl->node_index.as_ast_idx());
+  Assert(decl->resolve_status == ResolveStatus_unresolved);
+
+  decl->resolve_status = ResolveStatus_resolving_type;
+
+  auto &data = nodes->data(decl->ast_index);
 
   ValueIndex value_declared_type;
   Try(check_and_eval_type_expression(env, &data.declaration.type, &value_declared_type));
 
+  decl->resolve_status = ResolveStatus_resolving_value;
+
   TypeIndex type_declared;
   copy_value_data(value_declared_type, &type_declared);
+
+  // TODO: Is it possible that the `decl` pointer is invalidated.
+
+  Value *val;
+  decl->value = values->alloc_value(&val);
+
+  *val = {
+    .type = type_declared,
+    .data = nullptr,
+  };
+
+  *type_declaration = type_declared;
+
+  return true;
+}
+
+b32 Builder::resolve_declaration(Env<Declaration> *env, TokenIndex identifier) {
+  Declaration *decl;
+  Try(find_declaration(env, identifier, &decl));
+
+  TypeIndex type_declared;
+  Try(resolve_declaration_type(env, decl, &type_declared));
+
+  auto &data = nodes->data(decl->ast_index);
 
   TypeHint hint{};
   hint.type     = type_declared;
   hint.location = data.declaration.type;
 
-  // Only top level are not immediately resolved, because they may be declared in any order.
-  // Top level declaration values are implicitly const so we immediately evaluate them.
-
   ValueIndex value;
   Try(check_and_eval_expression(env, &data.declaration.value, hint, &value));
 
-  decl->resolve_status = ResolveStatus_type_resolved;
-  decl->node_index     = NodeIndex::from_value(value);
-
-  *declaration = *decl;
+  decl->resolve_status = ResolveStatus_resolved;
+  decl->value          = value;
 
   return true;
 }
@@ -517,9 +545,9 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     env->insert(
       key,
       {
-        .resolve_status = ResolveStatus_type_resolved,
+        .resolve_status = ResolveStatus_resolved,
         .is_const       = false, // TODO: this is potentially incorrect
-        .node_index     = NodeIndex::from_value(val_idx),
+        .value          = val_idx,
       }
     );
 
@@ -527,9 +555,13 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
   } break;
 
   case Ast_identifier: {
-    Declaration decl;
-    Try(resolve_declaration(env, data.identifier.token_index, &decl));
-    nodes->type(ast_index) = get_type(decl.node_index);
+    Declaration *decl;
+    Try(find_declaration(env, data.identifier, &decl));
+
+    TypeIndex type_declaration;
+    Try(resolve_declaration_type(env, decl, &type_declaration));
+
+    nodes->type(ast_index) = type_declaration;
   } break;
 
   case Ast_cast: {
@@ -618,14 +650,14 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     Type *type_hint = types->get(hint.type);
 
     Assert(type_hint->kind == Type_function);
-    Assert(type_hint->function.param_count == data.function.param_names.len());
+    Assert(type_hint->function.param_count == data.function.params.len());
 
     auto env_params = envs->alloc(env);
     defer(envs->dealloc(env_params));
 
-    for (u32 i = 0; i < data.function.param_names.len(); i++) {
-      auto param_node  = data.function.param_names[i].as_ast_idx();
-      auto token_index = nodes->data(param_node).identifier.token_index;
+    for (u32 i = 0; i < data.function.params.len(); i++) {
+      auto param_node  = data.function.params[i].as_ast_idx();
+      auto token_index = nodes->data(param_node).identifier;
       auto key         = intern_identifier(token_index);
 
       auto param_type = type_hint->function.param_types[i];
@@ -639,9 +671,11 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
       env_params->insert(
         key,
-        {.resolve_status = ResolveStatus_type_resolved,
-         .is_const       = false,
-         .node_index     = NodeIndex::from_value(value_idx_param)}
+        {
+          .resolve_status = ResolveStatus_resolved,
+          .is_const       = false,
+          .value          = value_idx_param,
+        }
       );
     }
 
@@ -667,7 +701,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
   } break;
 
   case Ast_literal_int: {
-    auto token_index = data.literal_int.token_index;
+    auto token_index = data.literal_int;
     auto str         = get_token_str(text, tokens, token_index);
     i64  i           = parse_i64(str);
 
@@ -724,17 +758,8 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     Try(check_expression(env, &data.if_else.otherwise, hint));
 
-    TypeIndex then_type      = get_type(data.if_else.then);
-    TypeIndex otherwise_type = get_type(data.if_else.otherwise);
-
     TypeIndex type_unified;
-    Try(check_unification(
-      data.if_else.then,
-      then_type,
-      data.if_else.otherwise,
-      otherwise_type,
-      &type_unified
-    ));
+    Try(check_and_resolve_unification(&data.if_else.then, &data.if_else.otherwise, &type_unified));
 
     nodes->type(ast_index) = type_unified;
   } break;
@@ -743,28 +768,31 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     NodeIndex &lhs = data.binary_op.lhs;
     NodeIndex &rhs = data.binary_op.rhs;
 
-    Try(check_expression(env, &lhs, hint));
-    Try(check_expression(env, &rhs, hint));
-
-    TypeIndex type_lhs = get_type(lhs);
-    TypeIndex type_rhs = get_type(rhs);
-
     switch (data.binary_op.kind) {
     case Logical_and:
-    case Logical_or:
-      Try(ensure_is_expected_type(lhs, types->type.bool_, type_lhs));
-      Try(ensure_is_expected_type(rhs, types->type.bool_, type_rhs));
+    case Logical_or: {
+      TypeHint hint_bool{};
+      hint_bool.type     = types->type.bool_;
+      hint_bool.location = *node_index;
+
+      Try(check_expression(env, &lhs, hint_bool));
+      Try(check_expression(env, &rhs, hint_bool));
+
       nodes->type(ast_index) = types->type.bool_;
-      break;
+    } break;
     case Cmp_equal:
     case Cmp_not_equal:
     case Cmp_less_than:
     case Cmp_less_equal:
     case Cmp_greater_than:
     case Cmp_greater_equal: {
+      Try(check_expression(env, &lhs));
+      Try(check_expression(env, &rhs));
+
       TypeIndex type_unified;
-      Try(check_unification(lhs, type_lhs, rhs, type_rhs, &type_unified));
+      Try(check_and_resolve_unification(&lhs, &rhs, &type_unified));
       Try(ensure_is_type_comparable(ast_index, type_unified));
+
       nodes->type(ast_index) = types->type.bool_;
     } break;
     case Mul:
@@ -777,8 +805,12 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     case Bit_and:
     case Bit_or:
     case Bit_xor: {
+      Try(check_expression(env, &lhs));
+      Try(check_expression(env, &rhs));
+
       TypeIndex type_unified;
-      Try(check_unification(lhs, type_lhs, rhs, type_rhs, &type_unified));
+      Try(check_and_resolve_unification(&lhs, &rhs, &type_unified));
+
       nodes->type(ast_index) = type_unified;
     } break;
     case BinaryOpKind_max:
@@ -787,13 +819,43 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     }
   } break;
 
+  case Ast_call: {
+    Try(check_expression(env, &data.call.callee));
+
+    TypeIndex type_idx_callee = get_type(data.call.callee);
+
+    Type *type_callee = types->get(type_idx_callee);
+
+    if (type_callee->kind != Type_function) {
+      messages
+        ->error(data.call.callee, "Callee must be a function. Found {type}.", type_idx_callee);
+      break;
+    }
+
+    if (type_callee->function.param_count != data.call.args.len()) {
+      messages->error(data.call.callee, "Function called with incorrect number of arguments.");
+      break;
+    }
+
+    u32 param_count = data.call.args.len();
+
+    for (u32 i = 0; i < param_count; i++) {
+      TypeHint hint_arg{};
+      hint_arg.type = type_callee->function.param_types[i];
+
+      Try(check_expression(env, &data.call.args[i], hint_arg));
+    }
+
+    nodes->type(ast_index) = type_callee->function.return_type;
+  } break;
+
   default:
     puts(ast_kind_string(kind));
     Todo();
     break;
   }
 
-  Try(check_and_resolve_coercion(env, hint, node_index));
+  Try(check_and_resolve_coercion(hint, node_index));
 
   return true;
 }
@@ -801,22 +863,6 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 StrKey Builder::intern_identifier(TokenIndex identifier) {
   auto s = get_token_str(text, tokens, identifier);
   return strings->add(s);
-}
-
-b32 Builder::check_unification(
-  NodeIndex  node_lhs,
-  TypeIndex  type_lhs,
-  NodeIndex  node_rhs,
-  TypeIndex  type_rhs,
-  TypeIndex *type_unified
-) {
-  if (types->unify(type_lhs, type_rhs, type_unified)) {
-    return true;
-  }
-
-  messages->error(node_lhs, "Cannot unify types {type} and {type}.", type_lhs, type_rhs);
-
-  return false;
 }
 
 b32 Builder::ensure_is_expected_type(NodeIndex location, TypeIndex expected, TypeIndex actual) {
@@ -860,41 +906,36 @@ b32 Builder::ensure_is_assignable(NodeIndex node_index) {
 b32 Builder::ensure_is_type_comparable(AstIndex location, TypeIndex type) { return true; }
 
 void Builder::env_populate_with_builtins(Env<Declaration> *env) {
-  // clang-format on
-  env_insert_value(env, STR("i8"), alloc_type(types->type.i8_));
+  // clang-format off
+  env_insert_value(env, STR("i8"),  alloc_type(types->type.i8_));
   env_insert_value(env, STR("i16"), alloc_type(types->type.i16_));
   env_insert_value(env, STR("i32"), alloc_type(types->type.i32_));
   env_insert_value(env, STR("i64"), alloc_type(types->type.i64_));
 
-  env_insert_value(env, STR("u8"), alloc_type(types->type.u8_));
+  env_insert_value(env, STR("u8"),  alloc_type(types->type.u8_));
   env_insert_value(env, STR("u16"), alloc_type(types->type.u16_));
   env_insert_value(env, STR("u32"), alloc_type(types->type.u32_));
   env_insert_value(env, STR("u64"), alloc_type(types->type.u64_));
 
   env_insert_value(env, STR("uint"), alloc_type(types->type.uint));
 
-  env_insert_value(env, STR("bool"), alloc_type(types->type.bool_));
-  env_insert_value(env, STR("nil"), alloc_type(types->type.nil));
+  env_insert_value(env, STR("bool"),  alloc_type(types->type.bool_));
+  env_insert_value(env, STR("nil"),   alloc_type(types->type.nil));
   env_insert_value(env, STR("never"), alloc_type(types->type.never));
-  env_insert_value(env, STR("type"), alloc_type(types->type.type));
+  env_insert_value(env, STR("type"),  alloc_type(types->type.type));
 
-  env_insert_value(env, STR("true"), alloc_bool(1));
+  env_insert_value(env, STR("true"),  alloc_bool(1));
   env_insert_value(env, STR("false"), alloc_bool(0));
-  // clang-format off
+  // clang-format on
 }
 
 void Builder::env_insert_value(Env<Declaration> *env, Str identifier, ValueIndex value) {
   env->insert(
     strings->add(identifier),
     {
-      .resolve_status = ResolveStatus_type_resolved,
+      .resolve_status = ResolveStatus_resolved,
       .is_const       = true,
-      .node_index     = {
-        .kind = NodeIndex_value,
-        .idx  = {
-          .value = value,
-        },
-      },
+      .value          = value,
     }
   );
 }
@@ -908,7 +949,7 @@ ValueIndex Builder::alloc_type(TypeIndex type_idx) {
 
   memcpy(data, &type_idx, sizeof(TypeIndex));
 
-  *val        = {
+  *val = {
     .type = type_of_val,
     .data = data,
   };
@@ -925,7 +966,7 @@ ValueIndex Builder::alloc_bool(u8 b) {
 
   memcpy(data, &b, sizeof(u8));
 
-  *val        = {
+  *val = {
     .type = type_of_val,
     .data = data,
   };
@@ -933,7 +974,59 @@ ValueIndex Builder::alloc_bool(u8 b) {
   return idx;
 }
 
-b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected, NodeIndex *value) {
+b32 Builder::check_and_resolve_unification(
+  NodeIndex *lhs, NodeIndex *rhs, TypeIndex *type_unified
+) {
+  TypeIndex type_lhs = get_type(*lhs);
+  TypeIndex type_rhs = get_type(*rhs);
+
+  TypeIndex unified;
+  if (!types->unify(type_lhs, type_rhs, &unified)) {
+    messages->error("Unable to unify types {type} and {type}.", type_lhs, type_rhs);
+    return false;
+  }
+
+  if (type_lhs != unified) {
+    insert_cast(lhs, unified);
+  }
+
+  if (type_rhs != unified) {
+    insert_cast(rhs, unified);
+  }
+
+  *type_unified = unified;
+
+  return true;
+}
+
+void Builder::insert_cast(NodeIndex *value, TypeIndex type_dst) {
+  auto old_node_index = *value;
+  auto ast_index      = nodes->alloc();
+  *value              = NodeIndex::from_ast_index(ast_index);
+
+  auto val_idx = alloc_type(type_dst);
+
+  AstCast cast;
+  cast.type_dst = NodeIndex::from_value(val_idx);
+  cast.value    = old_node_index;
+
+  nodes->type(ast_index) = type_dst;
+  nodes->set(
+    ast_index,
+    {
+      Ast_cast,
+      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
+                  // `AstNodes`
+      {.cast = cast},
+    }
+  );
+}
+
+b32 Builder::check_and_resolve_coercion(TypeHint expected, NodeIndex *value) {
+  if (expected.is_none()) {
+    return true;
+  }
+
   auto type_src = get_type(*value);
 
   if (type_src == expected.type) {
@@ -945,26 +1038,7 @@ b32 Builder::check_and_resolve_coercion(Env<Declaration> *env, TypeHint expected
     return false;
   }
 
-  auto old_node_index = *value;
-  auto ast_index     = nodes->alloc();
-  *value     = NodeIndex::from_ast_index(ast_index);
-
-  auto   val_idx           = alloc_type(expected.type);
-
-  AstCast cast;
-  cast.type_dst = NodeIndex::from_value(val_idx);
-  cast.value    = old_node_index;
-
-  nodes->type(ast_index) = expected.type;
-  nodes->set(
-    ast_index,
-    {
-      Ast_cast,
-      {{0}, {0}}, // TODO replace this with something else. or maybe these nodes shouldn't live in
-                  // `AstNodes`
-      {.cast = cast},
-    }
-  );
+  insert_cast(value, expected.type);
 
   return true;
 }

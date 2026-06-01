@@ -1,6 +1,6 @@
-## In progress notes
+## In progress
 
-...
+- [ ] Allow type annotations on params of function literals and a return type annotation.
 
 ## General
 
@@ -13,7 +13,6 @@
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 - [ ] Add assign of variables.
-- [ ] Allow type annotations on params on function literals and a return type annotation.
 - [ ] Update declaration syntax to allow optional omission of declaration type.
 - [ ] Add `const` qualifier to declarations.
   - This means that the declaration only exists at compile time.

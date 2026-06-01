@@ -94,6 +94,10 @@ This means that values of this type may only exist at compile time.
 Builtin examples of this are `const_int` and `type`.
 If a binding has a `const` type, then the binding is implicitly `const` itself, since it cannot exist at runtime due to its `const` type.
 
+## Coercions
+
+...
+
 ## Environments
 
 Modelled as stacked hashmaps.

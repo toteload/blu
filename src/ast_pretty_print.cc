@@ -264,17 +264,17 @@ void AstPrinter::print(NodeIndex node, bool print_type) {
   } break;
 
   case Ast_literal_int: {
-    auto s = token_str(data.literal_int.token_index);
+    auto s = token_str(data.literal_int);
     printf("%.*s", cast<int>(s.len()), s.str);
   } break;
 
   case Ast_literal_string: {
-    auto s = token_str(data.literal_string.token_index);
+    auto s = token_str(data.literal_string);
     printf("%.*s", cast<int>(s.len()), s.str);
   } break;
 
   case Ast_identifier: {
-    auto s = token_str(data.identifier.token_index);
+    auto s = token_str(data.identifier);
     printf("%.*s", cast<int>(s.len()), s.str);
   } break;
 
@@ -311,14 +311,23 @@ void AstPrinter::print(NodeIndex node, bool print_type) {
 
   case Ast_function: {
     fputs("|", stdout);
-    for (u32 i = 0; i < data.function.param_names.len(); i++) {
+    for (u32 i = 0; i < data.function.params.len(); i++) {
       if (i > 0) {
         fputs(", ", stdout);
       }
-      print(data.function.param_names[i]);
+      print(data.function.params[i]);
     }
     fputs("| ", stdout);
     print(data.function.body, true);
+  } break;
+
+  case Ast_param: {
+    auto s = token_str(data.param.name);
+    printf("%.*s", cast<int>(s.len()), s.str);
+    if (data.param.type.is_some()) {
+      fputs(": ", stdout);
+      print(data.param.type);
+    }
   } break;
 
   case Ast_cast: {
@@ -472,15 +481,15 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_literal_int:
-    print_token(data.literal_int.token_index);
+    print_token(data.literal_int);
     break;
 
   case Ast_literal_string:
-    print_token(data.literal_string.token_index);
+    print_token(data.literal_string);
     break;
 
   case Ast_identifier:
-    print_token(data.identifier.token_index);
+    print_token(data.identifier);
     break;
 
   case Ast_call:
@@ -509,8 +518,13 @@ void TablePrinter::print_node_data(AstKind kind, AstNodeData data) {
     break;
 
   case Ast_function:
-    printf("params=%lu body=", data.function.param_names.len());
+    printf("params=%lu body=", data.function.params.len());
     print_idx(data.function.body);
+    break;
+
+  case Ast_param:
+    fputs("name=", stdout); print_token(data.param.name);
+    fputs("type=", stdout); print_idx(data.param.type);
     break;
 
   case Ast_if_else:

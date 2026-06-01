@@ -147,7 +147,7 @@ int main(i32 arg_count, char const *const *args) {
          it      = builder.env_root->map.next(it)) {
       auto s = strings.get(it->key);
       char buf[256]{};
-      u32  len = values.value_to_string(&types, it->val.node_index.as_value_idx(), buf, 256);
+      u32  len = values.value_to_string(&types, it->val.value, buf, 256);
       printf("%.*s = %.*s\n", cast<int>(s.len()), s.str, cast<int>(len), buf);
     }
   }
@@ -162,7 +162,7 @@ int main(i32 arg_count, char const *const *args) {
   }
 
   ValueIndex result;
-  ok = builder.eval_call(builder.env_root, decl_main.node_index.as_value_idx(), {}, &result);
+  ok = builder.eval_call(builder.env_root, decl_main.value, {}, &result);
   if (!ok) {
     messages.print_messages(&message_context);
     return 1;
