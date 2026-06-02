@@ -55,6 +55,7 @@ b32 Builder::typecheck_and_eval_const_code() {
       env_root->insert(
         key,
         {
+          .scope          = Scope_toplevel,
           .resolve_status = ResolveStatus_unresolved,
           .is_const       = false,
           .ast_index      = idx_item,
@@ -104,9 +105,14 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
   case Ast_identifier: {
     auto        key = intern_identifier(data.identifier);
     Declaration decl;
-    b32 found = env->lookup(key, &decl);
+    b32         found = env->lookup(key, &decl);
     Assert(found);
-    Assert(decl.resolve_status == ResolveStatus_resolved);
+    Assert(decl.resolve_status >= ResolveStatus_resolving_value);
+
+    if (decl.resolve_status == ResolveStatus_resolving_value) {
+      Todo();
+    }
+
     *result = decl.value;
   } break;
 
@@ -117,6 +123,7 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     env->insert(
       key,
       {
+        .scope          = Scope_local,
         .resolve_status = ResolveStatus_resolved,
         .is_const       = false,
         .value          = value,
@@ -405,6 +412,7 @@ b32 Builder::eval_call(
     env_args->insert(
       key,
       {
+        .scope          = Scope_parameter,
         .resolve_status = ResolveStatus_resolved,
         .is_const       = false,
         .value          = args[i],
@@ -475,7 +483,7 @@ b32 Builder::resolve_declaration_type(
   TypeIndex type_declared;
   copy_value_data(value_declared_type, &type_declared);
 
-  // TODO: Is it possible that the `decl` pointer is invalidated.
+  // TODO: Is it possible that the `decl` pointer is invalidated????!!?!???!
 
   Value *val;
   decl->value = values->alloc_value(&val);
@@ -545,8 +553,9 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     env->insert(
       key,
       {
+        .scope          = Scope_local,
         .resolve_status = ResolveStatus_resolved,
-        .is_const       = false, // TODO: this is potentially incorrect
+        .is_const       = false,
         .value          = val_idx,
       }
     );
@@ -560,6 +569,19 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
     TypeIndex type_declaration;
     Try(resolve_declaration_type(env, decl, &type_declaration));
+
+    // if the declaration is const or the type is const then the value should be immediately evaluated and resolved.
+    if (decl->is_const || types->is_const(type_declaration)) {
+      TypeHint hint_declaration{};
+      hint_declaration.type     = type_declared;
+      hint_declaration.location = data.declaration.type;
+
+      ValueIndex value;
+      Try(check_and_eval_expression(env, &data.declaration.value, hint_declaration, &value));
+
+      decl->resolve_status = ResolveStatus_resolved;
+      decl->value          = value;
+    }
 
     nodes->type(ast_index) = type_declaration;
   } break;
@@ -672,6 +694,7 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
       env_params->insert(
         key,
         {
+          .scope          = Scope_parameter,
           .resolve_status = ResolveStatus_resolved,
           .is_const       = false,
           .value          = value_idx_param,
@@ -907,32 +930,33 @@ b32 Builder::ensure_is_type_comparable(AstIndex location, TypeIndex type) { retu
 
 void Builder::env_populate_with_builtins(Env<Declaration> *env) {
   // clang-format off
-  env_insert_value(env, STR("i8"),  alloc_type(types->type.i8_));
-  env_insert_value(env, STR("i16"), alloc_type(types->type.i16_));
-  env_insert_value(env, STR("i32"), alloc_type(types->type.i32_));
-  env_insert_value(env, STR("i64"), alloc_type(types->type.i64_));
+  env_insert_builtin_value(env, STR("i8"),  alloc_type(types->type.i8_));
+  env_insert_builtin_value(env, STR("i16"), alloc_type(types->type.i16_));
+  env_insert_builtin_value(env, STR("i32"), alloc_type(types->type.i32_));
+  env_insert_builtin_value(env, STR("i64"), alloc_type(types->type.i64_));
 
-  env_insert_value(env, STR("u8"),  alloc_type(types->type.u8_));
-  env_insert_value(env, STR("u16"), alloc_type(types->type.u16_));
-  env_insert_value(env, STR("u32"), alloc_type(types->type.u32_));
-  env_insert_value(env, STR("u64"), alloc_type(types->type.u64_));
+  env_insert_builtin_value(env, STR("u8"),  alloc_type(types->type.u8_));
+  env_insert_builtin_value(env, STR("u16"), alloc_type(types->type.u16_));
+  env_insert_builtin_value(env, STR("u32"), alloc_type(types->type.u32_));
+  env_insert_builtin_value(env, STR("u64"), alloc_type(types->type.u64_));
 
-  env_insert_value(env, STR("uint"), alloc_type(types->type.uint));
+  env_insert_builtin_value(env, STR("uint"), alloc_type(types->type.uint));
 
-  env_insert_value(env, STR("bool"),  alloc_type(types->type.bool_));
-  env_insert_value(env, STR("nil"),   alloc_type(types->type.nil));
-  env_insert_value(env, STR("never"), alloc_type(types->type.never));
-  env_insert_value(env, STR("type"),  alloc_type(types->type.type));
+  env_insert_builtin_value(env, STR("bool"),  alloc_type(types->type.bool_));
+  env_insert_builtin_value(env, STR("nil"),   alloc_type(types->type.nil));
+  env_insert_builtin_value(env, STR("never"), alloc_type(types->type.never));
+  env_insert_builtin_value(env, STR("type"),  alloc_type(types->type.type));
 
-  env_insert_value(env, STR("true"),  alloc_bool(1));
-  env_insert_value(env, STR("false"), alloc_bool(0));
+  env_insert_builtin_value(env, STR("true"),  alloc_bool(1));
+  env_insert_builtin_value(env, STR("false"), alloc_bool(0));
   // clang-format on
 }
 
-void Builder::env_insert_value(Env<Declaration> *env, Str identifier, ValueIndex value) {
+void Builder::env_insert_builtin_value(Env<Declaration> *env, Str identifier, ValueIndex value) {
   env->insert(
     strings->add(identifier),
     {
+      .scope          = Scope_builtin,
       .resolve_status = ResolveStatus_resolved,
       .is_const       = true,
       .value          = value,

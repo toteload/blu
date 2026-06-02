@@ -111,8 +111,15 @@ TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
     return TypeSizeInfo::of_type<ValueSlice>();
   case Type_boolean:
     return TypeSizeInfo::of_type<u8>();
-  case Type_array:
-    return TypeSizeInfo::of_type<void *>();
+  case Type_array: {
+    auto base_size_info = size_info(t->array.base_type);
+    auto count = t->array.size;
+    TypeSizeInfo size_info{};
+    size_info.size = count * base_size_info.stride;
+    size_info.stride = base_size_info.stride;
+    size_info.align = base_size_info.align;
+    return size_info;
+  } break;
   case Type_literal_int:
     return TypeSizeInfo::of_type<i64>();
   case Type_sequence:

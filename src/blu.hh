@@ -284,6 +284,7 @@ struct TypeInterner {
   Type *get(TypeIndex idx) { return list[idx.idx]; }
 
   TypeSizeInfo size_info(TypeIndex idx);
+  b32 is_const(TypeIndex idx);
 
   bool is_coercible_to(TypeIndex src, TypeIndex dst);
   bool unify(TypeIndex lhs, TypeIndex rhs, TypeIndex *result);
@@ -1006,24 +1007,20 @@ enum ResolveStatus : u8 {
   ResolveStatus_resolved,
 };
 
+enum DeclarationScope : u8 {
+  Scope_builtin,
+  Scope_toplevel,
+  Scope_parameter,
+  Scope_local,
+};
+
 struct Declaration {
-  ResolveStatus resolve_status;
-  u8            is_const;
-  AstIndex      ast_index;
-
-  // If `resolve_status == ResolveStatus_type_unresolved`
-  // - `value` holds no type.
-  // - `value` holds no data.
-  //
-  // If `resolve_status == ResolveStatus_type_resolving`
-  // - `value` holds a type if the declaration has a declared type.
-  // - `value` holds no data.
-  //
-  // If `resolve_status == ResolveStatus_type_resolved`
-  // - `value` holds a type.
-  // - `value` holds data.
-
-  ValueIndex value;
+  // `resolve_status` is only relevant to toplevel scoped declaraitons.
+  ResolveStatus    resolve_status;
+  DeclarationScope scope;
+  u8               is_const;
+  AstIndex         ast_index;
+  ValueIndex       value;
 };
 
 struct TypeHint {
@@ -1117,7 +1114,7 @@ struct Builder {
   );
 
   void env_populate_with_builtins(Env<Declaration> *env);
-  void env_insert_value(Env<Declaration> *env, Str s, ValueIndex value);
+  void env_insert_builtin_value(Env<Declaration> *env, Str s, ValueIndex value);
 
   inline void copy_value_data(ValueIndex value_idx, void *dst) {
     Value *v = values->get(value_idx);

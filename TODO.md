@@ -2,6 +2,15 @@
 
 - [ ] Allow type annotations on params of function literals and a return type annotation.
 
+## Up next
+
+- [ ] Add `const` qualifier to types.
+  - Values of a `const` type may only exist at compile time.
+    Declarations or parameters that have a `const` type are implicitly `const` themselves.
+- [ ] Add `const` qualifier to declarations.
+  - This means that the declaration only exists at compile time.
+    All uses of the declaration are replaced with its value.
+
 ## General
 
 - [ ] `test\basic\slice.blu`
@@ -14,9 +23,6 @@
 - [ ] `test\basic\defer.blu`
 - [ ] Add assign of variables.
 - [ ] Update declaration syntax to allow optional omission of declaration type.
-- [ ] Add `const` qualifier to declarations.
-  - This means that the declaration only exists at compile time.
-    All uses of the declaration are replaced with its value.
 - [ ] Add `const` qualifier to function parameters.
 
 
@@ -51,9 +57,6 @@
 - [ ] Add coercion of `[1]T`, `[1][1]T`, ... to `T`.
   - This has the benefit of having ASCII character literals for free by using the string literals.
     The type of `"A"` is `[1]u8`
-- [ ] Add `const` qualifier to types.
-  - Values of a `const` type may only exist at compile time.
-    Declarations or parameters that have a `const` type are implicitly `const` themselves.
 
 
 ## Metaprogramming
