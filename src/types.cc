@@ -93,6 +93,19 @@ u32 TypeInterner::type_to_string(TypeIndex idx, char *buf, u32 buf_size) {
   return buf_size_start - buf_size;
 }
 
+b32 TypeInterner::is_const(TypeIndex idx) {
+  auto t = get(idx);
+  switch (t->kind) {
+  case Type_literal_function:
+  case Type_literal_int:
+  case Type_type:
+  case Type_function:
+    return true;
+  default:
+    return false;
+  }
+}
+
 TypeSizeInfo TypeInterner::size_info(TypeIndex idx) {
   auto t = get(idx);
   switch (t->kind) {

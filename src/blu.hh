@@ -1003,6 +1003,7 @@ ttld_inline Str get_token_str(Str text, Tokens *tokens, TokenIndex idx) {
 enum ResolveStatus : u8 {
   ResolveStatus_unresolved,
   ResolveStatus_resolving_type,
+  ResolveStatus_resolved_type,
   ResolveStatus_resolving_value,
   ResolveStatus_resolved,
 };

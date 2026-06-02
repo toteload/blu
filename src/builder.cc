@@ -107,11 +107,7 @@ b32 Builder::eval_expression(Env<Declaration> *env, NodeIndex node_index, ValueI
     Declaration decl;
     b32         found = env->lookup(key, &decl);
     Assert(found);
-    Assert(decl.resolve_status >= ResolveStatus_resolving_value);
-
-    if (decl.resolve_status == ResolveStatus_resolving_value) {
-      Todo();
-    }
+    Assert(decl.resolve_status == ResolveStatus_resolved);
 
     *result = decl.value;
   } break;
@@ -463,7 +459,7 @@ b32 Builder::resolve_declaration_type(
     return false;
   }
 
-  if (decl->resolve_status >= ResolveStatus_resolving_value) {
+  if (decl->resolve_status > ResolveStatus_resolving_type) {
     Value *val        = values->get(decl->value);
     *type_declaration = val->type;
     return true;
@@ -478,7 +474,7 @@ b32 Builder::resolve_declaration_type(
   ValueIndex value_declared_type;
   Try(check_and_eval_type_expression(env, &data.declaration.type, &value_declared_type));
 
-  decl->resolve_status = ResolveStatus_resolving_value;
+  decl->resolve_status = ResolveStatus_resolved_type;
 
   TypeIndex type_declared;
   copy_value_data(value_declared_type, &type_declared);
@@ -567,23 +563,34 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
     Declaration *decl;
     Try(find_declaration(env, data.identifier, &decl));
 
-    TypeIndex type_declaration;
-    Try(resolve_declaration_type(env, decl, &type_declaration));
+    TypeIndex type_declared;
+    Try(resolve_declaration_type(env, decl, &type_declared));
 
-    // if the declaration is const or the type is const then the value should be immediately evaluated and resolved.
-    if (decl->is_const || types->is_const(type_declaration)) {
-      TypeHint hint_declaration{};
-      hint_declaration.type     = type_declared;
-      hint_declaration.location = data.declaration.type;
+    if (decl->resolve_status != ResolveStatus_resolved) {
+      // if the declaration is const or the type is const then the value should be immediately evaluated and resolved.
+      if ((decl->is_const || types->is_const(type_declared))) {
+        if (decl->resolve_status == ResolveStatus_resolving_value) {
+          messages->error("Circular declaration encountered.");
+          return false;
+        }
 
-      ValueIndex value;
-      Try(check_and_eval_expression(env, &data.declaration.value, hint_declaration, &value));
+        auto &ast_declaration = nodes->data(decl->ast_index).declaration;
 
-      decl->resolve_status = ResolveStatus_resolved;
-      decl->value          = value;
+        decl->resolve_status = ResolveStatus_resolving_value;
+
+        TypeHint hint_declaration{};
+        hint_declaration.type     = type_declared;
+        hint_declaration.location = ast_declaration.type;
+
+        ValueIndex value;
+        Try(check_and_eval_expression(env, &ast_declaration.value, hint_declaration, &value));
+
+        decl->resolve_status = ResolveStatus_resolved;
+        decl->value          = value;
+      }
     }
 
-    nodes->type(ast_index) = type_declaration;
+    nodes->type(ast_index) = type_declared;
   } break;
 
   case Ast_cast: {
