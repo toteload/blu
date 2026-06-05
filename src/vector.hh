@@ -1,5 +1,7 @@
 #pragma once
 
+#include "toteload.hh"
+
 template<typename T> struct Vector {
   Allocator alloc;
   usize     _len;

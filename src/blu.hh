@@ -1163,6 +1163,7 @@ struct Builder {
   ValueIndex alloc_bool(u8 val);
 };
 
+#if 0
 struct InterpreterContext {
   TypeInterner   *types;
   StringInterner *strings;
@@ -1294,6 +1295,7 @@ struct SourceUnit {
 
   void print_messages();
 };
+#endif
 
 struct TypeCheckContext {
   Messages                *messages;

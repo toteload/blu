@@ -576,6 +576,9 @@ b32 Builder::check_expression(Env<Declaration> *env, NodeIndex *node_index, Type
 
         auto &ast_declaration = nodes->data(decl->ast_index).declaration;
 
+        // If this is a function then we consider this declaration as resolved already, because
+        // a function can be recursive. 
+
         decl->resolve_status = ResolveStatus_resolving_value;
 
         TypeHint hint_declaration{};
