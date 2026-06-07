@@ -1,19 +1,19 @@
 #ifndef VECTOR_TYPE
 #endif
 
-#ifndef VECTOR_NAME_PREFIX
+#ifndef VECTOR_NAME
 #endif
 
 #include "toteload.h"
 
-typedef struct Cat(VECTOR_NAME_PREFIX, _Vector) {
+typedef struct VECTOR_NAME {
   usize len;
   usize cap;
   VECTOR_TYPE *data;
-} Cat(VECTOR_NAME_PREFIX, _Vector);
+} VECTOR_NAME;
 
-b32  Cat(VECTOR_NAME_PREFIX, _is_empty)(Cat(VECTOR_NAME_PREFIX, _Vector) *v);
-void Cat(VECTOR_NAME_PREFIX, _push)(Cat(VECTOR_NAME_PREFIX, _Vector) *v, VECTOR_TYPE x);
+b32  Cat(VECTOR_NAME, _is_empty)(VECTOR_NAME *v);
+void Cat(VECTOR_NAME, _push)(VECTOR_NAME *v, VECTOR_TYPE x);
 
 #ifdef VECTOR_IMPLEMENTATION
 #endif
