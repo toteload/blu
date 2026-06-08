@@ -19,7 +19,7 @@ typedef uint64_t    u64;
 typedef uintptr_t usize;
 typedef intptr_t  isize;
 
-typedef uint8_t b8;
+typedef uint8_t  b8;
 typedef uint16_t b16;
 typedef uint32_t b32;
 typedef uint64_t b64;
@@ -43,7 +43,18 @@ always_inline u32 clz32(u32 x) {
 #endif
 }
 
-#define Swap(a, b) do { \
+always_inline u32 bitwidth(u64 x) {
+#ifdef TTLD_COMPILER_CLANG
+  if (x == 0) {
+    return 0;
+  }
+  return 64 - clz(x);
+#else
+#error "todo: bitwidth is not implemented for this platform"
+#endif
+}
+
+#define swap(a, b) do { \
   typeof(a) tmp_ = (a); \
   a = (b); \
   b = tmp_; \
@@ -58,15 +69,15 @@ always_inline u32 clz32(u32 x) {
 #define True 1
 #define False 0
 
-#define Is_null(p) ((p) == Null)
-#define Cast(T, x) ((T)(x))
-#define Unused(x) ((void)(x))
+#define is_null(p) ((p) == Null)
+#define cast(T, x) ((T)(x))
+#define unused(x) ((void)(x))
 
-#define Is_zero_or_power_of_two(x) ((((x)-1) & (x)) == 0)
+#define is_zero_or_power_of_two(x) ((((x)-1) & (x)) == 0)
 
-#define Ptr_offset(p,d)        Cast(void*, Cast(u8*,p)+d)
+#define ptr_offset(p,d)        cast(void*,cast(u8*,p)+d)
 
-#define Align_of(x) _Alignof(x)
+#define align_of(x) _Alignof(x)
 
 #define Assert(e) assert(e)
 #define Panic() abort()
@@ -99,9 +110,34 @@ typedef struct Allocator {
 #define Alloc(allocator, size, align)                      (allocator).fn((allocator).ctx, Null, 0, size, align)
 #define Realloc(allocator, ptr, old_size, new_size, align) (allocator).fn((allocator).ctx, ptr, old_size, new_size, align)
 #define Free(allocator, ptr, size)                         (allocator).fn((allocator).ctx, ptr, size, 0, 0)
-#define Alloc_typed(allocator, Type, count)                Alloc(allocator, (count) * sizeof(Type), Align_of(Type))
 
 usize vmem_page_size();
 void *vmem_reserve(usize size);
 b32   vmem_commit(void *p, usize size);
 void  vmem_release(void *p, usize size);
+
+typedef struct {
+  void *base;
+  void *commit_end;
+  void *reserve_end;
+  void *at;
+} Arena;
+
+typedef struct {
+  Arena *arena;
+  void  *at;
+} ArenaSnapshot;
+
+void arena_init(Arena *arena);
+void arena_deinit(Arena *arena);
+
+void arena_commit(Arena *arena, usize commit_size);
+
+void *arena_push(Arena *arena, usize size, u32 align);
+
+#define arena_push_array(arena, type, count) Cast((type)*, arena_push(arena, (count) * sizeof(type), Align_of(type)))
+
+ArenaSnapshot arena_scope_begin(Arena *arena);
+void          arena_scope_end(Arena *arena, ArenaSnapshot snapshot);
+
+

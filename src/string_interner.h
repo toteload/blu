@@ -3,6 +3,8 @@
 
 #include "toteload.h"
 
+typedef u32 StringIndex;
+
 #define VECTOR_NAME StringVector
 #define VECTOR_TYPE String
 #include "vector.h"
@@ -12,7 +14,7 @@
 
 #define HASHMAP_NAME       StringIndexMap
 #define HASHMAP_KEY_TYPE   String
-#define HASHMAP_VALUE_TYPE u32
+#define HASHMAP_VALUE_TYPE StringIndex
 #include "hash_map.h"
 
 typedef struct StringInterner {
@@ -27,9 +29,9 @@ typedef struct StringInternerOptions {
   Allocator  vec_allocator;
 } StringInternerOptions;
 
-void   string_interner_init(StringInterner *strings, StringInternerOptions *options);
-void   string_interner_deinit(StringInterner *strings);
-u32    string_interner_add(StringInterner *strings, String s);
-String string_interner_get(StringInterner *strings, u32 key);
+void        string_interner_init(StringInterner *strings, StringInternerOptions *options);
+void        string_interner_deinit(StringInterner *strings);
+IndexString string_interner_add(StringInterner *strings, String s);
+String      string_interner_get(StringInterner *strings, StringIndex idx);
 
 #endif // STRING_INTERNER_H
