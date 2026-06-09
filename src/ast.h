@@ -233,6 +233,7 @@ typedef struct {
   Arena datas; // holds a u32 offset into `extra`
   Arena types; // TypeIndex[]
   Arena extra;
+  u32   offset;
 } AstNodes;
 
 void nodes_init(AstNodes *nodes);

@@ -22,7 +22,7 @@ typedef struct {
 #include "segment_list.h"
 
 typedef struct {
-  Arena *arena;
+  Arena       arena;
   MessageList messages;
 } Messages;
 

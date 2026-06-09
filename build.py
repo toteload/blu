@@ -67,6 +67,9 @@ def create_build_ninja():
         'tokenize.c',
         'string_interner.c',
         'parse.c',
+        'types.c',
+        'value.c',
+        'messages.c',
     ]
 
     outputs = []

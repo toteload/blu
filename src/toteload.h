@@ -167,7 +167,14 @@ void *arena_push(Arena *arena, usize size, u32 align);
 
 #define arena_push_array(arena, type, count) arena_push(arena, (count) * sizeof(type), Align_of(type))
 
-ArenaSnapshot arena_scope_begin(Arena *arena);
-void          arena_scope_end(Arena *arena, ArenaSnapshot snapshot);
+String arena_copy_string(Arena *arena, String s);
 
+always_inline ArenaSnapshot arena_scope_begin(Arena *arena) {
+  return (ArenaSnapshot){ .arena = arena, .at = arena->at, };
+}
+
+always_inline void arena_scope_end(Arena *arena, ArenaSnapshot snapshot) {
+  Assert(arena == snapshot.arena);
+  arena->at = snapshot.at;
+}
 

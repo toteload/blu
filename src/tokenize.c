@@ -61,6 +61,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   u8        c           = *tokenizer->at;
   u8 const *token_start = tokenizer->at;
 
+  tokenizer->at++;
+
   // clang-format off
   switch (c) {
   case ',': Return_token(Tok_comma);
@@ -202,8 +204,60 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   return TokResult_error;
 }
 
-b32 tokenize(Tokens *tokens, String source) {
-  Tokenizer tokenizer = {0};
+void tokens_init(Tokens *tokens) {
+  arena_init(&tokens->kinds, &(ArenaOptions){
+    .reserve_size = MiB(1),
+    .initial_commit_size = KiB(16),
+  });
+  arena_init(&tokens->spans, &(ArenaOptions){
+    .reserve_size = MiB(1),
+    .initial_commit_size = KiB(8 * 16),
+  });
+
+  arena_push_array(&tokens->kinds, u8, 1);
+  arena_push_array(&tokens->spans, SpanU32, 1);
+
+  tokens->offset = 1;
+}
+
+void tokens_deinit(Tokens *tokens) {
+  arena_deinit(&tokens->kinds);
+  arena_deinit(&tokens->spans);
+
+  zero_struct(Tokens, tokens);
+}
+
+u32 tokens_end(Tokens *tokens) {
+  return tokens->offset;
+}
+
+u32 tokens_count(Tokens *tokens) {
+  return tokens->offset - 1;
+}
+
+TokenIndex tokens_alloc(Tokens *tokens) {
+  TokenIndex idx = tokens->offset;
+  tokens->offset += 1;
+  arena_push_array(&tokens->kinds, u8, 1);
+  arena_push_array(&tokens->spans, SpanU32, 1);
+  return idx;
+}
+
+u8 *tokens_kind(Tokens *tokens, TokenIndex idx) {
+  return Cast(u8*, tokens->kinds.base) + idx;
+}
+
+SpanU32 *tokens_span(Tokens *tokens, TokenIndex idx) {
+  return Cast(SpanU32*, tokens->spans.base) + idx;
+}
+
+b32 tokenize(Messages *messages, Tokens *tokens, String source) {
+  Tokenizer tokenizer = {
+    .source   = source.str,
+    .end      = ptr_offset(source.str, source.len),
+    .at       = source.str,
+    .messages = messages,
+  };
 
   u32 res;
   while (True) {
@@ -227,3 +281,4 @@ b32 tokenize(Tokens *tokens, String source) {
 
   return res == TokResult_end;
 }
+

@@ -70,13 +70,16 @@ typedef struct {
 typedef struct {
   Arena kinds;
   Arena spans;
+  u32 offset;
 } Tokens;
 
 #define Max_tokens ((usize)1 << 24)
+#define First_token ((TokenIndex)1)
 
 void       tokens_init(Tokens *tokens);
 void       tokens_deinit(Tokens *tokens);
 u32        tokens_count(Tokens *tokens);
+TokenIndex tokens_end(Tokens *tokens);
 TokenIndex tokens_alloc(Tokens *tokens);
 u8        *tokens_kind(Tokens *tokens, TokenIndex idx);
 SpanU32   *tokens_span(Tokens *tokens, TokenIndex idx);

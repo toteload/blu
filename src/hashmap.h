@@ -14,6 +14,10 @@
 #define HASHMAP_FUNCTION_PREFIX HASHMAP_NAME
 #endif
 
+#ifndef HASHMAP_LINKAGE
+#define HASHMAP_LINKAGE
+#endif
+
 #include "toteload.h"
 
 #define HASHMAP_BUCKET_NAME Cat(HASHMAP_NAME, Bucket)
@@ -50,14 +54,14 @@ typedef struct HashMapOptions {
 
 #if defined(HASHMAP_OUTPUT_DECLARATIONS) || defined(HASHMAP_OUTPUT_DEFINITIONS)
 
-void                 Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *options);
-void                 Cat(HASHMAP_FUNCTION_PREFIX, _deinit)(HASHMAP_NAME *map);
-u32                  Cat(HASHMAP_FUNCTION_PREFIX, _cap)(HASHMAP_NAME *map);
-HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, b32 *was_occupied);
-HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _remove_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
-HASHMAP_VALUE_TYPE  *Cat(HASHMAP_FUNCTION_PREFIX, _find)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
-b32                  Cat(HASHMAP_FUNCTION_PREFIX, _insert)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, HASHMAP_VALUE_TYPE value);
-b32                  Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
+HASHMAP_LINKAGE void                 Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *options);
+HASHMAP_LINKAGE void                 Cat(HASHMAP_FUNCTION_PREFIX, _deinit)(HASHMAP_NAME *map);
+HASHMAP_LINKAGE u32                  Cat(HASHMAP_FUNCTION_PREFIX, _cap)(HASHMAP_NAME *map);
+HASHMAP_LINKAGE HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, b32 *was_occupied);
+HASHMAP_LINKAGE HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _remove_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
+HASHMAP_LINKAGE HASHMAP_VALUE_TYPE  *Cat(HASHMAP_FUNCTION_PREFIX, _find)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
+HASHMAP_LINKAGE b32                  Cat(HASHMAP_FUNCTION_PREFIX, _insert)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, HASHMAP_VALUE_TYPE value);
+HASHMAP_LINKAGE b32                  Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
 
 #undef HASHMAP_OUTPUT_DECLARATIONS
 #endif // HASHMAP_OUTPUT_DECLARATIONS
@@ -101,6 +105,7 @@ internal u32  Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *
 internal u32  Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map, u32 hash, HASHMAP_KEY_TYPE key);
 internal b32  Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem, u32 cap, u32 size);
 
+HASHMAP_LINKAGE 
 void Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *options) {
   u32 size = Max(options->initial_size, Min_map_size);
 
@@ -121,6 +126,7 @@ void Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *opti
   map->item_count = 0;
 }
 
+HASHMAP_LINKAGE 
 void Cat(HASHMAP_FUNCTION_PREFIX, _deinit)(HASHMAP_NAME *map) {
   if (!is_null(map->buckets)) {
     u32 cap = Cat(HASHMAP_FUNCTION_PREFIX, _cap)(map);
@@ -131,10 +137,12 @@ void Cat(HASHMAP_FUNCTION_PREFIX, _deinit)(HASHMAP_NAME *map) {
   memset(map, 0, sizeof(*map));
 }
 
+HASHMAP_LINKAGE 
 u32 Cat(HASHMAP_FUNCTION_PREFIX, _cap)(HASHMAP_NAME *map) {
   return map->mask + 1;
 }
 
+HASHMAP_LINKAGE 
 HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, b32 *was_occupied) {
   // This load factor check has a potential weakness, because it doesn't take tombstones into account.
   // If you repeatedly insert and remove the same keys, then you could end up with chains of tombstones.
@@ -168,6 +176,7 @@ HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(HA
 }
 
 // Returns Null if the item was not present in the map, otherwise returns a pointer to the bucket of the removed item.
+HASHMAP_LINKAGE 
 HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX , _remove_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key) {
   u32 idx = Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(map, key);
   if (idx == Index_not_found) {
@@ -181,6 +190,7 @@ HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX , _remove_key_and_get_bucket)(H
   return &map->buckets[idx];
 }
 
+HASHMAP_LINKAGE 
 HASHMAP_VALUE_TYPE *Cat(HASHMAP_FUNCTION_PREFIX, _find)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key) {
   u32 idx = Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(map, key);
   if (idx == Index_not_found) {
@@ -190,6 +200,7 @@ HASHMAP_VALUE_TYPE *Cat(HASHMAP_FUNCTION_PREFIX, _find)(HASHMAP_NAME *map, HASHM
   return &map->buckets[idx].val;
 }
 
+HASHMAP_LINKAGE 
 b32 Cat(HASHMAP_FUNCTION_PREFIX, _insert)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, HASHMAP_VALUE_TYPE value) {
   b32 was_occupied;
   HASHMAP_BUCKET_NAME *bucket = Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(map, key, &was_occupied);
@@ -199,6 +210,7 @@ b32 Cat(HASHMAP_FUNCTION_PREFIX, _insert)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE ke
   return was_occupied;
 }
 
+HASHMAP_LINKAGE 
 b32 Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key) {
   HASHMAP_BUCKET_NAME *bucket = Cat(HASHMAP_FUNCTION_PREFIX, _remove_key_and_get_bucket)(map, key);
   return !is_null(bucket);
@@ -393,6 +405,7 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
 #undef HASHMAP_HASH_FN
 #undef HASHMAP_KEY_COMPARE_FN
 #undef HASHMAP_BUCKET_NAME
+#undef HASHMAP_LINKAGE
 
 #undef Mask_is_occupied
 #undef Mask_is_tombstone

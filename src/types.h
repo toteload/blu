@@ -71,14 +71,14 @@ typedef Type *TypePtr;
 #include "hashmap.h"
 
 typedef struct {
-  Arena         *arena;
-  TypeList       list;
-  UniqueTypeMap  map;
+  Arena         arena;
+  TypeList      list;
+  UniqueTypeMap map;
 } TypeInterner;
 
 typedef struct {
-  Arena     *arena;
-  Allocator  map_allocator;
+  Allocator map_allocator;
+  Arena *scratch;
 } TypeInternerOptions; 
 
 void       types_init(TypeInterner *types, TypeInternerOptions *options);

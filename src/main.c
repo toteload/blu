@@ -5,8 +5,12 @@
 #include "string_interner.h"
 #include "types.h"
 #include "value.h"
+#include "messages.h"
 
 #include <stdlib.h>
+
+extern b32 tokenize(Messages *messages, Tokens *tokens, String source);
+extern b32 parse(Messages *messages, AstNodes *nodes, Tokens *tokens);
 
 internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   if (!is_null(p) && new_byte_size == 0) {
@@ -46,15 +50,29 @@ int main(int argc, char const *argv[]) {
 
   TypeInterner types = {0};
   types_init(&types, &(TypeInternerOptions){
-    .arena         = &arena,
     .map_allocator = cstd_allocator,
+    .scratch       = &arena_tmp,
   });
 
   ValueStore values = {0};
   values_init(&values, &(ValueStoreOptions){
-    .arena             = &arena,
     .payload_allocator = cstd_allocator,
   });
+
+  Messages messages;
+  messages_init(&messages);
+
+  b32 ok;
+
+  ok = tokenize(&messages, &tokens, source);
+  if (!ok) {
+    return 1;
+  }
+
+  ok = parse(&messages, &nodes, &tokens);
+  if (!ok) {
+    return 1;
+  }
 
   return 0;
 }

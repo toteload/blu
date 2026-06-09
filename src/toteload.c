@@ -85,3 +85,8 @@ void *arena_push(Arena *arena, usize size, u32 align) {
   return aligned;
 }
 
+String arena_copy_string(Arena *arena, String s) {
+  u8 *p = arena_push_array(arena, u8, s.len);
+  memcpy(p, s.str, s.len);
+  return (String){ .str = p, .len = s.len, };
+}
