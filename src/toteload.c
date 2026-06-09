@@ -1,0 +1,87 @@
+#include "toteload.h"
+
+#ifdef TTLD_OS_WINDOWS
+#error "vmem functions are not implemented for Windows"
+#endif // TTLD_OS_WINDOWS
+
+#ifdef TTLD_OS_MACOS
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
+internal usize macos_page_size = 0;
+
+usize vmem_page_size(void) {
+  if (macos_page_size == 0) {
+    macos_page_size = Cast(usize, getpagesize());
+  }
+
+  return macos_page_size;
+}
+
+void *vmem_reserve(usize size) {
+  return mmap(Null, size, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+}
+
+b32 vmem_commit(void *p, usize size) {
+  return mprotect(p, size, PROT_READ | PROT_WRITE) == 0;
+}
+
+void vmem_release(void *p, usize size) {
+  munmap(p, size);
+}
+#endif // TTLD_OS_MACOS
+
+void arena_init(Arena *arena, ArenaOptions *options) {
+  void *p = vmem_reserve(options->reserve_size);
+  if (options->initial_commit_size > 0) {
+    b32 ok = vmem_commit(p, options->initial_commit_size);
+    Assert(ok);
+  }
+
+  *arena = (Arena){
+    .base        = p,
+    .commit_end  = ptr_offset(p, options->initial_commit_size),
+    .reserve_end = ptr_offset(p, options->reserve_size),
+    .at          = p,
+  };
+}
+
+void arena_deinit(Arena *arena) {
+  if (arena->base) {
+    vmem_release(arena->base, Cast(usize, ptr_diff(arena->reserve_end, arena->base)));
+  }
+
+  memset(arena, 0, sizeof(Arena));
+}
+
+#define Default_commit_growth_size MiB(1)
+
+void *arena_push(Arena *arena, usize size, u32 align) {
+  void *aligned        = ptr_forward_align(arena->at, align);
+  void *at_after_alloc = ptr_offset(aligned, size);
+
+  if (at_after_alloc <= arena->commit_end) {
+    arena->at = at_after_alloc;
+    return aligned;
+  }
+
+  if (at_after_alloc > arena->reserve_end) {
+    Panic("Out of memory");
+    return Null;
+  }
+
+  u32 page_size = vmem_page_size();
+  usize commit_size_needed = Cast(usize, ptr_diff(at_after_alloc, arena->commit_end));
+  usize x = Max(Default_commit_growth_size, commit_size_needed);
+  usize commit_size = round_up_to_power_of_two(x, page_size);
+
+  b32 ok = vmem_commit(arena->commit_end, commit_size);
+  Assert(ok);
+
+  arena->at = at_after_alloc;
+  arena->commit_end = ptr_offset(arena->commit_end, commit_size);
+
+  return aligned;
+}
+

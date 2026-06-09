@@ -20,18 +20,23 @@
 
 #include "toteload.h"
 
+#ifdef SEGMENTLIST_OUTPUT_TYPES
+
 typedef struct {
   usize len;
   usize segment_count;
   SEGMENTLIST_TYPE *segments[SEGMENTLIST_SEGMENT_COUNT];
 } SEGMENTLIST_NAME;
 
+#undef SEGMENTLIST_OUTPUT_TYPES
+#endif // SEGMENTLIST_OUTPUT_TYPES
+
 #if defined(SEGMENTLIST_OUTPUT_DECLARATIONS) || defined(SEGMENTLIST_OUTPUT_DEFINITIONS)
 
 usize             Cat(SEGMENTLIST_FUNCTION_PREFIX, _cap)(SEGMENTLIST_NAME *list);
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list, Arena *arena);
 void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *arena, SEGMENTLIST_TYPE item);
-SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list);
+SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize i);
 
 #undef SEGMENTLIST_OUTPUT_DECLARATIONS
 #endif // SEGMENTLIST_OUTPUT_DECLARATIONS
@@ -79,8 +84,8 @@ internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NA
 }
 
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list, Arena *arena) {
-  Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(arena, list->len + 1);
-  SEGMENTLIST_TYPE *p = Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(list->len);
+  Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(list, arena, list->len + 1);
+  SEGMENTLIST_TYPE *p = Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(list, list->len);
   list->len += 1;
   return p;
 }

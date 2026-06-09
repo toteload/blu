@@ -3,6 +3,7 @@
 
 #include "toteload.h"
 
+typedef u32 StringIndex;
 typedef u32 TypeIndex;
 typedef u32 TokenIndex;
 typedef u32 AstIndex;

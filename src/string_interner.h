@@ -1,37 +1,35 @@
 #ifndef STRING_INTERNER_H
 #define STRING_INTERNER_H
 
-#include "toteload.h"
+#include "blu.h"
 
-typedef u32 StringIndex;
-
-#define VECTOR_NAME StringVector
-#define VECTOR_TYPE String
-#include "vector.h"
-
-#define XXH_INLINE_ALL
-#include "xxhash.h"
+#define SEGMENTLIST_NAME StringList
+#define SEGMENTLIST_TYPE String
+#define SEGMENTLIST_MIN_SIZE_LOG2 6
+#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
 
 #define HASHMAP_NAME       StringIndexMap
 #define HASHMAP_KEY_TYPE   String
 #define HASHMAP_VALUE_TYPE StringIndex
-#include "hash_map.h"
+#define HASHMAP_OUTPUT_TYPES
+#include "hashmap.h"
 
-typedef struct StringInterner {
-  Arena          *storage;
+typedef struct {
+  Arena          *arena;
+  StringList      list;
   StringIndexMap  map;
-  StringVector    vec;
 } StringInterner;
 
-typedef struct StringInternerOptions {
-  Arena     *string_storage;
+typedef struct {
+  Arena     *arena;
   Allocator  map_allocator;
-  Allocator  vec_allocator;
 } StringInternerOptions;
 
-void        string_interner_init(StringInterner *strings, StringInternerOptions *options);
-void        string_interner_deinit(StringInterner *strings);
-IndexString string_interner_add(StringInterner *strings, String s);
-String      string_interner_get(StringInterner *strings, StringIndex idx);
+void        strings_init(StringInterner *strings, StringInternerOptions *options);
+void        strings_deinit(StringInterner *strings);
+StringIndex strings_add(StringInterner *strings, String s);
+String      strings_get(StringInterner *strings, StringIndex idx);
 
 #endif // STRING_INTERNER_H

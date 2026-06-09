@@ -79,117 +79,116 @@ enum UnaryOpKind {
   UnaryOpKind_max,
 };
 
-typedef u32 NodeIndex;
-
 #define SEGMENTLIST_NAME          NodeIndexList
 #define SEGMENTLIST_TYPE          NodeIndex
 #define SEGMENTLIST_MIN_SIZE_LOG2 3
 #define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
 #define Max_nodes_in_NodeIndexList ((usize)1 << (3 + 24))
 
-struct {
+typedef struct {
   u8 kind;
   NodeIndexList args;
 } AstBuiltin;
 
-struct {
+typedef struct {
   NodeIndex     return_type;
   NodeIndexList param_types;
 } AstTypeFunction;
 
-struct {
+typedef struct {
   NodeIndex base;
 } AstTypeSlice;
 
-struct {
+typedef struct {
   NodeIndex size;
   NodeIndex base;
 } AstTypeArray;
 
-struct {
+typedef struct {
   TokenIndex name;
   NodeIndex  type;
   NodeIndex  value;
 } AstDeclaration;
 
-struct {
+typedef struct {
   NodeIndexList items;
 } AstRoot;
 
-struct {
+typedef struct {
   NodeIndexList items;
 } AstBlock;
 
-struct {
+typedef struct {
   NodeIndexList items;
 } AstLiteralSequence;
 
-struct {
+typedef struct {
   TokenIndex name;
   NodeIndex  type;
 } AstParam;
 
-struct {
+typedef struct {
   NodeIndexList params;
   NodeIndex     return_type;
   NodeIndex     body;
 } AstFunction;
 
-struct {
+typedef struct {
   NodeIndex cond;
   NodeIndex then;
   NodeIndex otherwise;
 } AstIfElse;
 
-struct {
+typedef struct {
   NodeIndex iterable;
   NodeIndex iterator;
   NodeIndex body;
 } AstFor;
 
-struct {
-  UnaryOpKind kind;
-  NodeIndex   value;
+typedef struct {
+  u8 op_kind;
+  NodeIndex value;
 } AstUnaryOp;
 
-struct {
-  BinaryOpKind kind;
+typedef struct {
+  u8 op_kind;
   NodeIndex    lhs;
   NodeIndex    rhs;
 } AstBinaryOp;
 
-struct {
+typedef struct {
   NodeIndex base;
   NodeIndex field;
 } AstFieldAccess;
 
-struct {
+typedef struct {
   NodeIndex     callee;
   NodeIndexList args;
 } AstCall;
 
-struct {
+typedef struct {
   NodeIndex indexable;
   NodeIndex index_at;
 } AstIndexData;
 
-struct {
+typedef struct {
   NodeIndex value;
 } AstDefer;
 
-struct {
-  AssignKind kind;
+typedef struct {
+  u8 assign_kind;
   NodeIndex  lhs;
   NodeIndex  value;
 } AstAssign;
 
-struct {
+typedef struct {
   NodeIndex expr;
 } AstConst;
 
-struct {
+typedef struct {
   NodeIndex type_dst;
   NodeIndex value;
 } AstCast;
@@ -229,15 +228,19 @@ typedef struct {
 #define Max_nodes ((usize)1 << 24)
 
 typedef struct {
-  Arena kinds;
-  Arena spans;
-  Arena datas; // holds an offset into `extra` (or maybe use a pointer?)
-  Arena types;
-
+  Arena kinds; // u8[]
+  Arena spans; // SpanToken[]
+  Arena datas; // holds a u32 offset into `extra`
+  Arena types; // TypeIndex[]
   Arena extra;
 } AstNodes;
 
 void nodes_init(AstNodes *nodes);
 void nodes_deinit(AstNodes *nodes);
+
+AstIndex   nodes_alloc(AstNodes *nodes);
+u8        *nodes_kind(AstNodes *nodes, AstIndex idx);
+SpanToken *nodes_span(AstNodes *nodes, AstIndex idx);
+void      *nodes_data(AstNodes *nodes, AstIndex idx);
 
 #endif // AST_H

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 typedef float  f32;
 typedef double f64;
@@ -28,34 +29,39 @@ typedef uint64_t b64;
 #define TTLD_COMPILER_CLANG 1
 #endif
 
+#ifdef _WIN32
+#define TTLD_OS_WINDOWS 1
+#endif
+
+#ifdef __APPLE__
+#define TTLD_OS_MACOS 1
+#endif
+
 #define Cat_(a, b) a##b
 #define Cat(a, b) Cat_(a, b)
 
 #define internal      static
 #define always_inline __attribute__((always_inline)) inline
 
-always_inline u32 clz32(u32 x) {
-#ifdef TTLD_COMPILER_CLANG
-  // Result is undefined if x == 0
-  return __builtin_clz(x);
-#else
-#error "todo"
-#endif
-}
+#define Cast(T, x) ((T)(x))
 
 always_inline u32 bitwidth(u64 x) {
 #ifdef TTLD_COMPILER_CLANG
   if (x == 0) {
     return 0;
   }
-  return 64 - clz(x);
+  return 64 - Cast(u32, __builtin_clz(x));
 #else
 #error "todo: bitwidth is not implemented for this platform"
 #endif
 }
 
-#define swap(a, b) do { \
-  typeof(a) tmp_ = (a); \
+#define KiB(x) (Cast(u64, x) << 10)
+#define MiB(x) (Cast(u64, x) << 20)
+#define GiB(x) (Cast(u64, x) << 30)
+
+#define Swap(Type, a, b) do { \
+  Type tmp_ = (a); \
   a = (b); \
   b = tmp_; \
 } while (0)
@@ -70,25 +76,46 @@ always_inline u32 bitwidth(u64 x) {
 #define False 0
 
 #define is_null(p) ((p) == Null)
-#define cast(T, x) ((T)(x))
-#define unused(x) ((void)(x))
+#define Unused(x) ((void)(x))
 
-#define is_zero_or_power_of_two(x) ((((x)-1) & (x)) == 0)
+always_inline b32 is_zero_or_power_of_two(usize x) {
+  return ((((x)-1) & (x)) == 0);
+}
 
-#define ptr_offset(p,d)        cast(void*,cast(u8*,p)+d)
+always_inline usize round_up_to_power_of_two(usize x, usize power) {
+  return (x + (power - 1)) & (~(power - 1));
+}
 
-#define align_of(x) _Alignof(x)
+always_inline void *ptr_offset(void const *p, usize offset) {
+  return Cast(void*, Cast(u8 const*, p) + offset);
+}
+
+always_inline isize ptr_diff(void const *a, void const *b) {
+  return Cast(isize, Cast(u8*, a) - Cast(u8*, b));
+}
+
+always_inline void *ptr_forward_align(void const *p, u32 align) {
+  return Cast(void*, round_up_to_power_of_two(Cast(usize, p), align));
+}
+
+#define zero_struct(type, p) memset(p, 0, sizeof(type))
+
+#define Align_of(x) _Alignof(x)
 
 #define Assert(e) assert(e)
-#define Panic() abort()
+#define Panic(Reason) abort()
 #define Unreachable() Panic()
 
 typedef struct String {
-  u8 *str;
+  u8 const *str;
   usize len;
 } String;
 
-#define string_lit(s) ((String){ .str = s, .len = (sizeof(s) - 1), })
+#define string_lit(s) \
+  _Pragma("clang diagnostic push") \
+  _Pragma("clang diagnostic ignored \"-Wpointer-sign\"") \
+  ((String){ .str = s, .len = (sizeof(s) - 1), }) \
+  _Pragma("clang diagnostic pop")
 
 always_inline b32 string_eq(String a, String b) {
   if (a.len != b.len) {
@@ -111,7 +138,7 @@ typedef struct Allocator {
 #define Realloc(allocator, ptr, old_size, new_size, align) (allocator).fn((allocator).ctx, ptr, old_size, new_size, align)
 #define Free(allocator, ptr, size)                         (allocator).fn((allocator).ctx, ptr, size, 0, 0)
 
-usize vmem_page_size();
+usize vmem_page_size(void);
 void *vmem_reserve(usize size);
 b32   vmem_commit(void *p, usize size);
 void  vmem_release(void *p, usize size);
@@ -128,14 +155,17 @@ typedef struct {
   void  *at;
 } ArenaSnapshot;
 
-void arena_init(Arena *arena);
-void arena_deinit(Arena *arena);
+typedef struct {
+  usize reserve_size;
+  usize initial_commit_size;
+} ArenaOptions;
 
-void arena_commit(Arena *arena, usize commit_size);
+void arena_init(Arena *arena, ArenaOptions *options);
+void arena_deinit(Arena *arena);
 
 void *arena_push(Arena *arena, usize size, u32 align);
 
-#define arena_push_array(arena, type, count) Cast((type)*, arena_push(arena, (count) * sizeof(type), Align_of(type)))
+#define arena_push_array(arena, type, count) arena_push(arena, (count) * sizeof(type), Align_of(type))
 
 ArenaSnapshot arena_scope_begin(Arena *arena);
 void          arena_scope_end(Arena *arena, ArenaSnapshot snapshot);

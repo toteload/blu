@@ -32,20 +32,23 @@ def create_build_ninja():
         )
 
     out.rule(
-        name    = 'compile_cpp_debug',
+        name    = 'compile_c_debug',
         depfile = '$out.d',
         command = ' '.join([
-                  'clang++',
+                  'clang',
                   '-MD -MF $out.d',
-                  '-Wall -Wextra',
+                  '-Wall -Wextra -Wpedantic',
+                  '-Wsign-conversion',
                   '-Wno-unused-parameter',
+                  '-Wimplicit-function-declaration',
                   '-Werror=switch', # Enforce all enum values are handled
                   #'-O2 -S -mllvm --x86-asm-syntax=intel',
                   '-fansi-escape-codes -fcolor-diagnostics',
-                  '-march=native -std=c++17',
+                  '-std=c11',
+                  '-march=native',
                   '-DTTLD_DEBUG',
-                  '-g' if is_macos else '',
-                  '-g -gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
+                  '-g',
+                  '-gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
                   '$cflags',
                   '-c',
                   '$in',
@@ -55,25 +58,15 @@ def create_build_ninja():
 
     out.rule(
         name = 'build_binary',
-        command = 'clang++ -g $in -o $out',
+        command = 'clang -g $in -o $out',
         )
 
     inputs = [
-        'main.cc',
-        'toteload.cc',
-        'tokenize.cc',
-        'parse.cc',
-        'value.cc',
-        'string_interner.cc',
-        #'interpreter.cc',
-        #'source_unit.cc',
-        'types.cc',
-        'builder.cc',
-        #'typecheck.cc',
-        'messages.cc',
-        'utils.cc',
-        'ast_pretty_print.cc',
-        join('utils', 'stdlib.cc'),
+        'main.c',
+        'toteload.c',
+        'tokenize.c',
+        'string_interner.c',
+        'parse.c',
     ]
 
     outputs = []
@@ -83,7 +76,7 @@ def create_build_ninja():
         outputs.append(fout)
         out.build(
             outputs   = fout,
-            rule      = 'compile_cpp_debug',
+            rule      = 'compile_c_debug',
             inputs    = join('src', f),
             variables = {
                 'cflags': '-Iext -Isrc',
@@ -93,40 +86,11 @@ def create_build_ninja():
     out.build(
         outputs = outd(exe('blu')),
         rule    = 'build_binary',
-        inputs  = [outd(f'{f}.o') for f in [
-                'main.cc',
-                'toteload.cc',
-                'tokenize.cc',
-        #        'interpreter.cc',
-                'value.cc',
-                'parse.cc',
-        #        'source_unit.cc',
-                'string_interner.cc',
-                'types.cc',
-                'builder.cc',
-        #        'typecheck.cc',
-                'utils.cc',
-                'messages.cc',
-                'ast_pretty_print.cc',
-                join('utils', 'stdlib.cc'),
-        ]],
+        inputs  = [outd(f'{f}.o') for f in inputs],
         )
-
-    #out.build(
-    #    outputs = outd(exe('tokenviewer')),
-    #    rule    = 'build_binary',
-    #    inputs  = [outd(f'{f}.o') for f in [
-    #            'toteload.cc',
-    #            'tokenize.cc',
-    #            'types.cc',
-    #            'string_interner.cc',
-    #            join('tools', 'tokenviewer.cc'),
-    #            join('utils', 'stdlib.cc'),
-    #    ]],
-    #    )
 
 if __name__ == '__main__':
     create_build_ninja()
     run(['ninja'] + sys.argv[1:])
     comp_commands = open('compile_commands.json', 'w')
-    call(['ninja', '-t', 'compdb', 'compile_cpp_debug'], stdout=comp_commands)
+    call(['ninja', '-t', 'compdb', 'compile_c_debug'], stdout=comp_commands)

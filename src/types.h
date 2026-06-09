@@ -1,9 +1,7 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include "toteload.h"
-
-typedef u32 TypeIndex;
+#include "blu.h"
 
 enum TypeKind {
   Type_integer,
@@ -48,37 +46,44 @@ typedef struct {
     struct {
       TypeIndex return_type;
       u32 param_count;
-      TypeIndex param_types[0];
     } function;
   } data;
+
+  // The compiler complains that you are not allowed to put flexible array members (FAM) in nested 
+  // structs, when I put the FAM inside the `function` struct. I don't think it should be a problem, 
+  // but I'll listen to the compiler.
+  TypeIndex function_param_types[];
 } Type;
 
 typedef Type *TypePtr;
 
-#define ARRAYLIST_NAME TypeList
-#define ARRAYLIST_TYPE TypePtr
-#include "array_list.h"
+#define SEGMENTLIST_NAME TypeList
+#define SEGMENTLIST_TYPE TypePtr
+#define SEGMENTLIST_MIN_SIZE_LOG2 6
+#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
 
 #define HASHMAP_NAME       UniqueTypeMap
 #define HASHMAP_KEY_TYPE   TypePtr
 #define HASHMAP_VALUE_TYPE TypeIndex
-#include "hash_map.h"
+#define HASHMAP_OUTPUT_TYPES
+#include "hashmap.h"
 
 typedef struct {
-  Arena *storage;
-  UniqueTypeMap map;
-  TypeList list;
+  Arena         *arena;
+  TypeList       list;
+  UniqueTypeMap  map;
 } TypeInterner;
 
 typedef struct {
-  Arena *type_storage;
-  Allocator map_allocator;
-  Allocator list_allocator;
+  Arena     *arena;
+  Allocator  map_allocator;
 } TypeInternerOptions; 
 
-void types_init(TypeInterner *types, TypeInternerOptions *options);
-void types_deinit(TypeInterner *types);
-TypeIndex types_add(TypeInterner *types, Type *type);
-Type *types_get(TypeInterner *types, TypeIndex idx);
+void       types_init(TypeInterner *types, TypeInternerOptions *options);
+void       types_deinit(TypeInterner *types);
+TypeIndex  types_add(TypeInterner *types, Type *type);
+Type      *types_get(TypeInterner *types, TypeIndex idx);
 
 #endif // TYPES_H

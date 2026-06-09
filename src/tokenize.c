@@ -1,4 +1,6 @@
 #include "blu.h"
+#include "tokens.h"
+#include "messages.h"
 
 enum TokenizerResult {
   TokResult_ok,
@@ -7,18 +9,18 @@ enum TokenizerResult {
 };
 
 typedef struct {
-  u8 const *start;
-  u8 const *at;
+  u8 const *source;
   u8 const *end;
+  u8 const *at;
 
   Messages *messages;
 } Tokenizer;
 
-internal b32 is_whitespace(char c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
-internal b32 is_numeric(char c) { return c >= '0' && c <= '9'; }
-internal b32 is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
-internal b32 is_identifier_start(char c) { return c == '_' || is_alpha(c); }
-internal b32 is_identifier_rest(char c) { return is_identifier_start(c) || is_numeric(c); }
+internal b32 is_whitespace(u8 c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
+internal b32 is_numeric(u8 c) { return c >= '0' && c <= '9'; }
+internal b32 is_alpha(u8 c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+internal b32 is_identifier_start(u8 c) { return c == '_' || is_alpha(c); }
+internal b32 is_identifier_rest(u8 c) { return is_identifier_start(c) || is_numeric(c); }
 
 internal b32 is_at_end(Tokenizer *tokenizer) {
   return tokenizer->at == tokenizer->end;
@@ -26,38 +28,38 @@ internal b32 is_at_end(Tokenizer *tokenizer) {
 
 internal void skip_whitespace(Tokenizer *tokenizer) {
   while (!is_at_end(tokenizer) && is_whitespace(*tokenizer->at)) {
-    at += 1;
+    tokenizer->at += 1;
   }
 }
 
 internal void step_until_new_line(Tokenizer *tokenizer) {
-  while (!is_at_end() && *at != '\n') {
-    at += 1;
+  while (!is_at_end(tokenizer) && *tokenizer->at != '\n') {
+    tokenizer->at += 1;
   }
 }
 
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
     *kind       = Kind;                                                                            \
-    span->start = cast(u32, token_start - start);                                                  \
-    span->end   = cast(u32, at - start);                                                           \
+    span->start = Cast(u32, token_start - tokenizer->source);                                                  \
+    span->end   = Cast(u32, tokenizer->at - tokenizer->source);                                                           \
     return TokResult_ok;                                                                           \
   }
 
 #define Return_if_match(s, Kind)                                                              \
-  if (str_eq(str_lit(s), (String){.str = token_start, .len = cast(usize, at - token_start)})) {                    \
+  if (string_eq(string_lit(s), (String){.str = token_start, .len = Cast(usize, tokenizer->at - token_start)})) {                    \
     Return_token(Kind);                                                                            \
   }
 
-internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *span) {
+internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   skip_whitespace(tokenizer);
 
   if (is_at_end(tokenizer)) {
     return TokResult_end;
   }
 
-  char        c           = *at;
-  char const *token_start = at;
+  u8        c           = *tokenizer->at;
+  u8 const *token_start = tokenizer->at;
 
   // clang-format off
   switch (c) {
@@ -87,8 +89,8 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '=') {
-    if (*at == '=') {
-      at += 1;
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
       Return_token(Tok_cmp_eq);
     }
 
@@ -96,8 +98,8 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '+') {
-    if (*at == '=') {
-      at += 1;
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
       Return_token(Tok_plus_equals);
     }
 
@@ -105,13 +107,13 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '<') {
-    if (*at == '=') {
-      at += 1;
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
       Return_token(Tok_cmp_le);
     }
 
-    if (*at == '<') {
-      at += 1;
+    if (*tokenizer->at == '<') {
+      tokenizer->at += 1;
       Return_token(Tok_left_shift);
     }
 
@@ -119,13 +121,13 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '>') {
-    if (*at == '=') {
-      at += 1;
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
       Return_token(Tok_cmp_ge);
     }
 
-    if (*at == '>') {
-      at += 1;
+    if (*tokenizer->at == '>') {
+      tokenizer->at += 1;
       Return_token(Tok_right_shift);
     }
 
@@ -133,8 +135,8 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '!') {
-    if (*at == '=') {
-      at += 1;
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
       Return_token(Tok_cmp_ne);
     }
 
@@ -142,37 +144,37 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
   }
 
   if (c == '"') {
-    while (!is_at_end(tokenizer) && *at != '"') {
-      if (*at == '\\') {
-        at += 1;
+    while (!is_at_end(tokenizer) && *tokenizer->at != '"') {
+      if (*tokenizer->at == '\\') {
+        tokenizer->at += 1;
         if (is_at_end(tokenizer)) {
           break;
         }
       }
-      at += 1;
+      tokenizer->at += 1;
     }
 
     if (is_at_end(tokenizer)) {
-      messages->error("End of source encountered while parsing string literal.");
+      messages_add_error(tokenizer->messages, string_lit("End of source encountered while parsing string literal."));
       return TokResult_error;
     }
 
-    at += 1;
+    tokenizer->at += 1;
 
     Return_token(Tok_literal_string);
   }
 
   if (is_numeric(c)) {
-    while (!is_at_end(tokenizer) && is_numeric(*at)) {
-      at += 1;
+    while (!is_at_end(tokenizer) && is_numeric(*tokenizer->at)) {
+      tokenizer->at += 1;
     }
 
     Return_token(Tok_literal_int);
   }
 
   if (is_identifier_start(c) || c == '#') {
-    while (!is_at_end(tokenizer) && is_identifier_rest(*at)) {
-      at += 1;
+    while (!is_at_end(tokenizer) && is_identifier_rest(*tokenizer->at)) {
+      tokenizer->at += 1;
     }
 
     // clang-format off
@@ -195,15 +197,15 @@ internal TokenizerResult next(Tokenizer *tokenizer, TokenKind *kind, Span<u32> *
     Return_token(Tok_identifier);
   }
 
-  messages->error("Unrecognized token encountered.");
+  messages_add_error(tokenizer->messages, string_lit("Unrecognized token encountered."));
 
   return TokResult_error;
 }
 
 b32 tokenize(Tokens *tokens, String source) {
-  Tokenizer tokenizer = {};
+  Tokenizer tokenizer = {0};
 
-  TokenizerResult res;
+  u32 res;
   while (True) {
     u8 kind;
     SpanU32 span;
