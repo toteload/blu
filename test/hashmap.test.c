@@ -8,7 +8,8 @@ u32 hash_i32(void *hash_context, i32 x) {
   return Cast(u32, x);
 }
 
-b32 cmp_i32(i32 a, i32 b) {
+b32 cmp_i32(void *context, i32 a, i32 b) {
+  Unused(context);
   return a == b;
 }
 
@@ -18,6 +19,7 @@ b32 cmp_i32(i32 a, i32 b) {
 #define HASHMAP_VALUE_TYPE      i32
 #define HASHMAP_HASH_FN         hash_i32
 #define HASHMAP_KEY_COMPARE_FN  cmp_i32
+#define HASHMAP_OUTPUT_TYPES
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
 
@@ -26,7 +28,7 @@ void *std_alloc(void *ctx, void *ptr, size_t old_byte_size, size_t new_byte_size
   Unused(old_byte_size);
   Unused(align);
 
-  if (!Is_null(ptr) && new_byte_size == 0) {
+  if (!is_null(ptr) && new_byte_size == 0) {
     free(ptr);
     return Null;
   }
@@ -57,17 +59,17 @@ i32 main() {
 
   // Item that is present in map should be found.
   p = map_find(&map, 2);
-  Assert(!Is_null(p));
+  Assert(!is_null(p));
   Assert(*p == 4);
 
   // Item that is present in map should be found.
   p = map_find(&map, 8);
-  Assert(!Is_null(p));
+  Assert(!is_null(p));
   Assert(*p == 99999);
 
   // Item that is absent in map should not found.
   p = map_find(&map, 5);
-  Assert(Is_null(p));
+  Assert(is_null(p));
 
   b32 was_removed = False;
 
@@ -77,7 +79,7 @@ i32 main() {
 
   // Item that was removed should be able to be removed again.
   p = map_find(&map, 2);
-  Assert(Is_null(p));
+  Assert(is_null(p));
 
   // Item that was never in map should not be able to be removed.
   was_removed = map_remove(&map, 7);

@@ -4,10 +4,10 @@
 
 ## Up next
 
-- [ ] Add `const` qualifier to types.
-  - Values of a `const` type may only exist at compile time.
-    Declarations or parameters that have a `const` type are implicitly `const` themselves.
-- [ ] Add `const` qualifier to declarations.
+- [ ] Add `comptime` qualifier to types.
+  - Values of a `comptime` type may only exist at compile time.
+    Declarations or parameters that have a `comptime` type are implicitly `comptime` themselves.
+- [ ] Add `comptime` qualifier to declarations.
   - This means that the declaration only exists at compile time.
     All uses of the declaration are replaced with its value.
 
@@ -23,7 +23,7 @@
 - [ ] `test\basic\defer.blu`
 - [ ] Add assign of variables.
 - [ ] Update declaration syntax to allow optional omission of declaration type.
-- [ ] Add `const` qualifier to function parameters.
+- [ ] Add `comptime` qualifier to function parameters.
 
 
 ## Code organization
@@ -61,7 +61,7 @@
 
 ## Metaprogramming
 
-- [ ] Add `eval` keyword to evaluate expressions at compile time.
+- [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Type introspection / reflection.
 
 

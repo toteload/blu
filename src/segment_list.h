@@ -56,15 +56,15 @@ internal usize segment_size(usize min_size_log2, usize si) {
 }
 
 internal usize segment_idx(usize min_size_log2, usize i) {
-  return bitwidth(i >> min_size_log2);
+  return bitwidth((i >> min_size_log2) + 1) - 1;
 }
 
 internal usize item_idx(usize min_size_log2, usize i, usize si) {
-  return i + 1 - (1 << (min_size_log2 + si));
+  return i + ((usize)1 << min_size_log2) - ((usize)1 << (min_size_log2 + si));
 }
 
 usize Cat(SEGMENTLIST_FUNCTION_PREFIX, _cap)(SEGMENTLIST_NAME *list) {
-  return (1 << (SEGMENTLIST_SEGMENT_COUNT + list->segment_count)) - 1;
+  return (((usize)1 << list->segment_count) - 1) << SEGMENTLIST_MIN_SIZE_LOG2;
 }
 
 internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NAME *list, Arena *arena, usize min_capacity) {
@@ -103,7 +103,7 @@ void Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *ar
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
   usize si = segment_idx(SEGMENTLIST_MIN_SIZE_LOG2, idx);
-  usize i  = item_idx(SEGMENTLIST_MIN_SIZE_LOG2, si, idx);
+  usize i  = item_idx(SEGMENTLIST_MIN_SIZE_LOG2, idx, si);
 
   return &list->segments[si][i];
 }

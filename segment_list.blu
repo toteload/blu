@@ -1,0 +1,30 @@
+SegmentList := |
+  T: type,
+  min_size_log2: comptime u32,
+  segment_count: comptime u32,
+| struct {
+  len: uint,
+  initialized_segment_count: uint,
+  segments: [segment_count][*]T,
+
+  Self := #self
+
+  pub append := |self: *Self, arena: *Arena, item: T| {
+    p := self.push(arena)
+    p.* = item
+  }
+
+  ensure_capacity := |self: *Self, arena: *Arena, min_capacity: uint| {
+    required_segment_count := segment_count_at_capacity(min_size_log2, min_capacity)
+    if required_segment_count <= self.initialized_segment_count {
+      return
+    }
+
+    for self.initialized_segment_count..required_segment_count do |i| {
+      size := segment_size(min_size_log2, i)
+      self.segments[i] = arena.push_array(T, size)
+    }
+
+    self.initialized_segment_count = required_segment_count
+  }
+}

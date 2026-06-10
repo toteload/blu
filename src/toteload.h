@@ -50,7 +50,7 @@ always_inline u32 bitwidth(u64 x) {
   if (x == 0) {
     return 0;
   }
-  return 64 - Cast(u32, __builtin_clz(x));
+  return 64 - Cast(u32, __builtin_clzll(x));
 #else
 #error "todo: bitwidth is not implemented for this platform"
 #endif

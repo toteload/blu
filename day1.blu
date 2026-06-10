@@ -1,0 +1,35 @@
+main := ||: i32 {
+  count  : i32 = 0
+  pcount : i32 = 0
+  dial   : i32 = 50
+
+  while i < text.len {
+    sign : i32 = if text[i] == "L" { -1 } else { 1 }
+    i += 1
+
+    n : i32 = text[i] - "0"
+    i += 1
+
+    while text[i] >= "0" and text[i] <= "9" {
+      n *= 10
+      n += text[i] - "0"
+      i += 1
+    }
+
+    pcount += n / 100
+    n %= 100
+
+    was_on_zero : i32 = dial == 0
+    dial += sign * n
+    if dial <  0   { dial += 100, pcount += !was_on_zero }
+    if dial >= 100 { dial -= 100, pcount += 1 }
+
+    count  += dial == 0
+    pcount += dial == 0 and sign < 0
+
+    while i < text.len {
+      if text[i] == "L" or text[i] == "R" { break }
+      i += 1
+    }
+  }
+}
