@@ -1,7 +1,41 @@
 #include "toteload.h"
 
+String string_from_cstr(char const *s) {
+  u32 len = strlen(s);
+  return (String){
+    .str = s,
+    .len = len,
+  };
+}
+
 #ifdef TTLD_OS_WINDOWS
-#error "vmem functions are not implemented for Windows"
+#define WIN32_LEAN_AND_MEAN
+#define VC_EXTRA_LEAN
+#include <Windows.h>
+
+internal b32 is_sys_info_initialized = False;
+internal SYSTEM_INFO sys_info;
+usize vmem_page_size(void) {
+  if (!is_sys_info_initialized) {
+    GetSystemInfo(&sys_info);
+    is_sys_info_initialized = True;
+  }
+
+  return sys_info.dwPageSize;
+}
+
+void *vmem_reserve(usize size) {
+  return VirtualAlloc(Null, size, MEM_RESERVE, PAGE_READWRITE);
+}
+
+b32 vmem_commit(void *p, usize size) {
+  void *x = VirtualAlloc(p, size, MEM_COMMIT, PAGE_READWRITE);
+  return !is_null(x);
+}
+
+void vmem_release(void *p, usize size) {
+  VirtualFree(p, size, MEM_RELEASE);
+}
 #endif // TTLD_OS_WINDOWS
 
 #ifdef TTLD_OS_MACOS
@@ -86,7 +120,7 @@ void *arena_push(Arena *arena, usize size, u32 align) {
 }
 
 String arena_copy_string(Arena *arena, String s) {
-  u8 *p = arena_push_array(arena, u8, s.len);
+  u8 *p = arena_push_array(u8, arena, s.len);
   memcpy(p, s.str, s.len);
   return (String){ .str = p, .len = s.len, };
 }

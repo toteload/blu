@@ -29,10 +29,10 @@ void nodes_init(AstNodes *nodes) {
     .initial_commit_size = KiB(16),
   });
 
-  arena_push_array(&nodes->kinds, u8, 1);
-  arena_push_array(&nodes->spans, SpanToken, 1);
-  arena_push_array(&nodes->datas, u32, 1);
-  arena_push_array(&nodes->types, TypeIndex, 1);
+  arena_push_array(u8, &nodes->kinds, 1);
+  arena_push_array(SpanToken, &nodes->spans, 1);
+  arena_push_array(u32, &nodes->datas, 1);
+  arena_push_array(TypeIndex, &nodes->types, 1);
 
   nodes->offset = 1;
 }
@@ -50,10 +50,10 @@ void nodes_deinit(AstNodes *nodes) {
 AstIndex nodes_alloc(AstNodes *nodes) {
   AstIndex idx = nodes->offset;
   nodes->offset += 1;
-  arena_push_array(&nodes->kinds, u8, 1);
-  arena_push_array(&nodes->spans, SpanToken, 1);
-  arena_push_array(&nodes->datas, u32, 1);
-  arena_push_array(&nodes->types, TypeIndex, 1);
+  arena_push_array(u8, &nodes->kinds, 1);
+  arena_push_array(SpanToken, &nodes->spans, 1);
+  arena_push_array(u32, &nodes->datas, 1);
+  arena_push_array(TypeIndex, &nodes->types, 1);
   return idx;
 }
 

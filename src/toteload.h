@@ -117,6 +117,8 @@ typedef struct String {
   ((String){ .str = s, .len = (sizeof(s) - 1), }) \
   _Pragma("clang diagnostic pop")
 
+String string_from_cstr(char const *s);
+
 always_inline b32 string_eq(String a, String b) {
   if (a.len != b.len) {
     return False;
@@ -165,7 +167,7 @@ void arena_deinit(Arena *arena);
 
 void *arena_push(Arena *arena, usize size, u32 align);
 
-#define arena_push_array(arena, type, count) arena_push(arena, (count) * sizeof(type), Align_of(type))
+#define arena_push_array(type, arena, count) arena_push(arena, (count) * sizeof(type), Align_of(type))
 
 String arena_copy_string(Arena *arena, String s);
 
@@ -173,6 +175,8 @@ always_inline ArenaSnapshot arena_scope_begin(Arena *arena) {
   return (ArenaSnapshot){ .arena = arena, .at = arena->at, };
 }
 
+// [Thought] Everything you need is present in `snapshot` and passing in `arena` is only done as an
+// extra safety check. It might be more convenient to only pass in the snapshot.
 always_inline void arena_scope_end(Arena *arena, ArenaSnapshot snapshot) {
   Assert(arena == snapshot.arena);
   arena->at = snapshot.at;

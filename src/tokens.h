@@ -52,6 +52,8 @@ enum TokenKind {
   Tok_keyword_defer,
   Tok_keyword_const,
   Tok_keyword_cast,
+  Tok_keyword_bitcast,
+  Tok_keyword_as,
 
   Tok_identifier,
 
@@ -83,5 +85,7 @@ TokenIndex tokens_end(Tokens *tokens);
 TokenIndex tokens_alloc(Tokens *tokens);
 u8        *tokens_kind(Tokens *tokens, TokenIndex idx);
 SpanU32   *tokens_span(Tokens *tokens, TokenIndex idx);
+
+char const *token_kind_string(u8 kind);
 
 #endif // TOKENS_H

@@ -1,3 +1,5 @@
+mod std.collections
+
 SegmentList := |
   T: type,
   min_size_log2: comptime u32,
@@ -28,3 +30,20 @@ SegmentList := |
     self.initialized_segment_count = required_segment_count
   }
 }
+
+SegmentList := |
+  T: type,
+  min_size_log2: comptime u32,
+  segment_count: comptime u32,
+|: type -> mod {
+  Self := struct {
+    len: uint,
+    initialized_segment_count: uint,
+    segments: [segment_count][*]T,
+  }
+
+  Self.append := |self: *Self, arena: *Arena, item: T| -> {
+    p := self.push(arena)
+    p.* = item
+  }
+}.Self

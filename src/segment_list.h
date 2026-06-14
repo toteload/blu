@@ -81,7 +81,7 @@ internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NA
 
   for (usize i = list->segment_count; i < required_segment_count; i++) {
     usize size = segment_size(SEGMENTLIST_MIN_SIZE_LOG2, i);
-    list->segments[i] = arena_push_array(arena, SEGMENTLIST_TYPE, size);
+    list->segments[i] = arena_push_array(SEGMENTLIST_TYPE, arena, size);
   }
 
   list->segment_count = required_segment_count;

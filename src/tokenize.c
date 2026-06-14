@@ -192,7 +192,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("defer",    Tok_keyword_defer);
     Return_if_match("const",    Tok_keyword_const);
     Return_if_match("cast",     Tok_keyword_cast);
-
+    Return_if_match("bitcast",  Tok_keyword_bitcast);
+    Return_if_match("as",       Tok_keyword_as);
     Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
@@ -214,8 +215,8 @@ void tokens_init(Tokens *tokens) {
     .initial_commit_size = KiB(8 * 16),
   });
 
-  arena_push_array(&tokens->kinds, u8, 1);
-  arena_push_array(&tokens->spans, SpanU32, 1);
+  arena_push_array(u8, &tokens->kinds, 1);
+  arena_push_array(SpanU32, &tokens->spans, 1);
 
   tokens->offset = 1;
 }
@@ -238,8 +239,8 @@ u32 tokens_count(Tokens *tokens) {
 TokenIndex tokens_alloc(Tokens *tokens) {
   TokenIndex idx = tokens->offset;
   tokens->offset += 1;
-  arena_push_array(&tokens->kinds, u8, 1);
-  arena_push_array(&tokens->spans, SpanU32, 1);
+  arena_push_array(u8, &tokens->kinds, 1);
+  arena_push_array(SpanU32, &tokens->spans, 1);
   return idx;
 }
 
@@ -282,3 +283,38 @@ b32 tokenize(Messages *messages, Tokens *tokens, String source) {
   return res == TokResult_end;
 }
 
+char const *token_kind_string_literals[Tok_kind_max] = {
+  "colon",        "semicolon",
+  "comma",        "dot",
+  "equals",       "minus",
+  "plus",         "star",
+  "slash",        "percent",
+  "plus_equals",  "exclamation",
+  "ampersand",    "bar",
+  "caret",        "tilde",
+  "left-shift",   "right-shift",
+  "cmp-eq",       "cmp-ne",
+  "cmp-gt",       "cmp-ge",
+  "cmp-lt",       "cmp-le",
+  "literal-int",  "literal-string",
+  "brace-open",   "brace-close",
+  "paren-open",   "paren-close",
+  "bracket-open", "bracket-close",
+  "if",           "else",
+  "for",          "do",
+  "break",        "continue",
+  "return",       "and",
+  "or",           "defer",
+  "const",        "cast",
+  "bitcast", "as",
+  "identifier",   "#print",
+  "line-comment",
+};
+
+char const *token_kind_string(u8 kind) {
+  if (kind >= Tok_kind_max) {
+    return "<illegal-token-kind>";
+  }
+
+  return token_kind_string_literals[kind];
+}
