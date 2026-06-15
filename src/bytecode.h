@@ -4,15 +4,18 @@
 #include "blu.h"
 
 enum BytecodeOp {
-  CodeOp_int_add,
-  CodeOp_branch,
-  CodeOp_block,
-  CodeOp_call,
-  CodeOp_return,
+  
+
+  Op_add,
+
+  Op_cond_branch,
+  Op_block,
+  Op_call,
+  Op_return,
 };
 
 typedef struct {
-
+  
 } BytecodeMachine;
 
 #endif // BYTECODE_H 

@@ -8,6 +8,7 @@ enum TokenKind {
   Tok_semicolon,
   Tok_comma,
   Tok_dot,
+  Tok_arrow,
 
   Tok_equals,
   Tok_minus,
@@ -54,6 +55,7 @@ enum TokenKind {
   Tok_keyword_cast,
   Tok_keyword_bitcast,
   Tok_keyword_as,
+  Tok_keyword_mod,
 
   Tok_identifier,
 
@@ -75,12 +77,10 @@ typedef struct {
   u32 offset;
 } Tokens;
 
-#define Max_tokens ((usize)1 << 24)
-#define First_token ((TokenIndex)1)
-
 void       tokens_init(Tokens *tokens);
 void       tokens_deinit(Tokens *tokens);
 u32        tokens_count(Tokens *tokens);
+TokenIndex tokens_begin(Tokens *tokens);
 TokenIndex tokens_end(Tokens *tokens);
 TokenIndex tokens_alloc(Tokens *tokens);
 u8        *tokens_kind(Tokens *tokens, TokenIndex idx);

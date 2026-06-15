@@ -19,20 +19,14 @@ void nodes_init(AstNodes *nodes) {
     .initial_commit_size = 4 * KiB(16),
   });
 
-  arena_init(&nodes->types, &(ArenaOptions){
-    .reserve_size        = 4 * MiB(1),
-    .initial_commit_size = 4 * KiB(16),
-  });
-
   arena_init(&nodes->extra, &(ArenaOptions){
-    .reserve_size        = MiB(1),
-    .initial_commit_size = KiB(16),
+    .reserve_size        = 128 * MiB(1),
+    .initial_commit_size = 128 * KiB(16),
   });
 
-  arena_push_array(u8, &nodes->kinds, 1);
+  arena_push_array(u8,        &nodes->kinds, 1);
   arena_push_array(SpanToken, &nodes->spans, 1);
-  arena_push_array(u32, &nodes->datas, 1);
-  arena_push_array(TypeIndex, &nodes->types, 1);
+  arena_push_array(u32,       &nodes->datas, 1);
 
   nodes->offset = 1;
 }
@@ -41,10 +35,18 @@ void nodes_deinit(AstNodes *nodes) {
   arena_deinit(&nodes->kinds);
   arena_deinit(&nodes->spans);
   arena_deinit(&nodes->datas);
-  arena_deinit(&nodes->types);
   arena_deinit(&nodes->extra);
 
   zero_struct(AstNodes, nodes);
+}
+
+AstIndex nodes_begin(AstNodes *nodes) {
+  Unused(nodes);
+  return 1;
+}
+
+AstIndex nodes_end(AstNodes *nodes) {
+  return nodes->offset;
 }
 
 AstIndex nodes_alloc(AstNodes *nodes) {
@@ -53,11 +55,10 @@ AstIndex nodes_alloc(AstNodes *nodes) {
   arena_push_array(u8, &nodes->kinds, 1);
   arena_push_array(SpanToken, &nodes->spans, 1);
   arena_push_array(u32, &nodes->datas, 1);
-  arena_push_array(TypeIndex, &nodes->types, 1);
   return idx;
 }
 
-u8        *nodes_kind(AstNodes *nodes, AstIndex idx) {
+u8 *nodes_kind(AstNodes *nodes, AstIndex idx) {
   return Cast(u8*, nodes->kinds.base) + idx;
 }
 
@@ -65,7 +66,7 @@ SpanToken *nodes_span(AstNodes *nodes, AstIndex idx) {
   return Cast(SpanToken*, nodes->spans.base) + idx;
 }
 
-void      *nodes_data(AstNodes *nodes, AstIndex idx) {
+void *nodes_data(AstNodes *nodes, AstIndex idx) {
   u32 offset = Cast(u32*, nodes->datas.base)[idx];
   return ptr_offset(nodes->extra.base, offset);
 }
@@ -84,7 +85,7 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 #define SEGMENTLIST_FUNCTION_PREFIX list
 #define SEGMENTLIST_MIN_SIZE_LOG2   3
 #define SEGMENTLIST_SEGMENT_COUNT   24
-#define SEGMENTLIST_LINKAGE  internal 
+#define SEGMENTLIST_LINKAGE         internal 
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
@@ -103,6 +104,7 @@ typedef struct {
 } Parser;
 
 internal b32 parse_root(Parser *parser, NodeIndex *out);
+internal b32 parse_mod_section(Parser *parser, NodeIndex *out);
 internal b32 parse_declaration(Parser *parser, NodeIndex *out);
 internal b32 parse_block(Parser *parser, NodeIndex *out);
 internal b32 parse_type(Parser *parser, NodeIndex *out);
@@ -175,6 +177,16 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
   return True;
 }
 
+internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
+  b32 has_peeked = peek(parser, token_kind);
+  if (!has_peeked) {
+    messages_add_error(parser->messages, string_lit("Expected a token but got end of source."));
+    return False;
+  }
+
+  return True;
+}
+
 internal b32 peek2(Parser *parser, u8 *token_kind) {
   TokenIndex lookahead = parser->at + 1;
 
@@ -233,11 +245,41 @@ internal b32 parse_root(Parser *parser, NodeIndex *out) {
   zero_struct(AstRoot, root);
 
   while (!is_parser_past_end(parser)) {
-    NodeIndex *decl = list_push(&root->items, &parser->nodes->extra);
-    Try(parse_declaration(parser, decl));
+    NodeIndex *section = list_push(&root->items, &parser->nodes->extra);
+    Try(parse_mod_section(parser, section));
   }
 
   *nodes_kind(parser->nodes, idx) = Ast_root;
+  *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
+
+  *out = (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
+
+  return True;
+}
+
+internal b32 parse_mod_section(Parser *parser, NodeIndex *out) {
+  AstIndex idx = nodes_alloc(parser->nodes);
+  TokenIndex start = parser->at;
+
+  Try(expect_token(parser, Tok_keyword_mod));
+
+  AstModSection *section = nodes_push_data(parser->nodes, AstModSection, idx);
+  zero_struct(AstModSection, section);
+
+  Try(parse_identifier(parser, &section->name));
+
+  while (!is_parser_past_end(parser)) {
+    u8 tok;
+    peek(parser, &tok);
+    if (tok == Tok_keyword_mod) {
+      break;
+    }
+
+    NodeIndex *decl = list_push(&section->items, &parser->nodes->extra);
+    Try(parse_declaration(parser, decl));
+  }
+
+  *nodes_kind(parser->nodes, idx) = Ast_mod_section;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
@@ -379,7 +421,14 @@ internal b32 parse_declaration(Parser *parser, NodeIndex *out) {
 
   Try(expect_token(parser, Tok_colon));
 
-  Try(parse_type(parser, &declaration->type));
+  u8 tok;
+  Try(peek_or_error(parser, &tok));
+
+  if (tok != Tok_equals) {
+    Try(parse_type(parser, &declaration->type));
+  } else {
+    declaration->type = (NodeIndex){ .kind = NodeIndex_none };
+  }
 
   Try(expect_token(parser, Tok_equals));
 
@@ -432,27 +481,6 @@ internal b32 parse_literal_string(Parser *parser, NodeIndex *out) {
   return True;
 }
 
-internal b32 parse_literal_sequence(Parser *parser, NodeIndex *out) {
-  AstIndex   idx   = nodes_alloc(parser->nodes);
-  TokenIndex start = parser->at;
-
-  AstLiteralSequence *literal_sequence = nodes_push_data(parser->nodes, AstLiteralSequence, idx);
-  zero_struct(AstLiteralSequence, literal_sequence);
-
-  Try(expect_token(parser, Tok_brace_open));
-  Try(parse_comma_separated_items_until(
-    parser, &literal_sequence->items, parse_expression, Tok_brace_close
-  ));
-  Try(expect_token(parser, Tok_brace_close));
-
-  *nodes_kind(parser->nodes, idx) = Ast_literal_sequence;
-  *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = node_index_from_ast(idx);
-
-  return True;
-}
-
 internal b32 parse_param(Parser *parser, NodeIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
@@ -486,9 +514,14 @@ internal b32 parse_function(Parser *parser, NodeIndex *out) {
   Try(parse_comma_separated_items_until(parser, &function->params, parse_param, Tok_bar));
   Try(expect_token(parser, Tok_bar));
 
-  if (consume_if_match(parser, Tok_colon)) {
+  u8 tok;
+  Try(peek_or_error(parser, &tok));
+
+  if (tok != Tok_arrow) {
     Try(parse_type(parser, &function->return_type));
   }
+
+  Try(expect_token(parser, Tok_arrow));
 
   Try(parse_expression(parser, &function->body));
 
@@ -669,9 +702,6 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
     next(parser, &ignored);
     Try(peek(parser, &tok));
     switch (tok) {
-    case Tok_brace_open:
-      Try(parse_literal_sequence(parser, &base));
-      break;
     default:
       messages_add_error(
         parser->messages,
@@ -907,9 +937,43 @@ b32 parse(Messages *messages, AstNodes *nodes, Tokens *tokens) {
     .messages = messages,
     .tokens = tokens,
     .nodes = nodes,
-    .at = First_token,
+    .at = tokens_begin(tokens),
   };
 
   NodeIndex ignored;
   return parse_root(&parser, &ignored);
+}
+
+String ast_string[] = {
+  [Ast_root]           = string_lit("root"),
+  [Ast_mod_section]    = string_lit("mod-section"),
+  [Ast_block]          = string_lit("block"),          
+  [Ast_type_slice]     = string_lit("type-slice"),
+  [Ast_type_array]     = string_lit("type-array"),  
+  [Ast_type_function]  = string_lit("type-function"),  
+  [Ast_builtin]        = string_lit("builtin"),
+  [Ast_declaration]    = string_lit("declaration"), 
+  [Ast_assign]         = string_lit("assign"),
+  [Ast_literal_int]    = string_lit("literal-int"),
+  [Ast_literal_string] = string_lit("literal-string"),
+  [Ast_identifier]     = string_lit("identifier"),
+  [Ast_call]           = string_lit("call"),
+  [Ast_index]          = string_lit("index"),
+  [Ast_unary_op]       = string_lit("unary-op"),
+  [Ast_binary_op]      = string_lit("binary-op"),
+  [Ast_function]       = string_lit("function"),
+  [Ast_param]          = string_lit("param"),
+  [Ast_if_else]        = string_lit("if-else"),
+  [Ast_for]            = string_lit("for"),
+  [Ast_defer]          = string_lit("defer"),
+  [Ast_const]          = string_lit("const"),
+  [Ast_cast]           = string_lit("cast"),
+};
+
+String ast_kind_string(u8 kind) {
+  if (kind >= Ast_kind_max) {
+    return string_lit("<illegal-ast-kind>");
+  }
+
+  return ast_string[kind];
 }

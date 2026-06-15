@@ -1,4 +1,8 @@
-mod std.collections
+mod main
+
+main := || {
+  x := SegmentList(u32, 3, 20).new()
+}
 
 SegmentList := |
   T: type,
@@ -40,6 +44,9 @@ SegmentList := |
     len: uint,
     initialized_segment_count: uint,
     segments: [segment_count][*]T,
+  }
+
+  Self.new := ||: Self -> {
   }
 
   Self.append := |self: *Self, arena: *Arena, item: T| -> {

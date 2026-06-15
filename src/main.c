@@ -109,8 +109,8 @@ u32 read_file(String filename, Arena *arena, String *content) {
 extern b32 tokenize(Messages *messages, Tokens *tokens, String source);
 extern b32 parse(Messages *messages, AstNodes *nodes, Tokens *tokens);
 
-void write_tokens(Tokens *tokens, String source) {
-  for (u32 i = First_token; i < tokens_end(tokens); i++) {
+internal void write_tokens(Tokens *tokens, String source) {
+  for (u32 i = tokens_begin(tokens); i < tokens_end(tokens); i++) {
     u8      kind = *tokens_kind(tokens, i);
     SpanU32 span = *tokens_span(tokens, i);
 
@@ -120,6 +120,15 @@ void write_tokens(Tokens *tokens, String source) {
     char const *kind_string = token_kind_string(kind);
 
     printf("%5u:%5u - %s - \"%.*s\"\n", span.start, span.end, kind_string, len, s);
+  }
+}
+
+internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
+  for (u32 i = nodes_begin(nodes); i < nodes_end(nodes); i++) {
+    u8 kind = *nodes_kind(nodes, i);
+    String kind_string = ast_kind_string(kind);
+
+    printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
   }
 }
 
@@ -191,7 +200,7 @@ int main(int argc, char const *argv[]) {
 
   ok = tokenize(&messages, &tokens, source);
   if (!ok) {
-    printf("Tokenize error.\n");
+    messages_print_all_messages(&messages);
     return 1;
   }
 
@@ -199,9 +208,11 @@ int main(int argc, char const *argv[]) {
 
   ok = parse(&messages, &nodes, &tokens);
   if (!ok) {
-    printf("Parse error.\n");
+    messages_print_all_messages(&messages);
     return 1;
   }
+
+  write_nodes(&nodes, &tokens, source);
 
   printf("ok\n");
 

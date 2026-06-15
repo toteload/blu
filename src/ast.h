@@ -5,6 +5,7 @@
 
 enum AstKind {
   Ast_root,
+  Ast_mod_section,
   Ast_block,
 
   Ast_type_slice,
@@ -15,7 +16,6 @@ enum AstKind {
 
   Ast_declaration,
   Ast_assign,
-  Ast_literal_sequence,
   Ast_literal_int,
   Ast_literal_string,
   Ast_identifier,
@@ -116,6 +116,11 @@ typedef struct {
 typedef struct {
   NodeIndexList items;
 } AstRoot;
+
+typedef struct {
+  NodeIndex     name;
+  NodeIndexList items;
+} AstModSection;
 
 typedef struct {
   NodeIndexList items;
@@ -226,12 +231,12 @@ typedef struct {
 } SpanToken;
 
 #define Max_nodes ((usize)1 << 24)
+#define AstNodes_first_index 1
 
 typedef struct {
   Arena kinds; // u8[]
   Arena spans; // SpanToken[]
   Arena datas; // holds a u32 offset into `extra`
-  Arena types; // TypeIndex[]
   Arena extra;
   u32   offset;
 } AstNodes;
@@ -239,9 +244,14 @@ typedef struct {
 void nodes_init(AstNodes *nodes);
 void nodes_deinit(AstNodes *nodes);
 
+AstIndex nodes_begin(AstNodes *nodes);
+AstIndex nodes_end(AstNodes *nodes);
+
 AstIndex   nodes_alloc(AstNodes *nodes);
 u8        *nodes_kind(AstNodes *nodes, AstIndex idx);
 SpanToken *nodes_span(AstNodes *nodes, AstIndex idx);
 void      *nodes_data(AstNodes *nodes, AstIndex idx);
+
+String ast_kind_string(u8 kind);
 
 #endif // AST_H

@@ -1,7 +1,9 @@
 main : (): i32 = || {
-  const x : i32 = {45 + 5} / 5
+  comptime x := as(i32) {45 + 5} / 5
   a : i32 = 0
-  const fac(x) - 3628800
+  b : i32 = one_or_two(false)
+  c : i32 = one_or_two(true)
+  comptime fac(x) - 3628800
 }
 
 fac : (i32): i32 = |n| {
@@ -10,4 +12,11 @@ fac : (i32): i32 = |n| {
   } else {
     n * fac(n-1)
   }
+}
+
+; if you call a function that has a comptime parameter, then the function gets instantiated/generated
+; for the specific arguments.
+
+one_or_two := |comptime toggle: bool|: i32 {
+  if toggle { 1 } else { 2 } 
 }

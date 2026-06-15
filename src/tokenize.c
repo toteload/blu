@@ -81,13 +81,21 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   case '|': Return_token(Tok_bar);
   case '^': Return_token(Tok_caret);
   case '~': Return_token(Tok_tilde);
-  case '-': Return_token(Tok_minus);
   }
   // clang-format on
 
   if (c == ';') {
     step_until_new_line(tokenizer);
     Return_token(Tok_line_comment);
+  }
+
+  if (c == '-') {
+    if (!is_at_end(tokenizer) && *tokenizer->at == '>') {
+      tokenizer->at += 1;
+      Return_token(Tok_arrow);
+    }
+
+    Return_token(Tok_minus);
   }
 
   if (c == '=') {
@@ -194,6 +202,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("cast",     Tok_keyword_cast);
     Return_if_match("bitcast",  Tok_keyword_bitcast);
     Return_if_match("as",       Tok_keyword_as);
+    Return_if_match("mod",      Tok_keyword_mod);
     Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
@@ -211,8 +220,8 @@ void tokens_init(Tokens *tokens) {
     .initial_commit_size = KiB(16),
   });
   arena_init(&tokens->spans, &(ArenaOptions){
-    .reserve_size = MiB(1),
-    .initial_commit_size = KiB(8 * 16),
+    .reserve_size = 8 * MiB(1),
+    .initial_commit_size = 8 * KiB(16),
   });
 
   arena_push_array(u8, &tokens->kinds, 1);
@@ -228,6 +237,10 @@ void tokens_deinit(Tokens *tokens) {
   zero_struct(Tokens, tokens);
 }
 
+u32 tokens_begin(Tokens *tokens) {
+  return 1;
+}
+
 u32 tokens_end(Tokens *tokens) {
   return tokens->offset;
 }
@@ -239,7 +252,7 @@ u32 tokens_count(Tokens *tokens) {
 TokenIndex tokens_alloc(Tokens *tokens) {
   TokenIndex idx = tokens->offset;
   tokens->offset += 1;
-  arena_push_array(u8, &tokens->kinds, 1);
+  arena_push_array(u8,      &tokens->kinds, 1);
   arena_push_array(SpanU32, &tokens->spans, 1);
   return idx;
 }
@@ -285,7 +298,7 @@ b32 tokenize(Messages *messages, Tokens *tokens, String source) {
 
 char const *token_kind_string_literals[Tok_kind_max] = {
   "colon",        "semicolon",
-  "comma",        "dot",
+  "comma",        "dot", "arrow",
   "equals",       "minus",
   "plus",         "star",
   "slash",        "percent",
@@ -306,7 +319,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "cast",
-  "bitcast", "as",
+  "bitcast", "as", "mod",
   "identifier",   "#print",
   "line-comment",
 };
