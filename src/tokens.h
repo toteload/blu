@@ -57,6 +57,8 @@ enum TokenKind {
   Tok_keyword_as,
   Tok_keyword_mod,
 
+  Tok_keyword_no_cache,
+
   Tok_identifier,
 
   Tok_builtin_print,

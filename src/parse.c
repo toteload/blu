@@ -110,6 +110,7 @@ internal b32 parse_block(Parser *parser, NodeIndex *out);
 internal b32 parse_type(Parser *parser, NodeIndex *out);
 internal b32 parse_function(Parser *parser, NodeIndex *out);
 internal b32 parse_cast(Parser *parser, NodeIndex *out);
+internal b32 parse_as(Parser *parser, NodeIndex *out);
 internal b32 parse_if_else(Parser *parser, NodeIndex *out);
 internal b32 parse_base_expression(Parser *parser, NodeIndex *out);
 internal b32 parse_expression(Parser *parser, NodeIndex *out);
@@ -380,8 +381,6 @@ internal b32 parse_type(Parser *parser, NodeIndex *out) {
     ));
     Try(expect_token(parser, Tok_paren_close));
 
-    Try(expect_token(parser, Tok_colon));
-
     Try(parse_type(parser, &type_function->return_type));
 
     *nodes_kind(parser->nodes, idx) = Ast_type_function;
@@ -514,14 +513,9 @@ internal b32 parse_function(Parser *parser, NodeIndex *out) {
   Try(parse_comma_separated_items_until(parser, &function->params, parse_param, Tok_bar));
   Try(expect_token(parser, Tok_bar));
 
-  u8 tok;
-  Try(peek_or_error(parser, &tok));
-
-  if (tok != Tok_arrow) {
+  if (consume_if_match(parser, Tok_colon)) {
     Try(parse_type(parser, &function->return_type));
   }
-
-  Try(expect_token(parser, Tok_arrow));
 
   Try(parse_expression(parser, &function->body));
 
@@ -652,6 +646,28 @@ internal b32 parse_cast(Parser *parser, NodeIndex *out) {
   return True;
 }
 
+internal b32 parse_as(Parser *parser, NodeIndex *out) {
+  AstIndex   idx   = nodes_alloc(parser->nodes);
+  TokenIndex start = parser->at;
+
+  Try(expect_token(parser, Tok_keyword_as));
+
+  AstCast *cast = nodes_push_data(parser->nodes, AstCast, idx);
+
+  Try(expect_token(parser, Tok_paren_open));
+  Try(parse_type(parser, &cast->type_dst));
+  Try(expect_token(parser, Tok_paren_close));
+
+  Try(parse_base_expression(parser, &cast->value));
+
+  *nodes_kind(parser->nodes, idx) = Ast_as;
+  *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
+
+  *out = node_index_from_ast(idx);
+
+  return True;
+}
+
 internal b32 parse_identifier(Parser *parser, NodeIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
@@ -694,6 +710,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
   case Tok_builtin_print:    Try(parse_builtin_print(parser, &base));  break;
   case Tok_keyword_const:    Try(parse_const(parser, &base));          break;
   case Tok_keyword_cast:     Try(parse_cast(parser, &base));           break;
+  case Tok_keyword_as:       Try(parse_as(parser, &base));             break;
   case Tok_brace_open:       Try(parse_block(parser, &base));          break;
     // clang-format on
 
@@ -968,6 +985,7 @@ String ast_string[] = {
   [Ast_defer]          = string_lit("defer"),
   [Ast_const]          = string_lit("const"),
   [Ast_cast]           = string_lit("cast"),
+  [Ast_as]             = string_lit("as"),
 };
 
 String ast_kind_string(u8 kind) {

@@ -70,6 +70,8 @@ def create_build_ninja():
         'types.c',
         'value.c',
         'messages.c',
+        'env.c',
+        'check.c',
     ]
 
     outputs = []

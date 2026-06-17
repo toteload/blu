@@ -86,4 +86,6 @@ void       types_deinit(TypeInterner *types);
 TypeIndex  types_add(TypeInterner *types, Type *type);
 Type      *types_get(TypeInterner *types, TypeIndex idx);
 
+TypeSizeInfo types_size_info(TypeInterner *types, TypeIndex idx);
+
 #endif // TYPES_H

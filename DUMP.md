@@ -16,6 +16,15 @@ Wants:
 - No implicit uninitialized variables.
 - Static checking for overflows and out of bounds access with possible override using `assume` keyword.
 
+## Variable shadowing
+
+Variable shadowing can happen in different ways, but for Blu only two different ways matter
+at the moment; a variable with a same name is redeclared in the same scope OR it is redeclared in an
+inner scope.
+I think I want to allow it if it is in the same scope, but not if you are overriding it in an inner
+scope.
+This would include variables introduced by loops.
+
 ## Comparison to other languages
 
 ### Comparison to C

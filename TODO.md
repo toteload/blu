@@ -1,12 +1,26 @@
-## In progress
+## `main.blu`
 
-- [ ] Allow type annotations on params of function literals and a return type annotation.
+- [ ] Compile `main.blu` to bytecode and run the main function.
+  - [ ] Ensure that the file has a 'main' module containing a 'main' function of the expected type signature.
+  - [ ] 
 
-## Up next
+### Types
 
+### Control flow
+
+### Comptime
+
+### Modules
+
+
+## Comptime
+
+- [ ] Update declaration syntax to allow optional omission of declaration type.
+- [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to types.
   - Values of a `comptime` type may only exist at compile time.
     Declarations or parameters that have a `comptime` type are implicitly `comptime` themselves.
+- [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.
   - This means that the declaration only exists at compile time.
     All uses of the declaration are replaced with its value.
@@ -22,8 +36,6 @@
   - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 - [ ] Add assign of variables.
-- [ ] Update declaration syntax to allow optional omission of declaration type.
-- [ ] Add `comptime` qualifier to function parameters.
 
 
 ## Code organization
@@ -46,14 +58,20 @@
 ## Types
 
 - [ ] `struct` type
-- [ ] refinement
+- [ ] Integer range.
+  - `a..b` exclusive range. `a..=b` inclusive range.
+- [ ] Refinement
+  - For integer types you could use `int(<values>)` syntax.
+- [ ] `[*]T` 'multi'-pointer.
+- [ ] `*T` pointer.
 - [ ] `enum` definitions.
   - I think something like `Direction := enum { north, east, south, west }` is good.
   - Effectively, the enum values are named integer constants. So `Direction` does not have a size.
-    - Then what is the type of `Direction`? I am guessing `distinct enum`.
+    - Then what is the type of `Direction`? I am guessing `distinct enum`?
+      - I guess that would mean that enums are nominal. Does that make sense?
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
-  - Sized booleans? `u32(bool)`. `bool := enum { false, true }` 
-- [ ] Add coercion of `bool` to integer types. 
+  - Sized booleans? `u32(bool)`. `bool := enum { false, true }`
+- [ ] Add coercion of `bool` to integer types.
 - [ ] Add coercion of `[1]T`, `[1][1]T`, ... to `T`.
   - This has the benefit of having ASCII character literals for free by using the string literals.
     The type of `"A"` is `[1]u8`
@@ -61,7 +79,6 @@
 
 ## Metaprogramming
 
-- [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Type introspection / reflection.
 
 
@@ -85,7 +102,6 @@ Maybe DO implement this in the language itself.
 ---
 
 - [ ] Floating point type
-- [ ] Pointer type. Is not allowed to be nil
 
 - [ ] Bounds checking
 - [ ] Integer overflow checks

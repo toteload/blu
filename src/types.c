@@ -103,6 +103,7 @@ internal u32 hash_type(void *context, Type *x) {
 #define HASHMAP_FUNCTION_PREFIX map
 #define HASHMAP_HASH_FN         hash_type
 #define HASHMAP_KEY_COMPARE_FN  cmp_type
+#define HASHMAP_LINKAGE         internal
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
 
@@ -122,5 +123,3 @@ void types_init(TypeInterner *types, TypeInternerOptions *options) {
 void types_deinit(TypeInterner *types);
 TypeIndex  types_add(TypeInterner *types, Type *type);
 Type      *types_get(TypeInterner *types, TypeIndex idx);
-
-

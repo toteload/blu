@@ -30,6 +30,7 @@ enum AstKind {
   Ast_defer,
   Ast_const,
   Ast_cast,
+  Ast_as,
 
   Ast_kind_max,
 };
@@ -79,14 +80,17 @@ enum UnaryOpKind {
   UnaryOpKind_max,
 };
 
+enum AttributeFlag {
+  Attribute_comptime = 1 << 0,
+  Attribute_no_cache = 1 << 1,
+};
+
 #define SEGMENTLIST_NAME          NodeIndexList
 #define SEGMENTLIST_TYPE          NodeIndex
 #define SEGMENTLIST_MIN_SIZE_LOG2 3
 #define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
-
-#define Max_nodes_in_NodeIndexList ((usize)1 << (3 + 24))
 
 typedef struct {
   u8 kind;
@@ -198,6 +202,11 @@ typedef struct {
   NodeIndex value;
 } AstCast;
 
+typedef struct {
+  NodeIndex type_dst;
+  NodeIndex value;
+} AstAs;
+
 typedef union {
   AstRoot            root;
   AstBlock           block;
@@ -223,15 +232,13 @@ typedef union {
   AstDefer           defer;
   AstConst           const_;
   AstCast            cast;
+  AstAs              as;
 } AstNodeData;
 
 typedef struct {
   TokenIndex start;
   TokenIndex end;
 } SpanToken;
-
-#define Max_nodes ((usize)1 << 24)
-#define AstNodes_first_index 1
 
 typedef struct {
   Arena kinds; // u8[]

@@ -41,13 +41,13 @@ internal void step_until_new_line(Tokenizer *tokenizer) {
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
     *kind       = Kind;                                                                            \
-    span->start = Cast(u32, token_start - tokenizer->source);                                                  \
-    span->end   = Cast(u32, tokenizer->at - tokenizer->source);                                                           \
+    span->start = Cast(u32, token_start - tokenizer->source);                                      \
+    span->end   = Cast(u32, tokenizer->at - tokenizer->source);                                    \
     return TokResult_ok;                                                                           \
   }
 
-#define Return_if_match(s, Kind)                                                              \
-  if (string_eq(string_lit(s), (String){.str = token_start, .len = Cast(usize, tokenizer->at - token_start)})) {                    \
+#define Return_if_match(s, Kind)                                                                   \
+  if (string_eq(string_lit(s), (String){.str = token_start, .len = Cast(usize, tokenizer->at - token_start)})) { \
     Return_token(Kind);                                                                            \
   }
 
@@ -203,6 +203,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("bitcast",  Tok_keyword_bitcast);
     Return_if_match("as",       Tok_keyword_as);
     Return_if_match("mod",      Tok_keyword_mod);
+    Return_if_match("no_cache", Tok_keyword_no_cache);
     Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
@@ -319,7 +320,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "cast",
-  "bitcast", "as", "mod",
+  "bitcast", "as", "mod", "no_cache",
   "identifier",   "#print",
   "line-comment",
 };
