@@ -21,10 +21,10 @@ typedef struct {
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
-typedef struct {
+struct Messages {
   Arena       arena;
   MessageList messages;
-} Messages;
+};
 
 void messages_init(Messages *messages);
 void messages_print_all_messages(Messages *messages);

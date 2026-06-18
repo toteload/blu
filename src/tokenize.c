@@ -204,6 +204,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("as",       Tok_keyword_as);
     Return_if_match("mod",      Tok_keyword_mod);
     Return_if_match("no_cache", Tok_keyword_no_cache);
+    Return_if_match("inline",   Tok_keyword_inline);
     Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
@@ -320,7 +321,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "cast",
-  "bitcast", "as", "mod", "no_cache",
+  "bitcast", "as", "mod", "no_cache", "inline",
   "identifier",   "#print",
   "line-comment",
 };

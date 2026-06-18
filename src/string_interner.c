@@ -22,6 +22,8 @@ b32 str_eq(void *context, String a, String b) {
   return string_eq(a, b);
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 #define HASHMAP_NAME            StringIndexMap
 #define HASHMAP_FUNCTION_PREFIX map
 #define HASHMAP_KEY_TYPE        String
@@ -31,6 +33,7 @@ b32 str_eq(void *context, String a, String b) {
 #define HASHMAP_LINKAGE         internal
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
+#pragma clang diagnostic pop
 
 void strings_init(StringInterner *strings, StringInternerOptions *options) {
   strings->arena = options->arena;

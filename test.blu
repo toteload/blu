@@ -12,9 +12,9 @@ ArrayOfi32OrSomethingElse := |n: comptime uint|: type {
 
 ArrayOfi32_ := |n: uint|: typeid {
   if n < 10 {
-    internal.values.build_type(type.array, type.i32, n)
+    #typeid({ .array = .{ .base = #typeid(.int, .signed, 32), .size = n }})
   } else {
-    type.bool
+    #typeid({ .bool })
   }
 }
 
@@ -32,8 +32,11 @@ hellos := |n: comptime uint|: nil {
 
 hellos_ := |n: uint|: nil {
   for 0..n do i {
-    tmp := if i % 2 == 0 { "bubba" } else { "gump" }
-    internal.emit_code(`std.println("hello", {tmp})`)
+    emit {
+      std.println("hello ", eval {
+        if i % 2 == 0 { "bubba" } else { "gump" }
+      })
+    }
   }
 }
 

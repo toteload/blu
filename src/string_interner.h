@@ -16,11 +16,11 @@
 #define HASHMAP_OUTPUT_TYPES
 #include "hashmap.h"
 
-typedef struct {
+struct StringInterner {
   Arena          *arena;
   StringList      list;
   StringIndexMap  map;
-} StringInterner;
+};
 
 typedef struct {
   Arena     *arena;

@@ -33,23 +33,25 @@ typedef struct {
 #define HASHMAP_OUTPUT_TYPES
 #include "hashmap.h"
 
-typedef struct Env {
+struct Env {
   struct Env     *parent;
   DeclarationMap  map;
-} Env;
+};
 
 void env_insert(Env *env, StringIndex idx, Declaration decl);
 b32  env_contains(Env *env, StringIndex idx);
 b32  env_lookup(Env *env, StringIndex idx, Declaration *decl);
 
-typedef struct {
+struct EnvAllocator {
   Arena *arena;
   void *freelist;
   Allocator map_allocator;
-} EnvAllocator;
+};
 
 typedef struct {
+  // `arena` is used to store the `Env` structs. Uses a freelist.
   Arena *arena;
+  // `map_allocator` is passed to  each `Env` and used by the `Env`.
   Allocator map_allocator;
 } EnvAllocatorOptions;
 

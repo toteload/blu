@@ -6,6 +6,8 @@
 #include "types.h"
 #include "value.h"
 #include "messages.h"
+#include "check.h"
+#include "env.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -114,8 +116,8 @@ internal void write_tokens(Tokens *tokens, String source) {
     u8      kind = *tokens_kind(tokens, i);
     SpanU32 span = *tokens_span(tokens, i);
 
-    char const *s = source.str + span.start;
-    int len = span.end - span.start;
+    char const *s = Cast(char const*, source.str + span.start);
+    int len = Cast(int, span.end - span.start);
 
     char const *kind_string = token_kind_string(kind);
 
@@ -141,13 +143,41 @@ internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_
   return realloc(p, new_byte_size);
 }
 
+enum SourceFileResult {
+  SourceFileResult_ok,
+  SourceFileResult_error_read_file,
+  SourceFileResult_error_tokenize,
+  SourceFileResult_error_parse,
+};
+
+u32 read_tokenize_parse_file(SourceFile *source, Messages *messages, Arena *arena, String filename) {
+  source->filename = filename;
+
+  u32 err = read_file(filename, arena, &source->text);
+  if (err) {
+    return SourceFileResult_error_read_file;
+  }
+
+  b32 ok = tokenize(messages, &source->tokens, source->text);
+  if (!ok) {
+    return SourceFileResult_error_tokenize;
+  }
+
+  ok = parse(messages, &source->ast, &source->tokens);
+  if (!ok) {
+    return SourceFileResult_error_parse;
+  }
+
+  return SourceFileResult_ok;
+}
+
 int main(int argc, char const *argv[]) {
   Allocator cstd_allocator = { .fn = cstd_alloc_fn, };
 
   u32 err = 0;
   b32 ok = False;
   CLIOptions cli = {0};
-  err = parse_cli_options(&cli, argc, argv);
+  err = parse_cli_options(&cli, Cast(u32, argc), argv);
   if (err) {
     printf("Encountered error reading command line options.\n");
     return 1;
@@ -191,28 +221,38 @@ int main(int argc, char const *argv[]) {
   Messages messages;
   messages_init(&messages);
 
-  String source;
-  err = read_file(cli.source_filename, &arena, &source);
+  SourceFile source;
+  err = read_tokenize_parse_file(&source, &messages, &arena, cli.source_filename);
   if (err) {
-    printf("Could not read source file.\n");
-    return 1;
-  }
-
-  ok = tokenize(&messages, &tokens, source);
-  if (!ok) {
     messages_print_all_messages(&messages);
     return 1;
   }
 
-  write_tokens(&tokens, source);
+  write_tokens(&tokens, source.text);
+  write_nodes(&nodes, &tokens, source.text);
 
-  ok = parse(&messages, &nodes, &tokens);
+  EnvAllocator envs;
+  envs_init(&envs, &(EnvAllocatorOptions){
+    .arena         = &arena,
+    .map_allocator = cstd_allocator,
+  });
+
+  Checker checker;
+  checker_init(&checker, &(CheckerOptions){
+    .messages = &messages,
+    .strings  = &strings,
+    .types    = &types,
+    .envs     = &envs,
+
+    .source_count = 1,
+    .sources      = &source,
+  });
+
+  ok = check_code(&checker);
   if (!ok) {
     messages_print_all_messages(&messages);
     return 1;
   }
-
-  write_nodes(&nodes, &tokens, source);
 
   printf("ok\n");
 

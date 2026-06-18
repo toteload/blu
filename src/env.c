@@ -12,6 +12,8 @@ always_inline internal b32 cmp_string_index(void *context, StringIndex a, String
   return a == b;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 #define HASHMAP_NAME            DeclarationMap
 #define HASHMAP_FUNCTION_PREFIX map
 #define HASHMAP_KEY_TYPE        StringIndex
@@ -21,6 +23,7 @@ always_inline internal b32 cmp_string_index(void *context, StringIndex a, String
 #define HASHMAP_LINKAGE         internal
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
+#pragma clang diagnostic pop
 
 void env_insert(Env *env, StringIndex idx, Declaration decl) {
   b32 was_occupied_ignore;
@@ -51,24 +54,12 @@ void envs_init(EnvAllocator *envs, EnvAllocatorOptions *options) {
 
 Env *envs_alloc(EnvAllocator *envs, Env *parent) {
   if (is_null(envs->freelist)) {
-    u32 count = 4;
-
-    Env *items = arena_push_array(Env, envs->arena, count);
-
-    for (u32 i = 0; i < count - 1; i++) {
-      void **p = Cast(void**, &items[i]);
-      *p = &items[i+1];
-    }
-
-    *Cast(void**, &items[count - 1]) = Null;
-
-    envs->freelist = items;
+    usize reserve_amount = 8;
+    void *items = arena_push_array(Env, envs->arena, reserve_amount);
+    freelist_grow(&envs->freelist, items, sizeof(Env), reserve_amount);
   }
 
-  Env *env = envs->freelist;
-
-  void *next = *Cast(void**, envs->freelist);
-  envs->freelist = next;
+  Env *env = freelist_alloc(&envs->freelist);
 
   env->parent = parent;
   map_init(&env->map, &(HashMapOptions){
@@ -81,6 +72,5 @@ Env *envs_alloc(EnvAllocator *envs, Env *parent) {
 
 void envs_dealloc(EnvAllocator *envs, Env *env) {
   map_deinit(&env->map);
-  *Cast(Env**, env) = envs->freelist;
-  envs->freelist = env;
+  freelist_free(&envs->freelist, env);
 }

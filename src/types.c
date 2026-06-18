@@ -97,6 +97,8 @@ internal u32 hash_type(void *context, Type *x) {
   return hash;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 #define HASHMAP_NAME            UniqueTypeMap
 #define HASHMAP_KEY_TYPE        TypePtr
 #define HASHMAP_VALUE_TYPE      TypeIndex
@@ -106,6 +108,7 @@ internal u32 hash_type(void *context, Type *x) {
 #define HASHMAP_LINKAGE         internal
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
+#pragma clang diagnostic pop
 
 void types_init(TypeInterner *types, TypeInternerOptions *options) {
   arena_init(&types->arena, &(ArenaOptions){

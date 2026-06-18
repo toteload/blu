@@ -24,4 +24,13 @@ typedef struct {
   } idx;
 } NodeIndex;
 
+typedef struct Messages Messages;
+typedef struct StringInterner StringInterner;
+typedef struct TypeInterner TypeInterner;
+typedef struct AstNodes AstNodes;
+typedef struct Tokens Tokens;
+typedef struct EnvAllocator EnvAllocator;
+typedef struct Env Env;
+typedef struct ValueStore ValueStore;
+
 #endif // BLU_H

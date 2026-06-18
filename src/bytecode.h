@@ -4,8 +4,9 @@
 #include "blu.h"
 
 enum InternalOp {
-  InternalOp_type,
-  InternalOp_emit_code,
+  InternalOp_typeid,
+  InternalOp_emit,
+  InternalOp_eval,
 };
 
 enum BytecodeOp {

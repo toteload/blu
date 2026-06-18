@@ -80,6 +80,8 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 
 #define nodes_push_data(nodes, type, idx) nodes_push_data_raw(nodes, idx, sizeof(type), Align_of(type))
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 #define SEGMENTLIST_NAME            NodeIndexList
 #define SEGMENTLIST_TYPE            NodeIndex
 #define SEGMENTLIST_FUNCTION_PREFIX list
@@ -88,6 +90,7 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 #define SEGMENTLIST_LINKAGE         internal 
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
+#pragma clang diagnostic pop
 
 #define Op_count (BinaryOpKind_max + AssignKind_max)
 
@@ -103,7 +106,7 @@ typedef struct {
   TokenIndex at;
 } Parser;
 
-internal b32 parse_root(Parser *parser, NodeIndex *out);
+internal b32 parse_source(Parser *parser, NodeIndex *out);
 internal b32 parse_mod_section(Parser *parser, NodeIndex *out);
 internal b32 parse_declaration(Parser *parser, NodeIndex *out);
 internal b32 parse_block(Parser *parser, NodeIndex *out);
@@ -238,19 +241,19 @@ internal b32 parse_comma_separated_items_until(
   return True;
 }
 
-internal b32 parse_root(Parser *parser, NodeIndex *out) {
+internal b32 parse_source(Parser *parser, NodeIndex *out) {
   AstIndex idx = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
-  AstRoot *root = nodes_push_data(parser->nodes, AstRoot, idx);
-  zero_struct(AstRoot, root);
+  AstSource *source = nodes_push_data(parser->nodes, AstSource, idx);
+  zero_struct(AstSource, source);
 
   while (!is_parser_past_end(parser)) {
-    NodeIndex *section = list_push(&root->items, &parser->nodes->extra);
+    NodeIndex *section = list_push(&source->items, &parser->nodes->extra);
     Try(parse_mod_section(parser, section));
   }
 
-  *nodes_kind(parser->nodes, idx) = Ast_root;
+  *nodes_kind(parser->nodes, idx) = Ast_source;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
@@ -958,11 +961,11 @@ b32 parse(Messages *messages, AstNodes *nodes, Tokens *tokens) {
   };
 
   NodeIndex ignored;
-  return parse_root(&parser, &ignored);
+  return parse_source(&parser, &ignored);
 }
 
 String ast_string[] = {
-  [Ast_root]           = string_lit("root"),
+  [Ast_source]         = string_lit("source"),
   [Ast_mod_section]    = string_lit("mod-section"),
   [Ast_block]          = string_lit("block"),          
   [Ast_type_slice]     = string_lit("type-slice"),

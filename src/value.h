@@ -8,10 +8,10 @@ typedef struct {
   void      *data;
 } Value;
 
-typedef struct {
+struct ValueStore {
   Arena     arena;
   Allocator payload_allocator;
-} ValueStore;
+};
 
 typedef struct {
   Allocator payload_allocator;

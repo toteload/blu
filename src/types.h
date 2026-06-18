@@ -19,6 +19,10 @@ enum Signedness {
   Signed,
 };
 
+enum TypeAttribute {
+  TypeAttribute_comptime,
+};
+
 typedef struct {
   u32 size;
   u32 stride;
@@ -27,6 +31,7 @@ typedef struct {
 
 typedef struct {
   u8 kind;
+  u8 attributes;
 
   union {
     struct {
@@ -70,11 +75,11 @@ typedef Type *TypePtr;
 #define HASHMAP_OUTPUT_TYPES
 #include "hashmap.h"
 
-typedef struct {
+struct TypeInterner {
   Arena         arena;
   TypeList      list;
   UniqueTypeMap map;
-} TypeInterner;
+};
 
 typedef struct {
   Allocator map_allocator;

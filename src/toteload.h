@@ -169,6 +169,9 @@ void *arena_push(Arena *arena, usize size, u32 align);
 
 #define arena_push_array(type, arena, count) arena_push(arena, (count) * sizeof(type), Align_of(type))
 
+#define arena_freelist_alloc_typed(type, arena, freelist, reserve) \
+  Cast(type*, arena_freelist_alloc(arena, freelist, sizeof(type), Align_of(type), reserve))
+
 String arena_copy_string(Arena *arena, String s);
 
 always_inline ArenaSnapshot arena_scope_begin(Arena *arena) {
@@ -182,3 +185,25 @@ always_inline void arena_scope_end(Arena *arena, ArenaSnapshot snapshot) {
   arena->at = snapshot.at;
 }
 
+always_inline void freelist_grow(void **freelist, void *mem, usize stride, usize count) {
+  for (usize i = 0; i < count-1; i++) {
+    void **p = ptr_offset(mem, i * stride);
+    *p = ptr_offset(mem, (i + 1) * stride);
+  }
+
+  void **p = ptr_offset(mem, (count - 1) * stride);
+  *p = *freelist;
+
+  *freelist = mem;
+}
+
+always_inline void *freelist_alloc(void **freelist) {
+  void *p = *freelist;
+  *freelist = *Cast(void***,freelist);
+  return p;
+}
+
+always_inline void freelist_free(void **freelist, void *p) {
+  *Cast(void**,p) = **Cast(void***, freelist);
+  *freelist = p;
+}

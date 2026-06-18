@@ -58,6 +58,7 @@ enum TokenKind {
   Tok_keyword_mod,
 
   Tok_keyword_no_cache,
+  Tok_keyword_inline,
 
   Tok_identifier,
 
@@ -73,11 +74,11 @@ typedef struct {
   u32 end;
 } SpanU32;
 
-typedef struct {
+struct Tokens {
   Arena kinds;
   Arena spans;
   u32 offset;
-} Tokens;
+};
 
 void       tokens_init(Tokens *tokens);
 void       tokens_deinit(Tokens *tokens);
