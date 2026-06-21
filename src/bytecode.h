@@ -3,35 +3,50 @@
 
 #include "blu.h"
 
-enum InternalOp {
-  InternalOp_typeid,
-  InternalOp_emit,
-  InternalOp_eval,
+enum VMOpcode {
+  VM_add,
+  VM_alloc,
+  VM_func,
+  VM_load,
+  VM_store,
+  VM_cast,
+  VM_br,
+
+  VM_emit,
+  VM_eval,
 };
 
-enum BytecodeOp {
-  Op_add,
-  Op_cond_branch,
-  Op_block,
-  Op_call,
-  Op_return,
+// emit
+//   eval
+//     const %0 (uint 0)
+//   @loop0
+//     const %8 (uint 1)
+//     add (uint) %16, %0, %8
+//     cmp (uint) eq %17, %16, %arg_0
+//     jmpif %17, @loop0_end
+//     mov (uint) %0, %16
+//     emit
+//       call std.println "hello {}" (uint %0)
+//     jmp @loop0
+//   @loop0_end
 
-  Op_internal,
-};
+// emit
+//   eval
+//     load_const %16 (const i128 0)
+//     cast i32_from_i128 %0 %16
+//   ret (uint %0)
 
 typedef struct {
-} Bytecode;
+  u32  opcode_count;
+  u8   *opcodes;
+  u32  *data;
+  void *extra;
+} VmCode;
 
 typedef struct {
-  Arena  registers;
-  Arena  callstack;
-  u32    pc;
-  void  *ret_val_address;
 
-  u8  *code;
-  u32  code_len;
-} BytecodeMachine;
+} VirtualMachine;
 
-void machine_init(BytecodeMachine *machine);
+void machine_init(VirtualMachine *machine);
 
 #endif // BYTECODE_H 

@@ -1,3 +1,87 @@
 mod main
 
 main : () i32 = || 0
+
+; Each function gets converted to a function that takes all the comptime parameters.
+; If the function takes no comptime parameters it still gets converted to this function.
+; Running this function will emit a function that has all comptime expressions evaluated.
+; Emitting code can be seen as a side effect of the function.
+
+; function () nil
+; emit
+;   function () i32
+;   %b = eval @eval0
+;     %a = cast (i32) (const i128 0)
+;     br @eval0 (i32) %a
+;   ret (i32) %b
+; ret (nil)
+
+; Function at runtime
+; -------------------
+; function () i32
+; ret (i32) (const i32 0)
+
+hellos := |n: comptime uint|: nil {
+  inline for 0..n do i {
+    std.println("hello {}", i)
+  }
+}
+
+; A function with any comptime parameters needs to be converted to a function where all the
+; comptime parameters have been inlined into the function body.
+
+; `comptime_func` is implicitly an emit block
+; comptime_func (%n uint)
+; function () nil
+; eval (nil) @eval0
+;   %a = alloc (uint)
+;   store (uint) %a, (const uint 0)
+;   loop @loop0
+;     %b = load (uint) %a
+;     %c = add (uint) %b, (const uint 1)
+;     %d = cmp (uint) neq %c, %n
+;     cond_br %d, @then, @loop0
+;     block @then
+;       store (uint) %a, %c
+;       emit
+;         call std.println "hello" %c
+;       repeat @loop0
+;   br (nil) @eval0
+; ret (nil) 
+
+; function (%n uint) nil
+; emit (%n)
+;   function () nil
+;   eval @eval0
+;     %a = alloc (uint)
+;     store (uint) %a, (const uint 0)
+;     loop @loop0
+;       %b = load (uint) %a
+;       %c = add (uint) %b, (const uint 1)
+;       %d = cmp (uint) neq %c, %n
+;       cond_br %d, @then, @loop0
+;       block @then
+;         store (uint) %a, %d
+;         emit 
+;           call std.println "hello" %d
+;         repeat @loop0
+;     br (nil) @eval0
+;   ret (nil) 
+; ret (nil)
+
+array_of_i32 := |n: comptime uint|: type {
+  [n]i32
+}
+
+; `array_of_i32` will be converted to a function `a` that takes a `uint` and emits a function that
+; returns a typeid for an array of i32 of a size given by the `uint` parameter of `a`.
+
+; function (%n uint) nil
+; emit
+;   function () type
+;   %a = eval @eval0
+;     %base = #typeid .int, { .signed, 32 }
+;     %t = #typeid .array, { %base, %n }
+;     br (type) @eval0 %t
+;   ret (type) %a
+; ret (nil)
