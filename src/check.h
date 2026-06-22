@@ -17,9 +17,6 @@ typedef struct {
   EnvAllocator   *envs;
   ValueStore     *values;
 
-  Arena *arena;
-  void *freelist;
-
   u32         source_count;
   SourceFile *sources;
 

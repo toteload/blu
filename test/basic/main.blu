@@ -11,7 +11,7 @@ main : () i32 = || 0
 ; emit
 ;   function () i32
 ;   %b = eval @eval0
-;     %a = cast (i32) (const i128 0)
+;     %a = cast_int (i32) (const i64 0)
 ;     br @eval0 (i32) %a
 ;   ret (i32) %b
 ; ret (nil)
@@ -30,24 +30,39 @@ hellos := |n: comptime uint|: nil {
 ; A function with any comptime parameters needs to be converted to a function where all the
 ; comptime parameters have been inlined into the function body.
 
-; `comptime_func` is implicitly an emit block
-; comptime_func (%n uint)
-; function () nil
-; eval (nil) @eval0
-;   %a = alloc (uint)
-;   store (uint) %a, (const uint 0)
-;   loop @loop0
-;     %b = load (uint) %a
-;     %c = add (uint) %b, (const uint 1)
-;     %d = cmp (uint) neq %c, %n
-;     cond_br %d, @then, @loop0
-;     block @then
-;       store (uint) %a, %c
-;       emit
-;         call std.println "hello" %c
-;       repeat @loop0
-;   br (nil) @eval0
+; func (%n uint)
+; %a = alloc (uint)
+; store (uint) %a, (const uint 0)
+; loop @loop0
+;   %b = load (uint) %a
+;   %c = cmp (uint) neq %b, %n
+;   cond_br %c, @then, @loop0
+;   block @then
+;     call std.println "hello" %b
+;     %d = add (uint) %b, (const uint 1)
+;     store (uint) %a, %d
+;     repeat @loop0
 ; ret (nil) 
+
+; func (%n uint) nil
+; emit
+;   func () nil
+;   eval (nil) @eval0
+;     %a = alloc (uint)
+;     store (uint) %a, (const uint 0)
+;     loop @loop0
+;       %b = load (uint) %a
+;       %c = add (uint) %b, (const uint 1)
+;       %d = cmp (uint) neq %c, %n
+;       cond_br %d, @then, @loop0
+;       block @then
+;         store (uint) %a, %c
+;         emit
+;           call std.println "hello" %c
+;         repeat @loop0
+;     br (nil) @eval0
+;   ret (nil)
+; ret (nil) ; return from comptime function
 
 ; function (%n uint) nil
 ; emit (%n)
@@ -67,6 +82,32 @@ hellos := |n: comptime uint|: nil {
 ;         repeat @loop0
 ;     br (nil) @eval0
 ;   ret (nil) 
+; ret (nil)
+
+hellos := |n: comptime uint, k: uint|: nil {
+  inline for 0..n do i {
+    std.println("hello {}", i + k)
+  }
+}
+
+; func (%n uint)
+; emit
+;   func (%k uint) nil
+;   eval
+;     %a = alloc (uint)
+;     store (uint) %a, (const uint 0)
+;     loop @loop0
+;       %b = load (uint) %a
+;       %c = cmp (uint) neq %b, %n
+;       cond_br %c, @then, @loop0
+;       block @then
+;         emit
+;           %e = add (uint) %b, %k
+;           call std.println "hello" %e
+;         %d = add (uint) %b, (const uint 1)
+;         store (uint) %a, %d
+;         repeat @loop0
+;   ret (nil)
 ; ret (nil)
 
 array_of_i32 := |n: comptime uint|: type {

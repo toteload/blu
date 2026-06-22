@@ -18,11 +18,18 @@ ArrayOfi32_ := |n: uint|: typeid {
   }
 }
 
-os_name := if std.os.platform == .windows {
-  "Windows"
+os_name := if true {
+  "yeah man"
 } else {
-  "Not windows :)"
+  "nah"
 }
+
+; block @e0
+;   cond_br (const u1 1) @then @else
+;   block @then
+;     br @e0 "yeah man"
+;   block @else
+;     br @e0 "nah"
 
 hellos := |n: comptime uint|: nil {
   inline for 0..n do i {

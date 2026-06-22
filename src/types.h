@@ -20,7 +20,7 @@ enum Signedness {
 };
 
 enum TypeAttribute {
-  TypeAttribute_comptime,
+  TypeAttribute_comptime = 1 << 0,
 };
 
 typedef struct {
@@ -30,23 +30,27 @@ typedef struct {
 } TypeSizeInfo;
 
 typedef struct {
+  u8 signedness;
+  u16 bitwidth;
+} TypeInteger;
+
+typedef struct {
+  TypeIndex base_type;
+} TypeSlice;
+
+typedef struct {
+  TypeIndex base_type;
+  u64 size;
+} TypeArray;
+
+typedef struct {
   u8 kind;
   u8 attributes;
 
   union {
-    struct {
-      u8 signedness;
-      u16 bitwidth;
-    } integer;
-
-    struct {
-      TypeIndex base_type;
-    } slice;
-
-    struct {
-      TypeIndex base_type;
-      i64 size;
-    } array;
+    TypeInteger integer;
+    TypeSlice   slice;
+    TypeArray   array;
 
     struct {
       TypeIndex return_type;
@@ -91,6 +95,7 @@ void       types_deinit(TypeInterner *types);
 TypeIndex  types_add(TypeInterner *types, Type *type);
 Type      *types_get(TypeInterner *types, TypeIndex idx);
 
+TypeSizeInfo types_size_info_by_type(TypeInterner *types, Type *type);
 TypeSizeInfo types_size_info(TypeInterner *types, TypeIndex idx);
 
 #endif // TYPES_H
