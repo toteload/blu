@@ -23,10 +23,14 @@ ValueIndex values_alloc(ValueStore *values, Value **out) {
   return idx;
 }
 
+void *values_alloc_data(ValueStore *values, u32 size, u32 align) {
+  return Alloc(values->payload_allocator, size, align);
+}
+
 void values_dealloc(ValueStore *values, ValueIndex idx) {
   Value *p = values_get(values, idx);
-  if (p->data) {
-    values_dealloc_data(values, p->data, );
+  if (p->data_size > 0) {
+    Free(values->payload_allocator, p->data, p->data_size);
   }
 }
 

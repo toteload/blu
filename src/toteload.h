@@ -185,6 +185,7 @@ always_inline void arena_scope_end(Arena *arena, ArenaSnapshot snapshot) {
   arena->at = snapshot.at;
 }
 
+// The amount of memory pointed to by `mem` must be at least `stride * count` bytes.
 always_inline void freelist_grow(void **freelist, void *mem, usize stride, usize count) {
   for (usize i = 0; i < count-1; i++) {
     void **p = ptr_offset(mem, i * stride);

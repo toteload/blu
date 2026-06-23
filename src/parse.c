@@ -80,8 +80,6 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 
 #define nodes_push_data(nodes, type, idx) nodes_push_data_raw(nodes, idx, sizeof(type), Align_of(type))
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 #define SEGMENTLIST_NAME            NodeIndexList
 #define SEGMENTLIST_TYPE            NodeIndex
 #define SEGMENTLIST_FUNCTION_PREFIX list
@@ -90,7 +88,6 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 #define SEGMENTLIST_LINKAGE         internal 
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
-#pragma clang diagnostic pop
 
 #define Op_count (BinaryOpKind_max + AssignKind_max)
 

@@ -14,10 +14,6 @@ typedef struct {
   InstructionIndex instruction_index;
 } IrLocation;
 
-enum IrResult {
-  IrResult_ok,
-};
-
 enum IrOpcode {
   IR_func,      // data references `IrFunc` in extra
   IR_arg,       // data contains `TypeIndex`
@@ -27,11 +23,11 @@ enum IrOpcode {
   IR_loop,      // data contains instruction count of block
   IR_br,        // data contains `InstructionIndex`
   IR_repeat,    // data contains `InstructionIndex`
-  IR_ret,       // data references `IrBr`
-  IR_load,      //
+  IR_ret,       // data contains `IrRef`
+  IR_load,      // data contains `IrRef`
   IR_store,     // data references `IrStore` in extra
   IR_cast_int,  // data references `IrCastInt` in extra
-  IR_call,
+  IR_call,      // data references `IrCall` in extra
 
   IR_typeid,
 
@@ -61,14 +57,19 @@ typedef struct {
 
 typedef struct {
   IrRef cond;
-  IrRef then;
-  IrRef otherwise;
+  InstructionIndex then;
+  InstructionIndex otherwise;
 } IrCondBr;
 
 typedef struct {
   IrRef dst;
   IrRef value;
 } IrStore;
+
+typedef struct {
+  u32 arg_count;
+  IrRef args[];
+} IrCall;
 
 // ---
 
@@ -79,9 +80,9 @@ typedef struct {
   void *extra;
 } IrChunk;
 
-u8    opcode(IrChunk *chunk, IrInstructionIndex idx);
-u32   instruction_data(IrChunk *chunk, IrInstructionIndex idx);
-void *instruction_extra(IrChunk *chunk, IrInstructionIndex idx);
+u8    opcode(IrChunk *chunk, InstructionIndex idx);
+u32   instruction_data(IrChunk *chunk, InstructionIndex idx);
+void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
 
 #define SEGMENTLIST_NAME          ChunkList
 #define SEGMENTLIST_TYPE          IrChunk
@@ -97,26 +98,49 @@ typedef struct {
 
 IrChunk *get_chunk(IrChunkAllocator *chunks, ChunkIndex idx);
 
-ChunkIndex translate_ast_to_ir();
+// ---
 
-#define SEGMENTLIST_NAME          CallStackList
-#define SEGMENTLIST_TYPE          IrLocation
+enum ValueStackElementKind {
+  ValueStackElement_block_marker,
+  ValueStackElement_value,
+};
+
+typedef struct {
+  u8 kind;
+  IrLocation loc;
+} ValueStackElement;
+
+#define SEGMENTLIST_NAME          ValueStack
+#define SEGMENTLIST_TYPE          ValueStackElement
 #define SEGMENTLIST_MIN_SIZE_LOG2 5
 #define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
 #define HASHMAP_NAME       InstructionResultMap
-#define HASHMAP_KEY_TYPE   IrLocation
+#define HASHMAP_KEY_TYPE   InstructionIndex
 #define HASHMAP_VALUE_TYPE ValueIndex
 #define HASHMAP_OUTPUT_TYPES
 #include "hashmap.h"
 
 typedef struct {
-  IrChunkAllocator     *chunks;
-  ValueStore           *values;
-  InstructionResultMap  inst_map;
-  CallStackList         callstack;
+  IrLocation           function;
+  InstructionResultMap inst_map;
+  ValueStack           value_stack;
+} CallFrame;
+
+#define SEGMENTLIST_NAME          CallStack
+#define SEGMENTLIST_TYPE          CallFrame
+#define SEGMENTLIST_MIN_SIZE_LOG2 5
+#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
+  IrChunkAllocator *chunks;
+  ValueStore       *values;
+  CallStack         callstack;
+  ValueIndex        return_value;
 } IrMachine;
 
 u32 ir_call_safe(IrMachine *machine, IrLocation function, u32 arg_count, ValueIndex *args, ValueIndex *result);

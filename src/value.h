@@ -3,17 +3,18 @@
 
 #include "blu.h"
 
+typedef struct {
+  TypeIndex  type;
+  u32        data_size;
+  void      *data;
+} Value;
+
 #define SEGMENTLIST_NAME          ValueList
 #define SEGMENTLIST_TYPE          Value
 #define SEGMENTLIST_MIN_SIZE_LOG2 6
 #define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
-
-typedef struct {
-  TypeIndex  type;
-  void      *data;
-} Value;
 
 typedef struct {
   usize  len;
@@ -36,7 +37,7 @@ void values_deinit(ValueStore *values);
 
 ValueIndex  values_alloc(ValueStore *values, Value **out);
 void       *values_alloc_data(ValueStore *values, u32 size, u32 align);
-void        values_dealloc(ValueStore *values, ValueIndex idx, TypeSizeInfo size_info);
+void        values_dealloc(ValueStore *values, ValueIndex idx);
 Value      *values_get(ValueStore *values, ValueIndex idx);
 
 #endif // VALUE_H

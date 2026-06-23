@@ -87,6 +87,8 @@ internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NA
   list->segment_count = required_segment_count;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list, Arena *arena) {
   Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(list, arena, list->len + 1);
@@ -94,11 +96,15 @@ SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list
   list->len += 1;
   return p;
 }
+#pragma clang diagnostic pop
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 void Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *arena, SEGMENTLIST_TYPE item) {
   *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(list, arena) = item;
 }
+#pragma clang diagnostic pop
 
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
