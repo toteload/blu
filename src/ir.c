@@ -36,6 +36,17 @@ b32 instruction_index_eq(void *context, InstructionIndex a, InstructionIndex b) 
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+internal CallFrame *callstack_push_and_init_frame(CallStack *stack, IrLocation address) {
+  CallFrame *frame = callstack_push(&machine->callstack);
+
+  *frame = (CallFrame){
+    .pc = pc,
+    .value_stack = {0},
+  };
+
+  map_init(&frame->inst_map, &(HashMapOptions){ .allocator = 0, .initial_size = 8, .context = Null });
+}
+
 internal always_inline InstructionIndex ref_to_instruction_index(IrRef ref) {
   return ref;
 }
@@ -107,47 +118,26 @@ internal void clear_frame_values(IrMachine *machine, CallFrame *frame) {
   }
 }
 
-u32 ir_call_safe(
+u32 ir_run(
   IrMachine *machine,
-  IrCode *code,
-  IrLocation function,
-  u32 arg_count,
-  ValueIndex *args,
+  IrLocation start,
+  u32 offset,
   ValueIndex *result
 ) {
-  IrChunk *chunk = get_chunk(machine->chunks, function.chunk_index);
-  InstructionIndex instruction_index = function.instruction_index;
+  IrLocation end = { .chunk_index = start.chunk_index. instruction_index = start.instruction_index + offset };
 
-  u8 op = opcode(chunk, instruction_index);
-
-  Assert(op == IR_func);
-
-  IrFunc *func = instruction_extra(code, function);
-
-  Assert(arg_count == func->arg_count);
-
-  InstructionIndex first_param = instruction_index + 1;
-
-  for (u32 i = 0; i < arg_count; i++) {
-    map_insert(
-      &machine->inst_map, 
-      (IrLocation){ .chunk_index = function.chunk_index, .instruction_index = first_param + i },
-      args[i]
-    );
+  {
+    CallFrame *frame = callstack_push_and_init_frame(&machine->callstack, start);
   }
 
-  InstructionIndex pc = first_param + arg_count;
-
-  callstack_append(
-    &machine->callstack,
-    (IrLocation){}
-  );
-  
-  IrLocation pc = *callstack_ptr_at_unchecked(&machine->callstack, machine->callstack.len-1);
-  IrChunk *chunk = get_chunk(machine->chunks, pc.chunk_index);
-
   while (True) {
-    op = opcode(chunk, pc.instruction_index);
+    if (pc.chunk_index == end.chunk_index && pc.instruction_index == end.instruction_index) {
+      // TODO return value
+      Panic();
+      break;
+    }
+
+    u8 op = opcode(chunk, pc.instruction_index);
 
     switch (op) {
     case IR_alloc: {
@@ -209,6 +199,25 @@ u32 ir_call_safe(
       memcpy(target->data, from->data, target->data_size);
     } break;
     case IR_call: {
+      IrCall *call = instruction_extra(chunk, pc.instruction_index);
+
+      IrChunk *chunk = get_chunk(machine->chunks, call->func.chunk_index);
+      InstructionIndex instruction_index = call->func.instruction_index;
+
+      IrFunc *func = instruction_extra(chunk, instruction_index);
+      InstructionIndex first_param = instruction_index + 1;
+
+      CallFrame *frame = callstack_push_and_init_frame(&machine->callstack, call->func);
+
+      for (u32 i = 0; i < arg_count; i++) {
+        ValueIndex arg = ref_value_index(call->args[i]);
+        map_insert(
+          &frame->inst_map, 
+          (IrLocation){ .chunk_index = function.chunk_index, .instruction_index = first_param + i },
+          arg
+        );
+      }
+
       Panic();
     } break;
     case IR_cast_int: {

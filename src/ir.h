@@ -67,6 +67,7 @@ typedef struct {
 } IrStore;
 
 typedef struct {
+  IrLocation func;
   u32 arg_count;
   IrRef args[];
 } IrCall;
@@ -124,7 +125,7 @@ typedef struct {
 #include "hashmap.h"
 
 typedef struct {
-  IrLocation           function;
+  IrLocation           pc;
   InstructionResultMap inst_map;
   ValueStack           value_stack;
 } CallFrame;
@@ -143,6 +144,8 @@ typedef struct {
   ValueIndex        return_value;
 } IrMachine;
 
-u32 ir_call_safe(IrMachine *machine, IrLocation function, u32 arg_count, ValueIndex *args, ValueIndex *result);
+// Start running at `start` and run until you hit `start + offset`.
+// The value of the last instruction is returned.
+u32 ir_run(IrMachine *machine, IrLocation start, u32 offset, ValueIndex *result);
 
 #endif // IR_H
