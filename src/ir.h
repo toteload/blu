@@ -3,6 +3,10 @@
 
 #include "blu.h"
 
+enum IrResult {
+  IrResult_ok,
+};
+
 // The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
 // If the MSB is 1, then the `IrRef` is a `ValueIndex`.
 typedef u32 IrRef;
@@ -15,6 +19,7 @@ typedef struct {
 } IrLocation;
 
 enum IrOpcode {
+  IR_comptime_func,
   IR_func,      // data references `IrFunc` in extra
   IR_arg,       // data contains `TypeIndex`
   IR_alloc,     // data contains `TypeIndex`
@@ -31,13 +36,20 @@ enum IrOpcode {
 
   IR_typeid,
 
-  // Emit blocks do not return a value and can be seen as a marker to the compiler on what code
-  // to emit.
+  // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
+  // Emit blocks are only valid in a comptime function.
   IR_emit, // data contains how many instructions are in this block.
 
   // Eval blocks return a value and can only be exited with a `br`.
   IR_eval, // data contains how many instructions are in this block.
 };
+
+typedef struct {
+  TypeIndex return_type;
+  u32 comptime_arg_count;
+  u32 runtime_arg_count;
+  u32 instruction_count;
+} IrComptimeFunc;
 
 typedef struct {
   TypeIndex return_type;
@@ -102,19 +114,22 @@ IrChunk *get_chunk(IrChunkAllocator *chunks, ChunkIndex idx);
 // ---
 
 enum ValueStackElementKind {
-  ValueStackElement_block_marker,
+  ValueStackElement_marker_frame,
+  ValueStackElement_marker_block,
   ValueStackElement_value,
 };
 
 typedef struct {
   u8 kind;
-  IrLocation loc;
+  InstructionIndex idx;
 } ValueStackElement;
 
+#define ValueStack_min_size_log2  5
+#define ValueStack_segment_count  24
 #define SEGMENTLIST_NAME          ValueStack
 #define SEGMENTLIST_TYPE          ValueStackElement
-#define SEGMENTLIST_MIN_SIZE_LOG2 5
-#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_MIN_SIZE_LOG2 ValueStack_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT ValueStack_segment_count
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
@@ -127,25 +142,33 @@ typedef struct {
 typedef struct {
   IrLocation           pc;
   InstructionResultMap inst_map;
-  ValueStack           value_stack;
 } CallFrame;
 
+#define CallStack_min_size_log2   5
+#define CallStack_segment_count   24
 #define SEGMENTLIST_NAME          CallStack
 #define SEGMENTLIST_TYPE          CallFrame
-#define SEGMENTLIST_MIN_SIZE_LOG2 5
-#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_MIN_SIZE_LOG2 CallStack_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT CallStack_segment_count
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
 typedef struct {
   IrChunkAllocator *chunks;
   ValueStore       *values;
+  TypeInterner     *types;
   CallStack         callstack;
+  ValueStack        value_stack;
   ValueIndex        return_value;
+
+  Arena *arena_value_stack;
+  Arena *arena_callstack;
+  Allocator allocator_inst_map;
 } IrMachine;
 
-// Start running at `start` and run until you hit `start + offset`.
-// The value of the last instruction is returned.
-u32 ir_run(IrMachine *machine, IrLocation start, u32 offset, ValueIndex *result);
+void ir_machine_init(IrMachine *machine);
+void ir_machine_deinit(IrMachine *machine);
+
+u32 ir_run(IrMachine *machine);
 
 #endif // IR_H

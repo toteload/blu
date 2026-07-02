@@ -1,6 +1,10 @@
 #include "ir.h"
+#include "value.h"
+#include "types.h"
 
 #define Bitmask_ir_ref_is_value_index (Cast(u32, 1) << 31)
+
+extern u32 eval_cast_int(TypeInteger, void*, TypeInteger, void*);
 
 u32 instruction_index_hash(void *context, InstructionIndex idx) {
   Unused(context);
@@ -29,34 +33,45 @@ b32 instruction_index_eq(void *context, InstructionIndex a, InstructionIndex b) 
 
 #define SEGMENTLIST_NAME            CallStack
 #define SEGMENTLIST_TYPE            CallFrame
-#define SEGMENTLIST_MIN_SIZE_LOG2   5
-#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_MIN_SIZE_LOG2   CallStack_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   CallStack_segment_count
 #define SEGMENTLIST_FUNCTION_PREFIX callstack
 #define SEGMENTLIST_LINKAGE         internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-internal CallFrame *callstack_push_and_init_frame(CallStack *stack, IrLocation address) {
-  CallFrame *frame = callstack_push(&machine->callstack);
+#define SEGMENTLIST_NAME            ValueStack
+#define SEGMENTLIST_TYPE            ValueStackElement
+#define SEGMENTLIST_MIN_SIZE_LOG2   ValueStack_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   ValueStack_segment_count
+#define SEGMENTLIST_FUNCTION_PREFIX value_stack
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+internal CallFrame *push_and_init_callframe(IrMachine *machine, IrLocation address) {
+  CallFrame *frame = callstack_push(&machine->callstack, machine->arena_callstack);
 
   *frame = (CallFrame){
-    .pc = pc,
-    .value_stack = {0},
+    .pc = address,
   };
 
-  map_init(&frame->inst_map, &(HashMapOptions){ .allocator = 0, .initial_size = 8, .context = Null });
+  map_init(&frame->inst_map, &(HashMapOptions){ .allocator = machine->allocator_inst_map, .initial_size = 8, .context = Null });
+
+  return frame;
 }
 
 internal always_inline InstructionIndex ref_to_instruction_index(IrRef ref) {
   return ref;
 }
 
-internal always_inline IrRef instruction_index_to_ref(InstructionIndex idx) {
-  return idx;
-}
-
 internal always_inline ValueIndex ref_to_value_index(IrRef ref) {
   return ref & ~Bitmask_ir_ref_is_value_index;
+}
+
+internal always_inline Value *ref_value(ValueStore *values, IrRef ref) {
+  ValueIndex idx = ref_to_value_index(ref);
+  return values_get(values, idx);
 }
 
 internal always_inline b32 ref_is_value_index(IrRef ref) {
@@ -75,73 +90,75 @@ void *instruction_extra(IrChunk *chunk, InstructionIndex idx) {
   return ptr_offset(chunk->extra, chunk->data[idx]);
 }
 
+internal CallFrame *top_frame(IrMachine *machine) {
+  return callstack_ptr_at_unchecked(&machine->callstack, machine->callstack.len-1);
+}
+
 ValueIndex ref_value_index(IrMachine *machine, IrRef ref) {
   if (ref_is_value_index(ref)) {
     return ref_to_value_index(ref);
   }
 
-  return map_find(&machine->inst_map, ref_to_instruction_index(ref));
+  CallFrame *frame = top_frame(machine);
+
+  return *map_find(&frame->inst_map, ref_to_instruction_index(ref));
 }
 
 internal void clear_block_values(IrMachine *machine, CallFrame *frame, InstructionIndex block) {
-  ValueStack *stack = &frame->value_stack;
+  ValueStack *stack = &machine->value_stack;
 
   for (u32 i = stack->len; i-- > 0; ) {
     ValueStackElement e = *value_stack_ptr_at_unchecked(stack, i);
-    if (e.kind == ValueStackElement_block_marker && e.loc == block) {
-      stack->len = i;
+    if (e.kind == ValueStackElement_marker_block && e.idx == block) {
+      stack->len = i-1;
       break;
     }
 
     Assert(e.kind == ValueStackElement_value);
 
-    ValueIndex val = *map_find(&machine->inst_map, e.loc);
+    ValueIndex val = *map_find(&frame->inst_map, e.idx);
 
     values_dealloc(machine->values, val);
   }
 }
 
 internal void clear_frame_values(IrMachine *machine, CallFrame *frame) {
-  ValueStack *stack = &frame->value_stack;
+  ValueStack *stack = &machine->value_stack;
 
   for (u32 i = stack->len; i-- > 0; ) {
     ValueStackElement e = *value_stack_ptr_at_unchecked(stack, i);
-    if (e.kind == ValueStackElement_block_marker) {
+
+    if (e.kind == ValueStackElement_marker_frame) {
+      stack->len = i-1;
+      break;
+    }
+
+    if (e.kind == ValueStackElement_marker_block) {
       continue;
     }
 
     Assert(e.kind == ValueStackElement_value);
 
-    ValueIndex val = *map_find(&machine->inst_map, e.loc);
+    ValueIndex val = *map_find(&frame->inst_map, e.idx);
 
     values_dealloc(machine->values, val);
   }
 }
 
-u32 ir_run(
-  IrMachine *machine,
-  IrLocation start,
-  u32 offset,
-  ValueIndex *result
-) {
-  IrLocation end = { .chunk_index = start.chunk_index. instruction_index = start.instruction_index + offset };
-
-  {
-    CallFrame *frame = callstack_push_and_init_frame(&machine->callstack, start);
-  }
+u32 ir_run(IrMachine *machine) {
+  ValueStore *values = machine->values;
+  TypeInterner *types = machine->types;
 
   while (True) {
-    if (pc.chunk_index == end.chunk_index && pc.instruction_index == end.instruction_index) {
-      // TODO return value
-      Panic();
-      break;
-    }
+    CallFrame *frame = top_frame(machine);
+    InstructionIndex pc = frame->pc.instruction_index;
+    IrChunk *chunk = get_chunk(machine->chunks, frame->pc.chunk_index);
 
-    u8 op = opcode(chunk, pc.instruction_index);
+    u8 op = opcode(chunk, pc);
 
     switch (op) {
     case IR_alloc: {
-      TypeIndex type_idx = instruction_data(chunk, pc.instruction_index);
+      TypeIndex type_idx = instruction_data(chunk, pc);
       Type *type = types_get(types, type_idx);
       TypeSizeInfo size_info = types_size_info_by_type(types, type);
       void *mem = values_alloc_data(values, size_info.size, size_info.align);
@@ -152,84 +169,85 @@ u32 ir_run(
         .data = mem,
       };
 
-      map_insert(&machine->inst_map, pc, val_idx);
-      value_stack_append(&machine->value_stack, arena, (ValueStackElement){ .kind = ValueStackElement_value, .loc = pc });
+      map_insert(&frame->inst_map, pc, val_idx);
+      value_stack_append(
+        &machine->value_stack,
+        machine->arena_value_stack,
+        (ValueStackElement){ .kind = ValueStackElement_value, .idx = pc });
     } break;
     case IR_cond_br: {
-      IrCondBr *cond_br = instruction_extra(chunk, pc.instruction_index);
-      Value *cond = ir_ref_value(machine, cond_br->cond);
+      IrCondBr *cond_br = instruction_extra(chunk, pc);
+      Value *cond = ref_value(values, cond_br->cond);
 
       // A cond_br can only jump forward into a block, and not backwards to break out of an enclosing block.
       // This way you don't have to branch on whether this is a forwards or backwards jump.
-      IrInstructionIndex target = (*Cast(u8*, cond->data)) ? cond->then : cond->otherwise;
-      pc.instruction_index = target;
+      InstructionIndex target = (*Cast(u8*, cond->data)) ? cond_br->then : cond_br->otherwise;
+      pc = target;
     } break;
     case IR_block: {
-      value_stack_append(&machine->value_stack, arena, (ValueStackElement){ .kind = ValueStackElement_block_marker, .loc = pc });
+      value_stack_append(
+        &machine->value_stack, 
+        machine->arena_value_stack, 
+        (ValueStackElement){ .kind = ValueStackElement_marker_block, .idx = pc });
     } break;
     case IR_loop: {
-      value_stack_append(&machine->value_stack, arena, (ValueStackElement){ .kind = ValueStackElement_block_marker, .loc = pc });
+      value_stack_append(
+        &machine->value_stack, 
+        machine->arena_value_stack,
+        (ValueStackElement){ .kind = ValueStackElement_marker_block, .idx = pc });
     } break;
     case IR_br: {
-      InstructionIndex block_index = instruction_data(chunk, pc.instruction_index);
-      clear_block_values(machine, block_index);
+      InstructionIndex block_index = instruction_data(chunk, pc);
+      clear_block_values(machine, frame, block_index);
       u32 block_size = instruction_data(chunk, block_index);
-      pc.instruction_index = block_index + block_size;
+      pc = block_index + block_size;
     } break;
     case IR_repeat: {
-      InstructionIndex block_index = instruction_data(chunk, pc.instruction_index);
-      clear_block_values(machine, block_index);
-      pc.instruction_index = block_index;
+      InstructionIndex block_index = instruction_data(chunk, pc);
+      clear_block_values(machine, frame, block_index);
+      pc = block_index;
     } break;
     case IR_ret: {
-      clear_function_values(machine);
-      IrRef ref = instruction_data(chunk, pc.instruction_index);
+      IrRef ref = instruction_data(chunk, pc);
       machine->return_value = ref_to_value_index(ref);
-      return EvalResult_ok;
+      machine->callstack.len -= 1;
+      clear_frame_values(machine, frame);
+      continue;
     } break;
     case IR_load: {
       Panic();
     } break;
     case IR_store: {
-      IrStore *store = instruction_extra(chunk, pc.instruction_index);
-      ValueIndex val_idx_from = ref_to_value_index(store->value);
-      ValueIndex val_idx_target = ref_to_value_index(store->dst);
-      Value *from = values_get(machine->values, val_idx_from);
-      Value *target = values_get(machine->values, val_idx_target);
+      IrStore *store = instruction_extra(chunk, pc);
+      Value *from = ref_value(machine->values, store->value);
+      Value *target = ref_value(machine->values, store->dst);
       memcpy(target->data, from->data, target->data_size);
     } break;
     case IR_call: {
-      IrCall *call = instruction_extra(chunk, pc.instruction_index);
+      IrCall *call = instruction_extra(chunk, pc);
 
-      IrChunk *chunk = get_chunk(machine->chunks, call->func.chunk_index);
-      InstructionIndex instruction_index = call->func.instruction_index;
+      CallFrame *frame = push_and_init_callframe(machine, call->func);
 
-      IrFunc *func = instruction_extra(chunk, instruction_index);
-      InstructionIndex first_param = instruction_index + 1;
-
-      CallFrame *frame = callstack_push_and_init_frame(&machine->callstack, call->func);
-
-      for (u32 i = 0; i < arg_count; i++) {
-        ValueIndex arg = ref_value_index(call->args[i]);
+      InstructionIndex first_param = call->func.instruction_index + 1;
+      for (u32 i = 0; i < call->arg_count; i++) {
+        ValueIndex arg = ref_to_value_index(call->args[i]);
         map_insert(
           &frame->inst_map, 
-          (IrLocation){ .chunk_index = function.chunk_index, .instruction_index = first_param + i },
+          first_param + i,
           arg
         );
       }
-
-      Panic();
     } break;
     case IR_cast_int: {
       IrCastInt *cast_int = instruction_extra(chunk, pc);
       Type *type_dst = types_get(types, cast_int->type);
-      Value *val = ir_get_value(machine, cast_int->value);
+      Value *val = ref_value(values, cast_int->value);
       Type *type_src = types_get(types, val->type);
       TypeSizeInfo size_info = types_size_info_by_type(types, type_dst);
       void *payload_dst = values_alloc_data(values, size_info.size, size_info.align);
       u32 err = eval_cast_int(type_src->data.integer, val->data, type_dst->data.integer, payload_dst);
       if (err) {
-        Todo();
+        Panic();
       }
       Value *val_res;
       ValueIndex res = values_alloc(values, &val_res);
@@ -238,11 +256,11 @@ u32 ir_run(
         .data = payload_dst,
       };
 
-      map_insert(&machine->inst_map, pc, res);
+      map_insert(&frame->inst_map, pc, res);
     } break;
     }
 
-    pc.instruction_index++;
+    frame->pc.instruction_index = pc + 1;
   }
  
   return IrResult_ok;

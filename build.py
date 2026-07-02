@@ -37,7 +37,7 @@ def create_build_ninja():
         command = ' '.join([
                   'clang',
                   '-MD -MF $out.d',
-                  '-Wall -Wextra -Wpedantic',
+                  '-Wall -Wextra -Wpedantic -Werror',
                   '-Wsign-conversion',
                   '-Wno-unused-parameter',
                   '-Wimplicit-function-declaration',

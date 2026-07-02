@@ -92,9 +92,11 @@ internal b32 check_source_file(Checker *checker, SourceFile *source) {
 }
 
 internal ValueIndex alloc_value(Checker *checker, Value **val) {
+  Panic();
 }
 
 internal void *alloc_value_data(Checker *checker, usize size, u32 align) {
+  Panic();
 }
 
 internal ValueIndex alloc_type_value(Checker *checker, TypeIndex type) {

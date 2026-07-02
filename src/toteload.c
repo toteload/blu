@@ -3,7 +3,7 @@
 String string_from_cstr(char const *s) {
   u32 len = strlen(s);
   return (String){
-    .str = s,
+    .str = Cast(const u8*, s),
     .len = len,
   };
 }

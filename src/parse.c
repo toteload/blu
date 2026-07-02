@@ -114,12 +114,8 @@ internal b32 parse_as(Parser *parser, NodeIndex *out);
 internal b32 parse_if_else(Parser *parser, NodeIndex *out);
 internal b32 parse_base_expression(Parser *parser, NodeIndex *out);
 internal b32 parse_expression(Parser *parser, NodeIndex *out);
-
-// - Additional helpers (interfaces are slightly different from the C++ version) -
-
 internal b32 parse_literal_int(Parser *parser, NodeIndex *out);
 internal b32 parse_literal_string(Parser *parser, NodeIndex *out);
-internal b32 parse_literal_sequence(Parser *parser, NodeIndex *out);
 internal b32 parse_for(Parser *parser, NodeIndex *out);
 internal b32 parse_defer(Parser *parser, NodeIndex *out);
 internal b32 parse_const(Parser *parser, NodeIndex *out);
@@ -127,8 +123,6 @@ internal b32 parse_identifier(Parser *parser, NodeIndex *out);
 internal b32 parse_param(Parser *parser, NodeIndex *out);
 internal b32 parse_builtin_print(Parser *parser, NodeIndex *out);
 
-// The C++ parser used a default `prev_op` argument on parse_expression. Here the
-// public entry point takes no precedence, so it forwards to this implementation.
 internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op);
 
 internal b32 is_token_index_past_end(Tokens *tokens, TokenIndex idx) {

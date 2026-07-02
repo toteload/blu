@@ -21,11 +21,11 @@ main : () i32 = || 0
 ; function () i32
 ; ret (i32) (const i32 0)
 
-hellos := |n: comptime uint|: nil {
-  inline for 0..n do i {
-    std.println("hello {}", i)
-  }
-}
+; hellos := |n: comptime uint|: nil {
+;   inline for 0..n do i {
+;     std.println("hello {}", i)
+;   }
+; }
 
 ; A function with any comptime parameters needs to be converted to a function where all the
 ; comptime parameters have been inlined into the function body.
@@ -84,11 +84,11 @@ hellos := |n: comptime uint|: nil {
 ;   ret (nil) 
 ; ret (nil)
 
-hellos := |n: comptime uint, k: uint|: nil {
-  inline for 0..n do i {
-    std.println("hello {}", i + k)
-  }
-}
+; hellos := |n: comptime uint, k: uint|: nil {
+;   inline for 0..n do i {
+;     std.println("hello {}", i + k)
+;   }
+; }
 
 ; func (%n uint)
 ; emit
@@ -110,9 +110,9 @@ hellos := |n: comptime uint, k: uint|: nil {
 ;   ret (nil)
 ; ret (nil)
 
-array_of_i32 := |n: comptime uint|: type {
-  [n]i32
-}
+; array_of_i32 := |n: comptime uint|: type {
+;   [n]i32
+; }
 
 ; `array_of_i32` will be converted to a function `a` that takes a `uint` and emits a function that
 ; returns a typeid for an array of i32 of a size given by the `uint` parameter of `a`.

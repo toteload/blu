@@ -47,6 +47,12 @@ SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_u
 
 #ifdef SEGMENTLIST_OUTPUT_DEFINITIONS
 
+#ifndef SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
+#define SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
+
+// Without the toggle of this preprocessor block, the functions defined here would be defined twice
+// if you define two segment lists in the same translation unit leading to compile errors.
+
 internal usize segment_count_at_capacity(usize min_size_log2, usize cap) {
   return bitwidth(cap >> min_size_log2) + 1;
 }
@@ -62,6 +68,8 @@ internal usize segment_idx(usize min_size_log2, usize i) {
 internal usize item_idx(usize min_size_log2, usize i, usize si) {
   return i + ((usize)1 << min_size_log2) - ((usize)1 << (min_size_log2 + si));
 }
+
+#endif // SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
 
 usize Cat(SEGMENTLIST_FUNCTION_PREFIX, _cap)(SEGMENTLIST_NAME *list) {
   return (((usize)1 << list->segment_count) - 1) << SEGMENTLIST_MIN_SIZE_LOG2;
