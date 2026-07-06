@@ -2,6 +2,7 @@
 #define VALUE_H
 
 #include "blu.h"
+#include "types.h"
 
 typedef struct {
   TypeIndex  type;

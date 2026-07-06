@@ -3,13 +3,6 @@
 
 #include "blu.h"
 
-typedef struct SourceFile {
-  String   filename;
-  String   text;
-  Tokens   tokens;
-  AstNodes ast;
-} SourceFile;
-
 typedef struct {
   Messages       *messages;
   StringInterner *strings;

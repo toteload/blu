@@ -7,14 +7,12 @@ main : () i32 = || 0
 ; Running this function will emit a function that has all comptime expressions evaluated.
 ; Emitting code can be seen as a side effect of the function.
 
-; function () nil
+; comptime_func (0 comptime params, 0 runtime params) i32
 ; emit
-;   function () i32
 ;   %b = eval @eval0
 ;     %a = cast_int (i32) (const i64 0)
 ;     br @eval0 (i32) %a
 ;   ret (i32) %b
-; ret (nil)
 
 ; Function at runtime
 ; -------------------
@@ -42,7 +40,13 @@ main : () i32 = || 0
 ;     %d = add (uint) %b, (const uint 1)
 ;     store (uint) %a, %d
 ;     repeat @loop0
-; ret (nil) 
+; ret (nil)
+
+hellos := |n: uint|: nil {
+  for 0..n do i {
+    #emit(0, i)
+  }
+}
 
 ; func (%n uint) nil
 ; emit

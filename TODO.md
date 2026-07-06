@@ -1,8 +1,7 @@
-## `main.blu`
+# Currently doing
 
-- [ ] Compile `main.blu` to bytecode and run the main function.
-  - [ ] Ensure that the file has a 'main' module containing a 'main' function of the expected type signature.
-  - [ ] 
+I am trying to figure out how to generate code that when ran produces the partial evaluation of the
+function; basically all the comptime stuff in the original function has been replaced with constants.
 
 ### Types
 

@@ -64,12 +64,17 @@ typedef struct {
   TypeIndex function_param_types[];
 } Type;
 
+// Types are variable in size. This functions returns the actual size in bytes for a given type.
+u32 type_intern_byte_size(Type *type);
+
 typedef Type *TypePtr;
 
-#define SEGMENTLIST_NAME TypeList
-#define SEGMENTLIST_TYPE TypePtr
-#define SEGMENTLIST_MIN_SIZE_LOG2 6
-#define SEGMENTLIST_SEGMENT_COUNT 24
+#define TypeList_min_size_log2    6
+#define TypeList_segment_count    24
+#define SEGMENTLIST_NAME          TypeList
+#define SEGMENTLIST_TYPE          TypePtr
+#define SEGMENTLIST_MIN_SIZE_LOG2 TypeList_min_size_log2 
+#define SEGMENTLIST_SEGMENT_COUNT TypeList_segment_count
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
@@ -80,14 +85,20 @@ typedef Type *TypePtr;
 #include "hashmap.h"
 
 struct TypeInterner {
-  Arena         arena;
-  TypeList      list;
-  UniqueTypeMap map;
+  Arena         *arena;
+  Arena         *arena_scratch;
+  TypeList       list;
+  UniqueTypeMap  map;
 };
 
 typedef struct {
-  Allocator map_allocator;
-  Arena *scratch;
+  Allocator  map_allocator;
+  Arena     *arena_scratch;
+
+  // `arena` is used for:
+  // - Storing the interned types.
+  // - Backing memory for the segment list that maps `TypeIndex` to `Type*`.
+  Arena     *arena;
 } TypeInternerOptions; 
 
 void       types_init(TypeInterner *types, TypeInternerOptions *options);
@@ -95,7 +106,7 @@ void       types_deinit(TypeInterner *types);
 TypeIndex  types_add(TypeInterner *types, Type *type);
 Type      *types_get(TypeInterner *types, TypeIndex idx);
 
-TypeSizeInfo types_size_info_by_type(TypeInterner *types, Type *type);
-TypeSizeInfo types_size_info(TypeInterner *types, TypeIndex idx);
+TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
+TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);
 
 #endif // TYPES_H

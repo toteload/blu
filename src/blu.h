@@ -27,10 +27,18 @@ typedef struct {
 typedef struct Messages Messages;
 typedef struct StringInterner StringInterner;
 typedef struct TypeInterner TypeInterner;
-typedef struct AstNodes AstNodes;
-typedef struct Tokens Tokens;
 typedef struct EnvAllocator EnvAllocator;
 typedef struct Env Env;
 typedef struct ValueStore ValueStore;
+
+#include "tokens.h"
+#include "ast.h"
+
+typedef struct {
+  String   filename;
+  String   text;
+  Tokens   tokens;
+  AstNodes ast;
+} SourceFile;
 
 #endif // BLU_H

@@ -19,7 +19,7 @@ void messages_init(Messages *messages) {
   zero_struct(MessageList, &messages->messages);
 }
 
-void messages_add_error(Messages *messages, String fmt) {
+void messages_error(Messages *messages, String fmt, ...) {
   Message msg = {
     .severity = Severity_Error,
     .format   = arena_copy_string(&messages->arena, fmt),

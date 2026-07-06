@@ -2,6 +2,30 @@
 #include "tokens.h"
 #include "messages.h"
 
+#define SEGMENTLIST_NAME            KindList
+#define SEGMENTLIST_TYPE            u8
+#define SEGMENTLIST_FUNCTION_PREFIX kinds
+#define SEGMENTLIST_MIN_SIZE_LOG2   KindList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   KindList_segment_count
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+#define SEGMENTLIST_NAME            SpanList
+#define SEGMENTLIST_TYPE            SpanU32
+#define SEGMENTLIST_FUNCTION_PREFIX spans
+#define SEGMENTLIST_MIN_SIZE_LOG2   SpanList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   SpanList_segment_count
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+#define SEGMENTLIST_NAME            OffsetList
+#define SEGMENTLIST_TYPE            u32
+#define SEGMENTLIST_FUNCTION_PREFIX lines
+#define SEGMENTLIST_MIN_SIZE_LOG2   OffsetList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   OffsetList_segment_count
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 enum TokenizerResult {
   TokResult_ok,
   TokResult_end,
@@ -16,7 +40,7 @@ typedef struct {
   Messages *messages;
 } Tokenizer;
 
-internal b32 is_whitespace(u8 c) { return (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t'); }
+internal b32 is_whitespace_except_newline(u8 c) { return (c == ' ') || (c == '\r') || (c == '\t'); }
 internal b32 is_numeric(u8 c) { return c >= '0' && c <= '9'; }
 internal b32 is_alpha(u8 c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 internal b32 is_identifier_start(u8 c) { return c == '_' || is_alpha(c); }
@@ -27,7 +51,7 @@ internal b32 is_at_end(Tokenizer *tokenizer) {
 }
 
 internal void skip_whitespace(Tokenizer *tokenizer) {
-  while (!is_at_end(tokenizer) && is_whitespace(*tokenizer->at)) {
+  while (!is_at_end(tokenizer) && is_whitespace_except_newline(*tokenizer->at)) {
     tokenizer->at += 1;
   }
 }
@@ -87,6 +111,11 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   if (c == ';') {
     step_until_new_line(tokenizer);
     Return_token(Tok_line_comment);
+  }
+
+  if (c == '\n') {
+    tokenizer->at += 1;
+    Return_token(Tok_newline);
   }
 
   if (c == '-') {
@@ -178,7 +207,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     }
 
     if (is_at_end(tokenizer)) {
-      messages_add_error(tokenizer->messages, string_lit("End of source encountered while parsing string literal."));
+      messages_error(tokenizer->messages, string_lit("End of source encountered while parsing string literal."));
       return TokResult_error;
     }
 
@@ -224,31 +253,22 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_token(Tok_identifier);
   }
 
-  messages_add_error(tokenizer->messages, string_lit("Unrecognized token encountered."));
+  messages_error(tokenizer->messages, string_lit("Unrecognized token encountered."));
 
   return TokResult_error;
 }
 
-void tokens_init(Tokens *tokens) {
-  arena_init(&tokens->kinds, &(ArenaOptions){
-    .reserve_size = MiB(1),
-    .initial_commit_size = KiB(16),
-  });
-  arena_init(&tokens->spans, &(ArenaOptions){
-    .reserve_size = 8 * MiB(1),
-    .initial_commit_size = 8 * KiB(16),
-  });
+void tokens_init(Tokens *tokens, Arena *arena) {
+  zero_struct(Tokens, tokens);
 
-  arena_push_array(u8, &tokens->kinds, 1);
-  arena_push_array(SpanU32, &tokens->spans, 1);
+  tokens->arena = arena;
 
-  tokens->offset = 1;
+  kinds_push(&tokens->kinds, arena);
+  spans_push(&tokens->spans, arena);
+  lines_append(&tokens->lines, arena, 0);
 }
 
 void tokens_deinit(Tokens *tokens) {
-  arena_deinit(&tokens->kinds);
-  arena_deinit(&tokens->spans);
-
   zero_struct(Tokens, tokens);
 }
 
@@ -257,27 +277,26 @@ u32 tokens_begin(Tokens *tokens) {
 }
 
 u32 tokens_end(Tokens *tokens) {
-  return tokens->offset;
+  return tokens->kinds.len;
 }
 
 u32 tokens_count(Tokens *tokens) {
-  return tokens->offset - 1;
+  return tokens->kinds.len - 1;
 }
 
 TokenIndex tokens_alloc(Tokens *tokens) {
-  TokenIndex idx = tokens->offset;
-  tokens->offset += 1;
-  arena_push_array(u8,      &tokens->kinds, 1);
-  arena_push_array(SpanU32, &tokens->spans, 1);
+  TokenIndex idx = tokens->kinds.len;
+  kinds_push(&tokens->kinds, tokens->arena);
+  spans_push(&tokens->spans, tokens->arena);
   return idx;
 }
 
 u8 *tokens_kind(Tokens *tokens, TokenIndex idx) {
-  return Cast(u8*, tokens->kinds.base) + idx;
+  return kinds_ptr_at_unchecked(&tokens->kinds, idx);
 }
 
 SpanU32 *tokens_span(Tokens *tokens, TokenIndex idx) {
-  return Cast(SpanU32*, tokens->spans.base) + idx;
+  return spans_ptr_at_unchecked(&tokens->spans, idx);
 }
 
 b32 tokenize(Messages *messages, Tokens *tokens, String source) {
@@ -299,6 +318,11 @@ b32 tokenize(Messages *messages, Tokens *tokens, String source) {
     }
 
     if (kind == Tok_line_comment) {
+      continue;
+    }
+
+    if (kind == Tok_newline) {
+      lines_append(&tokens->lines, tokens->arena, span.end);
       continue;
     }
 

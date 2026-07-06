@@ -240,13 +240,13 @@ typedef struct {
   TokenIndex end;
 } SpanToken;
 
-struct AstNodes {
+typedef struct {
   Arena kinds; // u8[]
   Arena spans; // SpanToken[]
   Arena datas; // holds a u32 offset into `extra`
   Arena extra;
   u32   offset;
-};
+} AstNodes;
 
 void nodes_init(AstNodes *nodes);
 void nodes_deinit(AstNodes *nodes);

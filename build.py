@@ -49,7 +49,7 @@ def create_build_ninja():
                   '-DTTLD_DEBUG',
                   '-g',
                   '-gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
-                  '-fsanitize=address,undefined',
+                  #'-fsanitize=address,undefined',
                   '$cflags',
                   '-c',
                   '$in',
@@ -59,7 +59,12 @@ def create_build_ninja():
 
     out.rule(
         name = 'build_binary',
-        command = 'clang -g -fsanitize=address,undefined $in -o $out',
+        command = ' '.join([
+            'clang',
+            '-g',
+            #'-fsanitize=address,undefined', 
+            '$in',
+            '-o $out']),
         )
 
     inputs = [
@@ -73,6 +78,7 @@ def create_build_ninja():
         'messages.c',
         'env.c',
         'check.c',
+        'eval.c',
         'ir.c',
     ]
 

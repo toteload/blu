@@ -65,6 +65,7 @@ enum TokenKind {
   Tok_builtin_print,
 
   Tok_line_comment,
+  Tok_newline,
 
   Tok_kind_max,
 };
@@ -74,18 +75,50 @@ typedef struct {
   u32 end;
 } SpanU32;
 
-struct Tokens {
-  Arena kinds;
-  Arena spans;
-  u32 offset;
-};
+#define KindList_min_size_log2    6
+#define KindList_segment_count    24
+#define SEGMENTLIST_NAME          KindList
+#define SEGMENTLIST_TYPE          u8
+#define SEGMENTLIST_MIN_SIZE_LOG2 KindList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT KindList_segment_count
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
 
-void       tokens_init(Tokens *tokens);
+#define SpanList_min_size_log2    6
+#define SpanList_segment_count    24
+#define SEGMENTLIST_NAME          SpanList
+#define SEGMENTLIST_TYPE          SpanU32
+#define SEGMENTLIST_MIN_SIZE_LOG2 SpanList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT SpanList_segment_count
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+#define OffsetList_min_size_log2  6
+#define OffsetList_segment_count  24
+#define SEGMENTLIST_NAME          OffsetList
+#define SEGMENTLIST_TYPE          u32
+#define SEGMENTLIST_MIN_SIZE_LOG2 OffsetList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT OffsetList_segment_count
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
+  Arena      *arena;
+  KindList    kinds;
+  SpanList    spans;
+  OffsetList  lines;
+} Tokens;
+
+void       tokens_init(Tokens *tokens, Arena *arena);
 void       tokens_deinit(Tokens *tokens);
+
 u32        tokens_count(Tokens *tokens);
+
 TokenIndex tokens_begin(Tokens *tokens);
 TokenIndex tokens_end(Tokens *tokens);
+
 TokenIndex tokens_alloc(Tokens *tokens);
+
 u8        *tokens_kind(Tokens *tokens, TokenIndex idx);
 SpanU32   *tokens_span(Tokens *tokens, TokenIndex idx);
 

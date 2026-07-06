@@ -6,6 +6,19 @@
 
 extern u32 eval_cast_int(TypeInteger, void*, TypeInteger, void*);
 
+#define SEGMENTLIST_NAME            ChunkList
+#define SEGMENTLIST_TYPE            IrChunk
+#define SEGMENTLIST_MIN_SIZE_LOG2   ChunkList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT   ChunkList_segment_count
+#define SEGMENTLIST_FUNCTION_PREFIX chunk_list
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+IrChunk *get_chunk(IrChunkAllocator *chunks, ChunkIndex idx) {
+  return chunk_list_ptr_at_unchecked(&chunks->list, idx);
+}
+
 u32 instruction_index_hash(void *context, InstructionIndex idx) {
   Unused(context);
 
@@ -150,6 +163,7 @@ u32 ir_run(IrMachine *machine) {
   TypeInterner *types = machine->types;
 
   while (True) {
+    // OPTIMIZE: fetch the top frame when the frame actually changes, so for call and ret instructions.
     CallFrame *frame = top_frame(machine);
     InstructionIndex pc = frame->pc.instruction_index;
     IrChunk *chunk = get_chunk(machine->chunks, frame->pc.chunk_index);
@@ -160,7 +174,7 @@ u32 ir_run(IrMachine *machine) {
     case IR_alloc: {
       TypeIndex type_idx = instruction_data(chunk, pc);
       Type *type = types_get(types, type_idx);
-      TypeSizeInfo size_info = types_size_info_by_type(types, type);
+      TypeSizeInfo size_info = types_size_info(types, type);
       void *mem = values_alloc_data(values, size_info.size, size_info.align);
       Value *val;
       ValueIndex val_idx = values_alloc(values, &val);
@@ -243,7 +257,7 @@ u32 ir_run(IrMachine *machine) {
       Type *type_dst = types_get(types, cast_int->type);
       Value *val = ref_value(values, cast_int->value);
       Type *type_src = types_get(types, val->type);
-      TypeSizeInfo size_info = types_size_info_by_type(types, type_dst);
+      TypeSizeInfo size_info = types_size_info(types, type_dst);
       void *payload_dst = values_alloc_data(values, size_info.size, size_info.align);
       u32 err = eval_cast_int(type_src->data.integer, val->data, type_dst->data.integer, payload_dst);
       if (err) {

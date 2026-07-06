@@ -150,10 +150,8 @@ enum SourceFileResult {
   SourceFileResult_error_parse,
 };
 
-u32 read_tokenize_parse_file(SourceFile *source, Messages *messages, Arena *arena, String filename) {
-  source->filename = filename;
-
-  u32 err = read_file(filename, arena, &source->text);
+u32 read_tokenize_parse_file(SourceFile *source, Messages *messages, Arena *arena) {
+  u32 err = read_file(source->filename, arena, &source->text);
   if (err) {
     return SourceFileResult_error_read_file;
   }
@@ -195,12 +193,6 @@ int main(int argc, char const *argv[]) {
     .initial_commit_size = KiB(64),
   });
 
-  Tokens tokens = {0};
-  tokens_init(&tokens);
-
-  AstNodes nodes = {0};
-  nodes_init(&nodes);
-
   StringInterner strings = {0};
   strings_init(&strings, &(StringInternerOptions){
     .arena         = &arena,
@@ -210,7 +202,8 @@ int main(int argc, char const *argv[]) {
   TypeInterner types = {0};
   types_init(&types, &(TypeInternerOptions){
     .map_allocator = cstd_allocator,
-    .scratch       = &arena_tmp,
+    .arena         = &arena,
+    .arena_scratch = &arena_tmp,
   });
 
   ValueStore values = {0};
@@ -221,15 +214,21 @@ int main(int argc, char const *argv[]) {
   Messages messages;
   messages_init(&messages);
 
-  SourceFile source;
-  err = read_tokenize_parse_file(&source, &messages, &arena, cli.source_filename);
+  SourceFile source = {
+    .filename = cli.source_filename,
+    .text = {0},
+  };
+  tokens_init(&source.tokens, &arena);
+  nodes_init(&source.ast);
+
+  err = read_tokenize_parse_file(&source, &messages, &arena);
   if (err) {
     messages_print_all_messages(&messages);
     return 1;
   }
 
-  write_tokens(&tokens, source.text);
-  write_nodes(&nodes, &tokens, source.text);
+  write_tokens(&source.tokens, source.text);
+  write_nodes(&source.ast, &source.tokens, source.text);
 
   EnvAllocator envs;
   envs_init(&envs, &(EnvAllocatorOptions){

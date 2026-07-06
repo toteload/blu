@@ -150,12 +150,12 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   b32 has_next = next(parser, &tok);
 
   if (!has_next) {
-    messages_add_error(parser->messages, string_lit("Expected a token, but encountered end of source."));
+    messages_error(parser->messages, string_lit("Expected a token, but encountered end of source."));
     return False;
   }
 
   if (tok != expected_token_kind) {
-    messages_add_error(parser->messages, string_lit("Expected a certain token, but got another."));
+    messages_error(parser->messages, string_lit("Expected a certain token, but got another."));
     return False;
   }
 
@@ -175,7 +175,7 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
 internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
   b32 has_peeked = peek(parser, token_kind);
   if (!has_peeked) {
-    messages_add_error(parser->messages, string_lit("Expected a token but got end of source."));
+    messages_error(parser->messages, string_lit("Expected a token but got end of source."));
     return False;
   }
 
@@ -391,7 +391,7 @@ internal b32 parse_type(Parser *parser, NodeIndex *out) {
     *nodes_kind(parser->nodes, idx) = Ast_identifier;
   } break;
   default:
-    messages_add_error(parser->messages, string_lit("Unexpected token encountered in type expression."));
+    messages_error(parser->messages, string_lit("Unexpected token encountered in type expression."));
     return False;
   }
 
@@ -685,7 +685,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
   u8  tok;
   b32 has_next_token = peek(parser, &tok);
   if (!has_next_token) {
-    messages_add_error(
+    messages_error(
       parser->messages,
       string_lit("Unexpected end of source, while trying to parse base expression.")
     );
@@ -714,7 +714,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
     Try(peek(parser, &tok));
     switch (tok) {
     default:
-      messages_add_error(
+      messages_error(
         parser->messages,
         string_lit("Unexpected token encountered after '.' in expression.")
       );
@@ -764,7 +764,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
   } break;
 
   default:
-    messages_add_error(
+    messages_error(
       parser->messages,
       string_lit("Unexpected token encountered at start of expression.")
     );
