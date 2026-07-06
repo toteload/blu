@@ -55,62 +55,6 @@ u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *arg
   return ParseCli_ok;
 }
 
-enum ReadFileResult {
-  ReadFile_ok,
-  ReadFile_error_could_not_open_file,
-  ReadFile_error_unexpected_content_size,
-  ReadFile_error_ftell_error,
-};
-
-u32 read_file(String filename, Arena *arena, String *content) {
-  FILE *f;
-  {
-    ArenaSnapshot scope = arena_scope_begin(arena);
-    u8 *buf = arena_push_array(u8, arena, filename.len + 1);
-    memcpy(buf, filename.str, filename.len);
-    buf[filename.len] = '\0';
-
-    f = fopen(Cast(char const *, buf), "rb");
-    if (is_null(f)) {
-      arena_scope_end(arena, scope);
-      return ReadFile_error_could_not_open_file;
-    }
-
-    arena_scope_end(arena, scope);
-  }
-
-  fseek(f, 0, SEEK_END);
-
-  ArenaSnapshot savepoint = arena_scope_begin(arena);
-
-  i32 sizei = ftell(f);
-  if (sizei < 0) {
-    return ReadFile_error_ftell_error;
-  }
-
-  u32 size = Cast(u32, sizei);
-
-  u8 *data = arena_push_array(u8, arena, size);
-
-  fseek(f, 0, SEEK_SET);
-
-  u64 bytes_read = fread(data, 1, size, f);
-  if (bytes_read != size) {
-    arena_scope_end(arena, savepoint);
-    return ReadFile_error_unexpected_content_size;
-  }
-
-  *content = (String){
-    .str = data,
-    .len = size,
-  };
-
-  return ReadFile_ok;
-}
-
-extern b32 tokenize(Messages *messages, Tokens *tokens, String source);
-extern b32 parse(Messages *messages, AstNodes *nodes, Tokens *tokens);
-
 internal void write_tokens(Tokens *tokens, String source) {
   for (u32 i = tokens_begin(tokens); i < tokens_end(tokens); i++) {
     u8      kind = *tokens_kind(tokens, i);
@@ -141,32 +85,6 @@ internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_
   }
 
   return realloc(p, new_byte_size);
-}
-
-enum SourceFileResult {
-  SourceFileResult_ok,
-  SourceFileResult_error_read_file,
-  SourceFileResult_error_tokenize,
-  SourceFileResult_error_parse,
-};
-
-u32 read_tokenize_parse_file(SourceFile *source, Messages *messages, Arena *arena) {
-  u32 err = read_file(source->filename, arena, &source->text);
-  if (err) {
-    return SourceFileResult_error_read_file;
-  }
-
-  b32 ok = tokenize(messages, &source->tokens, source->text);
-  if (!ok) {
-    return SourceFileResult_error_tokenize;
-  }
-
-  ok = parse(messages, &source->ast, &source->tokens);
-  if (!ok) {
-    return SourceFileResult_error_parse;
-  }
-
-  return SourceFileResult_ok;
 }
 
 int main(int argc, char const *argv[]) {
@@ -211,30 +129,34 @@ int main(int argc, char const *argv[]) {
     .payload_allocator = cstd_allocator,
   });
 
-  Messages messages;
-  messages_init(&messages);
+  SourceAllocator sources;
+  sources_init(&sources);
 
-  SourceFile source = {
-    .filename = cli.source_filename,
-    .text = {0},
-  };
-  tokens_init(&source.tokens, &arena);
-  nodes_init(&source.ast);
+  Source *source;
+  SourceIndex source_index = sources_alloc_and_get(&sources, &source);
+  Unused(source_index);
+  source_file_init(source, cli.source_filename);
 
-  err = read_tokenize_parse_file(&source, &messages, &arena);
-  if (err) {
-    messages_print_all_messages(&messages);
-    return 1;
-  }
+  ok = source_read_file(source);
+  if (!ok) { source_print_all_messages(source); return 1; }
 
-  write_tokens(&source.tokens, source.text);
-  write_nodes(&source.ast, &source.tokens, source.text);
+  ok = source_tokenize(source);
+  //write_tokens(&source->tokens, source->text);
+  if (!ok) { source_print_all_messages(source); return 1; }
+
+  ok = source_parse(source);
+  if (!ok) { source_print_all_messages(source); return 1; }
+
+  write_nodes(&source->ast, &source->tokens, source->text);
 
   EnvAllocator envs;
   envs_init(&envs, &(EnvAllocatorOptions){
     .arena         = &arena,
     .map_allocator = cstd_allocator,
   });
+
+  Messages messages;
+  messages_init(&messages);
 
   Checker checker;
   checker_init(&checker, &(CheckerOptions){
@@ -244,12 +166,12 @@ int main(int argc, char const *argv[]) {
     .envs     = &envs,
 
     .source_count = 1,
-    .sources      = &source,
+    .sources      = source,
   });
 
   ok = check_code(&checker);
   if (!ok) {
-    messages_print_all_messages(&messages);
+    messages_print_all_messages(&messages, &sources);
     return 1;
   }
 

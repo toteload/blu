@@ -24,6 +24,7 @@ internal u32 hash_type(void *context, Type *x);
 #define SEGMENTLIST_FUNCTION_PREFIX list
 #define SEGMENTLIST_MIN_SIZE_LOG2   TypeList_min_size_log2 
 #define SEGMENTLIST_SEGMENT_COUNT   TypeList_segment_count
+#define SEGMENTLIST_LINKAGE         internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
@@ -49,7 +50,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
       return False;
     }
 
-    for EachIndex(i, a->data.function.param_count) {
+    for (u32 i = 0; i < a->data.function.param_count; i++) {
       if (a->function_param_types[i] != b->function_param_types[i]) {
         return False;
       }
@@ -71,7 +72,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
 internal u32 push_type_data(Arena *arena, Type *x) {
 #define Push_data(y)                                                                               \
   {                                                                                                \
-    void *_p = arena_push(arena, sizeof(y), 1);                                                     \
+    void *_p = arena_push(arena, sizeof(y), 1);                                                    \
     memcpy(_p, &(y), sizeof(y));                                                                   \
     size += sizeof(y);                                                                             \
   }
@@ -96,7 +97,7 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   case Type_function: {
     Push_data(x->data.function.return_type);
     Push_data(x->data.function.param_count);
-    for EachIndex(i, x->data.function.param_count) { Push_data(x->function_param_types[i]); }
+    for (u32 i = 0; i < x->data.function.param_count; i++) { Push_data(x->function_param_types[i]); }
   } break;
   case Type_array: {
     Push_data(x->data.array.size);

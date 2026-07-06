@@ -6,6 +6,7 @@
 typedef u32 StringIndex;
 typedef u32 TypeIndex;
 typedef u32 TokenIndex;
+typedef u32 SourceIndex;
 typedef u32 AstIndex;
 typedef u32 ValueIndex;
 
@@ -24,21 +25,12 @@ typedef struct {
   } idx;
 } NodeIndex;
 
-typedef struct Messages Messages;
 typedef struct StringInterner StringInterner;
 typedef struct TypeInterner TypeInterner;
 typedef struct EnvAllocator EnvAllocator;
 typedef struct Env Env;
 typedef struct ValueStore ValueStore;
-
-#include "tokens.h"
-#include "ast.h"
-
-typedef struct {
-  String   filename;
-  String   text;
-  Tokens   tokens;
-  AstNodes ast;
-} SourceFile;
+typedef struct SourceAllocator SourceAllocator;
+typedef struct Source Source;
 
 #endif // BLU_H

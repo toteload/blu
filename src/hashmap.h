@@ -258,7 +258,7 @@ internal b32 Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem
   memset(meta + cap, 0, (size - cap) * sizeof(u32));
 
   // Mark occupied slots as stale and remove tombstones.
-  for EachIndex(i, cap) {
+  for (u32 i = 0; i < cap; i++) {
     if (slot_is_occupied(meta[i])) {
       meta[i] |= Mask_is_stale;
     } else if (slot_is_tombstone(meta[i])) {
@@ -268,7 +268,7 @@ internal b32 Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem
 
   u32 mask = size - 1;
 
-  for EachIndex(i, cap) {
+  for (u32 i = 0; i < cap; i++) {
     if (!slot_is_stale(meta[i])) {
       continue;
     }
@@ -279,7 +279,7 @@ internal b32 Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem
     u32 start = hash & mask;
 
     u32 idx = Index_not_found;
-    for EachIndex(k, Max_search_depth) {
+    for (u32 k = 0; k < Max_search_depth; k++) {
       u32 j = (start + k) & mask;
       if (slot_is_empty(meta[j]) || slot_is_stale(meta[j])) {
         idx = j;
@@ -309,11 +309,11 @@ internal b32 Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem
       Swap(HASHMAP_BUCKET_NAME, bi, buckets[idx]);
     }
 
-    for EachIndex(j, cap) {
+    for (u32 j = 0; j < cap; j++) {
       u32 hash = HASHMAP_HASH_FN(map->context, bi.key);
       u32 start = hash & mask;
 
-      for EachIndex(k, Max_search_depth) {
+      for (u32 k = 0; k < Max_search_depth; k++) {
         u32 idx = (start + k) & mask;
 
         if (slot_is_empty(meta[idx])) {
@@ -347,8 +347,8 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *m
   u32 fingerprint = read_fingerprint(hash);
   u32 start_idx = hash & map->mask;
 
-  for EachIndex(j, Max_search_depth) {
-    u32 idx = (start_idx + j) & map->mask;
+  for (u32 i = 0; i < Max_search_depth; i++) {
+    u32 idx = (start_idx + i) & map->mask;
 
     if (slot_is_empty(map->meta[idx])) {
       return Index_not_found;
@@ -370,8 +370,8 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
 
   u32 tombstone_idx = Index_not_found;
 
-  for EachIndex(j, Max_search_depth) {
-    u32 idx = (start_idx + j) & map->mask;
+  for (u32 i = 0; i < Max_search_depth; i++) {
+    u32 idx = (start_idx + i) & map->mask;
 
     if (slot_is_empty(map->meta[idx])) {
       if (tombstone_idx != Index_not_found) {

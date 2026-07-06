@@ -69,8 +69,6 @@ always_inline u32 bitwidth(u64 x) {
 #define Max(a, b) (((a)>(b))?(a):(b))
 #define Min(a, b) (((a)<(b))?(a):(b))
 
-#define EachIndex(i, count) (usize i = 0; i < (count); i += 1)
-
 #define Null NULL
 #define True 1
 #define False 0

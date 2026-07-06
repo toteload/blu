@@ -103,21 +103,27 @@ typedef struct {
 #include "segment_list.h"
 
 typedef struct {
-  Arena      *arena;
   KindList    kinds;
   SpanList    spans;
   OffsetList  lines;
 } Tokens;
 
+typedef struct {
+  u32 line;
+  u32 offset_start_of_line;
+  u32 line_len;
+} LineInfo;
+
 void       tokens_init(Tokens *tokens, Arena *arena);
-void       tokens_deinit(Tokens *tokens);
 
 u32        tokens_count(Tokens *tokens);
 
 TokenIndex tokens_begin(Tokens *tokens);
 TokenIndex tokens_end(Tokens *tokens);
 
-TokenIndex tokens_alloc(Tokens *tokens);
+LineInfo   tokens_find_line_info(Tokens *tokens, u32 byte_offset);
+
+TokenIndex tokens_alloc(Tokens *tokens, Arena *arena);
 
 u8        *tokens_kind(Tokens *tokens, TokenIndex idx);
 SpanU32   *tokens_span(Tokens *tokens, TokenIndex idx);

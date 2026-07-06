@@ -1,6 +1,6 @@
 #include "blu.h"
 #include "tokens.h"
-#include "messages.h"
+#include "source_file.h"
 
 #define SEGMENTLIST_NAME            KindList
 #define SEGMENTLIST_TYPE            u8
@@ -33,11 +33,11 @@ enum TokenizerResult {
 };
 
 typedef struct {
-  u8 const *source;
+  u8 const *start;
   u8 const *end;
   u8 const *at;
 
-  Messages *messages;
+  Source *source;
 } Tokenizer;
 
 internal b32 is_whitespace_except_newline(u8 c) { return (c == ' ') || (c == '\r') || (c == '\t'); }
@@ -65,8 +65,8 @@ internal void step_until_new_line(Tokenizer *tokenizer) {
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
     *kind       = Kind;                                                                            \
-    span->start = Cast(u32, token_start - tokenizer->source);                                      \
-    span->end   = Cast(u32, tokenizer->at - tokenizer->source);                                    \
+    span->start = Cast(u32, token_start - tokenizer->start);                                       \
+    span->end   = Cast(u32, tokenizer->at - tokenizer->start);                                     \
     return TokResult_ok;                                                                           \
   }
 
@@ -105,17 +105,14 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   case '|': Return_token(Tok_bar);
   case '^': Return_token(Tok_caret);
   case '~': Return_token(Tok_tilde);
+  case '\n': Return_token(Tok_newline);
   }
   // clang-format on
 
   if (c == ';') {
     step_until_new_line(tokenizer);
+    tokenizer->at++;
     Return_token(Tok_line_comment);
-  }
-
-  if (c == '\n') {
-    tokenizer->at += 1;
-    Return_token(Tok_newline);
   }
 
   if (c == '-') {
@@ -207,7 +204,11 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     }
 
     if (is_at_end(tokenizer)) {
-      messages_error(tokenizer->messages, string_lit("End of source encountered while parsing string literal."));
+      error(
+        tokenizer->source,
+        (MessageLocation){ .kind = MessageLocation_end_of_file },
+        string_lit("End of source encountered while parsing string literal.")
+      );
       return TokResult_error;
     }
 
@@ -253,7 +254,16 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_token(Tok_identifier);
   }
 
-  messages_error(tokenizer->messages, string_lit("Unrecognized token encountered."));
+  u32 offset = Cast(u32, ptr_diff(token_start, tokenizer->start));
+
+  error(
+    tokenizer->source, 
+    (MessageLocation){
+      .kind = MessageLocation_byte_offset,
+      .data.offset = offset,
+    },
+    string_lit("Unrecognized token encountered.")
+  );
 
   return TokResult_error;
 }
@@ -261,15 +271,13 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
 void tokens_init(Tokens *tokens, Arena *arena) {
   zero_struct(Tokens, tokens);
 
-  tokens->arena = arena;
-
   kinds_push(&tokens->kinds, arena);
   spans_push(&tokens->spans, arena);
   lines_append(&tokens->lines, arena, 0);
 }
 
-void tokens_deinit(Tokens *tokens) {
-  zero_struct(Tokens, tokens);
+u32 tokens_count(Tokens *tokens) {
+  return tokens->kinds.len - 1;
 }
 
 u32 tokens_begin(Tokens *tokens) {
@@ -280,14 +288,27 @@ u32 tokens_end(Tokens *tokens) {
   return tokens->kinds.len;
 }
 
-u32 tokens_count(Tokens *tokens) {
-  return tokens->kinds.len - 1;
+LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
+  u32 len = tokens->lines.len;
+  for (u32 i = 1; i < len; i++) {
+    u32 offset = *lines_ptr_at_unchecked(&tokens->lines, i);
+    if (offset > byte_offset) {
+      u32 offset_prev = *lines_ptr_at_unchecked(&tokens->lines, i-1);
+      return (LineInfo){
+        .line = i,
+        .offset_start_of_line = offset_prev,
+        .line_len = offset - offset_prev,
+      };
+    }
+  }
+
+  return (LineInfo){0};
 }
 
-TokenIndex tokens_alloc(Tokens *tokens) {
+TokenIndex tokens_alloc(Tokens *tokens, Arena *arena) {
   TokenIndex idx = tokens->kinds.len;
-  kinds_push(&tokens->kinds, tokens->arena);
-  spans_push(&tokens->spans, tokens->arena);
+  kinds_push(&tokens->kinds, arena);
+  spans_push(&tokens->spans, arena);
   return idx;
 }
 
@@ -299,13 +320,15 @@ SpanU32 *tokens_span(Tokens *tokens, TokenIndex idx) {
   return spans_ptr_at_unchecked(&tokens->spans, idx);
 }
 
-b32 tokenize(Messages *messages, Tokens *tokens, String source) {
+b32 source_tokenize(Source *source) {
   Tokenizer tokenizer = {
-    .source   = source.str,
-    .end      = ptr_offset(source.str, source.len),
-    .at       = source.str,
-    .messages = messages,
+    .start  = source->text.str,
+    .end    = ptr_offset(source->text.str, source->text.len),
+    .at     = source->text.str,
+    .source = source,
   };
+
+  Tokens *tokens = &source->tokens;
 
   u32 res;
   while (True) {
@@ -317,20 +340,18 @@ b32 tokenize(Messages *messages, Tokens *tokens, String source) {
       break;
     }
 
-    if (kind == Tok_line_comment) {
+    if (kind == Tok_line_comment || kind == Tok_newline) {
+      lines_append(&tokens->lines, &source->arena, span.end);
       continue;
     }
 
-    if (kind == Tok_newline) {
-      lines_append(&tokens->lines, tokens->arena, span.end);
-      continue;
-    }
-
-    TokenIndex i = tokens_alloc(tokens);
+    TokenIndex i = tokens_alloc(tokens, &source->arena);
 
     *tokens_kind(tokens, i) = kind;
     *tokens_span(tokens, i) = span;
   }
+
+  lines_append(&tokens->lines, &source->arena, source->text.len);
 
   return res == TokResult_end;
 }

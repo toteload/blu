@@ -2,6 +2,7 @@
 #define CHECK_H
 
 #include "blu.h"
+#include "source_file.h"
 
 typedef struct {
   Messages       *messages;
@@ -10,8 +11,8 @@ typedef struct {
   EnvAllocator   *envs;
   ValueStore     *values;
 
-  u32         source_count;
-  SourceFile *sources;
+  u32     source_count;
+  Source *sources;
 
   Env *env_root;
 
@@ -33,8 +34,8 @@ typedef struct {
   EnvAllocator *envs;
   ValueStore *values;
 
-  u32 source_count;
-  SourceFile *sources;
+  u32     source_count;
+  Source *sources;
 } CheckerOptions;
 
 void checker_init(Checker *checker, CheckerOptions *options);

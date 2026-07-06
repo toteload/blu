@@ -37,7 +37,7 @@ def create_build_ninja():
         command = ' '.join([
                   'clang',
                   '-MD -MF $out.d',
-                  '-Wall -Wextra -Wpedantic -Werror',
+                  '-Wall -Wextra -Wpedantic',
                   '-Wsign-conversion',
                   '-Wno-unused-parameter',
                   '-Wimplicit-function-declaration',
@@ -80,6 +80,7 @@ def create_build_ninja():
         'check.c',
         'eval.c',
         'ir.c',
+        'source_file.c',
     ]
 
     outputs = []

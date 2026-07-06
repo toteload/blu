@@ -42,11 +42,11 @@ main : () i32 = || 0
 ;     repeat @loop0
 ; ret (nil)
 
-hellos := |n: uint|: nil {
-  for 0..n do i {
-    #emit(0, i)
-  }
-}
+; hellos := |n: uint|: nil {
+;   for 0..n do i {
+;     #emit(0, i)
+;   }
+; }
 
 ; func (%n uint) nil
 ; emit

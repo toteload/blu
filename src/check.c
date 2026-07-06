@@ -18,7 +18,7 @@ internal ValueIndex alloc_type_value(Checker *checker, TypeIndex type);
 internal ValueIndex alloc_value(Checker *checker, Value **val);
 internal void *alloc_value_data(Checker *checker, usize size, u32 align);
 internal void env_insert_builtin_type(Checker *checker, Env *env, String s, TypeIndex type);
-internal b32 check_source_file(Checker *checker, SourceFile *source);
+internal b32 check_source_file(Checker *checker, Source *source);
 
 internal void env_insert_builtin_type(Checker *checker, Env *env, String s, TypeIndex type) {
   ValueIndex value = alloc_type_value(checker, type);
@@ -86,7 +86,7 @@ b32 check_code(Checker *checker) {
   return True;
 }
 
-internal b32 check_source_file(Checker *checker, SourceFile *source) {
+internal b32 check_source_file(Checker *checker, Source *source) {
   Panic();
   return True;
 }
