@@ -49,9 +49,10 @@ typedef struct {
 } IrLocation;
 
 enum IrOpcode {
-  IR_comptime_func,
+  IR_comptime_func, // data references `IrComptimeFunc` in extra 
   IR_func,      // data references `IrFunc` in extra
   IR_arg,       // data contains `TypeIndex`
+  IR_const,     // data contains `ValueIndex`
   IR_alloc,     // data contains `TypeIndex`
   IR_cond_br,   // data references `IrCondBr` in extra
   IR_block,     // data contains instruction count of block
@@ -61,10 +62,13 @@ enum IrOpcode {
   IR_ret,       // data contains `IrRef`
   IR_load,      // data contains `IrRef`
   IR_store,     // data references `IrStore` in extra
-  IR_cast_int,  // data references `IrCastInt` in extra
   IR_call,      // data references `IrCall` in extra
+  
+  IR_cast_int,  // data references `IrCastInt` in extra
+  IR_cast_int_safe,
+  IR_check_is_coercible,
 
-  IR_typeid,
+  IR_type, // 
 
   // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
   // Emit blocks are only valid in a comptime function.
@@ -76,15 +80,15 @@ enum IrOpcode {
 
 typedef struct {
   TypeIndex return_type;
-  u32 comptime_arg_count;
   u32 runtime_arg_count;
+  u32 comptime_arg_count;
   u32 instruction_count;
 } IrComptimeFunc;
 
 typedef struct {
   TypeIndex return_type;
-  u32 instruction_count;
   u32 arg_count;
+  u32 instruction_count;
 } IrFunc;
 
 typedef struct {
@@ -123,9 +127,13 @@ typedef struct {
   void *extra;
 } IrChunk;
 
+
+
 u8    opcode(IrChunk *chunk, InstructionIndex idx);
 u32   instruction_data(IrChunk *chunk, InstructionIndex idx);
 void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
+
+u32 generate_ir(Source *source);
 
 #define ChunkList_min_size_log2   6
 #define ChunkList_segment_count   24

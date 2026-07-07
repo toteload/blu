@@ -7,13 +7,23 @@
 #include "messages.h"
 
 struct Source {
-  SourceIndex idx;
+  SourceIndex idx; // Saves its own index :)
   Arena       arena;
-  String      filename;
-  String      text;
-  Messages    messages;
-  Tokens      tokens;
-  AstNodes    ast;
+  Arena       scratch;
+
+  // The filename, text (source code / file contents), messages, tokens are all stored
+  // in the arena of this source.
+  // TODO: refactor AstNodes to also use the arena as backing memory.
+  String   filename;
+  String   text;
+  Messages messages;
+  Tokens   tokens;
+  AstNodes ast;
+
+  // - list of declarations
+  //   - name of declaration
+  //   - instruction index to code generated
+  // - ir generated for this source
 };
 
 #define SourceList_min_size_log2  4

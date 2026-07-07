@@ -51,7 +51,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
     }
 
     for (u32 i = 0; i < a->data.function.param_count; i++) {
-      if (a->function_param_types[i] != b->function_param_types[i]) {
+      if (a->data.function.function_param_types[i] != b->data.function.function_param_types[i]) {
         return False;
       }
     }
@@ -97,7 +97,7 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   case Type_function: {
     Push_data(x->data.function.return_type);
     Push_data(x->data.function.param_count);
-    for (u32 i = 0; i < x->data.function.param_count; i++) { Push_data(x->function_param_types[i]); }
+    for (u32 i = 0; i < x->data.function.param_count; i++) { Push_data(x->data.function.function_param_types[i]); }
   } break;
   case Type_array: {
     Push_data(x->data.array.size);

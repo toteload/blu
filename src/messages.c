@@ -27,6 +27,7 @@ Message *messages_get(Messages *messages, u32 idx) {
 
 internal u32 format_arg_count(String fmt) {
   // ASSUME: the format string is well formed.
+
   u32 count = 0;
   for (usize i = 0; i < fmt.len; i++) {
     u8 c = fmt.str[i];

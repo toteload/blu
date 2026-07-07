@@ -1,3 +1,16 @@
+main : () i32 = || {
+  a : ArrayOfi32OrSomethingElse(9) = false
+  0
+}
+
+; comptime_func (0 comptime params, 0 runtime params) i32
+; %a = eval @e0
+;   %c = cast_int (uint) (const i64 9)
+;   %b = call ArrayOfi32OrSomethingElse %c
+;   br @e0 %b
+; %d = alloc (%a)
+; store %d, (const u8 0)
+
 ArrayOfi32OrSomethingElse := |n: comptime uint|: type {
   if n < 10 {
     [n]i32

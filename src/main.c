@@ -141,13 +141,16 @@ int main(int argc, char const *argv[]) {
   if (!ok) { source_print_all_messages(source); return 1; }
 
   ok = source_tokenize(source);
-  //write_tokens(&source->tokens, source->text);
+  if (cli.verbose) {
+    write_tokens(&source->tokens, source->text);
+  }
   if (!ok) { source_print_all_messages(source); return 1; }
 
   ok = source_parse(source);
+  if (cli.verbose) {
+    write_nodes(&source->ast, &source->tokens, source->text);
+  }
   if (!ok) { source_print_all_messages(source); return 1; }
-
-  write_nodes(&source->ast, &source->tokens, source->text);
 
   EnvAllocator envs;
   envs_init(&envs, &(EnvAllocatorOptions){

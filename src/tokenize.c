@@ -289,6 +289,7 @@ u32 tokens_end(Tokens *tokens) {
 }
 
 LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
+  // OPTIMIZE: A binary search is probably faster for bigger files.
   u32 len = tokens->lines.len;
   for (u32 i = 1; i < len; i++) {
     u32 offset = *lines_ptr_at_unchecked(&tokens->lines, i);

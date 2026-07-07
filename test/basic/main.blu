@@ -1,18 +1,58 @@
 mod main
 
-main : () i32 = || 0
+main: () i32 = || 0
 
 ; Each function gets converted to a function that takes all the comptime parameters.
 ; If the function takes no comptime parameters it still gets converted to this function.
 ; Running this function will emit a function that has all comptime expressions evaluated.
 ; Emitting code can be seen as a side effect of the function.
 
-; comptime_func (0 comptime params, 0 runtime params) i32
+; block
+;   %0 = lookup "i32"
+;   br %0
+
+; func (0 comptime params, 0 runtime params)
+; %c0 = const (i64 0)
+; %c1 = const (type i32)
+; %c2 = typeid %c0
+; check_is_coercible %c1 %c2
+; %c = cast_int_safe %b %a
 ; emit
-;   %b = eval @eval0
-;     %a = cast_int (i32) (const i64 0)
-;     br @eval0 (i32) %a
-;   ret (i32) %b
+;   ret (i32) %c
+
+RandomType := |n: uint|: type {
+  if n < 10 {
+    [n]int
+  } else {
+    f64
+  }
+}
+
+; this function may only be evaluated at comptime
+; func (1 comptime param) type
+; %0 = arg (uint)
+; %1 = const (i64) 10
+; %t0 = (type) typeid %0
+; %t1 = (type) typeid %1
+; check_is_coercible %t0 %t1
+; check_is_comparable %t0 %t1
+; %3 = (uint) cast_int_safe %1 %0
+; %4 = (bool) cmp_lt (uint) %0 %3
+; %booltype = const (type) bool
+; %typetype = const (type) type
+; check_is_coercible %booltype %4
+; %5 = (type) block @b
+;   cond_br %4 @then @otherwise
+;   block @then
+;     %7 = const (type) int
+;     %6 = (type) type_array %0 %7
+;     check_is_coercible %typetype %6 
+;     br @b %6
+;   block @otherwise
+;     %f64type = const (type) f64
+;     check_is_coercible %typetype %f64type
+;     br @b %f64type
+; ret %5
 
 ; Function at runtime
 ; -------------------

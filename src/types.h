@@ -44,24 +44,21 @@ typedef struct {
 } TypeArray;
 
 typedef struct {
+  TypeIndex return_type;
+  u32 param_count;
+  TypeIndex function_param_types[];
+} TypeFunction;
+
+typedef struct {
   u8 kind;
   u8 attributes;
 
   union {
-    TypeInteger integer;
-    TypeSlice   slice;
-    TypeArray   array;
-
-    struct {
-      TypeIndex return_type;
-      u32 param_count;
-    } function;
+    TypeInteger  integer;
+    TypeSlice    slice;
+    TypeArray    array;
+    TypeFunction function;
   } data;
-
-  // The compiler complains that you are not allowed to put flexible array members (FAM) in nested 
-  // structs, when I put the FAM inside the `function` struct. I don't think it should be a problem, 
-  // but I'll listen to the compiler.
-  TypeIndex function_param_types[];
 } Type;
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.

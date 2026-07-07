@@ -124,7 +124,7 @@ internal void clear_block_values(IrMachine *machine, CallFrame *frame, Instructi
     ValueStackElement e = *value_stack_ptr_at_unchecked(stack, i);
     if (e.kind == ValueStackElement_marker_block && e.idx == block) {
       stack->len = i-1;
-      break;
+break;
     }
 
     Assert(e.kind == ValueStackElement_value);
@@ -278,5 +278,54 @@ u32 ir_run(IrMachine *machine) {
   }
  
   return IrResult_ok;
+}
 
+internal u32 generate_ir_function(Source *source, IrChunk *chunk, TypeFunction type, AstIndex function) {
+  u32 comptime_arg_count; // TODO init
+  u32 runtime_arg_count; // TODO init
+
+  InstructionIndex i = chunk_alloc_inst(chunk);
+
+  chunk_set_opcode(chunk, i, IR_comptime_func);
+  IrComptimeFunc *func = chunk_alloc_extra_typed(IrComptimeFunc, chunk, i);
+
+  // TODO: output all the comptime and runtime args.
+
+  // while generating code: save all the declaration dependencies.
+  // it may be the case that the code in this function depends on the value or type of other declarations.
+
+  TypeIndex expected_return_type; // TODO init
+  
+  struct InstSource {
+    AstIndex ast_index;
+    TypeIndex type_dst;
+  };
+
+  Stack(InstSource) stack;
+
+  AstFunction *ast_func = nodes_data(&source->ast, function);
+  stack_push(&stack, ast_func->body);
+  
+  while (!is_empty(stack)) {
+    AstIndex idx = stack_pop();
+    u8 kind = ast_kind(idx);
+    switch (kind) {
+    case Ast_literal_int: {
+      InstructionIndex i = chunk_alloc_inst(chunk);
+      chunk_set_opcode(chunk, i, IR_const);
+      // TODO: create value in value store with this int
+      // TODO: add cast and check instruction if the type does not match the expected type
+    } break;
+    }
+  }
+
+  // TODO: return the value of the last instruction generated
+}
+
+u32 generate_ir(Source *source) {
+  // foreach mod-section
+  //   foreach declaration
+  //     generate ir and save the offset somewhere
+
+  return 0;
 }
