@@ -15,10 +15,7 @@ function; basically all the comptime stuff in the original function has been rep
 ## Comptime
 
 - [ ] Update declaration syntax to allow optional omission of declaration type.
-- [ ] Add `comptime` keyword to evaluate expressions at compile time.
-- [ ] Add `comptime` qualifier to types.
-  - Values of a `comptime` type may only exist at compile time.
-    Declarations or parameters that have a `comptime` type are implicitly `comptime` themselves.
+- [ ] Add `eval` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.
   - This means that the declaration only exists at compile time.

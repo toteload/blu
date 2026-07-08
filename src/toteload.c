@@ -89,7 +89,7 @@ void arena_deinit(Arena *arena) {
   memset(arena, 0, sizeof(Arena));
 }
 
-#define Default_commit_growth_size KiB(16)
+#define Default_commit_growth_size KiB(512)
 
 void *arena_push(Arena *arena, usize size, u32 align) {
   void *aligned        = ptr_forward_align(arena->at, align);

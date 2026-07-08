@@ -19,11 +19,11 @@ Wants:
 ## Variable shadowing
 
 Variable shadowing can happen in different ways, but for Blu only two different ways matter
-at the moment; a variable with a same name is redeclared in the same scope OR it is redeclared in an
-inner scope.
-I think I want to allow it if it is in the same scope, but not if you are overriding it in an inner
-scope.
+at the moment; a variable with a same name is redeclared in the same scope OR it is redeclared in an inner scope.
+I think I want to allow it if it is in the same scope, but not if you are overriding it in an inner scope.
 This would include variables introduced by loops.
+I think it can be confusing if a variable is first A, then in an inner scope it is B, and then goes
+back to being A.
 
 ## Comparison to other languages
 

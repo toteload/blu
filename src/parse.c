@@ -374,6 +374,9 @@ internal b32 parse_type(Parser *parser, NodeIndex *out) {
       Try(parse_type(parser, &type_array->base));
 
       *nodes_kind(parser->nodes, idx) = Ast_type_array;
+    } else {
+      // TODO: you could put any expression between the brackets really
+      Panic();
     }
   } break;
   case Tok_paren_open: {

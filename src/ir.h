@@ -63,11 +63,15 @@ enum IrOpcode {
   IR_load,      // data contains `IrRef`
   IR_store,     // data references `IrStore` in extra
   IR_call,      // data references `IrCall` in extra
+
+  IR_declaration, // data references `IrDeclaration` in extra
+  IR_lookup,
   
   IR_cast_int,  // data references `IrCastInt` in extra
   IR_cast_int_safe,
   IR_check_is_coercible,
 
+  // Create a type
   IR_type, // 
 
   // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
@@ -77,6 +81,11 @@ enum IrOpcode {
   // Eval blocks return a value and can only be exited with a `br`.
   IR_eval, // data contains how many instructions are in this block.
 };
+
+typedef struct {
+  InstructionIndex declared_type; // optional
+  InstructionIndex value;
+} IrDeclaration;
 
 typedef struct {
   TypeIndex return_type;
@@ -122,12 +131,10 @@ typedef struct {
 
 typedef struct {
   u32   opcode_count;
-  u8   *opcodes;
-  u32  *data;
-  void *extra;
+  Arena opcodes; // u8
+  Arena data; // u32
+  Arena extra; // variable
 } IrChunk;
-
-
 
 u8    opcode(IrChunk *chunk, InstructionIndex idx);
 u32   instruction_data(IrChunk *chunk, InstructionIndex idx);

@@ -91,6 +91,7 @@ internal always_inline b32 ref_is_value_index(IrRef ref) {
   return (ref & Bitmask_ir_ref_is_value_index) != 0;
 }
 
+#if 0
 u8 opcode(IrChunk *chunk, InstructionIndex idx) {
   return chunk->opcodes[idx];
 }
@@ -102,6 +103,7 @@ u32 instruction_data(IrChunk *chunk, InstructionIndex idx) {
 void *instruction_extra(IrChunk *chunk, InstructionIndex idx) {
   return ptr_offset(chunk->extra, chunk->data[idx]);
 }
+#endif
 
 internal CallFrame *top_frame(IrMachine *machine) {
   return callstack_ptr_at_unchecked(&machine->callstack, machine->callstack.len-1);
@@ -158,6 +160,7 @@ internal void clear_frame_values(IrMachine *machine, CallFrame *frame) {
   }
 }
 
+#if 0
 u32 ir_run(IrMachine *machine) {
   ValueStore *values = machine->values;
   TypeInterner *types = machine->types;
@@ -321,6 +324,7 @@ internal u32 generate_ir_function(Source *source, IrChunk *chunk, TypeFunction t
 
   // TODO: return the value of the last instruction generated
 }
+#endif
 
 u32 generate_ir(Source *source) {
   // foreach mod-section

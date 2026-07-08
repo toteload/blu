@@ -6,6 +6,24 @@
 #include "ast.h"
 #include "messages.h"
 
+#if 0
+// TODO remove
+// just a sketch
+struct Declaration {
+  u8 kind; // param | local | builtin | decl
+  
+  union {
+    AstIndex param;
+    AstIndex local;
+    ValueIndex builtin;
+    struct {
+      SourceIndex source;
+      AstIndex    ast;
+    } decl;
+  } data;
+};
+#endif
+
 struct Source {
   SourceIndex idx; // Saves its own index :)
   Arena       arena;
@@ -25,6 +43,28 @@ struct Source {
   //   - instruction index to code generated
   // - ir generated for this source
 };
+
+typedef struct {
+  SourceAllocator sources;
+} Compiler;
+
+void compiler_init(Compiler *compiler);
+void compiler_deinit(Compiler *compiler);
+
+void compiler_add_sourcefile(Compiler *compiler, String filename);
+
+// - For each source file:
+//   - read file, tokenize, parse
+//   - output list of decls
+// - Merge the list of decls into one map. 
+//   At this point we have all the necessary information to resolve all the identifiers.
+// - For each source file:
+//   - Resolve all the identifiers.
+//   ? At this point recursive declarations are still allowed, but how to differentiate between valid and invalid recursions?
+//   - Generate code
+//   - Output dependency information for each chunk of code.
+// - At this point each source file will have generated code and dependency information.
+//   Use this information to compute a dependency graph and walk the graph.
 
 #define SourceList_min_size_log2  4
 #define SourceList_segment_count  20

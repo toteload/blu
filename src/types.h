@@ -4,6 +4,7 @@
 #include "blu.h"
 
 enum TypeKind {
+  Type_const_integer,
   Type_integer,
   Type_boolean,
   Type_function,
@@ -17,10 +18,6 @@ enum TypeKind {
 enum Signedness {
   Unsigned,
   Signed,
-};
-
-enum TypeAttribute {
-  TypeAttribute_comptime = 1 << 0,
 };
 
 typedef struct {
@@ -51,7 +48,6 @@ typedef struct {
 
 typedef struct {
   u8 kind;
-  u8 attributes;
 
   union {
     TypeInteger  integer;

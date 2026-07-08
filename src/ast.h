@@ -240,6 +240,10 @@ typedef struct {
   TokenIndex end;
 } SpanToken;
 
+// If you are going to refactor this such that it only uses one backing Arena, like Tokens, then
+// you still want to keep a pointer around to the arena for when you want to allocate 'extra'
+// memory. The extra data that `datas` refers to won't be packed anymore like it is now, but that
+// seems fine. The u32s will essentially be compressed pointers.
 typedef struct {
   Arena kinds; // u8[]
   Arena spans; // SpanToken[]

@@ -45,7 +45,11 @@ SourceIndex sources_alloc_and_get(SourceAllocator *sources, Source **source) {
 void source_file_init(Source *source, String filename) {
   arena_init(&source->arena, &(ArenaOptions){
     .reserve_size        = MiB(64),
-    .initial_commit_size = KiB(64),
+    .initial_commit_size = MiB(1),
+  });
+  arena_init(&source->scratch, &(ArenaOptions){
+    .reserve_size        = MiB(4),
+    .initial_commit_size = MiB(1),
   });
   source->filename = arena_copy_string(&source->arena, filename);
   zero_struct(String, &source->text);
@@ -56,6 +60,7 @@ void source_file_init(Source *source, String filename) {
 
 void source_file_deinit(Source *source) {
   arena_deinit(&source->arena);
+  arena_deinit(&source->scratch);
 }
 
 void error(Source *source, MessageLocation location, String format, ...) {
