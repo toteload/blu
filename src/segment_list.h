@@ -41,6 +41,8 @@ SEGMENTLIST_LINKAGE usize             Cat(SEGMENTLIST_FUNCTION_PREFIX, _cap)(SEG
 SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list, Arena *arena);
 SEGMENTLIST_LINKAGE void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *arena, SEGMENTLIST_TYPE item);
 SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize i);
+SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE  Cat(SEGMENTLIST_FUNCTION_PREFIX, _at_unchecked)(SEGMENTLIST_NAME *list, usize i);
+SEGMENTLIST_LINKAGE void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SEGMENTLIST_TYPE *out);
 
 #undef SEGMENTLIST_OUTPUT_DECLARATIONS
 #endif // SEGMENTLIST_OUTPUT_DECLARATIONS
@@ -53,8 +55,8 @@ SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_u
 // Without the toggle of this preprocessor block, the functions defined here would be defined twice
 // if you define two segment lists in the same translation unit leading to compile errors.
 
-internal usize segment_count_at_capacity(usize min_size_log2, usize cap) {
-  return bitwidth(cap >> min_size_log2) + 1;
+internal usize segment_count_at_size(usize min_size_log2, usize size) {
+  return bitwidth(size >> min_size_log2) + 1;
 }
 
 internal usize segment_size(usize min_size_log2, usize si) {
@@ -81,7 +83,7 @@ internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NA
     return;
   }
 
-  usize required_segment_count = segment_count_at_capacity(SEGMENTLIST_MIN_SIZE_LOG2, min_capacity);
+  usize required_segment_count = segment_count_at_size(SEGMENTLIST_MIN_SIZE_LOG2, min_capacity);
 
   if (required_segment_count <= list->segment_count) {
     return;
@@ -114,6 +116,8 @@ void Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *ar
 }
 #pragma clang diagnostic pop
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
   usize si = segment_idx(SEGMENTLIST_MIN_SIZE_LOG2, idx);
@@ -121,6 +125,35 @@ SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIS
 
   return &list->segments[si][i];
 }
+#pragma clang diagnostic pop
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+SEGMENTLIST_LINKAGE
+SEGMENTLIST_TYPE Cat(SEGMENTLIST_FUNCTION_PREFIX, _at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
+  return *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(list, idx);
+}
+#pragma clang diagnostic pop
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+SEGMENTLIST_LINKAGE
+void Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SEGMENTLIST_TYPE *out) {
+  if (list->len == 0) {
+    return;
+  }
+
+  u32 offset = 0;
+  u32 segment_count = segment_count_at_size(SEGMENTLIST_MIN_SIZE_LOG2, list->len);
+  for (u32 i = 0; i < segment_count - 1; i++) {
+    u32 size = segment_size(SEGMENTLIST_MIN_SIZE_LOG2, i);
+    memcpy(out + offset, list->segments[i], size * sizeof(SEGMENTLIST_TYPE));
+    offset += size;
+  }
+
+  memcpy(out + offset, list->segments[segment_count-1], list->len - offset);
+}
+#pragma clang diagnostic pop
 
 #undef SEGMENTLIST_OUTPUT_DEFINITIONS
 #endif // SEGMENTLIST_OUTPUT_DEFINITIONS

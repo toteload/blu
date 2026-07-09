@@ -4,25 +4,31 @@
 
 #define SEGMENTLIST_NAME            KindList
 #define SEGMENTLIST_TYPE            u8
-#define SEGMENTLIST_FUNCTION_PREFIX kinds
-#define SEGMENTLIST_MIN_SIZE_LOG2   KindList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   KindList_segment_count
+#define SEGMENTLIST_FUNCTION_PREFIX kindlist
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_MIN_SIZE_LOG2   8
+#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
 #define SEGMENTLIST_NAME            SpanList
 #define SEGMENTLIST_TYPE            SpanU32
-#define SEGMENTLIST_FUNCTION_PREFIX spans
-#define SEGMENTLIST_MIN_SIZE_LOG2   SpanList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   SpanList_segment_count
+#define SEGMENTLIST_FUNCTION_PREFIX spanlist
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_MIN_SIZE_LOG2   8
+#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
 #define SEGMENTLIST_NAME            OffsetList
 #define SEGMENTLIST_TYPE            u32
 #define SEGMENTLIST_FUNCTION_PREFIX lines
-#define SEGMENTLIST_MIN_SIZE_LOG2   OffsetList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   OffsetList_segment_count
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_MIN_SIZE_LOG2   8
+#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
@@ -268,16 +274,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   return TokResult_error;
 }
 
-void tokens_init(Tokens *tokens, Arena *arena) {
-  zero_struct(Tokens, tokens);
-
-  kinds_push(&tokens->kinds, arena);
-  spans_push(&tokens->spans, arena);
-  lines_append(&tokens->lines, arena, 0);
-}
-
 u32 tokens_count(Tokens *tokens) {
-  return tokens->kinds.len - 1;
+  return tokens->tok_count;
 }
 
 u32 tokens_begin(Tokens *tokens) {
@@ -285,16 +283,16 @@ u32 tokens_begin(Tokens *tokens) {
 }
 
 u32 tokens_end(Tokens *tokens) {
-  return tokens->kinds.len;
+  return tokens->tok_count;
 }
 
 LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
   // OPTIMIZE: A binary search is probably faster for bigger files.
-  u32 len = tokens->lines.len;
+  u32 len = tokens->line_count;
   for (u32 i = 1; i < len; i++) {
-    u32 offset = *lines_ptr_at_unchecked(&tokens->lines, i);
+    u32 offset = tokens->lines[i];
     if (offset > byte_offset) {
-      u32 offset_prev = *lines_ptr_at_unchecked(&tokens->lines, i-1);
+      u32 offset_prev = tokens->lines[i-1];
       return (LineInfo){
         .line = i,
         .offset_start_of_line = offset_prev,
@@ -306,19 +304,12 @@ LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
   return (LineInfo){0};
 }
 
-TokenIndex tokens_alloc(Tokens *tokens, Arena *arena) {
-  TokenIndex idx = tokens->kinds.len;
-  kinds_push(&tokens->kinds, arena);
-  spans_push(&tokens->spans, arena);
-  return idx;
+u8 tokens_kind(Tokens *tokens, TokenIndex idx) {
+  return tokens->kinds[idx];
 }
 
-u8 *tokens_kind(Tokens *tokens, TokenIndex idx) {
-  return kinds_ptr_at_unchecked(&tokens->kinds, idx);
-}
-
-SpanU32 *tokens_span(Tokens *tokens, TokenIndex idx) {
-  return spans_ptr_at_unchecked(&tokens->spans, idx);
+SpanU32 tokens_span(Tokens *tokens, TokenIndex idx) {
+  return tokens->spans[idx];
 }
 
 b32 source_tokenize(Source *source) {
@@ -329,7 +320,16 @@ b32 source_tokenize(Source *source) {
     .source = source,
   };
 
-  Tokens *tokens = &source->tokens;
+  ArenaSnapshot scope = arena_scope_begin(&source->scratch);
+
+  KindList kindlist;
+  zero_struct(KindList, &kindlist);
+
+  SpanList spanlist;
+  zero_struct(SpanList, &spanlist);
+
+  OffsetList linelist;
+  zero_struct(OffsetList, &linelist);
 
   u32 res;
   while (True) {
@@ -342,17 +342,37 @@ b32 source_tokenize(Source *source) {
     }
 
     if (kind == Tok_line_comment || kind == Tok_newline) {
-      lines_append(&tokens->lines, &source->arena, span.end);
+      lines_append(&linelist, &source->scratch, span.end);
       continue;
     }
 
-    TokenIndex i = tokens_alloc(tokens, &source->arena);
-
-    *tokens_kind(tokens, i) = kind;
-    *tokens_span(tokens, i) = span;
+    kindlist_append(&kindlist, &source->scratch, kind);
+    spanlist_append(&spanlist, &source->scratch, span);
   }
 
-  lines_append(&tokens->lines, &source->arena, source->text.len);
+  lines_append(&linelist, &source->scratch, source->text.len);
+
+  u32 tok_count  = kindlist.len;
+  u32 line_count = linelist.len;
+
+  u8      *kinds = arena_push_array(u8,      &source->arena, tok_count);
+  SpanU32 *spans = arena_push_array(SpanU32, &source->arena, tok_count);
+
+  kindlist_copy_to_array(&kindlist, kinds);
+  spanlist_copy_to_array(&spanlist, spans);
+
+  u32 *lines = arena_push_array(u32, &source->arena, line_count);
+  lines_copy_to_array(&linelist, lines);
+
+  source->tokens = (Tokens){
+    .tok_count  = tok_count,
+    .line_count = line_count,
+    .kinds = kinds,
+    .spans = spans,
+    .lines = lines,
+  };
+
+  arena_scope_end(&source->scratch, scope);
 
   return res == TokResult_end;
 }
