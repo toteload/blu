@@ -124,6 +124,14 @@ int main(int argc, char const *argv[]) {
     .arena_scratch = &arena_tmp,
   });
 
+  // root
+  // |
+  // |- mod main
+  // |  \- fn main
+  // |
+  // \- mod util
+  //    \- fn print
+
   ValueStore values = {0};
   values_init(&values, &(ValueStoreOptions){
     .payload_allocator = cstd_allocator,

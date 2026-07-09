@@ -22,7 +22,23 @@ struct Declaration {
     } decl;
   } data;
 };
+
+struct ModuleLevelDeclaration {
+  AstIndex ast_index;
+  String name;
+};
 #endif
+
+enum SourceDeclarationKind {
+  SourceDeclaration_mod,
+  SourceDeclaration_declaration,
+};
+
+typedef struct {
+  u8 kind;
+  String name;
+  u32 tree_size;
+} SourceDeclaration;
 
 struct Source {
   SourceIndex idx; // Saves its own index :)
@@ -38,29 +54,44 @@ struct Source {
   Tokens   tokens;
   AstNodes ast;
 
+  u32 source_decl_count;
+  SourceDeclaration *decls;
+
   // - list of declarations
   //   - name of declaration
   //   - instruction index to code generated
   // - ir generated for this source
 };
 
-typedef struct {
-  SourceAllocator sources;
-} Compiler;
+#if 0
+typedef u32 ModuleIndex;
 
-void compiler_init(Compiler *compiler);
-void compiler_deinit(Compiler *compiler);
+struct DeclarationKey {
+  ModuleIndex parent;
+  StringIndex name;
+};
 
-void compiler_add_sourcefile(Compiler *compiler, String filename);
+struct DeclarationValue {
+  u8 kind; // mod | decl | builtin
+
+  union {
+    ModuleIndex mod;
+    ValueIndex builtin;
+  } data;
+};
+#endif
 
 // - For each source file:
 //   - read file, tokenize, parse
 //   - output list of decls
-// - Merge the list of decls into one map. 
+// - Merge the list of decls into one map.
 //   At this point we have all the necessary information to resolve all the identifiers.
+//   !!! THIS IS NOT (entirely?) TRUE !!!
+//   You could have a declaration for a comptime function that returns a module.
+//   The contents of this module are arbitrary and are only known after evaluating the function.
+//   Actually, I think this works out fine.
 // - For each source file:
 //   - Resolve all the identifiers.
-//   ? At this point recursive declarations are still allowed, but how to differentiate between valid and invalid recursions?
 //   - Generate code
 //   - Output dependency information for each chunk of code.
 // - At this point each source file will have generated code and dependency information.
@@ -95,7 +126,19 @@ void error(Source *source, MessageLocation location, String format, ...);
 b32 source_read_file(Source *source);
 b32 source_tokenize(Source *source);
 b32 source_parse(Source *source);
+void source_list_decls(Source *source);
 
 void source_print_all_messages(Source *source);
+
+typedef struct {
+  SourceAllocator sources;
+} Compiler;
+
+void compiler_init(Compiler *compiler);
+void compiler_deinit(Compiler *compiler);
+
+void compiler_add_sourcefile(Compiler *compiler, String filename);
+
+u32 compile(Compiler *compiler);
 
 #endif // SOURCE_FILE_H

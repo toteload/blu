@@ -14,25 +14,23 @@ main: () i32 = || 0
 
 ; There is a dependency between the value of the declaration and the declared type.
 
-; declaration
 ; %decl_type = block
 ;   %1 = lookup "i32"
 ;   check_is_coercible (const type) %1
 ;   %2 = type_function %1, 0 params
 ;   check_is_coercible (const type) %2
 ;   br %2
+;
 ; func (0 comptime params, 0 runtime params)
 ; %c2 = typeid (const const_int 0)
 ; %decl_type_info = typeinfo %decltype
 ; ; Somehow check that the declared type is function and get the return type
 ; check_is_coercible %return_type %c2
-; %c = cast_int_safe %return_type %c2
+; %c = cast_safe %return_type %c2
 ; emit
 ;   ret (i32) %c
 
-; declaration
-; %decl_type = const () i32
-; func
+; func () i32
 ; %a = const i32 0
 ; ret %a
 

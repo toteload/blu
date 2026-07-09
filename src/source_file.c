@@ -138,6 +138,20 @@ b32 source_read_file(Source *source) {
   return True;
 }
 
+#if 0
+void source_list_decls(Source *source) {
+  AstNodes *ast = &source->ast;
+  AstIndex at = nodes_begin(ast);
+  Assert(*nodes_kind(ast) == Ast_source);
+
+  AstSource *s = nodes_data(ast, at);
+
+  for (u32 i = 0; i < s->items.len; i++) {
+    AstIndex item = *astlist_ptr_at_unchecked(&s->items, i);
+  }
+}
+#endif
+
 void source_print_all_messages(Source *source) {
   u32 count = messages_count(&source->messages);
   for (u32 i = 0; i < count; i++) {

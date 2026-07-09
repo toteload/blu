@@ -37,8 +37,8 @@ SegmentList := |
 
 SegmentList := |
   T: type,
-  min_size_log2: comptime u32,
-  segment_count: comptime u32,
+  min_size_log2 comptime: u32,
+  segment_count comptime: u32,
 |: type -> mod {
   Self := struct {
     len: uint,
