@@ -20,6 +20,35 @@ def exe(name):
 def outd(p):
     return join('$outdir', p.replace('\\', '__'))
 
+def add_test_suite(out):
+    inputs = [
+        'main_test.c',
+        'test.c',
+        'tokenize.test.c',
+    ]
+
+    outputs = []
+    outputs.append(outd('toteload.c.o'))
+    outputs.append(outd('tokenize.c.o'))
+
+    for f in inputs:
+        fout = outd(f'{f}.o')
+        outputs.append(fout)
+        out.build(
+            outputs   = fout,
+            rule      = 'compile_c_debug',
+            inputs    = join('test', f),
+            variables = {
+                'cflags': '-Iext -Isrc',
+            },
+            )
+
+    out.build(
+        outputs = outd(exe('blu.test')),
+        rule    = 'build_binary',
+        inputs  = outputs,
+        )
+
 def create_build_ninja():
     fout = open('build.ninja', 'w')
     out = n.Writer(fout)
@@ -77,7 +106,6 @@ def create_build_ninja():
         'value.c',
         'messages.c',
         'env.c',
-        'check.c',
         'eval.c',
         'ir.c',
         'source_file.c',
@@ -102,6 +130,8 @@ def create_build_ninja():
         rule    = 'build_binary',
         inputs  = [outd(f'{f}.o') for f in inputs],
         )
+
+    add_test_suite(out)
 
 if __name__ == '__main__':
     create_build_ninja()

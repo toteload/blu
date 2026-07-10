@@ -6,8 +6,7 @@
 #include "types.h"
 #include "value.h"
 #include "messages.h"
-#include "check.h"
-#include "env.h"
+#include "source_file.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -57,8 +56,8 @@ u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *arg
 
 internal void write_tokens(Tokens *tokens, String source) {
   for (u32 i = tokens_begin(tokens); i < tokens_end(tokens); i++) {
-    u8      kind = *tokens_kind(tokens, i);
-    SpanU32 span = *tokens_span(tokens, i);
+    u8      kind = tokens_kind(tokens, i);
+    SpanU32 span = tokens_span(tokens, i);
 
     char const *s = Cast(char const*, source.str + span.start);
     int len = Cast(int, span.end - span.start);
@@ -159,32 +158,6 @@ int main(int argc, char const *argv[]) {
     write_nodes(&source->ast, &source->tokens, source->text);
   }
   if (!ok) { source_print_all_messages(source); return 1; }
-
-  EnvAllocator envs;
-  envs_init(&envs, &(EnvAllocatorOptions){
-    .arena         = &arena,
-    .map_allocator = cstd_allocator,
-  });
-
-  Messages messages;
-  messages_init(&messages);
-
-  Checker checker;
-  checker_init(&checker, &(CheckerOptions){
-    .messages = &messages,
-    .strings  = &strings,
-    .types    = &types,
-    .envs     = &envs,
-
-    .source_count = 1,
-    .sources      = source,
-  });
-
-  ok = check_code(&checker);
-  if (!ok) {
-    messages_print_all_messages(&messages, &sources);
-    return 1;
-  }
 
   printf("ok\n");
 

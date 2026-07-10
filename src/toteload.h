@@ -98,6 +98,7 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 
 #define zero_struct(type, p) memset(p, 0, sizeof(type))
 
+#define Count_of(x) (sizeof(x)/sizeof(x[0]))
 #define Align_of(x) _Alignof(x)
 
 #define Assert(e) assert(e)

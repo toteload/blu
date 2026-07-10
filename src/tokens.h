@@ -2,6 +2,7 @@
 #define TOKENS_H
 
 #include "toteload.h"
+#include "messages.h"
 
 enum TokenKind {
   Tok_colon,
@@ -98,5 +99,13 @@ SpanU32    tokens_span(Tokens *tokens, TokenIndex idx);
 LineInfo   tokens_find_line_info(Tokens *tokens, u32 byte_offset);
 
 char const *token_kind_string(u8 kind);
+
+typedef struct {
+  MessageSink *msg_sink;
+  Arena       *arena;
+  Arena       *scratch;
+} TokenizeContext;
+
+b32 tokenize(TokenizeContext *context, String text, Tokens *tokens);
 
 #endif // TOKENS_H

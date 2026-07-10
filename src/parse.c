@@ -97,10 +97,10 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
   }
 
 typedef struct {
-  Source     *source;
-  Tokens     *tokens;
-  AstNodes   *nodes;
-  TokenIndex  at;
+  MessageSink *msg_sink;
+  Tokens      *tokens;
+  AstNodes    *nodes;
+  TokenIndex   at;
 } Parser;
 
 internal b32 parse_source(Parser *parser, NodeIndex *out);
@@ -138,7 +138,7 @@ b32 next(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = *tokens_kind(parser->tokens, parser->at);
+  *token_kind = tokens_kind(parser->tokens, parser->at);
 
   parser->at += 1;
 
@@ -150,8 +150,8 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   b32 has_next = next(parser, &tok);
 
   if (!has_next) {
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Expected a token, but encountered end of source.")
     );
@@ -159,8 +159,8 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   }
 
   if (tok != expected_token_kind) {
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at - 1 },
       string_lit("Expected token {tok}, but got token {tok}."), expected_token_kind, tok
     );
@@ -175,7 +175,7 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = *tokens_kind(parser->tokens, parser->at);
+  *token_kind = tokens_kind(parser->tokens, parser->at);
 
   return True;
 }
@@ -183,8 +183,8 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
 internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
   b32 has_peeked = peek(parser, token_kind);
   if (!has_peeked) {
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Expected a token but got end of source.")
     );
@@ -201,7 +201,7 @@ internal b32 peek2(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = *tokens_kind(parser->tokens, lookahead);
+  *token_kind = tokens_kind(parser->tokens, lookahead);
 
   return True;
 }
@@ -406,8 +406,8 @@ internal b32 parse_type(Parser *parser, NodeIndex *out) {
     *nodes_kind(parser->nodes, idx) = Ast_identifier;
   } break;
   default:
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
       string_lit("Unexpected token {tok} encountered in type expression."), tok
     );
@@ -704,8 +704,8 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
   u8  tok;
   b32 has_next_token = peek(parser, &tok);
   if (!has_next_token) {
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Unexpected end of source, while trying to parse base expression.")
     );
@@ -734,8 +734,8 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
     Try(peek(parser, &tok));
     switch (tok) {
     default:
-      error(
-        parser->source,
+      Message_error(
+        parser->msg_sink,
         (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
         string_lit("Unexpected token {tok} encountered after '.' in expression."), tok
       );
@@ -785,8 +785,8 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
   } break;
 
   default:
-    error(
-      parser->source,
+    Message_error(
+      parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
       string_lit("Unexpected token {tok} encountered at start of expression."), tok
     );
@@ -967,10 +967,10 @@ internal b32 parse_expression(Parser *parser, NodeIndex *out) {
 
 b32 source_parse(Source *source) {
   Parser parser = {
-    .source = source,
-    .tokens = &source->tokens,
-    .nodes  = &source->ast,
-    .at     = tokens_begin(&source->tokens),
+    .msg_sink = &source->msg_sink,
+    .tokens   = &source->tokens,
+    .nodes    = &source->ast,
+    .at       = tokens_begin(&source->tokens),
   };
 
   NodeIndex ignored;

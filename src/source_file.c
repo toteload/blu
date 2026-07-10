@@ -11,6 +11,15 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+#define SEGMENTLIST_NAME            MessageList
+#define SEGMENTLIST_TYPE            MessagePtr
+#define SEGMENTLIST_FUNCTION_PREFIX msglist
+#define SEGMENTLIST_MIN_SIZE_LOG2   6
+#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 void sources_init(SourceAllocator *sources) {
   zero_struct(SourceAllocator, sources);
   arena_init(&sources->arena, &(ArenaOptions){
@@ -42,7 +51,32 @@ SourceIndex sources_alloc_and_get(SourceAllocator *sources, Source **source) {
   return idx;
 }
 
+internal void source_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
+  Source *source = user;
+
+  u32 arg_count = message_format_arg_count(format);
+
+  Message *msg = arena_push(&source->arena, sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message));
+
+  msg->severity = severity;
+  msg->source   = source->idx;
+  msg->location = location;
+  msg->format   = arena_copy_string(&source->arena, format);
+
+  va_list vl;
+  va_start(vl, format);
+
+  for (u32 i = 0; i < arg_count; i++) {
+    msg->args[i] = va_arg(vl, MessageArg);
+  }
+
+  va_end(vl);
+
+  msglist_append(&source->msg_list, &source->arena, msg);
+}
+
 void source_file_init(Source *source, String filename) {
+  zero_struct(Source, source);
   arena_init(&source->arena, &(ArenaOptions){
     .reserve_size        = MiB(64),
     .initial_commit_size = MiB(1),
@@ -52,22 +86,16 @@ void source_file_init(Source *source, String filename) {
     .initial_commit_size = MiB(1),
   });
   source->filename = arena_copy_string(&source->arena, filename);
-  zero_struct(String, &source->text);
-  messages_init(&source->messages);
-  tokens_init(&source->tokens, &source->arena);
+  source->msg_sink = (MessageSink){
+    .user        = source,
+    .add_message = source_add_message,
+  };
   nodes_init(&source->ast);
 }
 
 void source_file_deinit(Source *source) {
   arena_deinit(&source->arena);
   arena_deinit(&source->scratch);
-}
-
-void error(Source *source, MessageLocation location, String format, ...) {
-  va_list vl;
-  va_start(vl, format);
-  messages_errorv(&source->messages, &source->arena, source->idx, location, format, vl);
-  va_end(vl);
 }
 
 enum ReadFileResult {
@@ -127,8 +155,8 @@ internal u32 read_file(String filename, Arena *arena, String *content) {
 b32 source_read_file(Source *source) {
   u32 err = read_file(source->filename, &source->arena, &source->text);
   if (err) {
-    error(
-      source,
+    Message_error(
+      &source->msg_sink,
       (MessageLocation){ .kind = MessageLocation_unspecified },
       string_lit("Could not open/read file {str}."), source->filename
     );
@@ -136,6 +164,16 @@ b32 source_read_file(Source *source) {
   }
 
   return True;
+}
+
+b32 source_tokenize(Source *source) {
+  TokenizeContext context = {
+    .msg_sink = &source->msg_sink,
+    .arena    = &source->arena,
+    .scratch  = &source->scratch,
+  };
+
+  return tokenize(&context, source->text, &source->tokens);
 }
 
 #if 0
@@ -153,9 +191,9 @@ void source_list_decls(Source *source) {
 #endif
 
 void source_print_all_messages(Source *source) {
-  u32 count = messages_count(&source->messages);
+  u32 count = source->msg_list.len;
   for (u32 i = 0; i < count; i++) {
-    Message *msg = messages_get(&source->messages, i);
+    Message *msg = msglist_at_unchecked(&source->msg_list, i);
     print_message(msg, source);
   }
 }

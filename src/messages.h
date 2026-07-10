@@ -2,7 +2,6 @@
 #define MESSAGES_H
 
 #include "blu.h"
-#include <stdarg.h>
 
 enum MessageSeverity {
   Severity_Error,
@@ -43,24 +42,17 @@ typedef struct {
 
 typedef Message* MessagePtr;
 
-#define SEGMENTLIST_NAME          MessageList
-#define SEGMENTLIST_TYPE          MessagePtr
-#define SEGMENTLIST_MIN_SIZE_LOG2 6
-#define SEGMENTLIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
+typedef void (*FnAddMessage)(void *user, u8 severity, MessageLocation location, String format, ...);
 
 typedef struct {
-  MessageList messages;
-} Messages;
+  void *user;
+  FnAddMessage add_message;
+} MessageSink;
 
-void     messages_init(Messages *messages);
-u32      messages_count(Messages *messages);
-Message *messages_get(Messages *messages, u32 idx);
+#define Message_error(psink, loc, fmt, ...) \
+  (psink)->add_message((psink)->user, Severity_Error, loc, fmt, __VA_ARGS__)
 
+u32 message_format_arg_count(String fmt);
 void print_message(Message *message, Source *source);
-void messages_print_all_messages(Messages *messages, SourceAllocator *sources);
-
-void messages_errorv(Messages *messages, Arena *arena, SourceIndex source, MessageLocation location, String fmt, va_list args);
 
 #endif // MESSAGES_H

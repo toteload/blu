@@ -40,17 +40,26 @@ typedef struct {
   u32 tree_size;
 } SourceDeclaration;
 
+#define SEGMENTLIST_NAME          MessageList
+#define SEGMENTLIST_TYPE          MessagePtr
+#define SEGMENTLIST_MIN_SIZE_LOG2 6
+#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
 struct Source {
   SourceIndex idx; // Saves its own index :)
   Arena       arena;
   Arena       scratch;
+
+  MessageList msg_list;
+  MessageSink msg_sink;
 
   // The filename, text (source code / file contents), messages, tokens are all stored
   // in the arena of this source.
   // TODO: refactor AstNodes to also use the arena as backing memory.
   String   filename;
   String   text;
-  Messages messages;
   Tokens   tokens;
   AstNodes ast;
 
@@ -120,8 +129,6 @@ SourceIndex  sources_alloc_and_get(SourceAllocator *allocator, Source **source);
 
 void source_file_init(Source *source, String filename);
 void source_file_deinit(Source *source);
-
-void error(Source *source, MessageLocation location, String format, ...);
 
 b32 source_read_file(Source *source);
 b32 source_tokenize(Source *source);

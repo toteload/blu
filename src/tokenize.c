@@ -43,7 +43,7 @@ typedef struct {
   u8 const *end;
   u8 const *at;
 
-  Source *source;
+  MessageSink *msg_sink;
 } Tokenizer;
 
 internal b32 is_whitespace_except_newline(u8 c) { return (c == ' ') || (c == '\r') || (c == '\t'); }
@@ -210,8 +210,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     }
 
     if (is_at_end(tokenizer)) {
-      error(
-        tokenizer->source,
+      Message_error(
+        tokenizer->msg_sink,
         (MessageLocation){ .kind = MessageLocation_end_of_file },
         string_lit("End of source encountered while parsing string literal.")
       );
@@ -262,8 +262,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
 
   u32 offset = Cast(u32, ptr_diff(token_start, tokenizer->start));
 
-  error(
-    tokenizer->source, 
+  Message_error(
+    tokenizer->msg_sink,
     (MessageLocation){
       .kind = MessageLocation_byte_offset,
       .data.offset = offset,
@@ -278,11 +278,11 @@ u32 tokens_count(Tokens *tokens) {
   return tokens->tok_count;
 }
 
-u32 tokens_begin(Tokens *tokens) {
-  return 1;
+TokenIndex tokens_begin(Tokens *tokens) {
+  return 0;
 }
 
-u32 tokens_end(Tokens *tokens) {
+TokenIndex tokens_end(Tokens *tokens) {
   return tokens->tok_count;
 }
 
@@ -312,24 +312,21 @@ SpanU32 tokens_span(Tokens *tokens, TokenIndex idx) {
   return tokens->spans[idx];
 }
 
-b32 source_tokenize(Source *source) {
+b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   Tokenizer tokenizer = {
-    .start  = source->text.str,
-    .end    = ptr_offset(source->text.str, source->text.len),
-    .at     = source->text.str,
-    .source = source,
+    .start    = text.str,
+    .end      = ptr_offset(text.str, text.len),
+    .at       = text.str,
+    .msg_sink = context->msg_sink,
   };
 
-  ArenaSnapshot scope = arena_scope_begin(&source->scratch);
+  ArenaSnapshot scope = arena_scope_begin(context->scratch);
 
-  KindList kindlist;
-  zero_struct(KindList, &kindlist);
+  KindList kindlist = {0};
+  SpanList spanlist = {0};
+  OffsetList linelist = {0};
 
-  SpanList spanlist;
-  zero_struct(SpanList, &spanlist);
-
-  OffsetList linelist;
-  zero_struct(OffsetList, &linelist);
+  lines_append(&linelist, context->scratch, 0);
 
   u32 res;
   while (True) {
@@ -342,29 +339,29 @@ b32 source_tokenize(Source *source) {
     }
 
     if (kind == Tok_line_comment || kind == Tok_newline) {
-      lines_append(&linelist, &source->scratch, span.end);
+      lines_append(&linelist, context->scratch, span.end);
       continue;
     }
 
-    kindlist_append(&kindlist, &source->scratch, kind);
-    spanlist_append(&spanlist, &source->scratch, span);
+    kindlist_append(&kindlist, context->scratch, kind);
+    spanlist_append(&spanlist, context->scratch, span);
   }
 
-  lines_append(&linelist, &source->scratch, source->text.len);
+  lines_append(&linelist, context->scratch, text.len);
 
   u32 tok_count  = kindlist.len;
   u32 line_count = linelist.len;
 
-  u8      *kinds = arena_push_array(u8,      &source->arena, tok_count);
-  SpanU32 *spans = arena_push_array(SpanU32, &source->arena, tok_count);
+  u8      *kinds = arena_push_array(u8,      context->arena, tok_count);
+  SpanU32 *spans = arena_push_array(SpanU32, context->arena, tok_count);
 
   kindlist_copy_to_array(&kindlist, kinds);
   spanlist_copy_to_array(&spanlist, spans);
 
-  u32 *lines = arena_push_array(u32, &source->arena, line_count);
+  u32 *lines = arena_push_array(u32, context->arena, line_count);
   lines_copy_to_array(&linelist, lines);
 
-  source->tokens = (Tokens){
+  *tokens = (Tokens){
     .tok_count  = tok_count,
     .line_count = line_count,
     .kinds = kinds,
@@ -372,7 +369,7 @@ b32 source_tokenize(Source *source) {
     .lines = lines,
   };
 
-  arena_scope_end(&source->scratch, scope);
+  arena_scope_end(context->scratch, scope);
 
   return res == TokResult_end;
 }
