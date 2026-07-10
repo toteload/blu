@@ -45,13 +45,13 @@ void test_runner_run(TestRunner *runner);
 
 #define Test_assert(e) do { if (!(e)) { test->line = __LINE__; test->filename = __FILE__; \
     test->failed = True; \
-    i32 n = snprintf(Cast(char*,test->buf), Test_reason_buf_size, "Assertion failed: %s\n", #e); \
+    i32 n = snprintf(Cast(char*,test->buf), Test_reason_buf_size, "  Assertion failed: %s\n", #e); \
     test->reason = (String){ .len = Cast(usize,n-1), .str = test->buf }; \
     return; } } while (0)
 
 #define Test_assert_eq(a,b) do { if ((a) != (b)) { test->line = __LINE__; test->filename = __FILE__; \
     test->failed = True; \
-    i32 n = snprintf(Cast(char*,test->buf), Test_reason_buf_size, "Assertion failed: %s == %s\n", #a, #b); \
+    i32 n = snprintf(Cast(char*,test->buf), Test_reason_buf_size, "  Assertion failed: %s == %s\n", #a, #b); \
     test->reason = (String){ .len = Cast(usize,n-1), .str = test->buf }; \
     return; } } while (0)
 

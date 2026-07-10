@@ -151,7 +151,7 @@ void Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SE
     offset += size;
   }
 
-  memcpy(out + offset, list->segments[segment_count-1], list->len - offset);
+  memcpy(out + offset, list->segments[segment_count-1], (list->len - offset) * sizeof(SEGMENTLIST_TYPE));
 }
 #pragma clang diagnostic pop
 

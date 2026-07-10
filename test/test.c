@@ -36,6 +36,11 @@ void test_runner_run(TestRunner *runner) {
     TestResult result = {0};
     test.fn(&result, test.user);
 
+    // For now don't print passed tests.
+    if (!result.failed) {
+      continue;
+    }
+
     printf("%s %.*s",
       (result.failed) ? "[FAIL]" : "[PASS]",
       Cast(int, test.name.len), test.name.str
@@ -44,7 +49,7 @@ void test_runner_run(TestRunner *runner) {
     if (result.failed) {
       fail_count += 1;
       printf(" at %s:%u\n", result.filename, result.line);
-      printf("     - %.*s\n", Cast(int, result.reason.len), result.reason.str);
+      printf("%.*s\n", Cast(int, result.reason.len), result.reason.str);
     } else {
       printf("\n");
     }

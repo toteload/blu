@@ -50,7 +50,7 @@ typedef struct {
 } MessageSink;
 
 #define Message_error(psink, loc, fmt, ...) \
-  (psink)->add_message((psink)->user, Severity_Error, loc, fmt, __VA_ARGS__)
+  (psink)->add_message((psink)->user, Severity_Error, loc, fmt, ##__VA_ARGS__)
 
 u32 message_format_arg_count(String fmt);
 void print_message(Message *message, Source *source);

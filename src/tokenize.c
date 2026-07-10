@@ -117,7 +117,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
 
   if (c == ';') {
     step_until_new_line(tokenizer);
-    tokenizer->at++;
     Return_token(Tok_line_comment);
   }
 
@@ -144,6 +143,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '=') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_equals);
+    }
+
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_cmp_eq);
@@ -153,6 +156,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '+') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_plus);
+    }
+
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_plus_equals);
@@ -162,6 +169,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '<') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_cmp_lt);
+    }
+
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_cmp_le);
@@ -176,6 +187,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '>') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_cmp_gt);
+    }
+
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_cmp_ge);
@@ -190,6 +205,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '!') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_exclamation);
+    }
+
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_cmp_ne);
@@ -236,6 +255,21 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
       tokenizer->at += 1;
     }
 
+    if (c == '#') {
+      Return_if_match("#print", Tok_builtin_print);
+
+      Message_error(
+        tokenizer->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_byte_offset,
+          .data.offset = Cast(u32, ptr_diff(token_start, tokenizer->start)),
+        },
+        string_lit("Unrecognized builtin encountered.")
+      );
+
+      return TokResult_error;
+    }
+
     // clang-format off
     Return_if_match("return",   Tok_keyword_return);
     Return_if_match("if",       Tok_keyword_if);
@@ -254,19 +288,16 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("mod",      Tok_keyword_mod);
     Return_if_match("no_cache", Tok_keyword_no_cache);
     Return_if_match("inline",   Tok_keyword_inline);
-    Return_if_match("#print",   Tok_builtin_print);
     // clang-format on
 
     Return_token(Tok_identifier);
   }
 
-  u32 offset = Cast(u32, ptr_diff(token_start, tokenizer->start));
-
   Message_error(
     tokenizer->msg_sink,
     (MessageLocation){
       .kind = MessageLocation_byte_offset,
-      .data.offset = offset,
+      .data.offset = Cast(u32, ptr_diff(token_start, tokenizer->start)),
     },
     string_lit("Unrecognized token encountered.")
   );
@@ -338,7 +369,11 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
       break;
     }
 
-    if (kind == Tok_line_comment || kind == Tok_newline) {
+    if (kind == Tok_line_comment) {
+      continue;
+    }
+
+    if (kind == Tok_newline) {
       lines_append(&linelist, context->scratch, span.end);
       continue;
     }
