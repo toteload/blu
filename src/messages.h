@@ -40,8 +40,6 @@ typedef struct {
   MessageArg      args[];
 } Message;
 
-typedef Message* MessagePtr;
-
 typedef void (*FnAddMessage)(void *user, u8 severity, MessageLocation location, String format, ...);
 
 typedef struct {

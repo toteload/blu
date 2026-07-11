@@ -55,9 +55,9 @@ u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *arg
 }
 
 internal void write_tokens(Tokens *tokens, String source) {
-  for (u32 i = tokens_begin(tokens); i < tokens_end(tokens); i++) {
-    u8      kind = tokens_kind(tokens, i);
-    SpanU32 span = tokens_span(tokens, i);
+  for (u32 i = 0; i < tokens->tok_count; i++) {
+    u8      kind = tokens->kinds[i];
+    SpanU32 span = tokens->spans[i];
 
     char const *s = Cast(char const*, source.str + span.start);
     int len = Cast(int, span.end - span.start);
@@ -122,14 +122,6 @@ int main(int argc, char const *argv[]) {
     .arena         = &arena,
     .arena_scratch = &arena_tmp,
   });
-
-  // root
-  // |
-  // |- mod main
-  // |  \- fn main
-  // |
-  // \- mod util
-  //    \- fn print
 
   ValueStore values = {0};
   values_init(&values, &(ValueStoreOptions){

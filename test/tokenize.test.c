@@ -212,6 +212,6 @@ void register_tokenizer_tests(TestRunner *runner) {
   };
 
   for (u32 i = 0; i < Count_of(tests); i++) {
-    test_runner_register_test(runner, tests[i].name, Cast(FnTest, tokenizer_test), tests[i].fn);
+    test_runner_register_test(runner, tests[i].name, Cast(FnTest, tokenizer_test), Cast(void*, tests[i].fn));
   }
 }

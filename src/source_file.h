@@ -34,11 +34,21 @@ enum SourceDeclarationKind {
   SourceDeclaration_declaration,
 };
 
+// root
+// |
+// |- mod main
+// |  \- fn main
+// |
+// \- mod util
+//    \- fn print
+
 typedef struct {
   u8 kind;
   String name;
   u32 tree_size;
 } SourceDeclaration;
+
+typedef Message* MessagePtr;
 
 #define SEGMENTLIST_NAME          MessageList
 #define SEGMENTLIST_TYPE          MessagePtr

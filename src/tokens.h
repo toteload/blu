@@ -90,13 +90,7 @@ typedef struct {
   u32 line_len;
 } LineInfo;
 
-u32        tokens_count(Tokens *tokens);
-TokenIndex tokens_begin(Tokens *tokens);
-TokenIndex tokens_end(Tokens *tokens);
-u8         tokens_kind(Tokens *tokens, TokenIndex idx);
-SpanU32    tokens_span(Tokens *tokens, TokenIndex idx);
-
-LineInfo   tokens_find_line_info(Tokens *tokens, u32 byte_offset);
+LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset);
 
 char const *token_kind_string(u8 kind);
 

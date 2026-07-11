@@ -126,7 +126,7 @@ internal b32 parse_builtin_print(Parser *parser, NodeIndex *out);
 internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op);
 
 internal b32 is_token_index_past_end(Tokens *tokens, TokenIndex idx) {
-  return idx >= tokens_end(tokens);
+  return idx >= tokens->tok_count;
 }
 
 internal b32 is_parser_past_end(Parser *parser) {
@@ -138,7 +138,7 @@ b32 next(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = tokens_kind(parser->tokens, parser->at);
+  *token_kind = parser->tokens->kinds[parser->at];
 
   parser->at += 1;
 
@@ -175,7 +175,7 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = tokens_kind(parser->tokens, parser->at);
+  *token_kind = parser->tokens->kinds[parser->at];
 
   return True;
 }
@@ -201,7 +201,7 @@ internal b32 peek2(Parser *parser, u8 *token_kind) {
     return False;
   }
 
-  *token_kind = tokens_kind(parser->tokens, lookahead);
+  *token_kind = parser->tokens->kinds[lookahead];
 
   return True;
 }
@@ -970,7 +970,7 @@ b32 source_parse(Source *source) {
     .msg_sink = &source->msg_sink,
     .tokens   = &source->tokens,
     .nodes    = &source->ast,
-    .at       = tokens_begin(&source->tokens),
+    .at       = 0,
   };
 
   NodeIndex ignored;

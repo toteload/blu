@@ -39,12 +39,12 @@ internal void get_line_col(Source *source, MessageLocation loc, u32 *line, u32 *
     offset = loc.data.offset;
   } break;
   case MessageLocation_token_index: {
-    SpanU32 span_offset = tokens_span(&source->tokens, loc.data.token_index);
+    SpanU32 span_offset = source->tokens.spans[loc.data.token_index];
     offset = span_offset.start;
   } break;
   case MessageLocation_ast_index: {
     SpanToken span_token = *nodes_span(&source->ast, loc.data.ast_index);
-    SpanU32 span_offset = tokens_span(&source->tokens, span_token.start);
+    SpanU32 span_offset = source->tokens.spans[span_token.start];
     offset = span_offset.start;
   } break;
   }
