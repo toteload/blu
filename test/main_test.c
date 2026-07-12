@@ -21,7 +21,6 @@ int main(void) {
   test_runner_init(&runner);
 
   register_tokenizer_tests(&runner);
-
   test_runner_register_test(&runner, string_lit("test_assert_eq"), test_assert_eq, Null);
   test_runner_register_test(&runner, string_lit("test_assert"), test_assert, Null);
 

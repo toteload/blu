@@ -86,12 +86,6 @@ void test_multichar_operators(TestResult *test, TokenizeContext *context) {
   Assert_kinds("-",   Tok_minus);
 }
 
-void test_minus_vs_negative_literal(TestResult *test, TokenizeContext *context) {
-  Assert_kinds("-5",    Tok_literal_int);             // negative literal
-  Assert_kinds("a -5",  Tok_identifier, Tok_literal_int);
-  Assert_kinds("a - 5", Tok_identifier, Tok_minus, Tok_literal_int);
-}
-
 void test_literals(TestResult *test, TokenizeContext *context) {
   Assert_kinds("0",          Tok_literal_int);
   Assert_kinds("12345",      Tok_literal_int);
@@ -196,7 +190,6 @@ void register_tokenizer_tests(TestRunner *runner) {
     Test(test_empty_input),
     Test(test_single_char_tokens),
     Test(test_multichar_operators),
-    Test(test_minus_vs_negative_literal),
     Test(test_literals),
     Test(test_keywords_and_identifiers),
     Test(test_newlines_and_comments_dropped),

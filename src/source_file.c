@@ -2,15 +2,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#define SEGMENTLIST_NAME            SourceList
-#define SEGMENTLIST_TYPE            Source
-#define SEGMENTLIST_FUNCTION_PREFIX list
-#define SEGMENTLIST_MIN_SIZE_LOG2   SourceList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   SourceList_segment_count
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
-
 #define SEGMENTLIST_NAME            MessageList
 #define SEGMENTLIST_TYPE            MessagePtr
 #define SEGMENTLIST_FUNCTION_PREFIX msglist
@@ -19,37 +10,6 @@
 #define SEGMENTLIST_LINKAGE         internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
-
-void sources_init(SourceAllocator *sources) {
-  zero_struct(SourceAllocator, sources);
-  arena_init(&sources->arena, &(ArenaOptions){
-    .reserve_size        = MiB(1),
-    .initial_commit_size = KiB(4),
-  });
-  list_push(&sources->list, &sources->arena);
-}
-
-void sources_deinit(SourceAllocator *sources) {
-  arena_deinit(&sources->arena);
-  zero_struct(SourceAllocator, sources);
-}
-
-SourceIndex sources_alloc(SourceAllocator *sources) {
-  SourceIndex idx = sources->list.len;
-  Source *s = list_push(&sources->list, &sources->arena);
-  s->idx = idx;
-  return idx;
-}
-
-Source *sources_get(SourceAllocator *sources, SourceIndex idx) {
-  return list_ptr_at_unchecked(&sources->list, idx);
-}
-
-SourceIndex sources_alloc_and_get(SourceAllocator *sources, Source **source) {
-  SourceIndex idx = sources_alloc(sources);
-  *source = sources_get(sources, idx);
-  return idx;
-}
 
 internal void source_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
   Source *source = user;
@@ -75,7 +35,7 @@ internal void source_add_message(void *user, u8 severity, MessageLocation locati
   msglist_append(&source->msg_list, &source->arena, msg);
 }
 
-void source_file_init(Source *source, String filename) {
+void source_file_init(Source *source, SourceIndex idx, String filename) {
   zero_struct(Source, source);
   arena_init(&source->arena, &(ArenaOptions){
     .reserve_size        = MiB(64),
@@ -85,6 +45,7 @@ void source_file_init(Source *source, String filename) {
     .reserve_size        = MiB(4),
     .initial_commit_size = MiB(1),
   });
+  source->idx      = idx;
   source->filename = arena_copy_string(&source->arena, filename);
   source->msg_sink = (MessageSink){
     .user        = source,

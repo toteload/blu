@@ -109,6 +109,8 @@ def create_build_ninja():
         'eval.c',
         'ir.c',
         'source_file.c',
+        'compiler.c',
+        'cli_options.c',
     ]
 
     outputs = []

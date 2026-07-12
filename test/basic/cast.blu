@@ -1,4 +1,6 @@
-main : (): i32 = || {
+mod main
+
+main : () i32 = || {
   x : u32 = 0
   y : u64 = x
   cast(i32) y

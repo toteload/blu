@@ -121,22 +121,9 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   }
 
   if (c == '-') {
-    if (is_at_end(tokenizer)) {
-      Return_token(Tok_minus);
-    }
-
-    if (*tokenizer->at == '>') {
+    if (!is_at_end(tokenizer) && *tokenizer->at == '>') {
       tokenizer->at += 1;
       Return_token(Tok_arrow);
-    }
-
-    if (is_numeric(*tokenizer->at)) {
-      tokenizer->at += 1;
-      while (!is_at_end(tokenizer) && is_numeric(*tokenizer->at)) {
-        tokenizer->at += 1;
-      }
-
-      Return_token(Tok_literal_int);
     }
 
     Return_token(Tok_minus);
@@ -434,7 +421,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "const",        "cast",
   "bitcast", "as", "mod", "no_cache", "inline",
   "identifier",   "#print",
-  "line-comment",
+  "line-comment", "newline",
 };
 
 char const *token_kind_string(u8 kind) {

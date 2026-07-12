@@ -7,52 +7,11 @@
 #include "value.h"
 #include "messages.h"
 #include "source_file.h"
+#include "compiler.h"
+#include "cli_options.h"
 
 #include <stdlib.h>
 #include <stdio.h>
-
-typedef struct {
-  b32 verbose;
-  String source_filename;
-} CLIOptions;
-
-enum ParseCliResult {
-  ParseCli_ok,
-  ParseCli_error_unknown_argument,
-  ParseCli_error_no_source_filename_provided,
-};
-
-u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *args) {
-  *options = (CLIOptions){
-    .verbose = False,
-    .source_filename = {0},
-  };
-
-  b32 has_found_source_filename = False;
-
-  for (u32 i = 1; i < arg_count; i++) {
-    String arg = string_from_cstr(args[i]);
-
-    if (string_eq(arg, string_lit("-v"))) {
-      options->verbose = True;
-      continue;
-    } 
-
-    if (!has_found_source_filename) {
-      has_found_source_filename = True;
-      options->source_filename = arg;
-      continue;
-    }
-
-    return ParseCli_error_unknown_argument;
-  }
-
-  if (!has_found_source_filename) {
-    return ParseCli_error_no_source_filename_provided;
-  }
-
-  return ParseCli_ok;
-}
 
 internal void write_tokens(Tokens *tokens, String source) {
   for (u32 i = 0; i < tokens->tok_count; i++) {
@@ -98,60 +57,45 @@ int main(int argc, char const *argv[]) {
     return 1;
   }
 
-  Arena arena = {0};
-  arena_init(&arena, &(ArenaOptions){
-    .reserve_size        = MiB(64),
-    .initial_commit_size = KiB(64),
-  });
+  //Arena arena = {0};
+  //arena_init(&arena, &(ArenaOptions){
+  //  .reserve_size        = MiB(64),
+  //  .initial_commit_size = KiB(64),
+  //});
 
-  Arena arena_tmp = {0};
-  arena_init(&arena_tmp, &(ArenaOptions){
-    .reserve_size        = MiB(64),
-    .initial_commit_size = KiB(64),
-  });
+  //Arena arena_tmp = {0};
+  //arena_init(&arena_tmp, &(ArenaOptions){
+  //  .reserve_size        = MiB(64),
+  //  .initial_commit_size = KiB(64),
+  //});
 
-  StringInterner strings = {0};
-  strings_init(&strings, &(StringInternerOptions){
-    .arena         = &arena,
-    .map_allocator = cstd_allocator,
-  });
+  //StringInterner strings = {0};
+  //strings_init(&strings, &(StringInternerOptions){
+  //  .arena         = &arena,
+  //  .map_allocator = cstd_allocator,
+  //});
 
-  TypeInterner types = {0};
-  types_init(&types, &(TypeInternerOptions){
-    .map_allocator = cstd_allocator,
-    .arena         = &arena,
-    .arena_scratch = &arena_tmp,
-  });
+  //TypeInterner types = {0};
+  //types_init(&types, &(TypeInternerOptions){
+  //  .map_allocator = cstd_allocator,
+  //  .arena         = &arena,
+  //  .arena_scratch = &arena_tmp,
+  //});
 
-  ValueStore values = {0};
-  values_init(&values, &(ValueStoreOptions){
-    .payload_allocator = cstd_allocator,
-  });
+  //ValueStore values = {0};
+  //values_init(&values, &(ValueStoreOptions){
+  //  .payload_allocator = cstd_allocator,
+  //});
 
-  SourceAllocator sources;
-  sources_init(&sources);
+  Compiler compiler;
+  compiler_init(&compiler);
 
-  Source *source;
-  SourceIndex source_index = sources_alloc_and_get(&sources, &source);
-  Unused(source_index);
-  source_file_init(source, cli.source_filename);
+  compiler_add_sourcefile(&compiler, cli.source_filename);
 
-  ok = source_read_file(source);
-  if (!ok) { source_print_all_messages(source); return 1; }
+  ok = compile(&compiler);
+  compiler_print_all_messages(&compiler);
 
-  ok = source_tokenize(source);
-  if (cli.verbose) {
-    write_tokens(&source->tokens, source->text);
-  }
-  if (!ok) { source_print_all_messages(source); return 1; }
-
-  ok = source_parse(source);
-  if (cli.verbose) {
-    write_nodes(&source->ast, &source->tokens, source->text);
-  }
-  if (!ok) { source_print_all_messages(source); return 1; }
-
-  printf("ok\n");
+  printf("%s\n", (ok) ? "ok" : "error");
 
   return 0;
 }
