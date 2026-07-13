@@ -4,6 +4,46 @@
 #include "blu.h"
 #include "messages.h"
 
+typedef struct {
+  DeclarationIndex parent;
+  StringIndex name;
+} DeclarationKey;
+
+enum DeclarationKind {
+  Declaration_root,
+  Declaration_mod,
+  Declaration_builtin,
+  Declaration_decl,
+  Declaration_local,
+  Declaration_param,
+};
+
+typedef struct {
+  u8 kind;
+  union {
+    ValueIndex builtin;
+    struct {
+      SourceIndex source;
+      AstIndex    ast;
+    } decl;
+  } data;
+} Declaration;
+
+#define INTERNER_NAME       DeclarationInterner
+#define INTERNER_TYPE       DeclarationKey
+#define INTERNER_INDEX_TYPE DeclarationIndex
+#define INTERNER_OUTPUT_TYPES
+#include "interner.h"
+
+#define Declarations_min_size_log2 5
+#define Declarations_segment_count 24
+#define SEGMENTLIST_NAME           Declarations
+#define SEGMENTLIST_TYPE           Declaration
+#define SEGMENTLIST_MIN_SIZE_LOG2  Declarations_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT  Declarations_segment_count
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
 // - For each source file:
 //   - read file, tokenize, parse
 //   - output list of decls
@@ -33,14 +73,19 @@ typedef struct {
   Arena arena;
   Arena scratch;
 
-  SourceList  sources;
+  SourceList sources;
   MessageSink msg_sink;
+
+  DeclarationInterner decl_keys;
+  Declarations        decls;
 } Compiler;
 
 void compiler_init(Compiler *compiler);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
+
+DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, Declaration decl);
 
 void compiler_print_all_messages(Compiler *compiler);
 

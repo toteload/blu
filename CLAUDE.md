@@ -2,122 +2,108 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## General instructions
-
-**ALWAYS** put sentences on their own line when writing Markdown.
-
 ## What this is
 
-Blu is a compiled programming language written in C++17.
-The current goal is correctness over performance — the interpreter evaluates the AST directly rather than compiling to native code.
+Blu is a hobby programming language with a compiler written in C11 (previously C++17; the `c-rewrite` branch is a ground-up rewrite in C).
+The long-term design supports compile-time code execution: AST → IR, interpret the IR for comptime evaluation, and eventually translate IR → C.
+The rationale is documented in the comment at the top of `src/ir.h`.
+The rewrite is in progress; `TODO.md` and `NOTES.md` track current design work.
 
 ## Build
 
 ```bash
-python build.py        # regenerates build.ninja and runs ninja
+python build.py        # regenerates build.ninja, runs ninja, refreshes compile_commands.json
 ```
 
+Dependencies: `clang`, `ninja`, Python 3.
 Outputs land in `out/`:
-- `blu` / `blu.exe` — main interpreter binary
-- `tokenviewer` / `tokenviewer.exe` — HTML token-stream visualizer
 
-Dependencies: `clang++`, `ninja`, Python 3.
+- `blu` / `blu.exe` — the compiler
+- `blu.test` / `blu.test.exe` — unit test binary
 
-## Running
+Build configuration lives entirely in `build.py`:
+compiler flags are hardcoded in the `compile_c_debug` rule, and the source file list is the `inputs` array.
+To add a new `.c` file to the build, append it to that array.
+Do not add CLI flags to `build.py`; hardcode options in the rules directly.
+Note that `-Werror=switch` is enabled — every `switch` over an enum must handle all values.
+
+## Testing
 
 ```bash
-out/blu <file.blu>          # run a .blu source file
+out/blu test/basic/foo.blu     # run a single test file
+out/blu.test                   # unit tests
 ```
 
-Test files live in `test/basic/`.
-There is no automated test runner; run each file manually.
+Unit tests are C files registered in `test/main_test.c` (e.g. `test/tokenize.test.c` via `register_tokenizer_tests`) and use the assertion macros from `test/test.h`.
+The unit test binary's source list is in `add_test_suite` in `build.py`.
 
 ## Compiler pipeline
 
-`src/main.cc` wires together the full pipeline:
+`src/main.c` parses CLI options, creates a `Compiler`, adds the source file, calls `compile()`, and prints all messages.
 
-1. **Tokenize** (`tokenize.cc`) — source text → `Tokens`
-   (parallel `kinds`/`spans` vectors)
-2. **Parse** (`parse.cc`) — `Tokens` → `AstNodes`
-   (parallel `kinds`/`spans`/`datas` vectors)
-3. **Type check** (`typecheck2.cc`) — fills a `Vector<TypeIndex>`
-   (`type_annotations`) with one entry per AST node
-4. **Interpret** (`interpreter.cc`) — walks the AST; reads
-   `type_annotations` to know the resolved type of each node
+`compile()` in `src/compiler.c` loops over sources and runs, per `Source`:
 
-On any error, `messages.print_messages()` is called and the process
-exits non-zero.
+1. `source_read_file` — load file contents
+2. `source_tokenize` (`tokenize.c`) — text → `Tokens` (parallel `kinds`/`spans` arrays)
+3. `source_parse` (`parse.c`) — `Tokens` → `AstNodes`
+
+That is where the wired-up pipeline currently ends.
+Later stages exist but are not yet integrated:
+
+- `src/check.c` / `check.h` — type checker (`Checker`); **not in the `build.py` inputs list**
+- `src/ir.c` / `ir.h` — IR generation (`generate_ir`) and the IR interpreter (`IrMachine`, `ir_run`)
+- `src/eval.c` — value reading/casting helpers used by evaluation
+
+Diagnostics flow through `MessageSink` (`src/messages.h`), a function-pointer sink that stages append errors to; each `Source` collects its `Message`s and `compiler_print_all_messages` prints them at the end.
 
 ## Key files
 
 | File | Role |
 |------|------|
-| `src/blu.hh` | Central aggregation header; defines `Source`, `TypeCheckContext`, `Messages`, `Declaration` |
-| `src/ast.hh` | `AstKind` enum, all `Ast*` data structs, `AstNodes` parallel-vector store |
-| `src/tokens.hh` | `TokenKind` enum, `Tokens` parallel-vector store |
-| `src/types.hh` / `types.cc` | `Type` struct, `TypeInterner` — interns types by value |
-| `src/value.hh` / `value.cc` | `Value` (type + data pointer), `ValueStore` |
-| `src/interpreter.hh` / `interpreter.cc` | Tree-walk `Interpreter`; uses `Env<ValueIndex>` |
-| `src/env.hh` | Generic `Env<T>` / `EnvManager<T>` — lexical scope via parent-chain hash maps |
-| `src/toteload.hh` / `toteload.cc` | Core utility lib: `Arena`, `Allocator`, `Str`, `Slice`, `ArenaSnapshot`, common macros |
-| `src/index.hh` | Type-safe index wrappers: `Index<T,Tag>`, `OptionalIndex<T,Tag>` |
-| `src/hashmap.hh` | Open-addressing hash map with fingerprinting |
-| `src/vector.hh` | Dynamic array `Vector<T>` |
-| `src/segment_list.hh` | Arena-backed segmented list for variable-length AST children |
-| `src/arena_item_pool.hh` | Fixed-size object pool with 32-bit indices |
-| `src/string_interner.hh` / `string_interner.cc` | `StringInterner` — deduplicates strings; returns `StrKey` |
-| `src/messages.cc` | Error/warning formatting with source locations |
-| `src/utils/stdlib.cc` | `stdlib_alloc` — `malloc`/`realloc`/`free` wrapper |
+| `src/toteload.h` / `toteload.c` | Base layer: fixed-width typedefs (`u32`, `b32`, …), `Arena`, `Allocator`, `String`, common macros (`Cast`, `internal`, `Null`/`True`/`False`) |
+| `src/blu.h` | Shared index typedefs (`StringIndex`, `TypeIndex`, `AstIndex`, `ValueIndex`, …) and forward declarations |
+| `src/compiler.h` / `compiler.c` | `Compiler` — owns the `Source` list, arenas, and message sink; comment sketches the planned multi-file compilation strategy |
+| `src/source_file.h` / `source_file.c` | `Source` — one per file; owns its own arena holding filename, text, tokens, AST, and messages |
+| `src/tokens.h` / `tokenize.c` | `TokenKind` enum, `Tokens` parallel-array store |
+| `src/ast.h` / `parse.c` | `AstKind` enum, `AstNodes` store |
+| `src/types.h` / `types.c` | `TypeInterner` — interns types by value; `TypeIndex` is an opaque `u32` |
+| `src/value.h` / `value.c` | `ValueStore` — runtime/comptime values |
+| `src/env.h` / `env.c` | `Env` / `EnvAllocator` — lexical scoping |
+| `src/messages.h` / `messages.c` | `Message`, `MessageSink`, severity and location kinds |
+| `src/string_interner.h` / `string_interner.c` | String deduplication |
+| `src/segment_list.h` | Macro-templated segmented list (see below) |
+| `src/hashmap.h` | Macro-templated hash map (see below) |
+| `ext/` | Vendored single-file libraries (`xxhash.h`, `khash.h`, …) |
+
+`src/builder.cc`, `formatcode.sh`/`formatcode.bat`, and the `.bat` build scripts are leftovers from the pre-rewrite C++ codebase and are not part of the build.
+
+## Generic container pattern
+
+`segment_list.h` and `hashmap.h` are C "templates" instantiated with macros.
+Define the configuration macros, then `#include` the header:
+
+```c
+#define SEGMENTLIST_NAME          SourceList
+#define SEGMENTLIST_TYPE          Source
+#define SEGMENTLIST_MIN_SIZE_LOG2 4
+#define SEGMENTLIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_OUTPUT_TYPES        // emit typedefs + declarations (in headers)
+#include "segment_list.h"
+```
+
+Repeat the same include with `SEGMENTLIST_OUTPUT_DEFINITIONS` (and optionally `SEGMENTLIST_LINKAGE internal`, `SEGMENTLIST_FUNCTION_PREFIX`) in exactly one `.c` file to emit the function bodies.
+`hashmap.h` follows the same `HASHMAP_NAME` / `HASHMAP_KEY_TYPE` / `HASHMAP_VALUE_TYPE` pattern.
 
 ## Memory model
 
-Two arenas are used throughout:
-- `arena` — persistent; lives for the entire compilation
-- `work_arena` — scratch space; callers call `work_arena.take_snapshot()`
-  before a sub-task and `work_arena.restore(snapshot)` after
-
-`stdlib_alloc` (from `src/utils/stdlib.cc`) wraps `malloc`/`free` and is used for growable `Vector` collections and hash maps.
-
-The `Arena` type is defined in `toteload.hh`.
-It reserves virtual memory upfront and commits pages on demand.
-`ArenaSnapshot` captures the current allocation pointer so scratch allocations can be discarded cheaply.
-
-## AST layout
-
-`AstNodes` stores the tree as three parallel vectors:
-- `kinds` — `AstKind` per node
-- `spans` — `Span<TokenIndex>` per node (byte range in source)
-- `datas` — `AstNodeData` union per node
-
-Variable-length children (block items, call arguments, etc.) are stored as `SegmentList<NodeIndex>` inside `AstNodeData`, allocated from `nodes.segment_allocator` (backed by `arena`).
-
-## Type system
-
-All types are interned by value in `TypeInterner`.
-`TypeIndex` is a 32-bit opaque index; use `types.get(idx)` to retrieve `Type *`.
-
-Integer types: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`.
-Other types: `bool`, `nil`, `never`, `literal_int`, `literal_function`, `function`, `slice`, `array`, `distinct`, `sequence`, `type`.
-
-The type checker writes one `TypeIndex` per AST node into a flat `type_annotations` slice.
-The interpreter then reads that slice instead of re-inferring types.
-
-Environments differ between phases:
-- Type-check: `Env<Declaration>` maps names → `TypeIndex` or `NodeIndex`
-- Interpret: `Env<ValueIndex>` maps names → runtime value indices
+Everything is arena-based (`Arena` in `toteload.h` reserves virtual memory upfront and commits pages on demand).
+The `Compiler` owns an `arena` and a `scratch` arena.
+Each `Source` additionally owns its own `arena`/`scratch`, which back its filename, text, tokens, and messages.
+`Allocator` is a function-pointer allocator interface; `main.c` wraps `realloc`/`free` as `cstd_allocator` for growable collections.
 
 ## Language syntax (Blu)
 
 ```
 x : i32 = 42                              // declaration
-add : (i32, i32): i32 = |a, b| { a + b }  // function
-arr : [4]i32 = .{ 1, 2, 3, 4 }            // array literal
+add : (i32, i32) i32 = |a, b| { a + b }  // function
 ```
-
-Supported types: integer types listed above, `bool`, `nil`, function `(T, T): R`, slice `[]T`, array `[N]T`.
-
-Keywords: `if`, `else`, `while`, `break`, `continue`, `return`, `and`, `or`.
-
-Operators: `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `<<`, `>>`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `and`, `or`, `!`, unary `-`.
-
-Builtins (prefixed with `#`): only `#print(...)` is currently implemented.

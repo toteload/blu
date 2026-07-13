@@ -48,6 +48,8 @@ SEGMENTLIST_LINKAGE void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_
 #endif // SEGMENTLIST_OUTPUT_DECLARATIONS
 
 #ifdef SEGMENTLIST_OUTPUT_DEFINITIONS
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 
 #ifndef SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
 #define SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
@@ -97,8 +99,6 @@ internal void Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(SEGMENTLIST_NA
   list->segment_count = required_segment_count;
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list, Arena *arena) {
   Cat(SEGMENTLIST_FUNCTION_PREFIX, __ensure_capacity)(list, arena, list->len + 1);
@@ -106,18 +106,12 @@ SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(SEGMENTLIST_NAME *list
   list->len += 1;
   return p;
 }
-#pragma clang diagnostic pop
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 void Cat(SEGMENTLIST_FUNCTION_PREFIX, _append)(SEGMENTLIST_NAME *list, Arena *arena, SEGMENTLIST_TYPE item) {
   *Cat(SEGMENTLIST_FUNCTION_PREFIX, _push)(list, arena) = item;
 }
-#pragma clang diagnostic pop
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
   usize si = segment_idx(SEGMENTLIST_MIN_SIZE_LOG2, idx);
@@ -125,18 +119,12 @@ SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(SEGMENTLIS
 
   return &list->segments[si][i];
 }
-#pragma clang diagnostic pop
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 SEGMENTLIST_TYPE Cat(SEGMENTLIST_FUNCTION_PREFIX, _at_unchecked)(SEGMENTLIST_NAME *list, usize idx) {
   return *Cat(SEGMENTLIST_FUNCTION_PREFIX, _ptr_at_unchecked)(list, idx);
 }
-#pragma clang diagnostic pop
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 SEGMENTLIST_LINKAGE
 void Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SEGMENTLIST_TYPE *out) {
   if (list->len == 0) {
@@ -153,9 +141,9 @@ void Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SE
 
   memcpy(out + offset, list->segments[segment_count-1], (list->len - offset) * sizeof(SEGMENTLIST_TYPE));
 }
-#pragma clang diagnostic pop
 
 #undef SEGMENTLIST_OUTPUT_DEFINITIONS
+#pragma clang diagnostic pop
 #endif // SEGMENTLIST_OUTPUT_DEFINITIONS
 
 #undef SEGMENTLIST_NAME

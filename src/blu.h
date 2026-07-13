@@ -9,6 +9,7 @@ typedef u32 TokenIndex;
 typedef u32 SourceIndex;
 typedef u32 AstIndex;
 typedef u32 ValueIndex;
+typedef u32 DeclarationIndex;
 
 enum NodeIndexKind {
   NodeIndex_none,
@@ -25,7 +26,6 @@ typedef struct {
   } idx;
 } NodeIndex;
 
-typedef struct StringInterner StringInterner;
 typedef struct TypeInterner TypeInterner;
 typedef struct EnvAllocator EnvAllocator;
 typedef struct Env Env;

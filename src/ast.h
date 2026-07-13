@@ -85,8 +85,8 @@ enum AttributeFlag {
   Attribute_no_cache = 1 << 1,
 };
 
-#define SEGMENTLIST_NAME          NodeIndexList
-#define SEGMENTLIST_TYPE          NodeIndex
+#define SEGMENTLIST_NAME          AstIndexList
+#define SEGMENTLIST_TYPE          AstIndex
 #define SEGMENTLIST_MIN_SIZE_LOG2 3
 #define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
@@ -94,121 +94,122 @@ enum AttributeFlag {
 
 typedef struct {
   u8 kind;
-  NodeIndexList args;
+  AstIndexList args;
 } AstBuiltin;
 
 typedef struct {
-  NodeIndex     return_type;
-  NodeIndexList param_types;
+  AstIndex     return_type;
+  AstIndexList param_types;
 } AstTypeFunction;
 
 typedef struct {
-  NodeIndex base;
+  AstIndex base;
 } AstTypeSlice;
 
 typedef struct {
-  NodeIndex size;
-  NodeIndex base;
+  AstIndex size;
+  AstIndex base;
 } AstTypeArray;
 
 typedef struct {
   TokenIndex name;
-  NodeIndex  type;
-  NodeIndex  value;
+  AstIndex  type;
+  AstIndex  value;
 } AstDeclaration;
 
 typedef struct {
-  NodeIndexList items;
+  AstIndexList items;
 } AstSource;
 
 typedef struct {
-  NodeIndex     name;
-  NodeIndexList items;
+  AstIndex     name;
+  AstIndexList items;
 } AstModSection;
 
 typedef struct {
-  NodeIndexList items;
+  AstIndexList items;
 } AstBlock;
 
 typedef struct {
-  NodeIndexList items;
+  AstIndexList items;
 } AstLiteralSequence;
 
 typedef struct {
   TokenIndex name;
-  NodeIndex  type;
+  AstIndex  type;
 } AstParam;
 
 typedef struct {
-  NodeIndexList params;
-  NodeIndex     return_type;
-  NodeIndex     body;
+  AstIndexList params;
+  AstIndex     return_type;
+  AstIndex     body;
 } AstFunction;
 
 typedef struct {
-  NodeIndex cond;
-  NodeIndex then;
-  NodeIndex otherwise;
+  AstIndex cond;
+  AstIndex then;
+  AstIndex otherwise;
 } AstIfElse;
 
 typedef struct {
-  NodeIndex iterable;
-  NodeIndex iterator;
-  NodeIndex body;
+  AstIndex iterable;
+  AstIndex iterator;
+  AstIndex body;
 } AstFor;
 
 typedef struct {
   u8 op_kind;
-  NodeIndex value;
+  AstIndex value;
 } AstUnaryOp;
 
 typedef struct {
   u8 op_kind;
-  NodeIndex    lhs;
-  NodeIndex    rhs;
+  AstIndex    lhs;
+  AstIndex    rhs;
 } AstBinaryOp;
 
 typedef struct {
-  NodeIndex base;
-  NodeIndex field;
+  AstIndex base;
+  AstIndex field;
 } AstFieldAccess;
 
 typedef struct {
-  NodeIndex     callee;
-  NodeIndexList args;
+  AstIndex     callee;
+  AstIndexList args;
 } AstCall;
 
 typedef struct {
-  NodeIndex indexable;
-  NodeIndex index_at;
+  AstIndex indexable;
+  AstIndex index_at;
 } AstIndexData;
 
 typedef struct {
-  NodeIndex value;
+  AstIndex value;
 } AstDefer;
 
 typedef struct {
   u8 assign_kind;
-  NodeIndex  lhs;
-  NodeIndex  value;
+  AstIndex  lhs;
+  AstIndex  value;
 } AstAssign;
 
 typedef struct {
-  NodeIndex expr;
+  AstIndex expr;
 } AstConst;
 
 typedef struct {
-  NodeIndex type_dst;
-  NodeIndex value;
+  AstIndex type_dst;
+  AstIndex value;
 } AstCast;
 
 typedef struct {
-  NodeIndex type_dst;
-  NodeIndex value;
+  AstIndex type_dst;
+  AstIndex value;
 } AstAs;
 
 typedef union {
   AstSource          source;
+  AstModSection      mod_section;
   AstBlock           block;
   AstBuiltin         builtin;
   AstTypeFunction    type_function;

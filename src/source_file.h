@@ -6,42 +6,7 @@
 #include "ast.h"
 #include "messages.h"
 
-#if 0
-// TODO remove
-// just a sketch
-struct Declaration {
-  u8 kind; // param | local | builtin | decl
-  
-  union {
-    AstIndex param;
-    AstIndex local;
-    ValueIndex builtin;
-    struct {
-      SourceIndex source;
-      AstIndex    ast;
-    } decl;
-  } data;
-};
-
-struct ModuleLevelDeclaration {
-  AstIndex ast_index;
-  String name;
-};
-
-struct DeclarationKey {
-  StringIndex parent;
-  StringIndex name;
-};
-
-struct DeclarationValue {
-  u8 kind; // mod | decl | builtin
-
-  union {
-    ModuleIndex mod;
-    ValueIndex builtin;
-  } data;
-};
-
+#if 1
 // root
 // |
 // |- mod main
@@ -51,6 +16,7 @@ struct DeclarationValue {
 //    \- fn print
 
 enum SourceDeclarationKind {
+  SourceDeclaration_root,
   SourceDeclaration_mod,
   SourceDeclaration_declaration,
 };
@@ -58,7 +24,7 @@ enum SourceDeclarationKind {
 typedef struct {
   u8       kind;
   String   name;
-  u32      tree_size;
+  u32      child_count;
   AstIndex node;
 } SourceDeclaration;
 #endif
@@ -95,7 +61,6 @@ struct Source {
   Tokens   tokens;
   AstNodes ast;
 
-  u32 source_decl_count;
   SourceDeclaration *decls;
 
   // - list of declarations
@@ -110,7 +75,7 @@ void source_file_deinit(Source *source);
 b32 source_read_file(Source *source);
 b32 source_tokenize(Source *source);
 b32 source_parse(Source *source);
-void source_list_decls(Source *source);
+void source_index_declarations(Source *source);
 
 void source_print_all_messages(Source *source);
 

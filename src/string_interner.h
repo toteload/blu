@@ -3,33 +3,11 @@
 
 #include "blu.h"
 
-#define SEGMENTLIST_NAME StringList
-#define SEGMENTLIST_TYPE String
-#define SEGMENTLIST_MIN_SIZE_LOG2 6
-#define SEGMENTLIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
-#define HASHMAP_NAME       StringIndexMap
-#define HASHMAP_KEY_TYPE   String
-#define HASHMAP_VALUE_TYPE StringIndex
-#define HASHMAP_OUTPUT_TYPES
-#include "hashmap.h"
-
-struct StringInterner {
-  Arena          *arena;
-  StringList      list;
-  StringIndexMap  map;
-};
-
-typedef struct {
-  Arena     *arena;
-  Allocator  map_allocator;
-} StringInternerOptions;
-
-void        strings_init(StringInterner *strings, StringInternerOptions *options);
-void        strings_deinit(StringInterner *strings);
-StringIndex strings_add(StringInterner *strings, String s);
-String      strings_get(StringInterner *strings, StringIndex idx);
+#define INTERNER_NAME       StringInterner
+#define INTERNER_TYPE       String
+#define INTERNER_INDEX_TYPE StringIndex
+#define INTERNER_OUTPUT_TYPES
+#define INTERNER_OUTPUT_DECLARATIONS
+#include "interner.h"
 
 #endif // STRING_INTERNER_H

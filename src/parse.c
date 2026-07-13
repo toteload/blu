@@ -80,8 +80,8 @@ internal void *nodes_push_data_raw(AstNodes *nodes, AstIndex idx, usize size, u3
 
 #define nodes_push_data(nodes, type, idx) nodes_push_data_raw(nodes, idx, sizeof(type), Align_of(type))
 
-#define SEGMENTLIST_NAME            NodeIndexList
-#define SEGMENTLIST_TYPE            NodeIndex
+#define SEGMENTLIST_NAME            AstIndexList
+#define SEGMENTLIST_TYPE            AstIndex
 #define SEGMENTLIST_FUNCTION_PREFIX list
 #define SEGMENTLIST_MIN_SIZE_LOG2   3
 #define SEGMENTLIST_SEGMENT_COUNT   24
@@ -103,27 +103,27 @@ typedef struct {
   TokenIndex   at;
 } Parser;
 
-internal b32 parse_source(Parser *parser, NodeIndex *out);
-internal b32 parse_mod_section(Parser *parser, NodeIndex *out);
-internal b32 parse_declaration(Parser *parser, NodeIndex *out);
-internal b32 parse_block(Parser *parser, NodeIndex *out);
-internal b32 parse_type(Parser *parser, NodeIndex *out);
-internal b32 parse_function(Parser *parser, NodeIndex *out);
-internal b32 parse_cast(Parser *parser, NodeIndex *out);
-internal b32 parse_as(Parser *parser, NodeIndex *out);
-internal b32 parse_if_else(Parser *parser, NodeIndex *out);
-internal b32 parse_base_expression(Parser *parser, NodeIndex *out);
-internal b32 parse_expression(Parser *parser, NodeIndex *out);
-internal b32 parse_literal_int(Parser *parser, NodeIndex *out);
-internal b32 parse_literal_string(Parser *parser, NodeIndex *out);
-internal b32 parse_for(Parser *parser, NodeIndex *out);
-internal b32 parse_defer(Parser *parser, NodeIndex *out);
-internal b32 parse_const(Parser *parser, NodeIndex *out);
-internal b32 parse_identifier(Parser *parser, NodeIndex *out);
-internal b32 parse_param(Parser *parser, NodeIndex *out);
-internal b32 parse_builtin_print(Parser *parser, NodeIndex *out);
+internal b32 parse_source(Parser *parser, AstIndex *out);
+internal b32 parse_mod_section(Parser *parser, AstIndex *out);
+internal b32 parse_declaration(Parser *parser, AstIndex *out);
+internal b32 parse_block(Parser *parser, AstIndex *out);
+internal b32 parse_type(Parser *parser, AstIndex *out);
+internal b32 parse_function(Parser *parser, AstIndex *out);
+internal b32 parse_cast(Parser *parser, AstIndex *out);
+internal b32 parse_as(Parser *parser, AstIndex *out);
+internal b32 parse_if_else(Parser *parser, AstIndex *out);
+internal b32 parse_base_expression(Parser *parser, AstIndex *out);
+internal b32 parse_expression(Parser *parser, AstIndex *out);
+internal b32 parse_literal_int(Parser *parser, AstIndex *out);
+internal b32 parse_literal_string(Parser *parser, AstIndex *out);
+internal b32 parse_for(Parser *parser, AstIndex *out);
+internal b32 parse_defer(Parser *parser, AstIndex *out);
+internal b32 parse_const(Parser *parser, AstIndex *out);
+internal b32 parse_identifier(Parser *parser, AstIndex *out);
+internal b32 parse_param(Parser *parser, AstIndex *out);
+internal b32 parse_builtin_print(Parser *parser, AstIndex *out);
 
-internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op);
+internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op);
 
 internal b32 is_token_index_past_end(Tokens *tokens, TokenIndex idx) {
   return idx >= tokens->tok_count;
@@ -218,14 +218,10 @@ internal b32 consume_if_match(Parser *parser, u8 token_kind_match) {
   return False;
 }
 
-internal NodeIndex node_index_from_ast(AstIndex idx) {
-  return (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
-}
-
-typedef b32 (*ParseItemFn)(Parser *parser, NodeIndex *out);
+typedef b32 (*ParseItemFn)(Parser *parser, AstIndex *out);
 
 internal b32 parse_comma_separated_items_until(
-  Parser *parser, NodeIndexList *items, ParseItemFn parse, u8 terminator
+  Parser *parser, AstIndexList *items, ParseItemFn parse, u8 terminator
 ) {
   while (True) {
     consume_if_match(parser, Tok_comma);
@@ -237,14 +233,14 @@ internal b32 parse_comma_separated_items_until(
       break;
     }
 
-    NodeIndex *item = list_push(items, &parser->nodes->extra);
+    AstIndex *item = list_push(items, &parser->nodes->extra);
     Try(parse(parser, item));
   }
 
   return True;
 }
 
-internal b32 parse_source(Parser *parser, NodeIndex *out) {
+internal b32 parse_source(Parser *parser, AstIndex *out) {
   AstIndex idx = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -252,19 +248,19 @@ internal b32 parse_source(Parser *parser, NodeIndex *out) {
   zero_struct(AstSource, source);
 
   while (!is_parser_past_end(parser)) {
-    NodeIndex *section = list_push(&source->items, &parser->nodes->extra);
+    AstIndex *section = list_push(&source->items, &parser->nodes->extra);
     Try(parse_mod_section(parser, section));
   }
 
   *nodes_kind(parser->nodes, idx) = Ast_source;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_mod_section(Parser *parser, NodeIndex *out) {
+internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
   AstIndex idx = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -282,19 +278,19 @@ internal b32 parse_mod_section(Parser *parser, NodeIndex *out) {
       break;
     }
 
-    NodeIndex *decl = list_push(&section->items, &parser->nodes->extra);
+    AstIndex *decl = list_push(&section->items, &parser->nodes->extra);
     Try(parse_declaration(parser, decl));
   }
 
   *nodes_kind(parser->nodes, idx) = Ast_mod_section;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = (NodeIndex){ .kind = NodeIndex_ast, .idx.ast = idx, };
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_builtin_print(Parser *parser, NodeIndex *out) {
+internal b32 parse_builtin_print(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -311,12 +307,12 @@ internal b32 parse_builtin_print(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_builtin;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_block(Parser *parser, NodeIndex *out) {
+internal b32 parse_block(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -332,7 +328,7 @@ internal b32 parse_block(Parser *parser, NodeIndex *out) {
       break;
     }
 
-    NodeIndex *e = list_push(&block->items, &parser->nodes->extra);
+    AstIndex *e = list_push(&block->items, &parser->nodes->extra);
     Try(parse_expression(parser, e));
   }
 
@@ -341,12 +337,12 @@ internal b32 parse_block(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_block;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_type(Parser *parser, NodeIndex *out) {
+internal b32 parse_type(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -416,12 +412,12 @@ internal b32 parse_type(Parser *parser, NodeIndex *out) {
 
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_declaration(Parser *parser, NodeIndex *out) {
+internal b32 parse_declaration(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -439,7 +435,7 @@ internal b32 parse_declaration(Parser *parser, NodeIndex *out) {
   if (tok != Tok_equals) {
     Try(parse_type(parser, &declaration->type));
   } else {
-    declaration->type = (NodeIndex){ .kind = NodeIndex_none };
+    declaration->type = 0;
   }
 
   Try(expect_token(parser, Tok_equals));
@@ -449,12 +445,12 @@ internal b32 parse_declaration(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_declaration;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_literal_int(Parser *parser, NodeIndex *out) {
+internal b32 parse_literal_int(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -468,13 +464,13 @@ internal b32 parse_literal_int(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_literal_int;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
 // NOTE: this function and the parse_literal_int function are basically the same.
-internal b32 parse_literal_string(Parser *parser, NodeIndex *out) {
+internal b32 parse_literal_string(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -488,12 +484,12 @@ internal b32 parse_literal_string(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_literal_string;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_param(Parser *parser, NodeIndex *out) {
+internal b32 parse_param(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -510,12 +506,12 @@ internal b32 parse_param(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_param;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_function(Parser *parser, NodeIndex *out) {
+internal b32 parse_function(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -535,12 +531,12 @@ internal b32 parse_function(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_function;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_for(Parser *parser, NodeIndex *out) {
+internal b32 parse_for(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -559,12 +555,12 @@ internal b32 parse_for(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_for;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_defer(Parser *parser, NodeIndex *out) {
+internal b32 parse_defer(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -576,12 +572,12 @@ internal b32 parse_defer(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_defer;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_if_else(Parser *parser, NodeIndex *out) {
+internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -596,12 +592,12 @@ internal b32 parse_if_else(Parser *parser, NodeIndex *out) {
   u8 tok;
   Try(peek(parser, &tok));
   if (tok != Tok_keyword_else) {
-    if_else->otherwise = (NodeIndex){0};
+    if_else->otherwise = (AstIndex){0};
 
     *nodes_kind(parser->nodes, idx) = Ast_if_else;
     *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-    *out = node_index_from_ast(idx);
+    *out = idx;
 
     return True;
   }
@@ -614,12 +610,12 @@ internal b32 parse_if_else(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_if_else;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_const(Parser *parser, NodeIndex *out) {
+internal b32 parse_const(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -632,12 +628,12 @@ internal b32 parse_const(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_const;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_cast(Parser *parser, NodeIndex *out) {
+internal b32 parse_cast(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -654,12 +650,12 @@ internal b32 parse_cast(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_cast;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_as(Parser *parser, NodeIndex *out) {
+internal b32 parse_as(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -676,12 +672,12 @@ internal b32 parse_as(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_as;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_identifier(Parser *parser, NodeIndex *out) {
+internal b32 parse_identifier(Parser *parser, AstIndex *out) {
   AstIndex   idx   = nodes_alloc(parser->nodes);
   TokenIndex start = parser->at;
 
@@ -695,12 +691,12 @@ internal b32 parse_identifier(Parser *parser, NodeIndex *out) {
   *nodes_kind(parser->nodes, idx) = Ast_identifier;
   *nodes_span(parser->nodes, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
-  *out = node_index_from_ast(idx);
+  *out = idx;
 
   return True;
 }
 
-internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
+internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   u8  tok;
   b32 has_next_token = peek(parser, &tok);
   if (!has_next_token) {
@@ -712,7 +708,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
     return False;
   }
 
-  NodeIndex base;
+  AstIndex base;
   switch (tok) {
     // clang-format off
   case Tok_keyword_for:      Try(parse_for(parser, &base));            break;
@@ -781,7 +777,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
     *nodes_kind(parser->nodes, ast_index) = Ast_unary_op;
     *nodes_span(parser->nodes, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
 
-    base = node_index_from_ast(ast_index);
+    base = ast_index;
   } break;
 
   default:
@@ -813,7 +809,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
       *nodes_kind(parser->nodes, ast_index) = Ast_index;
       *nodes_span(parser->nodes, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
 
-      base = node_index_from_ast(ast_index);
+      base = ast_index;
 
       continue;
     }
@@ -834,7 +830,7 @@ internal b32 parse_base_expression(Parser *parser, NodeIndex *out) {
       *nodes_kind(parser->nodes, ast_index) = Ast_call;
       *nodes_span(parser->nodes, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
 
-      base = node_index_from_ast(ast_index);
+      base = ast_index;
 
       continue;
     }
@@ -875,8 +871,8 @@ internal enum Precedence determine_precedence(u32 lhs, u32 rhs) {
   return Prec_right;
 }
 
-internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op) {
-  NodeIndex lhs;
+internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
+  AstIndex lhs;
   Try(parse_base_expression(parser, &lhs));
 
   while (True) {
@@ -932,7 +928,7 @@ internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op) 
     u8 ignored;
     next(parser, &ignored);
 
-    NodeIndex rhs;
+    AstIndex rhs;
     Try(parse_expression_impl(parser, &rhs, op));
 
     if (op >= BinaryOpKind_max) {
@@ -953,7 +949,7 @@ internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op) 
       *nodes_span(parser->nodes, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
     }
 
-    lhs = node_index_from_ast(ast_index);
+    lhs = ast_index;
   }
 
   *out = lhs;
@@ -961,7 +957,7 @@ internal b32 parse_expression_impl(Parser *parser, NodeIndex *out, u32 prev_op) 
   return True;
 }
 
-internal b32 parse_expression(Parser *parser, NodeIndex *out) {
+internal b32 parse_expression(Parser *parser, AstIndex *out) {
   return parse_expression_impl(parser, out, Op_count);
 }
 
@@ -973,7 +969,7 @@ b32 source_parse(Source *source) {
     .at       = 0,
   };
 
-  NodeIndex ignored;
+  AstIndex ignored;
   return parse_source(&parser, &ignored);
 }
 

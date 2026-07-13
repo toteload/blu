@@ -20,7 +20,9 @@
 
 #include "toteload.h"
 
+#ifndef HASHMAP_BUCKET_NAME
 #define HASHMAP_BUCKET_NAME Cat(HASHMAP_NAME, Bucket)
+#endif // HASHMAP_BUCKET_NAME
 
 #ifdef HASHMAP_OUTPUT_TYPES
 
@@ -41,7 +43,7 @@ typedef struct HASHMAP_NAME {
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-typedef struct HashMapOptions {
+typedef struct {
   Allocator allocator;
   u32       initial_size;
   void     *context;
@@ -67,6 +69,8 @@ HASHMAP_LINKAGE b32                  Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHM
 #endif // HASHMAP_OUTPUT_DECLARATIONS
 
 #ifdef HASHMAP_OUTPUT_DEFINITIONS
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 
 #ifndef HASHMAP_HASH_FN
 #error "'HASHMAP_HASH_FN' must be defined"
@@ -94,11 +98,16 @@ HASHMAP_LINKAGE b32                  Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHM
 #define Index_not_found  UINT32_MAX
 #define Max_load_factor  0.8
 
+#ifndef HASHMAP_INTERNAL_FUNCTIONS_DEFINED
+#define HASHMAP_INTERNAL_FUNCTIONS_DEFINED
+
 internal always_inline b32 slot_is_empty(u32 meta)     { return meta == 0; }
 internal always_inline b32 slot_is_occupied(u32 meta)  { return (meta & Mask_is_occupied) != 0; }
 internal always_inline b32 slot_is_tombstone(u32 meta) { return (meta & Mask_is_tombstone) != 0; }
 internal always_inline b32 slot_is_stale(u32 meta)     { return (meta & Mask_is_stale) == Mask_is_stale; }
 internal always_inline u32 read_fingerprint(u32 x)     { return x & Mask_fingerprint; }
+
+#endif // HASHMAP_INTERNAL_FUNCTIONS_DEFINED
 
 internal void Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(HASHMAP_NAME *map);
 internal u32  Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
@@ -396,6 +405,7 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
 }
 
 #undef HASHMAP_OUTPUT_DEFINITIONS
+#pragma clang diagnostic pop
 #endif // HASHMAP_OUTPUT_DEFINITIONS
 
 #undef HASHMAP_NAME

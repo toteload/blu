@@ -138,16 +138,58 @@ b32 source_tokenize(Source *source) {
 }
 
 #if 0
-void source_list_decls(Source *source) {
+typedef struct {
+  u32 decltree_idx;
+  u32 idx;
+  AstIndex item;
+} AstWalker;
+
+void source_index_declarations(Source *source) {
   AstNodes *ast = &source->ast;
   AstIndex at = nodes_begin(ast);
-  Assert(*nodes_kind(ast) == Ast_source);
 
-  AstSource *s = nodes_data(ast, at);
+  Assert(*nodes_kind(ast, at) == Ast_source);
 
-  for (u32 i = 0; i < s->items.len; i++) {
-    AstIndex item = *astlist_ptr_at_unchecked(&s->items, i);
+  NodeIndexList *items = &nodes_data(ast, at)->source.items;
+
+  SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
+  *decls = (SourceDeclaration){
+    .kind = SourceDeclaration_root,
+    .name = {0},
+    .child_count = items->len,
+    .node = 0,
+  };
+
+  for (u32 i = 0; i < items->len; i++) {
+    NodeIndex item = nodelist_at(items, i);
+
+    Assert(*nodes_kind(ast, item) == Ast_mod_section);
+
+    AstModSection *mod_section = &nodes_data(ast, item)->mod_section;
+
+    SourceDeclaration *mod_decl = arena_push_one(SourceDeclaration, &source->arena);
+    *mod_decl = (SourceDeclaration){
+      .kind = SourceDeclaration_mod,
+      .name = 0, // TODO
+      .child_count = mod_section->items.len,
+      .node = item,
+    };
+
+    for (u32 j = 0; j < mod_section->items.len; j++) {
+      NodeIndex decl = nodelist_at(mod_decl->items, j);
+
+      Assert(*nodes_kind(ast, decl) == Ast_declaration);
+
+      *arena_push_one(SourceDeclaration, &source->arena) = (SourceDeclaration){
+        .kind = SourceDeclaration_declaration,
+        .name = 0, // TODO
+        .child_count = 0,
+        .node = decl,
+      };
+    }
   }
+
+  source->decls = decls;
 }
 #endif
 

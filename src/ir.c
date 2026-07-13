@@ -31,8 +31,6 @@ b32 instruction_index_eq(void *context, InstructionIndex a, InstructionIndex b) 
   return a == b;
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 #define HASHMAP_NAME            InstructionResultMap
 #define HASHMAP_FUNCTION_PREFIX map
 #define HASHMAP_KEY_TYPE        InstructionIndex
@@ -42,7 +40,6 @@ b32 instruction_index_eq(void *context, InstructionIndex a, InstructionIndex b) 
 #define HASHMAP_LINKAGE         internal
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
-#pragma clang diagnostic pop
 
 #define SEGMENTLIST_NAME            CallStack
 #define SEGMENTLIST_TYPE            CallFrame
