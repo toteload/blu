@@ -53,13 +53,12 @@ struct Source {
   MessageList msg_list;
   MessageSink msg_sink;
 
-  // The filename, text (source code / file contents), messages, tokens are all stored
+  // The filename, text (source code / file contents), messages, tokens and AST are all stored
   // in the arena of this source.
-  // TODO: refactor AstNodes to also use the arena as backing memory.
-  String   filename;
-  String   text;
-  Tokens   tokens;
-  AstNodes ast;
+  String    filename;
+  String    text;
+  Tokens    tokens;
+  AstNodes2 ast;
 
   SourceDeclaration *decls;
 

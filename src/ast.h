@@ -2,6 +2,7 @@
 #define AST_H
 
 #include "blu.h"
+#include "tokens.h"
 
 enum AstKind {
   Ast_source,
@@ -85,21 +86,16 @@ enum AttributeFlag {
   Attribute_no_cache = 1 << 1,
 };
 
-#define SEGMENTLIST_NAME          AstIndexList
-#define SEGMENTLIST_TYPE          AstIndex
-#define SEGMENTLIST_MIN_SIZE_LOG2 3
-#define SEGMENTLIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
 typedef struct {
   u8 kind;
-  AstIndexList args;
+  u32 count;
+  AstIndex args[];
 } AstBuiltin;
 
 typedef struct {
   AstIndex     return_type;
-  AstIndexList param_types;
+  u32 count;
+  AstIndex param_types[];
 } AstTypeFunction;
 
 typedef struct {
@@ -118,20 +114,24 @@ typedef struct {
 } AstDeclaration;
 
 typedef struct {
-  AstIndexList items;
+  u32 count;
+  AstIndex items[];
 } AstSource;
 
 typedef struct {
-  AstIndex     name;
-  AstIndexList items;
+  AstIndex name;
+  u32 count;
+  AstIndex items[];
 } AstModSection;
 
 typedef struct {
-  AstIndexList items;
+  u32 count;
+  AstIndex items[];
 } AstBlock;
 
 typedef struct {
-  AstIndexList items;
+  u32 count;
+  AstIndex items[];
 } AstLiteralSequence;
 
 typedef struct {
@@ -140,9 +140,10 @@ typedef struct {
 } AstParam;
 
 typedef struct {
-  AstIndexList params;
-  AstIndex     return_type;
-  AstIndex     body;
+  AstIndex return_type;
+  AstIndex body;
+  u32 count;
+  AstIndex params[];
 } AstFunction;
 
 typedef struct {
@@ -174,8 +175,9 @@ typedef struct {
 } AstFieldAccess;
 
 typedef struct {
-  AstIndex     callee;
-  AstIndexList args;
+  AstIndex callee;
+  u32 count;
+  AstIndex args[];
 } AstCall;
 
 typedef struct {
@@ -241,29 +243,29 @@ typedef struct {
   TokenIndex end;
 } SpanToken;
 
-// If you are going to refactor this such that it only uses one backing Arena, like Tokens, then
-// you still want to keep a pointer around to the arena for when you want to allocate 'extra'
-// memory. The extra data that `datas` refers to won't be packed anymore like it is now, but that
-// seems fine. The u32s will essentially be compressed pointers.
-typedef struct {
-  Arena kinds; // u8[]
-  Arena spans; // SpanToken[]
-  Arena datas; // holds a u32 offset into `extra`
-  Arena extra;
-  u32   offset;
-} AstNodes;
-
-void nodes_init(AstNodes *nodes);
-void nodes_deinit(AstNodes *nodes);
-
-AstIndex nodes_begin(AstNodes *nodes);
-AstIndex nodes_end(AstNodes *nodes);
-
-AstIndex   nodes_alloc(AstNodes *nodes);
-u8        *nodes_kind(AstNodes *nodes, AstIndex idx);
-SpanToken *nodes_span(AstNodes *nodes, AstIndex idx);
-void      *nodes_data(AstNodes *nodes, AstIndex idx);
-
 String ast_kind_string(u8 kind);
+
+typedef struct {
+  MessageSink *msg_sink;
+  Arena *arena;
+  Arena *scratch;
+} ParseContext;
+
+// Index 0 is reserved so that 0 can be used as 'no node'; the root node is at index 1.
+// `datas` holds a u32 byte offset into `extra` per node; the u32s are essentially compressed
+// pointers into the arena that backs the AST. Payloads are stored packed in `extra`; nodes with
+// variable-length children store them as a trailing array in their payload, which means a payload
+// is only written once the node is complete, so children appear before their parent in `extra`.
+typedef struct {
+  u32        count;
+  u8        *kinds;
+  SpanToken *spans;
+  u32       *datas;
+  void      *extra;
+} AstNodes2;
+
+void *ast_data(AstNodes2 *ast, AstIndex idx);
+
+b32 parse(ParseContext *context, Tokens *tokens, AstNodes2 *ast);
 
 #endif // AST_H

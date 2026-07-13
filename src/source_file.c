@@ -51,7 +51,6 @@ void source_file_init(Source *source, SourceIndex idx, String filename) {
     .user        = source,
     .add_message = source_add_message,
   };
-  nodes_init(&source->ast);
 }
 
 void source_file_deinit(Source *source) {
@@ -135,6 +134,16 @@ b32 source_tokenize(Source *source) {
   };
 
   return tokenize(&context, source->text, &source->tokens);
+}
+
+b32 source_parse(Source *source) {
+  ParseContext context = {
+    .msg_sink = &source->msg_sink,
+    .arena    = &source->arena,
+    .scratch  = &source->scratch,
+  };
+
+  return parse(&context, &source->tokens, &source->ast);
 }
 
 #if 0

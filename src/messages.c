@@ -43,7 +43,7 @@ internal void get_line_col(Source *source, MessageLocation loc, u32 *line, u32 *
     offset = span_offset.start;
   } break;
   case MessageLocation_ast_index: {
-    SpanToken span_token = *nodes_span(&source->ast, loc.data.ast_index);
+    SpanToken span_token = source->ast.spans[loc.data.ast_index];
     SpanU32 span_offset = source->tokens.spans[span_token.start];
     offset = span_offset.start;
   } break;

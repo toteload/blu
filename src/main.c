@@ -27,9 +27,9 @@ internal void write_tokens(Tokens *tokens, String source) {
   }
 }
 
-internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
-  for (u32 i = nodes_begin(nodes); i < nodes_end(nodes); i++) {
-    u8 kind = *nodes_kind(nodes, i);
+internal void write_nodes(AstNodes2 *nodes, Tokens *tokens, String source) {
+  for (u32 i = 1; i < nodes->count; i++) {
+    u8 kind = nodes->kinds[i];
     String kind_string = ast_kind_string(kind);
 
     printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
