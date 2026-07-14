@@ -33,15 +33,69 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define SEGMENTLIST_NAME            DataList
-#define SEGMENTLIST_TYPE            u32
-#define SEGMENTLIST_FUNCTION_PREFIX datalist
+typedef void *VoidPtr;
+
+#define SEGMENTLIST_NAME            TmpList
+#define SEGMENTLIST_TYPE            VoidPtr
+#define SEGMENTLIST_FUNCTION_PREFIX tmplist
 #define SEGMENTLIST_LINKAGE         internal
 #define SEGMENTLIST_MIN_SIZE_LOG2   8
 #define SEGMENTLIST_SEGMENT_COUNT   24
 #define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
+
+typedef struct {
+  AstIndexList items;
+  AstSource    base;
+} AstSourceTmp;
+
+typedef struct {
+  AstIndexList  items;
+  AstModSection base;
+} AstModSectionTmp;
+
+typedef struct {
+  AstIndexList items;
+  AstBlock     base;
+} AstBlockTmp;
+
+typedef struct {
+  AstIndexList args;
+  AstBuiltin   base;
+} AstBuiltinTmp;
+
+typedef struct {
+  AstIndexList    param_types;
+  AstTypeFunction base;
+} AstTypeFunctionTmp;
+
+typedef struct {
+  AstIndexList params;
+  AstFunction  base;
+} AstFunctionTmp;
+
+typedef struct {
+  AstIndexList args;
+  AstCall      base;
+} AstCallTmp;
+
+_Static_assert(Offsetof(AstSourceTmp, items)             == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstModSectionTmp, items)         == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstBlockTmp, items)              == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstBuiltinTmp, args)             == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstTypeFunctionTmp, param_types) == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstFunctionTmp, params)          == 0, "List must be at offset 0.");
+_Static_assert(Offsetof(AstCallTmp, args)                == 0, "List must be at offset 0.");
+
+#define Tmp_base_offset sizeof(AstIndexList)
+
+_Static_assert(Offsetof(AstSourceTmp, base)       == Tmp_base_offset, "Base must be at a common offset.");
+_Static_assert(Offsetof(AstModSectionTmp, base)   == Tmp_base_offset, "Base must be at a common offset.");
+_Static_assert(Offsetof(AstBlockTmp, base)        == Tmp_base_offset, "Base must be at a common offset.");
+_Static_assert(Offsetof(AstBuiltinTmp, base)      == Tmp_base_offset, "Base must be at a common offset.");
+_Static_assert(Offsetof(AstTypeFunctionTmp, base) == Tmp_base_offset, "Base must be at a common offset.");
+_Static_assert(Offsetof(AstFunctionTmp, base)     == Tmp_base_offset, "Base must be at a common offset.");
 
 #define Op_count (BinaryOpKind_max + AssignKind_max)
 
@@ -58,12 +112,8 @@ typedef struct {
 
   KindList     kinds;
   SpanList     spans;
-  DataList     datas;
+  TmpList      tmp;
 
-  // The node lists above are backed by `scratch` and are copied into flat arrays in `arena` when
-  // parsing is done. Node payloads ('extra' data) go directly into `arena`. Variable-length
-  // children are collected in a scratch-backed `AstIndexList` while parsing and are copied into a
-  // trailing array in the payload once the node is complete, so the payloads stay packed.
   Arena *arena;
   Arena *scratch;
 } Parser;
@@ -72,7 +122,7 @@ internal AstIndex node_alloc(Parser *parser) {
   AstIndex idx = Cast(AstIndex, parser->kinds.len);
   kindlist_append(&parser->kinds, parser->scratch, 0);
   spanlist_append(&parser->spans, parser->scratch, (SpanToken){0});
-  datalist_append(&parser->datas, parser->scratch, 0);
+  tmplist_append(&parser->tmp, parser->scratch, Null);
   return idx;
 }
 
@@ -84,17 +134,14 @@ internal SpanToken *node_span(Parser *parser, AstIndex idx) {
   return spanlist_ptr_at_unchecked(&parser->spans, idx);
 }
 
+// Allocates the intermediate payload for a node in `scratch` and records it in `tmp`.
 internal void *node_push_data_raw(Parser *parser, AstIndex idx, usize size, u32 align) {
-  void *p = arena_push(parser->arena, size, align);
-  *datalist_ptr_at_unchecked(&parser->datas, idx) = Cast(u32, ptr_diff(p, parser->arena->base));
+  void *p = arena_push(parser->scratch, size, align);
+  *tmplist_ptr_at_unchecked(&parser->tmp, idx) = p;
   return p;
 }
 
 #define node_push_data(parser, type, idx) node_push_data_raw(parser, idx, sizeof(type), Align_of(type))
-
-// For payloads with a trailing `AstIndex` array holding `n` children.
-#define node_push_data_flex(parser, type, n, idx) \
-  node_push_data_raw(parser, idx, sizeof(type) + (n) * sizeof(AstIndex), Align_of(type))
 
 internal b32 parse_source(Parser *parser, AstIndex *out);
 internal b32 parse_mod_section(Parser *parser, AstIndex *out);
@@ -237,16 +284,13 @@ internal b32 parse_source(Parser *parser, AstIndex *out) {
   AstIndex idx = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  AstIndexList items = {0};
+  AstSourceTmp *source = node_push_data(parser, AstSourceTmp, idx);
+  zero_struct(AstSourceTmp, source);
 
   while (!is_parser_past_end(parser)) {
-    AstIndex *section = list_push(&items, parser->scratch);
+    AstIndex *section = list_push(&source->items, parser->scratch);
     Try(parse_mod_section(parser, section));
   }
-
-  AstSource *source = node_push_data_flex(parser, AstSource, items.len, idx);
-  source->count = Cast(u32, items.len);
-  list_copy_to_array(&items, source->items);
 
   *node_kind(parser, idx) = Ast_source;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -262,10 +306,14 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
 
   Try(expect_token(parser, Tok_keyword_mod));
 
-  AstIndex name;
-  Try(parse_identifier(parser, &name));
+  AstModSectionTmp *section = node_push_data(parser, AstModSectionTmp, idx);
+  zero_struct(AstModSectionTmp, section);
 
-  AstIndexList items = {0};
+  TokenIndex name = parser->at;
+
+  Try(expect_token(parser, Tok_identifier));
+
+  section->base.name = name;
 
   while (!is_parser_past_end(parser)) {
     u8 tok;
@@ -274,14 +322,9 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
       break;
     }
 
-    AstIndex *decl = list_push(&items, parser->scratch);
+    AstIndex *decl = list_push(&section->items, parser->scratch);
     Try(parse_declaration(parser, decl));
   }
-
-  AstModSection *section = node_push_data_flex(parser, AstModSection, items.len, idx);
-  section->name  = name;
-  section->count = Cast(u32, items.len);
-  list_copy_to_array(&items, section->items);
 
   *node_kind(parser, idx) = Ast_mod_section;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -297,16 +340,13 @@ internal b32 parse_builtin_print(Parser *parser, AstIndex *out) {
 
   Try(expect_token(parser, Tok_builtin_print));
 
-  AstIndexList args = {0};
+  AstBuiltinTmp *builtin = node_push_data(parser, AstBuiltinTmp, idx);
+  zero_struct(AstBuiltinTmp, builtin);
+  builtin->base.kind = Builtin_print;
 
   Try(expect_token(parser, Tok_paren_open));
-  Try(parse_comma_separated_items_until(parser, &args, parse_expression, Tok_paren_close));
+  Try(parse_comma_separated_items_until(parser, &builtin->args, parse_expression, Tok_paren_close));
   Try(expect_token(parser, Tok_paren_close));
-
-  AstBuiltin *builtin = node_push_data_flex(parser, AstBuiltin, args.len, idx);
-  builtin->kind  = Builtin_print;
-  builtin->count = Cast(u32, args.len);
-  list_copy_to_array(&args, builtin->args);
 
   *node_kind(parser, idx) = Ast_builtin;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -320,7 +360,8 @@ internal b32 parse_block(Parser *parser, AstIndex *out) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  AstIndexList items = {0};
+  AstBlockTmp *block = node_push_data(parser, AstBlockTmp, idx);
+  zero_struct(AstBlockTmp, block);
 
   Try(expect_token(parser, Tok_brace_open));
 
@@ -331,15 +372,11 @@ internal b32 parse_block(Parser *parser, AstIndex *out) {
       break;
     }
 
-    AstIndex *e = list_push(&items, parser->scratch);
+    AstIndex *e = list_push(&block->items, parser->scratch);
     Try(parse_expression(parser, e));
   }
 
   Try(expect_token(parser, Tok_brace_close));
-
-  AstBlock *block = node_push_data_flex(parser, AstBlock, items.len, idx);
-  block->count = Cast(u32, items.len);
-  list_copy_to_array(&items, block->items);
 
   *node_kind(parser, idx) = Ast_block;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -386,17 +423,13 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     u8 ignored;
     next(parser, &ignored);
 
-    AstIndexList param_types = {0};
-    Try(parse_comma_separated_items_until(parser, &param_types, parse_type, Tok_paren_close));
+    AstTypeFunctionTmp *type_function = node_push_data(parser, AstTypeFunctionTmp, idx);
+    zero_struct(AstTypeFunctionTmp, type_function);
+
+    Try(parse_comma_separated_items_until(parser, &type_function->param_types, parse_type, Tok_paren_close));
     Try(expect_token(parser, Tok_paren_close));
 
-    AstIndex return_type;
-    Try(parse_type(parser, &return_type));
-
-    AstTypeFunction *type_function = node_push_data_flex(parser, AstTypeFunction, param_types.len, idx);
-    type_function->return_type = return_type;
-    type_function->count       = Cast(u32, param_types.len);
-    list_copy_to_array(&param_types, type_function->param_types);
+    Try(parse_type(parser, &type_function->base.return_type));
 
     *node_kind(parser, idx) = Ast_type_function;
   } break;
@@ -525,25 +558,18 @@ internal b32 parse_function(Parser *parser, AstIndex *out) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  AstIndexList params = {0};
+  AstFunctionTmp *function = node_push_data(parser, AstFunctionTmp, idx);
+  zero_struct(AstFunctionTmp, function);
 
   Try(expect_token(parser, Tok_bar));
-  Try(parse_comma_separated_items_until(parser, &params, parse_param, Tok_bar));
+  Try(parse_comma_separated_items_until(parser, &function->params, parse_param, Tok_bar));
   Try(expect_token(parser, Tok_bar));
 
-  AstIndex return_type = 0;
   if (consume_if_match(parser, Tok_colon)) {
-    Try(parse_type(parser, &return_type));
+    Try(parse_type(parser, &function->base.return_type));
   }
 
-  AstIndex body;
-  Try(parse_expression(parser, &body));
-
-  AstFunction *function = node_push_data_flex(parser, AstFunction, params.len, idx);
-  function->return_type = return_type;
-  function->body        = body;
-  function->count       = Cast(u32, params.len);
-  list_copy_to_array(&params, function->params);
+  Try(parse_expression(parser, &function->base.body));
 
   *node_kind(parser, idx) = Ast_function;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -838,14 +864,11 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
       u8 ignored;
       next(parser, &ignored);
 
-      AstIndexList args = {0};
-      Try(parse_comma_separated_items_until(parser, &args, parse_expression, Tok_paren_close));
+      AstCallTmp *call = node_push_data(parser, AstCallTmp, ast_index);
+      call->base.callee = base;
+      call->args        = (AstIndexList){0};
+      Try(parse_comma_separated_items_until(parser, &call->args, parse_expression, Tok_paren_close));
       Try(expect_token(parser, Tok_paren_close));
-
-      AstCall *call = node_push_data_flex(parser, AstCall, args.len, ast_index);
-      call->callee = base;
-      call->count  = Cast(u32, args.len);
-      list_copy_to_array(&args, call->args);
 
       *node_kind(parser, ast_index) = Ast_call;
       *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
@@ -981,11 +1004,53 @@ internal b32 parse_expression(Parser *parser, AstIndex *out) {
   return parse_expression_impl(parser, out, Op_count);
 }
 
-void *ast_data(AstNodes2 *ast, AstIndex idx) {
+void *ast_data(AstNodes *ast, AstIndex idx) {
   return ptr_offset(ast->extra, ast->datas[idx]);
 }
 
-b32 parse(ParseContext *context, Tokens *tokens, AstNodes2 *ast) {
+internal b32 has_variable_length_payload(u8 kind) {
+  switch (kind) {
+  case Ast_source:
+  case Ast_mod_section:
+  case Ast_block:
+  case Ast_type_function:
+  case Ast_builtin:
+  case Ast_call:
+  case Ast_function:
+    return True;
+  default:
+    return False;
+  }
+}
+
+internal u32 base_payload_size(u8 kind) {
+  switch (kind) {
+#define X(k,d) case k: return sizeof(d);
+#include "x_ast_kinds.h"
+#undef X
+  }
+
+  Panic();
+}
+
+internal u32 payload_align(u8 kind) {
+  switch (kind) {
+#define X(k,d) case k: return Align_of(d);
+#include "x_ast_kinds.h"
+#undef X
+  }
+
+  Panic();
+}
+
+internal void *push_data(void *base, Arena *extra, u32 *datas, AstIndex i, u32 size, u32 align) {
+  void *p = arena_push(extra, size, align);
+  u32 offset = ptr_diff(p, base);
+  datas[i] = offset;
+  return p;
+}
+
+b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
   ArenaSnapshot scope = arena_scope_begin(context->scratch);
 
   Parser parser = {
@@ -996,11 +1061,13 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes2 *ast) {
     .scratch  = context->scratch,
   };
 
-  // Reserve index 0 so that 0 can be used as 'no node'. The root is at index 1.
-  node_alloc(&parser);
-
   AstIndex root;
   b32 ok = parse_source(&parser, &root);
+
+  if (!ok) {
+    arena_scope_end(context->scratch, scope);
+    return False;
+  }
 
   u32 count = Cast(u32, parser.kinds.len);
 
@@ -1010,14 +1077,39 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes2 *ast) {
 
   kindlist_copy_to_array(&parser.kinds, kinds);
   spanlist_copy_to_array(&parser.spans, spans);
-  datalist_copy_to_array(&parser.datas, datas);
 
-  *ast = (AstNodes2){
+  void *extra = context->arena->at;
+
+  for (AstIndex i = 0; i < count; i++) {
+    u8 kind = kinds[i];
+    u32 size = base_payload_size(kind);
+    u32 align = payload_align(kind);
+    void *payload = tmplist_at_unchecked(&parser.tmp, i);
+
+    if (!has_variable_length_payload(kind)) {
+      void *mem = push_data(extra, context->arena, datas, i, size, align);
+      memcpy(mem, payload, size);
+    } else {
+      AstIndexList *list = payload;
+      u32 n = list->len;
+      void *mem = push_data(extra, context->arena, datas, i, size + n * sizeof(AstIndex), align);
+      void *base = ptr_offset(payload, Tmp_base_offset);
+      memcpy(mem, base, size);
+      // TODO: change the way the count pointer is computed, because this feels a bit fragile.
+      // It is assumed here that the count is u32, and that it is the last 4 bytes of the base payload.
+      // These assumptions are not checked/enforced anywhere.
+      u32 *count = Cast(u32*, ptr_offset(mem, size - sizeof(u32)));
+      *count = n;
+      list_copy_to_array(list, ptr_offset(mem, size));
+    }
+  }
+
+  *ast = (AstNodes){
     .count = count,
     .kinds = kinds,
     .spans = spans,
     .datas = datas,
-    .extra = context->arena->base,
+    .extra = extra,
   };
 
   arena_scope_end(context->scratch, scope);

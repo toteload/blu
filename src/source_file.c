@@ -146,61 +146,57 @@ b32 source_parse(Source *source) {
   return parse(&context, &source->tokens, &source->ast);
 }
 
-#if 0
-typedef struct {
-  u32 decltree_idx;
-  u32 idx;
-  AstIndex item;
-} AstWalker;
-
 void source_index_declarations(Source *source) {
   AstNodes *ast = &source->ast;
-  AstIndex at = nodes_begin(ast);
+  Tokens *tokens = &source->tokens;
+  String text = source->text;
 
-  Assert(*nodes_kind(ast, at) == Ast_source);
+  Assert(ast->kinds[0] == Ast_source);
 
-  NodeIndexList *items = &nodes_data(ast, at)->source.items;
+  AstSource *s = ast_data(ast, 0);
 
   SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
   *decls = (SourceDeclaration){
     .kind = SourceDeclaration_root,
     .name = {0},
-    .child_count = items->len,
+    .child_count = s->count,
     .node = 0,
   };
 
-  for (u32 i = 0; i < items->len; i++) {
-    NodeIndex item = nodelist_at(items, i);
+  for (u32 i = 0; i < s->count; i++) {
+    AstIndex item = s->items[i];
 
-    Assert(*nodes_kind(ast, item) == Ast_mod_section);
+    Assert(ast->kinds[item] == Ast_mod_section);
 
-    AstModSection *mod_section = &nodes_data(ast, item)->mod_section;
+    AstModSection *mod_section = ast_data(ast, item);
 
     SourceDeclaration *mod_decl = arena_push_one(SourceDeclaration, &source->arena);
     *mod_decl = (SourceDeclaration){
       .kind = SourceDeclaration_mod,
-      .name = 0, // TODO
-      .child_count = mod_section->items.len,
+      .name = token_string(tokens, text, mod_section->name),
+      .child_count = mod_section->count,
       .node = item,
     };
 
-    for (u32 j = 0; j < mod_section->items.len; j++) {
-      NodeIndex decl = nodelist_at(mod_decl->items, j);
+    for (u32 j = 0; j < mod_section->count; j++) {
+      AstIndex decl_idx = mod_section->items[j];
 
-      Assert(*nodes_kind(ast, decl) == Ast_declaration);
+      Assert(ast->kinds[decl_idx] == Ast_declaration);
 
-      *arena_push_one(SourceDeclaration, &source->arena) = (SourceDeclaration){
+      AstDeclaration *ast_decl = ast_data(ast, decl_idx);
+
+      SourceDeclaration *decl = arena_push_one(SourceDeclaration, &source->arena);
+      *decl = (SourceDeclaration){
         .kind = SourceDeclaration_declaration,
-        .name = 0, // TODO
+        .name = token_string(tokens, text, ast_decl->name),
         .child_count = 0,
-        .node = decl,
+        .node = decl_idx,
       };
     }
   }
 
   source->decls = decls;
 }
-#endif
 
 void source_print_all_messages(Source *source) {
   u32 count = source->msg_list.len;

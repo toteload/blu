@@ -55,10 +55,10 @@ struct Source {
 
   // The filename, text (source code / file contents), messages, tokens and AST are all stored
   // in the arena of this source.
-  String    filename;
-  String    text;
-  Tokens    tokens;
-  AstNodes2 ast;
+  String   filename;
+  String   text;
+  Tokens   tokens;
+  AstNodes ast;
 
   SourceDeclaration *decls;
 

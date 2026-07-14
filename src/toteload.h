@@ -4,6 +4,8 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stddef.h>
+#include <stdalign.h>
 
 typedef float  f32;
 typedef double f64;
@@ -100,6 +102,7 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 
 #define Count_of(x) (sizeof(x)/sizeof(x[0]))
 #define Align_of(x) _Alignof(x)
+#define Offsetof(s,m) offsetof(s,m)
 
 #define Assert(e) assert(e)
 #define Panic(Reason) abort()

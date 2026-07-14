@@ -8,13 +8,10 @@ enum AstKind {
   Ast_source,
   Ast_mod_section,
   Ast_block,
-
   Ast_type_slice,
   Ast_type_array,
   Ast_type_function,
-
   Ast_builtin,
-
   Ast_declaration,
   Ast_assign,
   Ast_literal_int,
@@ -32,7 +29,6 @@ enum AstKind {
   Ast_const,
   Ast_cast,
   Ast_as,
-
   Ast_kind_max,
 };
 
@@ -93,7 +89,7 @@ typedef struct {
 } AstBuiltin;
 
 typedef struct {
-  AstIndex     return_type;
+  AstIndex return_type;
   u32 count;
   AstIndex param_types[];
 } AstTypeFunction;
@@ -119,7 +115,7 @@ typedef struct {
 } AstSource;
 
 typedef struct {
-  AstIndex name;
+  TokenIndex name;
   u32 count;
   AstIndex items[];
 } AstModSection;
@@ -243,29 +239,24 @@ typedef struct {
   TokenIndex end;
 } SpanToken;
 
-String ast_kind_string(u8 kind);
-
 typedef struct {
   MessageSink *msg_sink;
   Arena *arena;
   Arena *scratch;
 } ParseContext;
 
-// Index 0 is reserved so that 0 can be used as 'no node'; the root node is at index 1.
-// `datas` holds a u32 byte offset into `extra` per node; the u32s are essentially compressed
-// pointers into the arena that backs the AST. Payloads are stored packed in `extra`; nodes with
-// variable-length children store them as a trailing array in their payload, which means a payload
-// is only written once the node is complete, so children appear before their parent in `extra`.
 typedef struct {
   u32        count;
   u8        *kinds;
   SpanToken *spans;
   u32       *datas;
   void      *extra;
-} AstNodes2;
+} AstNodes;
 
-void *ast_data(AstNodes2 *ast, AstIndex idx);
+void *ast_data(AstNodes *ast, AstIndex idx);
 
-b32 parse(ParseContext *context, Tokens *tokens, AstNodes2 *ast);
+String ast_kind_string(u8 kind);
+
+b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast);
 
 #endif // AST_H

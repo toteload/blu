@@ -15,6 +15,8 @@ void test_runner_init(TestRunner *runner) {
     .reserve_size        = MiB(64),
     .initial_commit_size = KiB(64),
   });
+
+  runner->tests = (TestList){0};
 }
 
 void test_runner_deinit(TestRunner *runner) {

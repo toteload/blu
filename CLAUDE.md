@@ -9,6 +9,10 @@ The long-term design supports compile-time code execution: AST → IR, interpret
 The rationale is documented in the comment at the top of `src/ir.h`.
 The rewrite is in progress; `TODO.md` and `NOTES.md` track current design work.
 
+## Code style
+
+Do not add comments that only describe the change being made right now (e.g. "renamed this", "new field", "now copies the base"). Comments should explain the code as it stands for a future reader, not narrate the edit that produced it.
+
 ## Build
 
 ```bash

@@ -41,6 +41,17 @@ b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
+  if (!is_null(p) && new_byte_size == 0) {
+    free(p);
+    return Null;
+  }
+
+  return realloc(p, new_byte_size);
+}
+
+Allocator const cstd_allocator = { .fn = cstd_alloc_fn, };
+
 void compiler_init(Compiler *compiler) {
   zero_struct(Compiler, compiler);
 
@@ -56,7 +67,7 @@ void compiler_init(Compiler *compiler) {
 
   decl_keys_init(&compiler->decl_keys, &(InternerOptions){
     .arena            = &compiler->arena,
-    .map_allocator    = {0},
+    .map_allocator    = cstd_allocator,
     .map_initial_size = 16,
   });
 

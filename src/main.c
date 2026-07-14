@@ -27,7 +27,7 @@ internal void write_tokens(Tokens *tokens, String source) {
   }
 }
 
-internal void write_nodes(AstNodes2 *nodes, Tokens *tokens, String source) {
+internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
   for (u32 i = 1; i < nodes->count; i++) {
     u8 kind = nodes->kinds[i];
     String kind_string = ast_kind_string(kind);
@@ -36,17 +36,8 @@ internal void write_nodes(AstNodes2 *nodes, Tokens *tokens, String source) {
   }
 }
 
-internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
-  if (!is_null(p) && new_byte_size == 0) {
-    free(p);
-    return Null;
-  }
-
-  return realloc(p, new_byte_size);
-}
 
 int main(int argc, char const *argv[]) {
-  Allocator cstd_allocator = { .fn = cstd_alloc_fn, };
 
   u32 err = 0;
   b32 ok = False;

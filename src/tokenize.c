@@ -396,6 +396,11 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   return res == TokResult_end;
 }
 
+String token_string(Tokens *tokens, String text, TokenIndex tok) {
+  SpanU32 span = tokens->spans[tok];
+  return (String){ .str = text.str + span.start, .len = span.end - span.start };
+}
+
 char const *token_kind_string_literals[Tok_kind_max] = {
   "colon",        "semicolon",
   "comma",        "dot", "arrow",

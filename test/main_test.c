@@ -15,12 +15,14 @@ void test_assert_eq(TestResult *test, void *user) {
 #define Test(function) { .name = string_lit(#function), .f = function }
 
 extern void register_tokenizer_tests(TestRunner *runner);
+extern void register_parser_tests(TestRunner *runner);
 
 int main(void) {
   TestRunner runner;
   test_runner_init(&runner);
 
   register_tokenizer_tests(&runner);
+  register_parser_tests(&runner);
   test_runner_register_test(&runner, string_lit("test_assert_eq"), test_assert_eq, Null);
   test_runner_register_test(&runner, string_lit("test_assert"), test_assert, Null);
 
