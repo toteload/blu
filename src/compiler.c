@@ -191,9 +191,14 @@ b32 compile(Compiler *compiler) {
   for (u32 i = 0; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
-    DeclFrame stackmem[64];
+
+    // At the moment it is not possible to nest modules, so this stack will never grow beyond 3(?).
+    // BUT this will likely change in the future. At that point some checks need to be inserted to
+    // ensure the stack doesn't overflow (and also make the stack a bit bigger :)).
+
+    DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
-    stack_init(stack, stackmem, 64);
+    stack_init(stack, stackmem, 4);
     stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
 
     u32 offset = 1;
@@ -214,8 +219,9 @@ b32 compile(Compiler *compiler) {
 
       if (decl->kind == SourceDeclaration_mod) {
         b32 ignore_already_exists;
-        DeclarationIndex mod = add_declaration(compiler, (DeclarationKey){ .parent = top->mod, .name = strings_add(&compiler->strings, decl->name) }, &ignore_already_exists);
-        stack_push(stack, ((DeclFrame){ .mod = mod, .n = decl->child_count }));
+        DeclarationIndex idx = add_declaration(compiler, (DeclarationKey){ .parent = top->mod, .name = strings_add(&compiler->strings, decl->name) }, &ignore_already_exists);
+        stack_push(stack, ((DeclFrame){ .mod = idx, .n = decl->child_count }));
+        decl->decl_idx = idx;
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
         DeclarationIndex idx = add_declaration(
@@ -237,6 +243,8 @@ b32 compile(Compiler *compiler) {
           continue;
         }
 
+        decl->decl_idx = idx;
+
         set_declaration_value(compiler, idx, (Declaration){
           .kind = Declaration_decl,
           .data.decl = { .source = source->idx, .ast = decl->node },
@@ -244,6 +252,21 @@ b32 compile(Compiler *compiler) {
       }
     }
   }
+
+  for (u32 i = 0; i < compiler->sources.len; i++) {
+    Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+
+    // go over all the declarations in the source:
+    // - 
+
+    DeclFrame stackmem[4];
+    Stack(DeclFrame) stack;
+    stack_init(stack, stackmem, 4);
+    stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
+
+    offset = 1;
+  }
+
 
   return is_ok;
 }

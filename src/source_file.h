@@ -17,6 +17,8 @@ typedef struct {
   String   name;
   u32      child_count;
   AstIndex node;
+
+  DeclarationIndex decl_idx;
 } SourceDeclaration;
 
 enum SourceStatus {
@@ -56,6 +58,8 @@ b32 source_read_file(Source *source);
 b32 source_tokenize(Source *source);
 b32 source_parse(Source *source);
 void source_index_declarations(Source *source);
+
+void source_generate_code_for_declaration(Source *source, StringInterner *strings, AstIndex decl);
 
 void source_print_all_messages(Source *source);
 
