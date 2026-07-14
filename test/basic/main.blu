@@ -2,6 +2,8 @@ mod main
 
 main: () i32 = || 0
 
+main: i32 = 12
+
 ; Each function gets converted to a function that takes all the comptime parameters.
 ; If the function takes no comptime parameters it still gets converted to this function.
 ; Running this function will emit a function that has all comptime expressions evaluated.

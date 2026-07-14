@@ -1,17 +1,11 @@
 #include "source_file.h"
+#include "messages.h"
 #include <stdarg.h>
 #include <stdio.h>
 
-#define SEGMENTLIST_NAME            MessageList
-#define SEGMENTLIST_TYPE            MessagePtr
-#define SEGMENTLIST_FUNCTION_PREFIX msglist
-#define SEGMENTLIST_MIN_SIZE_LOG2   6
-#define SEGMENTLIST_SEGMENT_COUNT   24
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
+internal void source_add_message(void *user, u8 severity, SourceIndex idx, MessageLocation location, String format, ...) {
+  Unused(idx);
 
-internal void source_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
   Source *source = user;
 
   u32 arg_count = message_format_arg_count(format);
@@ -117,6 +111,7 @@ b32 source_read_file(Source *source) {
   if (err) {
     Message_error(
       &source->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_unspecified },
       string_lit("Could not open/read file {str}."), source->filename
     );

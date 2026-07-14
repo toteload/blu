@@ -5,7 +5,7 @@
 
 typedef void (*FnTokenizerTest)(TestResult*, TokenizeContext*);
 
-void dummy_add_message(void *user, u8 severity, MessageLocation location, String format, ...) { }
+void dummy_add_message(void *user, u8 severity, SourceIndex source, MessageLocation location, String format, ...) { }
 
 void tokenizer_test(TestResult *test, FnTokenizerTest fn) {
   MessageSink sink = {

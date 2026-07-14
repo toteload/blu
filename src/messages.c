@@ -3,6 +3,14 @@
 
 #include <stdio.h>
 
+#define SEGMENTLIST_NAME            MessageList
+#define SEGMENTLIST_TYPE            MessagePtr
+#define SEGMENTLIST_FUNCTION_PREFIX msglist
+#define SEGMENTLIST_MIN_SIZE_LOG2   6
+#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 u32 message_format_arg_count(String fmt) {
   // ASSUME: the format string is well formed.
 

@@ -98,7 +98,7 @@ typedef struct {
   Arena     *arena;
   Allocator  map_allocator;
   u32        map_initial_size;
-  void      *context; // Passed to the hash, compare and copy functions.
+  void      *context; // Passed to the hash and compare functions.
 } InternerOptions;
 
 #endif // INTERNER_H
@@ -111,6 +111,7 @@ typedef struct {
 INTERNER_LINKAGE void                Cat(INTERNER_FUNCTION_PREFIX, _init)(INTERNER_NAME *interner, InternerOptions *options);
 INTERNER_LINKAGE void                Cat(INTERNER_FUNCTION_PREFIX, _deinit)(INTERNER_NAME *interner);
 INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add)(INTERNER_NAME *interner, INTERNER_TYPE item);
+INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add_checked)(INTERNER_NAME *interner, INTERNER_TYPE item, b32 *already_present);
 INTERNER_LINKAGE INTERNER_TYPE       Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx);
 
 #undef INTERNER_OUTPUT_DECLARATIONS
@@ -167,10 +168,16 @@ void Cat(INTERNER_FUNCTION_PREFIX, _deinit)(INTERNER_NAME *interner) {
 
 INTERNER_LINKAGE
 INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add)(INTERNER_NAME *interner, INTERNER_TYPE item) {
+  b32 ignore;
+  return Cat(INTERNER_FUNCTION_PREFIX, _add_checked)(interner, item, &ignore);
+}
+
+INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add_checked)(INTERNER_NAME *interner, INTERNER_TYPE item, b32 *already_present) {
   b32 was_occupied;
   INTERNER_BUCKET_NAME *bucket = Cat(INTERNER_MAP_PREFIX, _insert_key_and_get_bucket)(&interner->map, item, &was_occupied);
 
   if (was_occupied) {
+    *already_present = True;
     return bucket->val;
   }
 
@@ -183,6 +190,7 @@ INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add)(INTERNER_NAME *interner,
   INTERNER_INDEX_TYPE idx = Cast(INTERNER_INDEX_TYPE, interner->list.len);
 
   *bucket = (INTERNER_BUCKET_NAME){ .key = intern, .val = idx, };
+  *already_present = False;
 
   Cat(INTERNER_LIST_PREFIX, _append)(&interner->list, interner->arena, intern);
 

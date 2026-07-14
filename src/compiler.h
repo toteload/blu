@@ -3,6 +3,7 @@
 
 #include "blu.h"
 #include "messages.h"
+#include "string_interner.h"
 
 typedef struct {
   DeclarationIndex parent;
@@ -14,8 +15,6 @@ enum DeclarationKind {
   Declaration_mod,
   Declaration_builtin,
   Declaration_decl,
-  Declaration_local,
-  Declaration_param,
 };
 
 typedef struct {
@@ -74,7 +73,11 @@ typedef struct {
   Arena scratch;
 
   SourceList sources;
+
+  MessageList msg_list;
   MessageSink msg_sink;
+
+  StringInterner strings;
 
   DeclarationInterner decl_keys;
   Declarations        decls;
@@ -85,7 +88,8 @@ void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
 
-DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, Declaration decl);
+DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists);
+void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val);
 
 void compiler_print_all_messages(Compiler *compiler);
 

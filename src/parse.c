@@ -192,6 +192,7 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   if (!has_next) {
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Expected a token, but encountered end of source.")
     );
@@ -201,6 +202,7 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   if (tok != expected_token_kind) {
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at - 1 },
       string_lit("Expected token {tok}, but got token {tok}."), expected_token_kind, tok
     );
@@ -225,6 +227,7 @@ internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
   if (!has_peeked) {
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Expected a token but got end of source.")
     );
@@ -447,6 +450,7 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
   default:
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
       string_lit("Unexpected token {tok} encountered in type expression."), tok
     );
@@ -745,6 +749,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   if (!has_next_token) {
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_end_of_file },
       string_lit("Unexpected end of source, while trying to parse base expression.")
     );
@@ -775,6 +780,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     default:
       Message_error(
         parser->msg_sink,
+        0,
         (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
         string_lit("Unexpected token {tok} encountered after '.' in expression."), tok
       );
@@ -826,6 +832,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   default:
     Message_error(
       parser->msg_sink,
+      0,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
       string_lit("Unexpected token {tok} encountered at start of expression."), tok
     );

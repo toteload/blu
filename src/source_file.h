@@ -6,15 +6,6 @@
 #include "ast.h"
 #include "messages.h"
 
-#if 1
-// root
-// |
-// |- mod main
-// |  \- fn main
-// |
-// \- mod util
-//    \- fn print
-
 enum SourceDeclarationKind {
   SourceDeclaration_root,
   SourceDeclaration_mod,
@@ -27,16 +18,6 @@ typedef struct {
   u32      child_count;
   AstIndex node;
 } SourceDeclaration;
-#endif
-
-typedef Message* MessagePtr;
-
-#define SEGMENTLIST_NAME          MessageList
-#define SEGMENTLIST_TYPE          MessagePtr
-#define SEGMENTLIST_MIN_SIZE_LOG2 6
-#define SEGMENTLIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
 
 enum SourceStatus {
   SourceStatus_unprocessed,

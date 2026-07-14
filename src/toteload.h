@@ -147,6 +147,14 @@ void *vmem_reserve(usize size);
 b32   vmem_commit(void *p, usize size);
 void  vmem_release(void *p, usize size);
 
+#define Stack(type) struct { type* data; u32 len; u32 cap; }
+
+#define stack_init(s,p,c) do { (s).data = (p); (s).len = 0; (s).cap = (c); } while (0)
+#define stack_push(s,x) ((s).data[(s).len++] = (x))
+#define stack_pop(s) ((s).data[--(s).len])
+#define stack_peek_ptr(s) (&((s).data[(s).len-1]))
+#define stack_is_empty(s) ((s).len == 0)
+
 typedef struct {
   void *base;
   void *commit_end;
