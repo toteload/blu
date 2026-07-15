@@ -7,24 +7,24 @@
 
 typedef struct {
   DeclarationIndex parent;
-  StringIndex name;
+  StringIndex      name;
 } DeclarationKey;
 
 enum DeclarationKind {
   Declaration_root,
   Declaration_mod,
-  Declaration_builtin,
   Declaration_decl,
+  Declaration_value,
 };
 
 typedef struct {
   u8 kind;
   union {
-    ValueIndex builtin;
+    ValueIndex val;
     struct {
       SourceIndex source;
       AstIndex    ast;
-    } decl;
+    } loc;
   } data;
 } Declaration;
 
@@ -43,6 +43,15 @@ typedef struct {
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+#define SourceList_min_size_log2  4
+#define SourceList_segment_count  20
+#define SEGMENTLIST_NAME          SourceList
+#define SEGMENTLIST_TYPE          Source
+#define SEGMENTLIST_MIN_SIZE_LOG2 SourceList_min_size_log2
+#define SEGMENTLIST_SEGMENT_COUNT SourceList_segment_count
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
 // - For each source file:
 //   - read file, tokenize, parse
 //   - output list of decls
@@ -58,15 +67,6 @@ typedef struct {
 //   - Output dependency information for each chunk of code.
 // - Now, each source file will have generated code and dependency information.
 //   Use this information to compute a dependency graph and walk the graph.
-
-#define SourceList_min_size_log2  4
-#define SourceList_segment_count  20
-#define SEGMENTLIST_NAME          SourceList
-#define SEGMENTLIST_TYPE          Source
-#define SEGMENTLIST_MIN_SIZE_LOG2 SourceList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT SourceList_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
 
 typedef struct {
   Arena arena;
@@ -89,7 +89,12 @@ void compiler_deinit(Compiler *compiler);
 void compiler_add_sourcefile(Compiler *compiler, String filename);
 
 DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists);
-void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val);
+b32              find_declaration(Compiler *compiler, DeclarationKey key, DeclarationIndex *idx);
+void             set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val);
+DeclarationKey   get_declaration_key(Compiler *compiler, DeclarationIndex idx);
+Declaration      get_declaration_value(Compiler *compiler, DeclarationIndex idx);
+
+b32 lookup_identifier(Compiler *compiler, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 
 void compiler_print_all_messages(Compiler *compiler);
 

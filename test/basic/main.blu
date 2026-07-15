@@ -1,6 +1,6 @@
 mod main
 
-main: () i32 = || 0
+main: () { if foo.bar < 12 { i32 } else { bool } } = || 0
 
 ; Each function gets converted to a function that takes all the comptime parameters.
 ; If the function takes no comptime parameters it still gets converted to this function.
@@ -19,7 +19,8 @@ main: () i32 = || 0
 ;   check_is_coercible (const type) %1
 ;   %2 = type_function %1, 0 params
 ;   check_is_coercible (const type) %2
-;   br %2
+;   %3 = typeid %2
+;   br %3
 ;
 ; func (0 comptime params, 0 runtime params)
 ; %c2 = typeid (const const_int 0)

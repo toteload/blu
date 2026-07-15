@@ -5,6 +5,8 @@
 #include "tokens.h"
 #include "ast.h"
 #include "messages.h"
+#include "string_interner.h"
+#include "ir.h"
 
 enum SourceDeclarationKind {
   SourceDeclaration_root,
@@ -13,12 +15,11 @@ enum SourceDeclarationKind {
 };
 
 typedef struct {
-  u8       kind;
-  String   name;
-  u32      child_count;
-  AstIndex node;
-
-  DeclarationIndex decl_idx;
+  u8          kind;
+  AstIndex    node;
+  u32         child_count;
+  u32         parent;
+  StringIndex name;
 } SourceDeclaration;
 
 enum SourceStatus {
@@ -31,7 +32,6 @@ struct Source {
   u32         status;
   SourceIndex idx; // Saves its own index :)
   Arena       arena;
-  Arena       scratch;
 
   MessageList msg_list;
   MessageSink msg_sink;
@@ -43,23 +43,31 @@ struct Source {
   Tokens   tokens;
   AstNodes ast;
 
+  u32                decl_tree_size;
   SourceDeclaration *decls;
+  DeclarationIndex  *decl_idxs;
 
-  // - list of declarations
-  //   - name of declaration
-  //   - instruction index to code generated
-  // - ir generated for this source
+  u32      decl_count;
+  u32     *tree_idx;
+  IrChunk *ir_chunks;
 };
 
 void source_file_init(Source *source, SourceIndex idx, String filename);
 void source_file_deinit(Source *source);
 
 b32 source_read_file(Source *source);
-b32 source_tokenize(Source *source);
-b32 source_parse(Source *source);
-void source_index_declarations(Source *source);
+b32 source_tokenize(Source *source, Arena *scratch);
+b32 source_parse(Source *source, Arena *scratch);
 
-void source_generate_code_for_declaration(Source *source, StringInterner *strings, AstIndex decl);
+// - Creates the declaration tree for this source file and stores it in `decls`.
+// - Writes the size of the the tree in `decl_tree_size` (the number of SourceDeclarations).
+// - Writes the number of declarations in `decl_count` (`decl_tree_size` - (number of module declarations)).
+// - Allocates `decl_idxs` (decl_tree_size).
+// - Allocates `ir_chunks` (decl_count).
+// - Allocates `tree_idx` (decl_count).
+void source_index_declarations(Source *source, StringInterner *strings);
+
+void source_generate_code(Source *source, Arena *scratch);
 
 void source_print_all_messages(Source *source);
 

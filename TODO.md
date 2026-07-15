@@ -72,6 +72,8 @@ function; basically all the comptime stuff in the original function has been rep
   - This has the benefit of having ASCII character literals for free by using the string literals.
     The type of `"A"` is `[1]u8`
 
+- pointer to member of a struct. `PtrY := *{struct { x: i32, y: i32 }}.y` this type is only allowed to point to y member.
+
 
 ## Metaprogramming
 

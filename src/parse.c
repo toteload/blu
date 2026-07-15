@@ -1103,7 +1103,7 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
       void *base = ptr_offset(payload, Tmp_base_offset);
       memcpy(mem, base, size);
       // TODO: change the way the count pointer is computed, because this feels a bit fragile.
-      // It is assumed here that the count is u32, and that it is the last 4 bytes of the base payload.
+      // It is assumed here that the count is a u32, and that it is the last 4 bytes of the base payload.
       // These assumptions are not checked/enforced anywhere.
       u32 *count = Cast(u32*, ptr_offset(mem, size - sizeof(u32)));
       *count = n;

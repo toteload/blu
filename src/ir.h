@@ -69,7 +69,10 @@ enum IrOpcode {
   
   IR_cast_int,  // data references `IrCastInt` in extra
   IR_cast_int_safe,
-  IR_check_is_coercible,
+
+  IR_check_coercible,
+
+  IR_typeid, // returns a TypeIndex for a Type
 
   // Create a type
   IR_type, // 
@@ -83,9 +86,18 @@ enum IrOpcode {
 };
 
 typedef struct {
-  InstructionIndex declared_type; // optional
+  u8 kind;
+} IrType;
+
+typedef struct {
+  InstructionIndex declared_type;
   InstructionIndex value;
 } IrDeclaration;
+
+typedef struct {
+  InstructionIndex type_to;
+  InstructionIndex type_from;
+} IrCheckCoercible;
 
 typedef struct {
   TypeIndex return_type;
@@ -131,9 +143,9 @@ typedef struct {
 
 typedef struct {
   u32   opcode_count;
-  Arena opcodes; // u8
-  Arena data; // u32
-  Arena extra; // variable
+  u8   *opcodes;
+  u32  *data;
+  void *extra;
 } IrChunk;
 
 u8    opcode(IrChunk *chunk, InstructionIndex idx);

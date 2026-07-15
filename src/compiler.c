@@ -142,6 +142,7 @@ DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *al
 
 void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val) {
   // TODO
+  Panic();
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
@@ -158,6 +159,24 @@ void compiler_print_all_messages(Compiler *compiler) {
   }
 }
 
+b32 lookup_identifier(Compiler *compiler, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out) {
+  for (u32 i = 0; i < mod_count; i++) {
+    DeclarationKey key = {
+      .parent = mods[mod_count - 1 - i],
+      .name   = name,
+    };
+
+    DeclarationIndex idx;
+    b32 found = decl_keys_find(&compiler->decl_keys, key, &idx);
+    if (found) {
+      *out = idx;
+      return True;
+    }
+  }
+
+  return False;
+}
+
 typedef struct {
   DeclarationIndex mod;
   u32 n;
@@ -172,13 +191,13 @@ b32 compile(Compiler *compiler) {
     ok = source_read_file(source);
     if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
 
-    ok = source_tokenize(source);
+    ok = source_tokenize(source, &compiler->scratch);
     if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
 
-    ok = source_parse(source);
+    ok = source_parse(source, &compiler->scratch);
     if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
 
-    source_index_declarations(source);
+    source_index_declarations(source, &compiler->strings);
 
     source->status = SourceStatus_parsed;
   }
@@ -191,8 +210,7 @@ b32 compile(Compiler *compiler) {
   for (u32 i = 0; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
-
-    // At the moment it is not possible to nest modules, so this stack will never grow beyond 3(?).
+    // At the moment it is not possible to nest modules, so this stack will never grow beyond 2 (1. root, 2. mod).
     // BUT this will likely change in the future. At that point some checks need to be inserted to
     // ensure the stack doesn't overflow (and also make the stack a bit bigger :)).
 
@@ -200,6 +218,8 @@ b32 compile(Compiler *compiler) {
     Stack(DeclFrame) stack;
     stack_init(stack, stackmem, 4);
     stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
+
+    source->decl_idxs[0] = 0;
 
     u32 offset = 1;
 
@@ -218,15 +238,41 @@ b32 compile(Compiler *compiler) {
       offset += 1;
 
       if (decl->kind == SourceDeclaration_mod) {
-        b32 ignore_already_exists;
-        DeclarationIndex idx = add_declaration(compiler, (DeclarationKey){ .parent = top->mod, .name = strings_add(&compiler->strings, decl->name) }, &ignore_already_exists);
+        b32 already_exists;
+        DeclarationIndex idx = add_declaration(
+          compiler,
+          (DeclarationKey){ .parent = top->mod, .name = decl->name },
+          &already_exists
+        );
+
+        if (already_exists) {
+          Declaration val = get_declaration_value(compiler, idx);
+          if (val.kind != Declaration_mod) {
+            is_ok = False;
+            Message_error(
+              &compiler->msg_sink,
+              source->idx,
+              (MessageLocation){ .kind = MessageLocation_ast_index, .data.ast_index = decl->node },
+              string_lit("Declaration already exists.")
+            );
+            continue;
+          }
+        }
+
         stack_push(stack, ((DeclFrame){ .mod = idx, .n = decl->child_count }));
-        decl->decl_idx = idx;
+
+        source->decl_idxs[offset] = idx;
+
+        set_declaration_value(
+          compiler,
+          idx,
+          (Declaration){ .kind = Declaration_mod, .data.loc = { .source = source->idx, .ast = decl->node }}
+        );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
         DeclarationIndex idx = add_declaration(
           compiler,
-          (DeclarationKey){ .parent = top->mod, .name = strings_add(&compiler->strings, decl->name) },
+          (DeclarationKey){ .parent = top->mod, .name = decl->name },
           &already_exists
         );
 
@@ -243,11 +289,11 @@ b32 compile(Compiler *compiler) {
           continue;
         }
 
-        decl->decl_idx = idx;
+        source->decl_idxs[offset] = idx;
 
         set_declaration_value(compiler, idx, (Declaration){
           .kind = Declaration_decl,
-          .data.decl = { .source = source->idx, .ast = decl->node },
+          .data.loc = { .source = source->idx, .ast = decl->node },
         });
       }
     }
@@ -256,17 +302,15 @@ b32 compile(Compiler *compiler) {
   for (u32 i = 0; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
-    // go over all the declarations in the source:
-    // - 
-
     DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
     stack_init(stack, stackmem, 4);
     stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
 
-    offset = 1;
+    for (u32 j = 0; j < source->decl_count; j++) {
+      source_generate_code_for_declaration(source, j);
+    }
   }
-
 
   return is_ok;
 }

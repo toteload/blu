@@ -3,6 +3,8 @@
 
 #include "toteload.h"
 
+#define Max_module_depth 8
+
 typedef u32 StringIndex;
 typedef u32 TypeIndex;
 typedef u32 TokenIndex;

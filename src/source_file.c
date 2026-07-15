@@ -35,10 +35,6 @@ void source_file_init(Source *source, SourceIndex idx, String filename) {
     .reserve_size        = MiB(64),
     .initial_commit_size = MiB(1),
   });
-  arena_init(&source->scratch, &(ArenaOptions){
-    .reserve_size        = MiB(4),
-    .initial_commit_size = MiB(1),
-  });
   source->idx      = idx;
   source->filename = arena_copy_string(&source->arena, filename);
   source->msg_sink = (MessageSink){
@@ -49,7 +45,6 @@ void source_file_init(Source *source, SourceIndex idx, String filename) {
 
 void source_file_deinit(Source *source) {
   arena_deinit(&source->arena);
-  arena_deinit(&source->scratch);
 }
 
 enum ReadFileResult {
@@ -121,27 +116,27 @@ b32 source_read_file(Source *source) {
   return True;
 }
 
-b32 source_tokenize(Source *source) {
+b32 source_tokenize(Source *source, Arena *scratch) {
   TokenizeContext context = {
     .msg_sink = &source->msg_sink,
     .arena    = &source->arena,
-    .scratch  = &source->scratch,
+    .scratch  = scratch,
   };
 
   return tokenize(&context, source->text, &source->tokens);
 }
 
-b32 source_parse(Source *source) {
+b32 source_parse(Source *source, Arena *scratch) {
   ParseContext context = {
     .msg_sink = &source->msg_sink,
     .arena    = &source->arena,
-    .scratch  = &source->scratch,
+    .scratch  = scratch,
   };
 
   return parse(&context, &source->tokens, &source->ast);
 }
 
-void source_index_declarations(Source *source) {
+void source_index_declarations(Source *source, StringInterner *strings) {
   AstNodes *ast = &source->ast;
   Tokens *tokens = &source->tokens;
   String text = source->text;
@@ -155,8 +150,12 @@ void source_index_declarations(Source *source) {
     .kind = SourceDeclaration_root,
     .name = {0},
     .child_count = s->count,
+    .parent = 0,
     .node = 0,
   };
+
+  u32 count = 1;
+  u32 decl_count = 0;
 
   for (u32 i = 0; i < s->count; i++) {
     AstIndex item = s->items[i];
@@ -165,13 +164,22 @@ void source_index_declarations(Source *source) {
 
     AstModSection *mod_section = ast_data(ast, item);
 
+    String mod_name = token_string(tokens, text, mod_section->name);
+    StringIndex name = strings_add(strings, mod_name);
+
+    u32 mod_index = count;
+
     SourceDeclaration *mod_decl = arena_push_one(SourceDeclaration, &source->arena);
     *mod_decl = (SourceDeclaration){
       .kind = SourceDeclaration_mod,
-      .name = token_string(tokens, text, mod_section->name),
+      .name = name,
       .child_count = mod_section->count,
+      .parent = 0,
       .node = item,
     };
+
+    count += 1 + mod_section->count;
+    decl_count += mod_section->count;
 
     for (u32 j = 0; j < mod_section->count; j++) {
       AstIndex decl_idx = mod_section->items[j];
@@ -180,17 +188,34 @@ void source_index_declarations(Source *source) {
 
       AstDeclaration *ast_decl = ast_data(ast, decl_idx);
 
+      String decl_name = token_string(tokens, text, ast_decl->name);
+      StringIndex name = strings_add(strings, decl_name);
+
       SourceDeclaration *decl = arena_push_one(SourceDeclaration, &source->arena);
       *decl = (SourceDeclaration){
         .kind = SourceDeclaration_declaration,
-        .name = token_string(tokens, text, ast_decl->name),
+        .name = name,
         .child_count = 0,
+        .parent = mod_index,
         .node = decl_idx,
       };
     }
   }
 
+  source->decl_count = decl_count;
+  source->decl_tree_size = count;
   source->decls = decls;
+  source->decl_idxs = arena_push_array(DeclarationIndex, &source->arena, count);
+  source->tree_idxs = arena_push_array(u32, &source->arena, decl_count);
+  source->ir_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
+
+  u32 i_decl = 0;
+  for (u32 i = 0; i < decl_count; i++) {
+    if (decls[i].kind == SourceDeclaration_declaration) {
+      source->tree_idxs[i_decl] = i;
+      i_decl += 1;
+    }
+  }
 }
 
 void source_print_all_messages(Source *source) {
