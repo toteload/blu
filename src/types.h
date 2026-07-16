@@ -4,7 +4,7 @@
 #include "blu.h"
 
 enum TypeKind {
-  Type_const_integer,
+  Type_comptime_int,
   Type_integer,
   Type_boolean,
   Type_function,
@@ -57,47 +57,18 @@ typedef struct {
   } data;
 } Type;
 
-// Types are variable in size. This functions returns the actual size in bytes for a given type.
-u32 type_intern_byte_size(Type *type);
-
 typedef Type *TypePtr;
 
-#define TypeList_min_size_log2    6
-#define TypeList_segment_count    24
-#define SEGMENTLIST_NAME          TypeList
-#define SEGMENTLIST_TYPE          TypePtr
-#define SEGMENTLIST_MIN_SIZE_LOG2 TypeList_min_size_log2 
-#define SEGMENTLIST_SEGMENT_COUNT TypeList_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
+#define INTERNER_NAME            TypeInterner
+#define INTERNER_TYPE            TypePtr
+#define INTERNER_INDEX_TYPE      TypeIndex
+#define INTERNER_FUNCTION_PREFIX types
+#define INTERNER_OUTPUT_TYPES
+#define INTERNER_OUTPUT_DECLARATIONS
+#include "interner.h"
 
-#define HASHMAP_NAME       UniqueTypeMap
-#define HASHMAP_KEY_TYPE   TypePtr
-#define HASHMAP_VALUE_TYPE TypeIndex
-#define HASHMAP_OUTPUT_TYPES
-#include "hashmap.h"
-
-struct TypeInterner {
-  Arena         *arena;
-  Arena         *arena_scratch;
-  TypeList       list;
-  UniqueTypeMap  map;
-};
-
-typedef struct {
-  Allocator  map_allocator;
-  Arena     *arena_scratch;
-
-  // `arena` is used for:
-  // - Storing the interned types.
-  // - Backing memory for the segment list that maps `TypeIndex` to `Type*`.
-  Arena     *arena;
-} TypeInternerOptions; 
-
-void       types_init(TypeInterner *types, TypeInternerOptions *options);
-void       types_deinit(TypeInterner *types);
-TypeIndex  types_add(TypeInterner *types, Type *type);
-Type      *types_get(TypeInterner *types, TypeIndex idx);
+// Types are variable in size. This functions returns the actual size in bytes for a given type.
+u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
 TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);

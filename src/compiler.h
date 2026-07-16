@@ -3,7 +3,15 @@
 
 #include "blu.h"
 #include "messages.h"
+#include "value.h"
 #include "string_interner.h"
+
+typedef struct {
+  struct {
+    TypeIndex nil;
+    TypeIndex type;
+  } type;
+} Common;
 
 typedef struct {
   DeclarationIndex parent;
@@ -77,7 +85,10 @@ typedef struct {
   MessageList msg_list;
   MessageSink msg_sink;
 
+  Common         common;
+  ValueStore     values;
   StringInterner strings;
+  TypeInterner   types;
 
   DeclarationInterner decl_keys;
   Declarations        decls;
@@ -94,7 +105,7 @@ void             set_declaration_value(Compiler *compiler, DeclarationIndex idx,
 DeclarationKey   get_declaration_key(Compiler *compiler, DeclarationIndex idx);
 Declaration      get_declaration_value(Compiler *compiler, DeclarationIndex idx);
 
-b32 lookup_identifier(Compiler *compiler, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
+b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 
 void compiler_print_all_messages(Compiler *compiler);
 

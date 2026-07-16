@@ -32,6 +32,7 @@
 // 3. Translate IR to C
 
 #include "blu.h"
+#include "types.h"
 
 enum IrResult {
   IrResult_ok,
@@ -40,7 +41,6 @@ enum IrResult {
 // The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
 // If the MSB is 1, then the `IrRef` is a `ValueIndex`.
 typedef u32 IrRef;
-typedef u32 InstructionIndex;
 typedef u32 ChunkIndex;
 
 typedef struct {
@@ -49,7 +49,6 @@ typedef struct {
 } IrLocation;
 
 enum IrOpcode {
-  IR_comptime_func, // data references `IrComptimeFunc` in extra 
   IR_func,      // data references `IrFunc` in extra
   IR_arg,       // data contains `TypeIndex`
   IR_const,     // data contains `ValueIndex`
@@ -65,17 +64,18 @@ enum IrOpcode {
   IR_call,      // data references `IrCall` in extra
 
   IR_declaration, // data references `IrDeclaration` in extra
-  IR_lookup,
+  IR_lookup, // data contains `DeclarationIndex`
   
   IR_cast_int,  // data references `IrCastInt` in extra
   IR_cast_int_safe,
 
-  IR_check_coercible,
-
-  IR_typeid, // returns a TypeIndex for a Type
+  IR_coerce,
+  IR_unify,
 
   // Create a type
-  IR_type, // 
+  IR_type, // data references `IrType` in extra
+  IR_typeof,
+  IR_typeinfo,
 
   // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
   // Emit blocks are only valid in a comptime function.
@@ -87,6 +87,8 @@ enum IrOpcode {
 
 typedef struct {
   u8 kind;
+  u32 arg_count;
+  InstructionIndex args[];
 } IrType;
 
 typedef struct {
@@ -97,14 +99,7 @@ typedef struct {
 typedef struct {
   InstructionIndex type_to;
   InstructionIndex type_from;
-} IrCheckCoercible;
-
-typedef struct {
-  TypeIndex return_type;
-  u32 runtime_arg_count;
-  u32 comptime_arg_count;
-  u32 instruction_count;
-} IrComptimeFunc;
+} IrCheckCoerce;
 
 typedef struct {
   TypeIndex return_type;

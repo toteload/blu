@@ -45,6 +45,9 @@ typedef void *VoidPtr;
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wflexible-array-extensions"
+
 typedef struct {
   AstIndexList items;
   AstSource    base;
@@ -79,6 +82,8 @@ typedef struct {
   AstIndexList args;
   AstCall      base;
 } AstCallTmp;
+
+#pragma clang diagnostic pop
 
 _Static_assert(Offsetof(AstSourceTmp, items)             == 0, "List must be at offset 0.");
 _Static_assert(Offsetof(AstModSectionTmp, items)         == 0, "List must be at offset 0.");
@@ -119,7 +124,7 @@ typedef struct {
 } Parser;
 
 internal AstIndex node_alloc(Parser *parser) {
-  AstIndex idx = Cast(AstIndex, parser->kinds.len);
+  AstIndex idx = parser->kinds.len;
   kindlist_append(&parser->kinds, parser->scratch, 0);
   spanlist_append(&parser->spans, parser->scratch, (SpanToken){0});
   tmplist_append(&parser->tmp, parser->scratch, Null);
@@ -134,7 +139,6 @@ internal SpanToken *node_span(Parser *parser, AstIndex idx) {
   return spanlist_ptr_at_unchecked(&parser->spans, idx);
 }
 
-// Allocates the intermediate payload for a node in `scratch` and records it in `tmp`.
 internal void *node_push_data_raw(Parser *parser, AstIndex idx, usize size, u32 align) {
   void *p = arena_push(parser->scratch, size, align);
   *tmplist_ptr_at_unchecked(&parser->tmp, idx) = p;
@@ -1068,6 +1072,9 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
     .scratch  = context->scratch,
   };
 
+  // Reserve the zero index
+  node_alloc(&parser);
+
   AstIndex root;
   b32 ok = parse_source(&parser, &root);
 
@@ -1087,7 +1094,7 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
 
   void *extra = context->arena->at;
 
-  for (AstIndex i = 0; i < count; i++) {
+  for (AstIndex i = 1; i < count; i++) {
     u8 kind = kinds[i];
     u32 size = base_payload_size(kind);
     u32 align = payload_align(kind);

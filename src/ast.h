@@ -132,13 +132,13 @@ typedef struct {
 
 typedef struct {
   TokenIndex name;
-  AstIndex  type;
+  AstIndex   type;
 } AstParam;
 
 typedef struct {
   AstIndex return_type;
   AstIndex body;
-  u32 count;
+  u32      count;
   AstIndex params[];
 } AstFunction;
 

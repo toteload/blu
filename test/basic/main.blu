@@ -1,6 +1,6 @@
 mod main
 
-main: () { if foo.bar < 12 { i32 } else { bool } } = || 0
+main: () i32 = || 0
 
 ; Each function gets converted to a function that takes all the comptime parameters.
 ; If the function takes no comptime parameters it still gets converted to this function.
@@ -15,173 +15,19 @@ main: () { if foo.bar < 12 { i32 } else { bool } } = || 0
 ; There is a dependency between the value of the declaration and the declared type.
 
 ; %decl_type = block
-;   %1 = lookup "i32"
-;   check_is_coercible (const type) %1
-;   %2 = type_function %1, 0 params
-;   check_is_coercible (const type) %2
-;   %3 = typeid %2
+;   %1 = (?) lookup "i32"
+;   %a = (type) coerce (type) %1
+;   %2 = (type) type .function %a, 0 params
+;   %3 = (type) coerce (type) %2
 ;   br %3
-;
 ; func (0 comptime params, 0 runtime params)
-; %c2 = typeid (const const_int 0)
-; %decl_type_info = typeinfo %decltype
-; ; Somehow check that the declared type is function and get the return type
-; check_is_coercible %return_type %c2
-; %c = cast_safe %return_type %c2
+; %c1 = (comptime_int) const 0
+; %c2 = (type) typeof %c1
+; %return_type = (type) ...
+; %d = (%return_type) coerce %return_type %c1
 ; emit
-;   ret (i32) %c
+;   ret (%return_type) %d
 
 ; func () i32
 ; %a = const i32 0
 ; ret %a
-
-;RandomType := |n: uint|: type {
-;  if n < 10 {
-;    [n]int
-;  } else {
-;    f64
-;  }
-;}
-
-; this function may only be evaluated at comptime
-; func (1 comptime param) type
-; %0 = arg (uint)
-; %1 = const (i64) 10
-; %t0 = (type) typeid %0
-; %t1 = (type) typeid %1
-; check_is_coercible %t0 %t1
-; check_is_comparable %t0 %t1
-; %3 = (uint) cast_int_safe %1 %0
-; %4 = (bool) cmp_lt (uint) %0 %3
-; %booltype = const (type) bool
-; %typetype = const (type) type
-; check_is_coercible %booltype %4
-; %5 = (type) block @b
-;   cond_br %4 @then @otherwise
-;   block @then
-;     %7 = const (type) int
-;     %6 = (type) type_array %0 %7
-;     check_is_coercible %typetype %6 
-;     br @b %6
-;   block @otherwise
-;     %f64type = const (type) f64
-;     check_is_coercible %typetype %f64type
-;     br @b %f64type
-; ret %5
-
-; Function at runtime
-; -------------------
-; function () i32
-; ret (i32) (const i32 0)
-
-; hellos := |n: comptime uint|: nil {
-;   inline for 0..n do i {
-;     std.println("hello {}", i)
-;   }
-; }
-
-; A function with any comptime parameters needs to be converted to a function where all the
-; comptime parameters have been inlined into the function body.
-
-; func (%n uint)
-; %a = alloc (uint)
-; store (uint) %a, (const uint 0)
-; loop @loop0
-;   %b = load (uint) %a
-;   %c = cmp (uint) neq %b, %n
-;   cond_br %c, @then, @loop0
-;   block @then
-;     call std.println "hello" %b
-;     %d = add (uint) %b, (const uint 1)
-;     store (uint) %a, %d
-;     repeat @loop0
-; ret (nil)
-
-; hellos := |n: uint|: nil {
-;   for 0..n do i {
-;     #emit(0, i)
-;   }
-; }
-
-; func (%n uint) nil
-; emit
-;   func () nil
-;   eval (nil) @eval0
-;     %a = alloc (uint)
-;     store (uint) %a, (const uint 0)
-;     loop @loop0
-;       %b = load (uint) %a
-;       %c = add (uint) %b, (const uint 1)
-;       %d = cmp (uint) neq %c, %n
-;       cond_br %d, @then, @loop0
-;       block @then
-;         store (uint) %a, %c
-;         emit
-;           call std.println "hello" %c
-;         repeat @loop0
-;     br (nil) @eval0
-;   ret (nil)
-; ret (nil) ; return from comptime function
-
-; function (%n uint) nil
-; emit (%n)
-;   function () nil
-;   eval @eval0
-;     %a = alloc (uint)
-;     store (uint) %a, (const uint 0)
-;     loop @loop0
-;       %b = load (uint) %a
-;       %c = add (uint) %b, (const uint 1)
-;       %d = cmp (uint) neq %c, %n
-;       cond_br %d, @then, @loop0
-;       block @then
-;         store (uint) %a, %d
-;         emit 
-;           call std.println "hello" %d
-;         repeat @loop0
-;     br (nil) @eval0
-;   ret (nil) 
-; ret (nil)
-
-; hellos := |n: comptime uint, k: uint|: nil {
-;   inline for 0..n do i {
-;     std.println("hello {}", i + k)
-;   }
-; }
-
-; func (%n uint)
-; emit
-;   func (%k uint) nil
-;   eval
-;     %a = alloc (uint)
-;     store (uint) %a, (const uint 0)
-;     loop @loop0
-;       %b = load (uint) %a
-;       %c = cmp (uint) neq %b, %n
-;       cond_br %c, @then, @loop0
-;       block @then
-;         emit
-;           %e = add (uint) %b, %k
-;           call std.println "hello" %e
-;         %d = add (uint) %b, (const uint 1)
-;         store (uint) %a, %d
-;         repeat @loop0
-;   ret (nil)
-; ret (nil)
-
-; array_of_i32 := |n: comptime uint|: type {
-;   [n]i32
-; }
-
-; `array_of_i32` will be converted to a function `a` that takes a `uint` and emits a function that
-; returns a typeid for an array of i32 of a size given by the `uint` parameter of `a`.
-
-; function (%n uint) nil
-; emit
-;   function () type
-;   %a = eval @eval0
-;     %base = #typeid .int, { .signed, 32 }
-;     %t = #typeid .array, { %base, %n }
-;     br (type) @eval0 %t
-;   ret (type) %a
-; ret (nil)

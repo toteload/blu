@@ -1,6 +1,7 @@
 #include "compiler.h"
 #include "source_file.h"
 #include "string_interner.h"
+#include "codegen.h"
 
 #include <stdarg.h>
 
@@ -98,9 +99,26 @@ void compiler_init(Compiler *compiler) {
   };
 
   strings_init(&compiler->strings, &(InternerOptions){
+    .arena              = &compiler->arena,
+    .map_allocator      = cstd_allocator,
+    .map_initial_size   = 32,
+    .reserve_zero_index = True,
+  });
+
+  types_init(&compiler->types, &(InternerOptions){
+    .arena              = &compiler->arena,
+    .map_allocator      = cstd_allocator,
+    .map_initial_size   = 32,
+    .reserve_zero_index = True,
+    .context            = &compiler->scratch,
+  });
+
+  compiler->common.type.nil  = types_add(&compiler->types, &(Type){ .kind = Type_nil });
+  compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
+
+  values_init(&compiler->values, &(ValueStoreOptions){
     .arena = &compiler->arena,
-    .map_allocator = cstd_allocator,
-    .map_initial_size = 32,
+    .payload_allocator = cstd_allocator,
   });
 
   decl_keys_init(&compiler->decl_keys, &(InternerOptions){
@@ -137,12 +155,16 @@ void compiler_add_sourcefile(Compiler *compiler, String filename) {
 }
 
 DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists) {
+  decls_push(&compiler->decls, &compiler->arena);
   return decl_keys_add_checked(&compiler->decl_keys, key, already_exists);
 }
 
 void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val) {
-  // TODO
-  Panic();
+  *decls_ptr_at_unchecked(&compiler->decls, idx) = val;
+}
+
+Declaration get_declaration_value(Compiler *compiler, DeclarationIndex idx) {
+  return decls_at_unchecked(&compiler->decls, idx);
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
@@ -159,15 +181,15 @@ void compiler_print_all_messages(Compiler *compiler) {
   }
 }
 
-b32 lookup_identifier(Compiler *compiler, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out) {
+b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out) {
   for (u32 i = 0; i < mod_count; i++) {
     DeclarationKey key = {
-      .parent = mods[mod_count - 1 - i],
+      .parent = mods[i],
       .name   = name,
     };
 
     DeclarationIndex idx;
-    b32 found = decl_keys_find(&compiler->decl_keys, key, &idx);
+    b32 found = decl_keys_find(decl_keys, key, &idx);
     if (found) {
       *out = idx;
       return True;
@@ -221,7 +243,7 @@ b32 compile(Compiler *compiler) {
 
     source->decl_idxs[0] = 0;
 
-    u32 offset = 1;
+    u32 offset = 0;
 
     while (!stack_is_empty(stack)) {
       DeclFrame *top = stack_peek_ptr(stack);
@@ -299,16 +321,20 @@ b32 compile(Compiler *compiler) {
     }
   }
 
+  CodeGenContext context = {
+    .arena     = &compiler->arena,
+    .scratch   = &compiler->scratch,
+    .common    = &compiler->common,
+    .msg_sink  = &compiler->msg_sink,
+    .strings   = &compiler->strings,
+    .decl_keys = &compiler->decl_keys,
+    .values    = &compiler->values,
+  };
+
   for (u32 i = 0; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-
-    DeclFrame stackmem[4];
-    Stack(DeclFrame) stack;
-    stack_init(stack, stackmem, 4);
-    stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
-
     for (u32 j = 0; j < source->decl_count; j++) {
-      source_generate_code_for_declaration(source, j);
+      is_ok &= source_generate_code(&context, source, j);
     }
   }
 

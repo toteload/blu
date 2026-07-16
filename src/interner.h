@@ -98,6 +98,7 @@ typedef struct {
   Arena     *arena;
   Allocator  map_allocator;
   u32        map_initial_size;
+  b32        reserve_zero_index;
   void      *context; // Passed to the hash and compare functions.
 } InternerOptions;
 
@@ -159,6 +160,10 @@ void Cat(INTERNER_FUNCTION_PREFIX, _init)(INTERNER_NAME *interner, InternerOptio
     .initial_size = options->map_initial_size,
     .context      = options->context,
   });
+
+  if (options->reserve_zero_index) {
+    Cat(INTERNER_LIST_PREFIX, _push)(&interner->list, interner->arena);
+  }
 }
 
 INTERNER_LINKAGE

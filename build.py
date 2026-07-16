@@ -113,6 +113,7 @@ def create_build_ninja():
         'source_file.c',
         'compiler.c',
         'cli_options.c',
+        'codegen.c',
     ]
 
     outputs = []

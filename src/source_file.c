@@ -148,7 +148,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
   *decls = (SourceDeclaration){
     .kind = SourceDeclaration_root,
-    .name = {0},
+    .name = 0,
     .child_count = s->count,
     .parent = 0,
     .node = 0,
@@ -210,7 +210,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   source->ir_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
 
   u32 i_decl = 0;
-  for (u32 i = 0; i < decl_count; i++) {
+  for (u32 i = 0; i < count; i++) {
     if (decls[i].kind == SourceDeclaration_declaration) {
       source->tree_idxs[i_decl] = i;
       i_decl += 1;

@@ -48,7 +48,7 @@ struct Source {
   DeclarationIndex  *decl_idxs;
 
   u32      decl_count;
-  u32     *tree_idx;
+  u32     *tree_idxs;
   IrChunk *ir_chunks;
 };
 
@@ -66,8 +66,6 @@ b32 source_parse(Source *source, Arena *scratch);
 // - Allocates `ir_chunks` (decl_count).
 // - Allocates `tree_idx` (decl_count).
 void source_index_declarations(Source *source, StringInterner *strings);
-
-void source_generate_code(Source *source, Arena *scratch);
 
 void source_print_all_messages(Source *source);
 

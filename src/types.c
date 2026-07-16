@@ -6,27 +6,22 @@
 internal b32 cmp_type(void *context, Type *a, Type *b);
 internal u32 hash_type(void *context, Type *x);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#define HASHMAP_NAME            UniqueTypeMap
-#define HASHMAP_KEY_TYPE        TypePtr
-#define HASHMAP_VALUE_TYPE      TypeIndex
-#define HASHMAP_FUNCTION_PREFIX map
-#define HASHMAP_HASH_FN         hash_type
-#define HASHMAP_KEY_COMPARE_FN  cmp_type
-#define HASHMAP_LINKAGE         internal
-#define HASHMAP_OUTPUT_DEFINITIONS
-#include "hashmap.h"
-#pragma clang diagnostic pop
+internal Type *intern_type(Arena *arena, Type *x) {
+  u32 size = type_intern_byte_size(x);
+  Type *intern = arena_push(arena, size, Align_of(Type));
+  memcpy(intern, x, size);
+  return intern;
+}
 
-#define SEGMENTLIST_NAME            TypeList
-#define SEGMENTLIST_TYPE            TypePtr
-#define SEGMENTLIST_FUNCTION_PREFIX list
-#define SEGMENTLIST_MIN_SIZE_LOG2   TypeList_min_size_log2 
-#define SEGMENTLIST_SEGMENT_COUNT   TypeList_segment_count
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
+#define INTERNER_NAME            TypeInterner
+#define INTERNER_TYPE            TypePtr
+#define INTERNER_INDEX_TYPE      TypeIndex
+#define INTERNER_FUNCTION_PREFIX types
+#define INTERNER_HASH_FN         hash_type
+#define INTERNER_COMPARE_FN      cmp_type
+#define INTERNER_COPY_FN         intern_type
+#define INTERNER_OUTPUT_DEFINITIONS
+#include "interner.h"
 
 internal b32 cmp_type(void *context, Type *a, Type *b) {
   if (a->kind != b->kind) {
@@ -109,6 +104,7 @@ internal u32 push_type_data(Arena *arena, Type *x) {
 
 #undef Push_data
 }
+
 internal u32 hash_type(void *context, Type *x) {
   Arena *scratch  = context;
   ArenaSnapshot snapshot = arena_scope_begin(scratch);
@@ -120,47 +116,6 @@ internal u32 hash_type(void *context, Type *x) {
   arena_scope_end(scratch, snapshot);
 
   return hash;
-}
-
-void types_init(TypeInterner *types, TypeInternerOptions *options) {
-  types->arena = options->arena;
-  types->arena_scratch = options->arena_scratch;
-  zero_struct(TypeList, &types->list);
-  map_init(&types->map, &(HashMapOptions){
-    .allocator    = options->map_allocator,
-    .initial_size = 32,
-    .context      = options->arena_scratch,
-  });
-}
-
-void types_deinit(TypeInterner *types) {
-  map_deinit(&types->map);
-  zero_struct(TypeInterner, types);
-}
-
-TypeIndex types_add(TypeInterner *types, Type *type) {
-  b32 was_occupied;
-  UniqueTypeMapBucket *bucket = map_insert_key_and_get_bucket(&types->map, type, &was_occupied);
-
-  if (was_occupied) {
-    return bucket->val;
-  }
-
-  u32 size = type_intern_byte_size(type);
-  Type *intern = arena_push(types->arena, size, Align_of(Type));
-  memcpy(intern, type, size);
-
-  u32 idx = types->list.len;
-
-  *bucket = (UniqueTypeMapBucket){ .key = intern, .val = idx, };
-
-  list_append(&types->list, types->arena, intern);
-
-  return idx;
-}
-
-Type *types_get(TypeInterner *types, TypeIndex idx) {
-  return *list_ptr_at_unchecked(&types->list, idx);
 }
 
 u32 type_intern_byte_size(Type *type) {
