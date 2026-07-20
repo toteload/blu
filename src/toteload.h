@@ -76,7 +76,20 @@ always_inline u32 bitwidth(u64 x) {
 #define False 0
 
 #define is_null(p) ((p) == Null)
-#define Unused(x) ((void)(x))
+
+#define Unused_1(a)     (void)(a)
+#define Unused_2(a,...) (void)(a); Unused_1(__VA_ARGS__)
+#define Unused_3(a,...) (void)(a); Unused_2(__VA_ARGS__)
+#define Unused_4(a,...) (void)(a); Unused_3(__VA_ARGS__)
+#define Unused_5(a,...) (void)(a); Unused_4(__VA_ARGS__)
+#define Unused_6(a,...) (void)(a); Unused_5(__VA_ARGS__)
+#define Unused_7(a,...) (void)(a); Unused_6(__VA_ARGS__)
+#define Unused_8(a,...) (void)(a); Unused_7(__VA_ARGS__)
+#define Unused_PICK(_1,_2,_3,_4,_5,_6,_7,_8,NAME,...) NAME
+#define Unused(...)                                                     \
+  Unused_PICK(__VA_ARGS__, Unused_8, Unused_7, Unused_6, Unused_5,      \
+                           Unused_4, Unused_3, Unused_2, Unused_1,      \
+                           Unused_END)(__VA_ARGS__)
 
 always_inline b32 is_zero_or_power_of_two(usize x) {
   return ((((x)-1) & (x)) == 0);

@@ -69,7 +69,7 @@ enum IrOpcode {
   IR_cast_int,  // data references `IrCastInt` in extra
   IR_cast_int_safe,
 
-  IR_coerce,
+  IR_as, // data references `IrAs` in extra
   IR_unify,
 
   // Create a type
@@ -86,7 +86,7 @@ enum IrOpcode {
 };
 
 typedef struct {
-  u8 kind;
+  u8 kind; // TypeKind
   u32 arg_count;
   InstructionIndex args[];
 } IrType;
@@ -99,7 +99,7 @@ typedef struct {
 typedef struct {
   InstructionIndex type_to;
   InstructionIndex type_from;
-} IrCheckCoerce;
+} IrAs;
 
 typedef struct {
   TypeIndex return_type;

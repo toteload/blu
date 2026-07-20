@@ -49,12 +49,15 @@ typedef struct {
 typedef struct {
   u8 kind;
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wflexible-array-extensions"
   union {
     TypeInteger  integer;
     TypeSlice    slice;
     TypeArray    array;
     TypeFunction function;
   } data;
+#pragma clang diagnostic pop
 } Type;
 
 typedef Type *TypePtr;

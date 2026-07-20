@@ -5,10 +5,12 @@
 #include <stdio.h>
 
 void test_assert(TestResult *test, void *user) {
+  Unused(user);
   Test_assert(True);
 }
 
 void test_assert_eq(TestResult *test, void *user) {
+  Unused(user);
   Test_assert_eq(1, 1);
 }
 

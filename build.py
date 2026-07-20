@@ -70,8 +70,8 @@ def create_build_ninja():
                   '-MD -MF $out.d',
                   '-Wall -Wextra -Wpedantic',
                   '-Wsign-conversion',
-                  '-Wno-unused-parameter',
                   '-Wimplicit-function-declaration',
+                  '-Wno-unused-function',
                   '-Werror=switch', # Enforce all enum values are handled
                   #'-O2 -S -mllvm --x86-asm-syntax=intel',
                   '-fansi-escape-codes -fcolor-diagnostics',

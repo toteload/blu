@@ -163,10 +163,10 @@ internal void inst_add_check_coerce(CodeGen *gen, TypeIndex type_destination, In
   InstructionIndex idx_const_type = inst_add_const_type(gen, type_destination);
 
   InstructionIndex idx_check = inst_alloc(gen);
-  inst_set_kind(gen, idx_check, IR_check_coerce);
+  inst_set_kind(gen, idx_check, IR_as);
 
-  IrCheckCoerce *data = inst_push_data(gen, idx_check, IrCheckCoerce);
-  *data = (IrCheckCoerce){
+  IrAs *data = inst_push_data(gen, idx_check, IrAs);
+  *data = (IrAs){
     .type_to   = idx_const_type,
     .type_from = idx_type_from,
   };
@@ -189,15 +189,28 @@ InstructionIndex gen_code(CodeGen *gen, AstIndex idx_ast, TypeIndex type_destina
   } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
-    InstructionIndex idx_ret_type = gen_code(gen, func->return_type, gen->common->type.type);
-
-    Assert(func->count == 0);
+    InstructionIndex inst_ret_type = gen_code(gen, func->return_type, gen->common->type.type);
 
     for (u32 i = 0; i < func->count; i++) {
       // TODO Add the parameter types
+      Panic();
     }
 
-    Panic();
+    InstructionIndex inst_type = inst_alloc(gen);
+
+    inst_set_kind(gen, inst_type, IR_type);
+
+    u32 arg_count = func->count + 1; // parameters + return type
+
+    IrType *data_type = inst_push_data_raw(gen, inst_type, sizeof(IrType) + arg_count * sizeof(InstructionIndex), Align_of(IrType));
+    *data_type = (IrType){
+      .kind = Type_function,
+      .arg_count = arg_count,
+    };
+
+    data_type->args[0] = inst_ret_type;
+
+    return inst_type;
   } break;
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
@@ -240,14 +253,106 @@ InstructionIndex gen_code(CodeGen *gen, AstIndex idx_ast, TypeIndex type_destina
   }
 }
 
+internal b32 opcode_references_extra(u8 op) {
+  switch (op) {
+  case IR_func:
+  case IR_cond_br:
+  case IR_store:
+  case IR_call:
+  case IR_declaration:
+  case IR_cast_int:
+  case IR_as:
+  case IR_type:
+    return True;
+  default:
+    return False;
+  }
+}
+
+internal u32 extra_payload_size(u8 op, void *payload) {
+  switch (op) {
+  case IR_func:        return sizeof(IrFunc);
+  case IR_cond_br:     return sizeof(IrCondBr);
+  case IR_store:       return sizeof(IrStore);
+  case IR_declaration: return sizeof(IrDeclaration);
+  case IR_cast_int:    return sizeof(IrCastInt);
+  case IR_as:          return sizeof(IrAs);
+  case IR_type: {
+    IrType *type = payload;
+    return sizeof(IrType) + type->arg_count * sizeof(InstructionIndex);
+  }
+  case IR_call: {
+    IrCall *call = payload;
+    return sizeof(IrCall) + call->arg_count * sizeof(IrRef);
+  }
+  }
+
+  Panic();
+}
+
+internal u32 extra_payload_align(u8 op) {
+  switch (op) {
+  case IR_func:        return Align_of(IrFunc);
+  case IR_cond_br:     return Align_of(IrCondBr);
+  case IR_store:       return Align_of(IrStore);
+  case IR_call:        return Align_of(IrCall);
+  case IR_declaration: return Align_of(IrDeclaration);
+  case IR_cast_int:    return Align_of(IrCastInt);
+  case IR_as:          return Align_of(IrAs);
+  case IR_type:        return Align_of(IrType);
+  }
+
+  Panic();
+}
+
+internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionIndex i, u32 size, u32 align) {
+  void *p = arena_push(arena, size, align);
+  u32 offset = ptr_diff(p, extra_base);
+  data[i] = offset;
+  return p;
+}
+
 b32 source_generate_code(CodeGenContext *context, Source *source, u32 idx) {
   CodeGen gen;
   codegen_init(&gen, context, source, idx);
 
-  InstructionIndex inst_idx = gen_code(&gen, source->decls[source->tree_idxs[idx]].node, context->common->type.nil);
+  // Reserve the zero index so instruction index 0 can be used as a null reference.
+  inst_alloc(&gen);
+
+  gen_code(&gen, source->decls[source->tree_idxs[idx]].node, context->common->type.nil);
+
+  u32 count = Cast(u32, gen.kinds.len);
+
+  u8  *opcodes = arena_push_array(u8,  context->arena, count);
+  u32 *data    = arena_push_array(u32, context->arena, count);
+
+  kindlist_copy_to_array(&gen.kinds, opcodes);
+
+  void *extra = context->arena->at;
+
+  for (InstructionIndex i = 1; i < count; i++) {
+    u8 op = opcodes[i];
+    InstructionData entry = datalist_at_unchecked(&gen.datas, i);
+
+    if (!opcode_references_extra(op)) {
+      data[i] = entry.data;
+      continue;
+    }
+
+    u32 size  = extra_payload_size(op, entry.ptr);
+    u32 align = extra_payload_align(op);
+    void *mem = flatten_push_data(extra, context->arena, data, i, size, align);
+    memcpy(mem, entry.ptr, size);
+  }
+
+  source->ir_chunks[idx] = (IrChunk){
+    .opcode_count = count,
+    .opcodes      = opcodes,
+    .data         = data,
+    .extra        = extra,
+  };
 
   // TODO
-  // - flatten all the data and store it somewhere.
   // - output all the dependencies somewhere.
 
   codegen_deinit(&gen);

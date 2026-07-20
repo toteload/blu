@@ -46,6 +46,8 @@ b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 #include "segment_list.h"
 
 internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
+  Unused(ctx, old_byte_size, align);
+
   if (!is_null(p) && new_byte_size == 0) {
     free(p);
     return Null;

@@ -295,18 +295,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   return TokResult_error;
 }
 
-u32 tokens_count(Tokens *tokens) {
-  return tokens->tok_count;
-}
-
-TokenIndex tokens_begin(Tokens *tokens) {
-  return 0;
-}
-
-TokenIndex tokens_end(Tokens *tokens) {
-  return tokens->tok_count;
-}
-
 LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
   // OPTIMIZE: A binary search is probably faster for bigger files.
   u32 len = tokens->line_count;

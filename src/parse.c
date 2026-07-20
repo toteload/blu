@@ -1036,7 +1036,7 @@ internal b32 has_variable_length_payload(u8 kind) {
 
 internal u32 base_payload_size(u8 kind) {
   switch (kind) {
-#define X(k,d) case k: return sizeof(d);
+#define X(k,d,s) case k: return sizeof(d);
 #include "x_ast_kinds.h"
 #undef X
   }
@@ -1046,7 +1046,7 @@ internal u32 base_payload_size(u8 kind) {
 
 internal u32 payload_align(u8 kind) {
   switch (kind) {
-#define X(k,d) case k: return Align_of(d);
+#define X(k,d,s) case k: return Align_of(d);
 #include "x_ast_kinds.h"
 #undef X
   }
@@ -1132,30 +1132,9 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
 }
 
 String ast_string[] = {
-  [Ast_source]         = string_lit("source"),
-  [Ast_mod_section]    = string_lit("mod-section"),
-  [Ast_block]          = string_lit("block"),
-  [Ast_type_slice]     = string_lit("type-slice"),
-  [Ast_type_array]     = string_lit("type-array"),
-  [Ast_type_function]  = string_lit("type-function"),
-  [Ast_builtin]        = string_lit("builtin"),
-  [Ast_declaration]    = string_lit("declaration"),
-  [Ast_assign]         = string_lit("assign"),
-  [Ast_literal_int]    = string_lit("literal-int"),
-  [Ast_literal_string] = string_lit("literal-string"),
-  [Ast_identifier]     = string_lit("identifier"),
-  [Ast_call]           = string_lit("call"),
-  [Ast_index]          = string_lit("index"),
-  [Ast_unary_op]       = string_lit("unary-op"),
-  [Ast_binary_op]      = string_lit("binary-op"),
-  [Ast_function]       = string_lit("function"),
-  [Ast_param]          = string_lit("param"),
-  [Ast_if_else]        = string_lit("if-else"),
-  [Ast_for]            = string_lit("for"),
-  [Ast_defer]          = string_lit("defer"),
-  [Ast_const]          = string_lit("const"),
-  [Ast_cast]           = string_lit("cast"),
-  [Ast_as]             = string_lit("as"),
+#define X(k,d,s) [k] = string_lit(s),
+#include "x_ast_kinds.h"
+#undef X
 };
 
 String ast_kind_string(u8 kind) {

@@ -13,7 +13,9 @@ typedef struct {
 
 typedef void (*FnParserTest)(TestResult *, ParserTestContext *);
 
-void parser_dummy_add_message(void *user, u8 severity, SourceIndex source, MessageLocation location, String format, ...) { }
+void parser_dummy_add_message(void *user, u8 severity, SourceIndex source, MessageLocation location, String format, ...) { 
+  Unused(user, severity, source, location, format);
+}
 
 void parser_test(TestResult *test, FnParserTest fn) {
   MessageSink sink = {
