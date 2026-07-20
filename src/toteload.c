@@ -8,6 +8,23 @@ String string_from_cstr(char const *s) {
   };
 }
 
+i64 parse_i64(String s) {
+  usize i = 0;
+  b32 negative = False;
+
+  if (s.len > 0 && s.str[0] == '-') {
+    negative = True;
+    i = 1;
+  }
+
+  i64 value = 0;
+  for (; i < s.len; i++) {
+    value = value * 10 + (s.str[i] - '0');
+  }
+
+  return negative ? -value : value;
+}
+
 #ifdef TTLD_OS_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRA_LEAN

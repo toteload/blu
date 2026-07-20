@@ -134,6 +134,9 @@ typedef struct String {
 
 String string_from_cstr(char const *s);
 
+// Parses a decimal integer literal. An optional leading '-' denotes a negative value.
+i64 parse_i64(String s);
+
 always_inline b32 string_eq(String a, String b) {
   if (a.len != b.len) {
     return False;

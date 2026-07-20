@@ -121,7 +121,8 @@ internal u32 hash_type(void *context, Type *x) {
 }
 
 u32 type_intern_byte_size(Type *type) {
-  switch (type->kind) {
+  switch (Cast(enum TypeKind, type->kind)) {
+  case Type_comptime_int:
   case Type_integer:
   case Type_boolean:
   case Type_nil:

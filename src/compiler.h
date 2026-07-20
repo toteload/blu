@@ -8,9 +8,14 @@
 
 typedef struct {
   struct {
+    TypeIndex comptime_int;
     TypeIndex nil;
     TypeIndex type;
   } type;
+
+  struct {
+    ValueIndex type;
+  } val;
 } Common;
 
 typedef struct {

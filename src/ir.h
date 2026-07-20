@@ -79,12 +79,14 @@ enum IrOpcode {
   IR_cast_int_safe,
 
   IR_as, // data references `IrAs` in extra
-  IR_unify,
+  IR_unify, // data references `IrUnify` in extra
 
   // Create a type
   IR_type, // data references `IrType` in extra
   IR_typeof,
   IR_typeinfo,
+
+  IR_function_return_type, // data contains `IrRef`
 
   // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
   // Emit blocks are only valid in a comptime function.
@@ -104,6 +106,14 @@ typedef struct {
   IrRef declared_type;
   IrRef value;
 } IrDeclaration;
+
+// Unify must result in a valid type otherwise it is considered an error.
+// Unification of the following two function types results in error:
+// (i32, ?) bool + (i32, ?) ? = error | the second parameter type is unknown
+typedef struct {
+  IrRef type_lhs;
+  IrRef type_rhs;
+} IrUnify;
 
 typedef struct {
   IrRef type_to;

@@ -155,31 +155,31 @@ IrRef inst_add_const_type(CodeGen *gen, TypeIndex type) {
   return ir_ref_from_value_index(idx);
 }
 
-internal void inst_add_check_coerce(CodeGen *gen, TypeIndex type_destination, IrRef ref_type_from) {
-  IrRef ref_type_to = inst_add_const_type(gen, type_destination);
+internal InstructionIndex inst_add_as(CodeGen *gen, IrRef type_destination, IrRef ref_type_from) {
+  InstructionIndex idx_as = inst_alloc(gen);
+  inst_set_kind(gen, idx_as, IR_as);
 
-  InstructionIndex idx_check = inst_alloc(gen);
-  inst_set_kind(gen, idx_check, IR_as);
-
-  IrAs *data = inst_push_data(gen, idx_check, IrAs);
+  IrAs *data = inst_push_data(gen, idx_as, IrAs);
   *data = (IrAs){
-    .type_to   = ref_type_to,
+    .type_to   = type_destination,
     .type_from = ref_type_from,
   };
+
+  return idx_as;
 }
 
-IrRef gen_code(CodeGen *gen, AstIndex idx_ast, TypeIndex type_destination) {
+IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   String    text   = gen->source->text;
   Tokens   *tokens = &gen->source->tokens;
   AstNodes *ast    = &gen->source->ast;
 
   u8 kind = ast->kinds[idx_ast];
-  switch (kind) {
+  switch (Cast(enum AstKind, kind)) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
     IrRef ref_lookup = inst_add_lookup(gen, *name);
     if (type_destination) {
-      inst_add_check_coerce(gen, type_destination, ref_lookup);
+      inst_add_as(gen, type_destination, ref_lookup);
     }
     return ref_lookup;
   } break;
@@ -213,17 +213,46 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, TypeIndex type_destination) {
 
     IrRef ref_ret_type = 0;
     if (func->return_type) {
-      ref_ret_type = gen_code(gen, func->return_type, gen->common->type.type);
+      ref_ret_type = gen_code(gen, func->return_type, gen->common->val.type);
     }
 
-    Assert(func->count == 0);
+    for (u32 i = 0; i < func->count; i++) {
+      Panic();
+    }
 
-    // - get all the parameter types (if they are present)
-    // - construct a function type
-    // - check unify with this function type and the type_destination
-    // - type destination of the body becomes the return type of the unified type
-    // - output emit block?
-    // - generate body and return
+    InstructionIndex inst_type = inst_alloc(gen);
+    inst_set_kind(gen, inst_type, IR_type);
+    u32 arg_count = func->count + 1; // parameters + return type
+
+    IrType *data_type = inst_push_data_raw(gen, inst_type, sizeof(IrType) + arg_count * sizeof(IrRef), Align_of(IrType));
+    *data_type = (IrType){
+      .kind = Type_function,
+      .arg_count = arg_count,
+    };
+
+    data_type->args[0] = ref_ret_type;
+
+    InstructionIndex inst_unify = inst_alloc(gen);
+    inst_set_kind(gen, inst_unify, IR_unify);
+    IrUnify *data_unify = inst_push_data(gen, inst_unify, IrUnify);
+    *data_unify = (IrUnify){
+      .type_lhs = type_destination,
+      .type_rhs = ir_ref_from_instruction_index(inst_type),
+    };
+
+    InstructionIndex inst_return_type = inst_alloc(gen);
+    inst_set_kind(gen, inst_return_type, IR_function_return_type);
+    inst_set_data(gen, inst_return_type, inst_unify);
+
+    // ASSUME: you have no early returns in the function
+
+    InstructionIndex inst_body = gen_code(gen, func->body, ir_ref_from_instruction_index(inst_return_type));
+
+    InstructionIndex inst_ret = inst_alloc(gen);
+    inst_set_kind(gen, inst_ret, IR_ret);
+    inst_set_data(gen, inst_ret, ir_ref_from_instruction_index(inst_body));
+
+    return inst_ret;
   } break;
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
@@ -234,18 +263,41 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, TypeIndex type_destination) {
 
     IrDeclaration *data_decl = inst_push_data(gen, idx_decl, IrDeclaration);
 
-    IrRef ref_type = inst_add_const_type(gen, gen->common->type.type);
+    IrRef ref_type = ir_ref_from_value_index(gen->common->val.type);
     IrRef ref_decl_type = 0;
     if (decl->type) {
       ref_decl_type = gen_code(gen, decl->type, ref_type);
     }
-    IrRef ref_decl_val = gen_code(gen, ref_decl_type, ref_decl_type);
+    IrRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
 
     data_decl->declared_type = ref_decl_type;
     data_decl->value = ref_decl_val;
 
     return ir_ref_from_instruction_index(idx_decl);
   } break;
+  case Ast_literal_int: {
+    TokenIndex *tok = ast_data(ast, idx_ast);
+    i64 value = parse_i64(token_string(tokens, text, *tok));
+
+    Value *v;
+    ValueIndex idx = values_alloc(gen->values, &v);
+    i64 *data = values_alloc_data(gen->values, sizeof(i64), Align_of(i64));
+    *data = value;
+    *v = (Value){
+      .type      = gen->common->type.comptime_int,
+      .data_size = sizeof(i64),
+      .data      = data,
+    };
+
+    IrRef ref_literal = ir_ref_from_value_index(idx);
+
+    if (type_destination) {
+      inst_add_as(gen, type_destination, ref_literal);
+    }
+
+    return ref_literal;
+  } break;
+  default: Panic();
   }
 }
 

@@ -115,13 +115,25 @@ void compiler_init(Compiler *compiler) {
     .context            = &compiler->scratch,
   });
 
-  compiler->common.type.nil  = types_add(&compiler->types, &(Type){ .kind = Type_nil });
-  compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
-
   values_init(&compiler->values, &(ValueStoreOptions){
     .arena = &compiler->arena,
     .payload_allocator = cstd_allocator,
   });
+
+  compiler->common.type.comptime_int  = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
+  compiler->common.type.nil  = types_add(&compiler->types, &(Type){ .kind = Type_nil });
+  compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
+  {
+    Value *v;
+    compiler->common.val.type  = values_alloc(&compiler->values, &v);
+    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
+    *data = compiler->common.type.type;
+    *v = (Value){
+      .type = compiler->common.type.type,
+      .data_size = sizeof(TypeIndex),
+      .data = data,
+    };
+  }
 
   decl_keys_init(&compiler->decl_keys, &(InternerOptions){
     .arena            = &compiler->arena,
