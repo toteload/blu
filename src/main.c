@@ -28,6 +28,8 @@ internal void write_tokens(Tokens *tokens, String source) {
 }
 
 internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
+  Unused(tokens, source);
+
   for (u32 i = 1; i < nodes->count; i++) {
     u8 kind = nodes->kinds[i];
     String kind_string = ast_kind_string(kind);

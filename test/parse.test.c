@@ -69,7 +69,7 @@ internal b32 do_parse(ParserTestContext *context, String src, AstNodes *ast) {
   return parse(&parse_context, &context->tokens, ast);
 }
 
-#define Root 0
+#define Root 1
 
 void test_parse_empty(TestResult *test, ParserTestContext *context) {
   AstNodes ast;
@@ -191,7 +191,7 @@ void test_parse_payload_layout(TestResult *test, ParserTestContext *context) {
   Test_assert_eq(ast.datas[Root], 0);
 
   // Payloads are written in increasing node-index order.
-  for (u32 i = 1; i < ast.count; i += 1) {
+  for (u32 i = Root+1; i < ast.count; i += 1) {
     Test_assert(ast.datas[i] > ast.datas[i - 1]);
   }
 }

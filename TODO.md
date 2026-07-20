@@ -3,6 +3,11 @@
 I am trying to figure out how to generate code that when ran produces the partial evaluation of the
 function; basically all the comptime stuff in the original function has been replaced with constants.
 
+- [ ] Add IR pretty printer
+- [ ] Debug IR generation (if necessary)
+- [ ] Interpret the IR to produce "runtime IR"
+- [ ] Interpret runtime IR to execute the program!
+
 ### Types
 
 ### Control flow

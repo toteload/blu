@@ -109,7 +109,6 @@ def create_build_ninja():
         'messages.c',
         'env.c',
         'eval.c',
-        'ir.c',
         'source_file.c',
         'compiler.c',
         'cli_options.c',

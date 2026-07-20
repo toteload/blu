@@ -2,8 +2,6 @@
 #include "value.h"
 #include "types.h"
 
-#define Bitmask_ir_ref_is_value_index (Cast(u32, 1) << 31)
-
 extern u32 eval_cast_int(TypeInteger, void*, TypeInteger, void*);
 
 #define SEGMENTLIST_NAME            ChunkList

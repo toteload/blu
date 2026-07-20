@@ -24,6 +24,8 @@ internal Type *intern_type(Arena *arena, Type *x) {
 #include "interner.h"
 
 internal b32 cmp_type(void *context, Type *a, Type *b) {
+  Unused(context);
+
   if (a->kind != b->kind) {
     return False;
   }

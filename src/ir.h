@@ -43,6 +43,16 @@ enum IrResult {
 typedef u32 IrRef;
 typedef u32 ChunkIndex;
 
+#define Bitmask_ir_ref_is_value_index (Cast(u32, 1) << 31)
+
+always_inline IrRef ir_ref_from_instruction_index(InstructionIndex idx) {
+  return idx;
+}
+
+always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
+  return idx | Bitmask_ir_ref_is_value_index;
+}
+
 typedef struct {
   ChunkIndex       chunk_index;
   InstructionIndex instruction_index;
@@ -51,7 +61,6 @@ typedef struct {
 enum IrOpcode {
   IR_func,      // data references `IrFunc` in extra
   IR_arg,       // data contains `TypeIndex`
-  IR_const,     // data contains `ValueIndex`
   IR_alloc,     // data contains `TypeIndex`
   IR_cond_br,   // data references `IrCondBr` in extra
   IR_block,     // data contains instruction count of block
@@ -88,17 +97,17 @@ enum IrOpcode {
 typedef struct {
   u8 kind; // TypeKind
   u32 arg_count;
-  InstructionIndex args[];
+  IrRef args[];
 } IrType;
 
 typedef struct {
-  InstructionIndex declared_type;
-  InstructionIndex value;
+  IrRef declared_type;
+  IrRef value;
 } IrDeclaration;
 
 typedef struct {
-  InstructionIndex type_to;
-  InstructionIndex type_from;
+  IrRef type_to;
+  IrRef type_from;
 } IrAs;
 
 typedef struct {
