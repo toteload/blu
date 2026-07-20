@@ -125,6 +125,17 @@ void compiler_init(Compiler *compiler) {
   compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
   {
     Value *v;
+    compiler->common.val.nil  = values_alloc(&compiler->values, &v);
+    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
+    *data = compiler->common.type.nil;
+    *v = (Value){
+      .type = compiler->common.type.type,
+      .data_size = sizeof(TypeIndex),
+      .data = data,
+    };
+  }
+  {
+    Value *v;
     compiler->common.val.type  = values_alloc(&compiler->values, &v);
     TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
     *data = compiler->common.type.type;
@@ -169,8 +180,11 @@ void compiler_add_sourcefile(Compiler *compiler, String filename) {
 }
 
 DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists) {
-  decls_push(&compiler->decls, &compiler->arena);
-  return decl_keys_add_checked(&compiler->decl_keys, key, already_exists);
+  DeclarationIndex idx = decl_keys_add_checked(&compiler->decl_keys, key, already_exists);
+  if (!(*already_exists)) {
+    decls_push(&compiler->decls, &compiler->arena);
+  }
+  return idx;
 }
 
 void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val) {
@@ -257,7 +271,7 @@ b32 compile(Compiler *compiler) {
 
     source->decl_idxs[0] = 0;
 
-    u32 offset = 0;
+    u32 offset = 1;
 
     while (!stack_is_empty(stack)) {
       DeclFrame *top = stack_peek_ptr(stack);
@@ -270,8 +284,6 @@ b32 compile(Compiler *compiler) {
       top->n -= 1;
 
       SourceDeclaration const *decl = &source->decls[offset];
-
-      offset += 1;
 
       if (decl->kind == SourceDeclaration_mod) {
         b32 already_exists;
@@ -291,7 +303,7 @@ b32 compile(Compiler *compiler) {
               (MessageLocation){ .kind = MessageLocation_ast_index, .data.ast_index = decl->node },
               string_lit("Declaration already exists.")
             );
-            continue;
+            goto next_iter;
           }
         }
 
@@ -313,16 +325,14 @@ b32 compile(Compiler *compiler) {
         );
 
         if (already_exists) {
+          is_ok = False;
           Message_error(
             &compiler->msg_sink,
             source->idx,
             (MessageLocation){ .kind = MessageLocation_ast_index, .data.ast_index = decl->node },
             string_lit("Declaration already exists.")
           );
-
-          is_ok = False;
-
-          continue;
+          goto next_iter;
         }
 
         source->decl_idxs[offset] = idx;
@@ -332,6 +342,9 @@ b32 compile(Compiler *compiler) {
           .data.loc = { .source = source->idx, .ast = decl->node },
         });
       }
+
+next_iter:
+      offset += 1;
     }
   }
 

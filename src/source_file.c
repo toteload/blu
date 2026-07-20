@@ -74,20 +74,24 @@ internal u32 read_file(String filename, Arena *arena, String *content) {
 
   fseek(f, 0, SEEK_END);
 
-  ArenaSnapshot savepoint = arena_scope_begin(arena);
-
   i32 sizei = ftell(f);
   if (sizei < 0) {
+    fclose(f);
     return ReadFile_error_ftell_error;
   }
 
   u32 size = Cast(u32, sizei);
+
+  ArenaSnapshot savepoint = arena_scope_begin(arena);
 
   u8 *data = arena_push_array(u8, arena, size);
 
   fseek(f, 0, SEEK_SET);
 
   u64 bytes_read = fread(data, 1, size, f);
+
+  fclose(f);
+
   if (bytes_read != size) {
     arena_scope_end(arena, savepoint);
     return ReadFile_error_unexpected_content_size;
@@ -141,9 +145,9 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   Tokens *tokens = &source->tokens;
   String text = source->text;
 
-  Assert(ast->kinds[0] == Ast_source);
+  Assert(ast->kinds[AstIndex_source] == Ast_source);
 
-  AstSource *s = ast_data(ast, 0);
+  AstSource *s = ast_data(ast, AstIndex_source);
 
   SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
   *decls = (SourceDeclaration){

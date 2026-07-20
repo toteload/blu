@@ -5,6 +5,8 @@
 
 #define Max_module_depth 8
 
+#define AstIndex_source 1
+
 typedef u32 TokenIndex;       // Offset, not optional
 typedef u32 AstIndex;         // Optional, 0 means nil
 typedef u32 TypeIndex;        // Optional, 0 means nil

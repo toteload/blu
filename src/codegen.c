@@ -185,7 +185,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
-    IrRef ref_ret_type = gen_code(gen, func->return_type, gen->common->type.type);
+    IrRef ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
 
     for (u32 i = 0; i < func->count; i++) {
       // TODO Add the parameter types
@@ -213,7 +213,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     IrRef ref_ret_type = 0;
     if (func->return_type) {
-      ref_ret_type = gen_code(gen, func->return_type, gen->common->val.type);
+      ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
     }
 
     for (u32 i = 0; i < func->count; i++) {
@@ -302,55 +302,36 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 }
 
 internal b32 opcode_references_extra(u8 op) {
-  switch (op) {
-  case IR_func:
-  case IR_cond_br:
-  case IR_store:
-  case IR_call:
-  case IR_declaration:
-  case IR_cast_int:
-  case IR_as:
-  case IR_type:
-    return True;
-  default:
-    return False;
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,e,_1,_2) case k: return e;
+#include "x_ir.h"
+#undef X
+  }
+}
+
+// IrType and IrCall are each followed by an `arg_count`-long array of IrRef beyond their base struct.
+internal u32 flex_array_size(u8 op, void *payload) {
+  switch (Cast(enum IrOpcode, op)) {
+  case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);
+  case IR_call: return Cast(IrCall*, payload)->arg_count * sizeof(IrRef);
+  default:      return 0;
   }
 }
 
 internal u32 extra_payload_size(u8 op, void *payload) {
-  switch (op) {
-  case IR_func:        return sizeof(IrFunc);
-  case IR_cond_br:     return sizeof(IrCondBr);
-  case IR_store:       return sizeof(IrStore);
-  case IR_declaration: return sizeof(IrDeclaration);
-  case IR_cast_int:    return sizeof(IrCastInt);
-  case IR_as:          return sizeof(IrAs);
-  case IR_type: {
-    IrType *type = payload;
-    return sizeof(IrType) + type->arg_count * sizeof(IrRef);
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,_1,d,_2) case k: return sizeof(d) + flex_array_size(op, payload);
+#include "x_ir.h"
+#undef X
   }
-  case IR_call: {
-    IrCall *call = payload;
-    return sizeof(IrCall) + call->arg_count * sizeof(IrRef);
-  }
-  }
-
-  Panic();
 }
 
 internal u32 extra_payload_align(u8 op) {
-  switch (op) {
-  case IR_func:        return Align_of(IrFunc);
-  case IR_cond_br:     return Align_of(IrCondBr);
-  case IR_store:       return Align_of(IrStore);
-  case IR_call:        return Align_of(IrCall);
-  case IR_declaration: return Align_of(IrDeclaration);
-  case IR_cast_int:    return Align_of(IrCastInt);
-  case IR_as:          return Align_of(IrAs);
-  case IR_type:        return Align_of(IrType);
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,_1,d,_2) case k: return Align_of(d);
+#include "x_ir.h"
+#undef X
   }
-
-  Panic();
 }
 
 internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionIndex i, u32 size, u32 align) {
@@ -367,7 +348,7 @@ b32 source_generate_code(CodeGenContext *context, Source *source, u32 idx) {
   // Reserve the zero index so instruction index 0 can be used as a null reference.
   inst_alloc(&gen);
 
-  gen_code(&gen, source->decls[source->tree_idxs[idx]].node, context->common->type.nil);
+  gen_code(&gen, source->decls[source->tree_idxs[idx]].node, ir_ref_from_value_index(context->common->val.nil));
 
   u32 count = Cast(u32, gen.kinds.len);
 

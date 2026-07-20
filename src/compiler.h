@@ -15,6 +15,7 @@ typedef struct {
 
   struct {
     ValueIndex type;
+    ValueIndex nil;
   } val;
 } Common;
 

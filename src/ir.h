@@ -87,13 +87,6 @@ enum IrOpcode {
   IR_typeinfo,
 
   IR_function_return_type, // data contains `IrRef`
-
-  // Emit blocks do not return a value and can be seen as a marker to the compiler on what code to emit.
-  // Emit blocks are only valid in a comptime function.
-  IR_emit, // data contains how many instructions are in this block.
-
-  // Eval blocks return a value and can only be exited with a `br`.
-  IR_eval, // data contains how many instructions are in this block.
 };
 
 typedef struct {

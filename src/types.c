@@ -111,7 +111,7 @@ internal u32 hash_type(void *context, Type *x) {
   Arena *scratch  = context;
   ArenaSnapshot snapshot = arena_scope_begin(scratch);
 
-  void *data = scratch->base;
+  void *data = scratch->at;
   u32 size = push_type_data(scratch, x);
   u32 hash = XXH32(data, size, 0);
 

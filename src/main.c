@@ -38,7 +38,6 @@ internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
   }
 }
 
-
 int main(int argc, char const *argv[]) {
 
   u32 err = 0;
@@ -50,36 +49,6 @@ int main(int argc, char const *argv[]) {
     return 1;
   }
 
-  //Arena arena = {0};
-  //arena_init(&arena, &(ArenaOptions){
-  //  .reserve_size        = MiB(64),
-  //  .initial_commit_size = KiB(64),
-  //});
-
-  //Arena arena_tmp = {0};
-  //arena_init(&arena_tmp, &(ArenaOptions){
-  //  .reserve_size        = MiB(64),
-  //  .initial_commit_size = KiB(64),
-  //});
-
-  //StringInterner strings = {0};
-  //strings_init(&strings, &(StringInternerOptions){
-  //  .arena         = &arena,
-  //  .map_allocator = cstd_allocator,
-  //});
-
-  //TypeInterner types = {0};
-  //types_init(&types, &(TypeInternerOptions){
-  //  .map_allocator = cstd_allocator,
-  //  .arena         = &arena,
-  //  .arena_scratch = &arena_tmp,
-  //});
-
-  //ValueStore values = {0};
-  //values_init(&values, &(ValueStoreOptions){
-  //  .payload_allocator = cstd_allocator,
-  //});
-
   Compiler compiler;
   compiler_init(&compiler);
 
@@ -90,5 +59,5 @@ int main(int argc, char const *argv[]) {
 
   printf("%s\n", (ok) ? "ok" : "error");
 
-  return 0;
+  return (ok) ? 0 : 1;
 }
