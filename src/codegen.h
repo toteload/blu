@@ -10,7 +10,7 @@ typedef struct {
   Common         *common;
   MessageSink    *msg_sink;
   StringInterner *strings;
-  DeclarationInterner *decl_keys;
+  DeclarationInterner *decls;
   ValueStore          *values;
 } CodeGenContext;
 

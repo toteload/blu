@@ -55,7 +55,7 @@ typedef struct {
   Common *common;
   MessageSink *msg_sink;
   StringInterner *strings;
-  DeclarationInterner *decl_keys;
+  DeclarationInterner *decls;
   ValueStore *values;
   Source *source;
 
@@ -71,7 +71,7 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx
     .common = context->common,
     .strings = context->strings,
     .msg_sink = context->msg_sink,
-    .decl_keys = context->decl_keys,
+    .decls = context->decls,
     .values = context->values,
     .source = source,
   };
@@ -148,7 +148,7 @@ InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, name));
 
   DeclarationIndex decl;
-  b32 found = lookup_identifier(gen->decl_keys, gen->mods, gen->mod_depth, str, &decl);
+  b32 found = lookup_identifier(gen->decls, gen->mods, gen->mod_depth, str, &decl);
   if (!found) {
     Message_error(
       gen->msg_sink,

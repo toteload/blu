@@ -50,6 +50,7 @@ struct Source {
   u32      decl_count;
   u32     *tree_idxs;
   IrChunk *ir_chunks;
+  IrChunk *runtime_chunks;
 };
 
 void source_file_init(Source *source, SourceIndex idx, String filename);
@@ -63,8 +64,9 @@ b32 source_parse(Source *source, Arena *scratch);
 // - Writes the size of the the tree in `decl_tree_size` (the number of SourceDeclarations).
 // - Writes the number of declarations in `decl_count` (`decl_tree_size` - (number of module declarations)).
 // - Allocates `decl_idxs` (decl_tree_size).
-// - Allocates `ir_chunks` (decl_count).
 // - Allocates `tree_idx` (decl_count).
+// - Allocates `ir_chunks` (decl_count).
+// - Allocates `runtime_chunks` (decl_count).
 void source_index_declarations(Source *source, StringInterner *strings);
 
 void source_print_all_messages(Source *source);

@@ -2,6 +2,7 @@
 #include "source_file.h"
 #include "string_interner.h"
 #include "codegen.h"
+#include "interpret.h"
 
 #include <stdarg.h>
 
@@ -30,20 +31,12 @@ b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 #define INTERNER_NAME            DeclarationInterner
 #define INTERNER_TYPE            DeclarationKey
 #define INTERNER_INDEX_TYPE      DeclarationIndex
-#define INTERNER_FUNCTION_PREFIX decl_keys
+#define INTERNER_EXTRA_TYPE      Declaration
+#define INTERNER_FUNCTION_PREFIX decls
 #define INTERNER_HASH_FN         hash_decl_key
 #define INTERNER_COMPARE_FN      cmp_decl_key
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
-
-#define SEGMENTLIST_NAME            Declarations
-#define SEGMENTLIST_TYPE            Declaration
-#define SEGMENTLIST_MIN_SIZE_LOG2   Declarations_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   Declarations_segment_count
-#define SEGMENTLIST_FUNCTION_PREFIX decls
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
 
 internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   Unused(ctx, old_byte_size, align);
@@ -146,26 +139,15 @@ void compiler_init(Compiler *compiler) {
     };
   }
 
-  decl_keys_init(&compiler->decl_keys, &(InternerOptions){
+  decls_init(&compiler->decls, &(InternerOptions){
     .arena            = &compiler->arena,
     .map_allocator    = cstd_allocator,
     .map_initial_size = 16,
   });
 
-  b32 ignore;
-
   // DeclarationIndex 0 is reserved for the root
-  add_declaration(
-    compiler,
-    (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX },
-    &ignore
-  );
-
-  add_declaration(
-    compiler,
-    (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, string_lit("i32")) },
-    &ignore
-  );
+  decls_add(&compiler->decls, (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX });
+  decls_add(&compiler->decls, (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, string_lit("i32")) });
 }
 
 void compiler_deinit(Compiler *compiler) {
@@ -177,22 +159,6 @@ void compiler_add_sourcefile(Compiler *compiler, String filename) {
   SourceIndex idx = compiler->sources.len;
   Source *source = sources_push(&compiler->sources, &compiler->arena);
   source_file_init(source, idx, filename);
-}
-
-DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists) {
-  DeclarationIndex idx = decl_keys_add_checked(&compiler->decl_keys, key, already_exists);
-  if (!(*already_exists)) {
-    decls_push(&compiler->decls, &compiler->arena);
-  }
-  return idx;
-}
-
-void set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val) {
-  *decls_ptr_at_unchecked(&compiler->decls, idx) = val;
-}
-
-Declaration get_declaration_value(Compiler *compiler, DeclarationIndex idx) {
-  return decls_at_unchecked(&compiler->decls, idx);
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
@@ -217,7 +183,7 @@ b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u3
     };
 
     DeclarationIndex idx;
-    b32 found = decl_keys_find(decl_keys, key, &idx);
+    b32 found = decls_find(decl_keys, key, &idx);
     if (found) {
       *out = idx;
       return True;
@@ -287,14 +253,14 @@ b32 compile(Compiler *compiler) {
 
       if (decl->kind == SourceDeclaration_mod) {
         b32 already_exists;
-        DeclarationIndex idx = add_declaration(
-          compiler,
+        DeclarationIndex idx = decls_add_checked(
+          &compiler->decls,
           (DeclarationKey){ .parent = top->mod, .name = decl->name },
           &already_exists
         );
 
         if (already_exists) {
-          Declaration val = get_declaration_value(compiler, idx);
+          Declaration val = decls_get_extra(&compiler->decls, idx);
           if (val.kind != Declaration_mod) {
             is_ok = False;
             Message_error(
@@ -311,15 +277,15 @@ b32 compile(Compiler *compiler) {
 
         source->decl_idxs[offset] = idx;
 
-        set_declaration_value(
-          compiler,
+        decls_set_extra(
+          &compiler->decls,
           idx,
           (Declaration){ .kind = Declaration_mod, .data.loc = { .source = source->idx, .ast = decl->node }}
         );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
-        DeclarationIndex idx = add_declaration(
-          compiler,
+        DeclarationIndex idx = decls_add_checked(
+          &compiler->decls,
           (DeclarationKey){ .parent = top->mod, .name = decl->name },
           &already_exists
         );
@@ -337,7 +303,7 @@ b32 compile(Compiler *compiler) {
 
         source->decl_idxs[offset] = idx;
 
-        set_declaration_value(compiler, idx, (Declaration){
+        decls_set_extra(&compiler->decls, idx, (Declaration){
           .kind = Declaration_decl,
           .data.loc = { .source = source->idx, .ast = decl->node },
         });
@@ -348,21 +314,49 @@ next_iter:
     }
   }
 
-  CodeGenContext context = {
-    .arena     = &compiler->arena,
-    .scratch   = &compiler->scratch,
-    .common    = &compiler->common,
-    .msg_sink  = &compiler->msg_sink,
-    .strings   = &compiler->strings,
-    .decl_keys = &compiler->decl_keys,
-    .values    = &compiler->values,
-  };
+  {
+    CodeGenContext context = {
+      .arena    = &compiler->arena,
+      .scratch  = &compiler->scratch,
+      .common   = &compiler->common,
+      .msg_sink = &compiler->msg_sink,
+      .strings  = &compiler->strings,
+      .decls    = &compiler->decls,
+      .values   = &compiler->values,
+    };
 
-  for (u32 i = 0; i < compiler->sources.len; i++) {
-    Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-    for (u32 j = 0; j < source->decl_count; j++) {
-      is_ok &= source_generate_code(&context, source, j);
-      ir_chunk_print(stdout, &source->ir_chunks[j], &compiler->types, &compiler->values);
+    for (u32 i = 0; i < compiler->sources.len; i++) {
+      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+      for (u32 j = 0; j < source->decl_count; j++) {
+        is_ok &= source_generate_code(&context, source, j);
+        ir_chunk_print(stdout, &source->ir_chunks[j], &compiler->types, &compiler->values);
+      }
+    }
+  }
+
+  // TODO: At this stage all the declarations in all the source files have generated code and
+  // have output their dependencies on other declarations. Use these dependencies to determine
+  // an evaluation order.
+  //
+  // For now that is not necessary (just one function).
+
+  {
+    for (u32 i = 0; i < compiler->sources.len; i++) {
+      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+
+      InterpretContext context = {
+        .perm = &source->arena,
+        .scratch = &compiler->scratch,
+        .common = &compiler->common,
+        .msg_sink = &compiler->msg_sink,
+        .decls = &compiler->decls,
+        .values = &compiler->values,
+      };
+
+      for (u32 j = 0; j < source->decl_count; j++) {
+        is_ok &= source_interpret_code(&context, source, j);
+        ir_chunk_print(stdout, &source->runtime_chunks[j], &compiler->types, &compiler->values);
+      }
     }
   }
 

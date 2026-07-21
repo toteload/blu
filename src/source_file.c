@@ -212,6 +212,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   source->decl_idxs = arena_push_array(DeclarationIndex, &source->arena, count);
   source->tree_idxs = arena_push_array(u32, &source->arena, decl_count);
   source->ir_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
+  source->runtime_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
 
   u32 i_decl = 0;
   for (u32 i = 0; i < count; i++) {

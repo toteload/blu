@@ -37,7 +37,7 @@ typedef struct {
     ValueIndex val;
     struct {
       SourceIndex source;
-      AstIndex    ast;
+      u32         source_decl_idx;
     } loc;
   } data;
 } Declaration;
@@ -45,17 +45,9 @@ typedef struct {
 #define INTERNER_NAME       DeclarationInterner
 #define INTERNER_TYPE       DeclarationKey
 #define INTERNER_INDEX_TYPE DeclarationIndex
+#define INTERNER_EXTRA_TYPE Declaration
 #define INTERNER_OUTPUT_TYPES
 #include "interner.h"
-
-#define Declarations_min_size_log2 5
-#define Declarations_segment_count 24
-#define SEGMENTLIST_NAME           Declarations
-#define SEGMENTLIST_TYPE           Declaration
-#define SEGMENTLIST_MIN_SIZE_LOG2  Declarations_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT  Declarations_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
 
 #define SourceList_min_size_log2  4
 #define SourceList_segment_count  20
@@ -96,20 +88,13 @@ typedef struct {
   StringInterner strings;
   TypeInterner   types;
 
-  DeclarationInterner decl_keys;
-  Declarations        decls;
+  DeclarationInterner decls;
 } Compiler;
 
 void compiler_init(Compiler *compiler);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
-
-DeclarationIndex add_declaration(Compiler *compiler, DeclarationKey key, b32 *already_exists);
-b32              find_declaration(Compiler *compiler, DeclarationKey key, DeclarationIndex *idx);
-void             set_declaration_value(Compiler *compiler, DeclarationIndex idx, Declaration val);
-DeclarationKey   get_declaration_key(Compiler *compiler, DeclarationIndex idx);
-Declaration      get_declaration_value(Compiler *compiler, DeclarationIndex idx);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 

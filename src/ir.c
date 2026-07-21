@@ -308,11 +308,3 @@ internal u32 generate_ir_function(Source *source, IrChunk *chunk, TypeFunction t
   // TODO: return the value of the last instruction generated
 }
 #endif
-
-u32 generate_ir(Source *source) {
-  // foreach mod-section
-  //   foreach declaration
-  //     generate ir and save the offset somewhere
-
-  return 0;
-}

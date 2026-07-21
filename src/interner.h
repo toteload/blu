@@ -1,9 +1,3 @@
-// Generic interner in the style of segment_list.h and hashmap.h.
-//
-// Interns items by value: `_add` returns the existing index if an equal item was added before,
-// otherwise it stores the item and hands out a new index. `_get` maps an index back to the item.
-// Internally this is a hashmap (item -> index) plus a segment list (index -> item).
-//
 // In a header:
 //
 //   #define INTERNER_NAME       StringInterner
@@ -29,9 +23,6 @@
 // a pointer). Without it the item is stored as-is, which is only correct for self-contained values.
 //
 // The `context` pointer from `InternerOptions` is passed to the hash and compare functions.
-//
-// NOTE: hashmap.h defines unprefixed internal helper functions in its definitions output, so only
-// one INTERNER_OUTPUT_DEFINITIONS (or HASHMAP_OUTPUT_DEFINITIONS) is possible per translation unit.
 
 #ifndef INTERNER_NAME
 #error "'INTERNER_NAME' must be defined"
@@ -66,11 +57,18 @@
 #define INTERNER_LIST_NAME   Cat(INTERNER_NAME, List)
 #define INTERNER_MAP_NAME    Cat(INTERNER_NAME, Map)
 #define INTERNER_BUCKET_NAME Cat(INTERNER_MAP_NAME, Bucket)
+#define INTERNER_EXTRA_NAME  Cat(INTERNER_NAME, Extra)
 
 #ifdef INTERNER_OUTPUT_TYPES
 
+#ifdef INTERNER_EXTRA_TYPE
+typedef struct { INTERNER_TYPE key; INTERNER_EXTRA_TYPE extra; } INTERNER_EXTRA_NAME;
+#define SEGMENTLIST_TYPE INTERNER_EXTRA_NAME
+#else
+#define SEGMENTLIST_TYPE INTERNER_TYPE
+#endif
+
 #define SEGMENTLIST_NAME          INTERNER_LIST_NAME
-#define SEGMENTLIST_TYPE          INTERNER_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 INTERNER_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT INTERNER_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
@@ -116,6 +114,11 @@ INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add_checked)
 INTERNER_LINKAGE b32                 Cat(INTERNER_FUNCTION_PREFIX, _find)(INTERNER_NAME *interner, INTERNER_TYPE item, INTERNER_INDEX_TYPE *idx);
 INTERNER_LINKAGE INTERNER_TYPE       Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx);
 
+#ifdef INTERNER_EXTRA_TYPE
+INTERNER_LINKAGE INTERNER_EXTRA_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx);
+INTERNER_LINKAGE void                Cat(INTERNER_FUNCTION_PREFIX, _set_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx, INTERNER_EXTRA_TYPE);
+#endif
+
 #undef INTERNER_OUTPUT_DECLARATIONS
 #endif // INTERNER_OUTPUT_DECLARATIONS
 
@@ -132,8 +135,13 @@ INTERNER_LINKAGE INTERNER_TYPE       Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNE
 #define INTERNER_LIST_PREFIX Cat(INTERNER_FUNCTION_PREFIX, __list)
 #define INTERNER_MAP_PREFIX  Cat(INTERNER_FUNCTION_PREFIX, __map)
 
+#ifdef INTERNER_EXTRA_TYPE
+#define SEGMENTLIST_TYPE INTERNER_EXTRA_NAME
+#else
+#define SEGMENTLIST_TYPE INTERNER_TYPE
+#endif
+
 #define SEGMENTLIST_NAME            INTERNER_LIST_NAME
-#define SEGMENTLIST_TYPE            INTERNER_TYPE
 #define SEGMENTLIST_FUNCTION_PREFIX INTERNER_LIST_PREFIX
 #define SEGMENTLIST_MIN_SIZE_LOG2   INTERNER_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT   INTERNER_SEGMENT_COUNT
@@ -198,7 +206,11 @@ INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add_checked)
   *bucket = (INTERNER_BUCKET_NAME){ .key = intern, .val = idx, };
   *already_present = False;
 
+#ifdef INTERNER_EXTRA_TYPE
+  Cat(INTERNER_LIST_PREFIX, _append)(&interner->list, interner->arena, (INTERNER_EXTRA_NAME){ .key = intern });
+#else
   Cat(INTERNER_LIST_PREFIX, _append)(&interner->list, interner->arena, intern);
+#endif
 
   return idx;
 }
@@ -216,8 +228,25 @@ b32 Cat(INTERNER_FUNCTION_PREFIX, _find)(INTERNER_NAME *interner, INTERNER_TYPE 
 
 INTERNER_LINKAGE
 INTERNER_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx) {
+#ifdef INTERNER_EXTRA_TYPE
+  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx).key;
+#else
   return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx);
+#endif
 }
+
+
+#ifdef INTERNER_EXTRA_TYPE
+INTERNER_LINKAGE
+INTERNER_EXTRA_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx) {
+  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx).extra;
+}
+
+INTERNER_LINKAGE
+void Cat(INTERNER_FUNCTION_PREFIX, _set_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx, INTERNER_EXTRA_TYPE val) {
+  Cat(INTERNER_LIST_PREFIX, _ptr_at_unchecked)(&interner->list, idx)->extra = val;
+}
+#endif
 
 #undef INTERNER_OUTPUT_DEFINITIONS
 #endif // INTERNER_OUTPUT_DEFINITIONS
@@ -237,3 +266,4 @@ INTERNER_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTER
 #undef INTERNER_BUCKET_NAME
 #undef INTERNER_LIST_PREFIX
 #undef INTERNER_MAP_PREFIX
+#undef INTERNER_EXTRA_TYPE

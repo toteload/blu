@@ -3,11 +3,6 @@
 I am trying to figure out how to generate code that when ran produces the partial evaluation of the
 function; basically all the comptime stuff in the original function has been replaced with constants.
 
-- [x] Update code such that `0` for `IrRef` means nil.
-- [x] Investigate if making IrRef a newtype is worth it.
-  - For now: NO. But... the current setup is a bit error prone, because all the types alias to u32.
-- [x] Add IR pretty printer
-- [x] Debug IR generation (if necessary)
 - [ ] Interpret the IR to produce "runtime IR"
 - [ ] Interpret runtime IR to execute the program!
 
@@ -74,7 +69,6 @@ function; basically all the comptime stuff in the original function has been rep
     - Then what is the type of `Direction`? I am guessing `distinct enum`?
       - I guess that would mean that enums are nominal. Does that make sense?
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
-  - Sized booleans? `u32(bool)`. `bool := enum { false, true }`
 - [ ] Add coercion of `bool` to integer types.
 - [ ] Add coercion of `[1]T`, `[1][1]T`, ... to `T`.
   - This has the benefit of having ASCII character literals for free by using the string literals.

@@ -221,7 +221,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     } break;
     case IR_call: {
       IrCall *call = extra;
-      fprintf(out, "func=%u:%%%u args=[", call->func.chunk_index, call->func.instruction_index);
+      fprintf(out, "func=(TODO) args=[");
       for (u32 j = 0; j < call->arg_count; j++) {
         if (j != 0) {
           fputs(", ", out);

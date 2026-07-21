@@ -3,36 +3,6 @@
 
 #include <stdio.h>
 
-// Motivation for IR
-// -----------------
-//
-// Having a 'proxy' layer between the frontend AST and the final code format provides flexibility.
-// Blu supports compile time code execution so _something_ needs to be executed at compile time.
-// Having an IR has several benefits.
-// - Different language constructs from the AST can be mapped to the same IR instructions.
-//   For example, different loop constructs (for, while) can be mapped to the same thing in IR.
-// - The code can be made "more explicit". For example, Blu supports type coercion, but at some
-//   point these implicit casts need to be made explicit. This can happen in the AST -> IR step.
-// - IR is easier to interpret than the AST because it has simpler constructs.
-// - IR is easier to translate to another target, like C or LLVM.
-//
-// For now, the idea is to convert AST -> IR.
-// Interpret IR for compile time execution and then convert IR -> C 
-// If interpreting IR is really slow in some cases, I see two alternatives atm
-// 1. Convert to C, compile C, load dynamic lib and execute.
-// 2. Use something in-process to compile and run the code, like MIR or create own dumb code generator.
-//
-// The first option is less work, because there will already be a C conversion.
-// The second option is more work, because there will need to be written a new translation.
-// But it has potential to be faster in total (should be faster to compile and no need to call an
-// external C compiler etc.).
-//
-// Still, I would first like to write an IR interpreter.
-//
-// 1. IR interpreter
-// 2. Partially evaluate comptime IR
-// 3. Translate IR to C
-
 #include "blu.h"
 #include "types.h"
 
@@ -47,7 +17,6 @@ enum IrResult {
 // `IrRef` is also optional, so making the optional `IrRef` value map to the optional `ValueIndex` value
 // seems wise.
 typedef u32 IrRef;
-typedef u32 ChunkIndex;
 
 #define Bitmask_ir_ref_is_instruction_index (Cast(u32, 1) << 31)
 
@@ -74,11 +43,6 @@ always_inline IrRef ir_ref_from_instruction_index(InstructionIndex idx) {
 always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
   return idx;
 }
-
-typedef struct {
-  ChunkIndex       chunk_index;
-  InstructionIndex instruction_index;
-} IrLocation;
 
 enum IrOpcode {
   IR_func,      // data references `IrFunc` in extra
@@ -164,7 +128,7 @@ typedef struct {
 } IrStore;
 
 typedef struct {
-  IrLocation func;
+  IrRef func;
   u32 arg_count;
   IrRef args[];
 } IrCall;
@@ -185,22 +149,6 @@ void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
 u32 generate_ir(Source *source);
 
 void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values);
-
-#define ChunkList_min_size_log2   6
-#define ChunkList_segment_count   24
-#define SEGMENTLIST_NAME          ChunkList
-#define SEGMENTLIST_TYPE          IrChunk
-#define SEGMENTLIST_MIN_SIZE_LOG2 ChunkList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT ChunkList_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
-typedef struct {
-  Arena     *arena;
-  ChunkList  list;
-} IrChunkAllocator;
-
-IrChunk *get_chunk(IrChunkAllocator *chunks, ChunkIndex idx);
 
 // ---
 
@@ -231,7 +179,6 @@ typedef struct {
 #include "hashmap.h"
 
 typedef struct {
-  IrLocation           pc;
   InstructionResultMap inst_map;
 } CallFrame;
 
@@ -243,23 +190,5 @@ typedef struct {
 #define SEGMENTLIST_SEGMENT_COUNT CallStack_segment_count
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
-
-typedef struct {
-  IrChunkAllocator *chunks;
-  ValueStore       *values;
-  TypeInterner     *types;
-  CallStack         callstack;
-  ValueStack        value_stack;
-  ValueIndex        return_value;
-
-  Arena *arena_value_stack;
-  Arena *arena_callstack;
-  Allocator allocator_inst_map;
-} IrMachine;
-
-void ir_machine_init(IrMachine *machine);
-void ir_machine_deinit(IrMachine *machine);
-
-u32 ir_run(IrMachine *machine);
 
 #endif // IR_H
