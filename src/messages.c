@@ -40,8 +40,16 @@ internal b32 location_kind_has_line_col(u8 kind) {
   return kind == MessageLocation_token_index || kind == MessageLocation_ast_index || kind == MessageLocation_byte_offset;
 }
 
-internal void get_line_col(Source *source, MessageLocation loc, u32 *line, u32 *col, String *textline) {
+typedef struct {
+  u32 line;
+  u32 col;
+  String textline;
+  u32 underline_len;
+} PositionInfo;
+
+internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
   u32 offset;
+  u32 len = 0;
   switch (loc.kind) {
   case MessageLocation_byte_offset: {
     offset = loc.data.offset;
@@ -49,21 +57,30 @@ internal void get_line_col(Source *source, MessageLocation loc, u32 *line, u32 *
   case MessageLocation_token_index: {
     SpanU32 span_offset = source->tokens.spans[loc.data.token_index];
     offset = span_offset.start;
+    len = span_offset.end - span_offset.start;
   } break;
   case MessageLocation_ast_index: {
     SpanToken span_token = source->ast.spans[loc.data.ast_index];
     SpanU32 span_offset = source->tokens.spans[span_token.start];
     offset = span_offset.start;
+    len = span_offset.end - span_offset.start;
   } break;
   }
 
   LineInfo info = tokens_find_line_info(&source->tokens, offset);
 
-  *line = info.line;
-  *col  = offset - info.offset_start_of_line + 1;
+  u32 line = info.line;
+  u32 col  = offset - info.offset_start_of_line + 1;
 
   // subtract 1 from the line length to exclude the newline
-  *textline = (String){ .str = source->text.str + info.offset_start_of_line, .len = info.line_len - 1 };
+  String textline = (String){ .str = source->text.str + info.offset_start_of_line, .len = info.line_len - 1 };
+
+  return (PositionInfo){
+    .line = line,
+    .col = col,
+    .textline = textline,
+    .underline_len = len,
+  };
 }
 
 void print_message(Message *message, Source *source) {
@@ -78,18 +95,22 @@ void print_message(Message *message, Source *source) {
   String filename = source->filename;
   printf(" %.*s:", Cast(int, filename.len), filename.str);
 
-  u32 line = 0;
-  u32 col = 0;
-  String textline;
+  PositionInfo info = {
+    .line = 0,
+    .col = 0,
+    .textline = {0},
+    .underline_len = 0,
+  };
   if (location_kind_has_line_col(message->location.kind)) {
-    get_line_col(source, message->location, &line, &col, &textline);
-    printf("%u:%u:", line, col);
+    info = get_position_info(source, message->location);
+    printf("%u:%u:", info.line, info.col);
   }
 
   printf(" %.*s\n", Cast(int, message->format.len), message->format.str);
 
-  if (line) {
-    printf("%5u | %.*s\n", line, Cast(int, textline.len), textline.str);
-    printf("      |%*c^\n", col, ' ');
+  if (info.line) {
+    printf("%5u | %.*s\n", info.line, Cast(int, info.textline.len), info.textline.str);
+    // Forgive me, Father, for I have sinned.
+    printf("      |%*c%.*s\n", info.col, ' ', Min(info.underline_len, 64), "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
   }
 }

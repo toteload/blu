@@ -78,13 +78,17 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
 
+
   DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, Max_module_depth);
   u32 i = source->decls[source->tree_idxs[idx]].parent;
   u32 offset = 0;
-  while (source->decls[i].kind != SourceDeclaration_root) {
+  Assert(source->decls[0].kind == SourceDeclaration_root);
+  while (i) {
     mods[offset++] = source->decl_idxs[i];
     i = source->decls[i].parent;
   }
+
+  mods[offset++] = source->decl_idxs[0];
 
   gen->mod_depth = offset;
   gen->mods = mods;

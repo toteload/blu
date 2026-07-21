@@ -11,6 +11,8 @@ The rewrite is in progress; `TODO.md` and `NOTES.md` track current design work.
 
 ## Code style
 
+Never add comments to code. Tests are the exception — comments are allowed in test files.
+
 Do not add comments that only describe the change being made right now (e.g. "renamed this", "new field", "now copies the base"). Comments should explain the code as it stands for a future reader, not narrate the edit that produced it.
 
 ## Build
