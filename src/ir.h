@@ -1,6 +1,8 @@
 #ifndef IR_H
 #define IR_H
 
+#include <stdio.h>
+
 // Motivation for IR
 // -----------------
 //
@@ -39,18 +41,38 @@ enum IrResult {
 };
 
 // The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
-// If the MSB is 1, then the `IrRef` is a `ValueIndex`.
+// If the MSB is 1, then the `IrRef` is a `InstructionIndex`.
+// The reasoning behind this is that `InstructionIndex` is treated as an offset and is non-optional.
+// `ValueIndex` is optional and a value of 0 means nil.
+// `IrRef` is also optional, so making the optional `IrRef` value map to the optional `ValueIndex` value
+// seems wise.
 typedef u32 IrRef;
 typedef u32 ChunkIndex;
 
-#define Bitmask_ir_ref_is_value_index (Cast(u32, 1) << 31)
+#define Bitmask_ir_ref_is_instruction_index (Cast(u32, 1) << 31)
+
+always_inline b32 ref_is_value_index(IrRef ref) {
+  return (ref & Bitmask_ir_ref_is_instruction_index) == 0;
+}
+
+always_inline b32 ir_ref_is_nil(IrRef ref) {
+  return ref == 0;
+}
+
+always_inline ValueIndex ref_to_value_index(IrRef ref) {
+  return ref;
+}
+
+always_inline InstructionIndex ref_to_instruction_index(IrRef ref) {
+  return ref & ~Bitmask_ir_ref_is_instruction_index;
+}
 
 always_inline IrRef ir_ref_from_instruction_index(InstructionIndex idx) {
-  return idx;
+  return idx | Bitmask_ir_ref_is_instruction_index;
 }
 
 always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
-  return idx | Bitmask_ir_ref_is_value_index;
+  return idx;
 }
 
 typedef struct {
@@ -60,14 +82,14 @@ typedef struct {
 
 enum IrOpcode {
   IR_func,      // data references `IrFunc` in extra
-  IR_arg,       // data contains `TypeIndex`
+  IR_param,     // data contains `IrRef`
   IR_alloc,     // data contains `TypeIndex`
   IR_cond_br,   // data references `IrCondBr` in extra
   IR_block,     // data contains instruction count of block
   IR_loop,      // data contains instruction count of block
-  IR_br,        // data contains `InstructionIndex`
-  IR_repeat,    // data contains `InstructionIndex`
+  IR_br,        // data references `IrBr` in extra
   IR_ret,       // data contains `IrRef`
+  IR_repeat,    // data contains `InstructionIndex`
   IR_load,      // data contains `IrRef`
   IR_store,     // data references `IrStore` in extra
   IR_call,      // data references `IrCall` in extra
@@ -114,13 +136,14 @@ typedef struct {
 } IrAs;
 
 typedef struct {
-  TypeIndex return_type;
+  IrRef return_type;
+  u32 arg_offset;
   u32 arg_count;
   u32 instruction_count;
 } IrFunc;
 
 typedef struct {
-  TypeIndex type;
+  IrRef type;
   IrRef value;
 } IrCastInt;
 
@@ -160,6 +183,8 @@ u32   instruction_data(IrChunk *chunk, InstructionIndex idx);
 void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
 
 u32 generate_ir(Source *source);
+
+void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values);
 
 #define ChunkList_min_size_log2   6
 #define ChunkList_segment_count   24

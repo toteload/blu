@@ -78,7 +78,6 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
 
-
   DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, Max_module_depth);
   u32 i = source->decls[source->tree_idxs[idx]].parent;
   u32 offset = 0;
@@ -121,8 +120,33 @@ internal void *inst_push_data_raw(CodeGen *gen, InstructionIndex idx, u32 size, 
 
 #define inst_push_data(gen,idx,type) inst_push_data_raw(gen, idx, sizeof(type), Align_of(type))
 
-IrRef inst_add_lookup(CodeGen *gen, TokenIndex name) {
+internal u32 inst_offset(CodeGen *gen, InstructionIndex start) {
+  u32 at = gen->kinds.len;
+  return at - start - 1;
+}
+
+internal InstructionIndex block_begin(CodeGen *gen) {
+  InstructionIndex block = inst_alloc(gen);
+  inst_set_kind(gen, block, IR_block);
+  return block;
+}
+
+internal void block_end(CodeGen *gen, InstructionIndex block, IrRef val) {
+  InstructionIndex br = inst_alloc(gen);
+  inst_set_kind(gen, br, IR_br);
+  IrBr *data_br = inst_push_data(gen, br, IrBr);
+  *data_br = (IrBr){
+    .block = block,
+    .value = val,
+  };
+
+  u32 block_inst_count = inst_offset(gen, block);
+  inst_set_data(gen, block, block_inst_count);
+}
+
+InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, name));
+
   DeclarationIndex decl;
   b32 found = lookup_identifier(gen->decl_keys, gen->mods, gen->mod_depth, str, &decl);
   if (!found) {
@@ -142,7 +166,7 @@ IrRef inst_add_lookup(CodeGen *gen, TokenIndex name) {
 
   depslist_append(&gen->dependencies, gen->scratch, decl);
 
-  return ir_ref_from_instruction_index(lookup);
+  return lookup;
 }
 
 IrRef inst_add_const_type(CodeGen *gen, TypeIndex type) {
@@ -177,15 +201,13 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   Tokens   *tokens = &gen->source->tokens;
   AstNodes *ast    = &gen->source->ast;
 
+  IrRef res = 0;
+
   u8 kind = ast->kinds[idx_ast];
   switch (Cast(enum AstKind, kind)) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
-    IrRef ref_lookup = inst_add_lookup(gen, *name);
-    if (type_destination) {
-      inst_add_as(gen, type_destination, ref_lookup);
-    }
-    return ref_lookup;
+    res = ir_ref_from_instruction_index(inst_add_lookup(gen, *name));
   } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
@@ -210,15 +232,22 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     data_type->args[0] = ref_ret_type;
 
-    return ir_ref_from_instruction_index(inst_type);
+    res = ir_ref_from_instruction_index(inst_type);
   } break;
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
+
+    InstructionIndex inst_func = inst_alloc(gen);
+    inst_set_kind(gen, inst_func, IR_func);
+
+    IrFunc *data_func = inst_push_data(gen, inst_func, IrFunc);
 
     IrRef ref_ret_type = 0;
     if (func->return_type) {
       ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
     }
+
+    u32 arg_offset = inst_offset(gen, inst_func);
 
     for (u32 i = 0; i < func->count; i++) {
       Panic();
@@ -246,17 +275,24 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     InstructionIndex inst_return_type = inst_alloc(gen);
     inst_set_kind(gen, inst_return_type, IR_function_return_type);
-    inst_set_data(gen, inst_return_type, inst_unify);
+    inst_set_data(gen, inst_return_type, ir_ref_from_instruction_index(inst_unify));
 
-    // ASSUME: you have no early returns in the function
-
-    InstructionIndex inst_body = gen_code(gen, func->body, ir_ref_from_instruction_index(inst_return_type));
+    IrRef inst_body = gen_code(gen, func->body, ir_ref_from_instruction_index(inst_return_type));
 
     InstructionIndex inst_ret = inst_alloc(gen);
     inst_set_kind(gen, inst_ret, IR_ret);
-    inst_set_data(gen, inst_ret, ir_ref_from_instruction_index(inst_body));
+    inst_set_data(gen, inst_ret, inst_body);
 
-    return inst_ret;
+    u32 func_instruction_count = inst_offset(gen, inst_func);
+
+    *data_func = (IrFunc){
+      .return_type = ref_ret_type,
+      .arg_offset = arg_offset,
+      .arg_count = func->count,
+      .instruction_count = func_instruction_count,
+    };
+
+    return ir_ref_from_instruction_index(inst_func);
   } break;
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
@@ -270,7 +306,10 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     IrRef ref_type = ir_ref_from_value_index(gen->common->val.type);
     IrRef ref_decl_type = 0;
     if (decl->type) {
-      ref_decl_type = gen_code(gen, decl->type, ref_type);
+      InstructionIndex block = block_begin(gen);
+      IrRef type = gen_code(gen, decl->type, ref_type);
+      block_end(gen, block, type);
+      ref_decl_type = ir_ref_from_instruction_index(block);
     }
     IrRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
 
@@ -295,14 +334,16 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     IrRef ref_literal = ir_ref_from_value_index(idx);
 
-    if (type_destination) {
-      inst_add_as(gen, type_destination, ref_literal);
-    }
-
-    return ref_literal;
+    res = ref_literal;
   } break;
   default: Panic();
   }
+
+  if (type_destination) {
+    return ir_ref_from_instruction_index(inst_add_as(gen, type_destination, res));
+  }
+
+  return res;
 }
 
 internal b32 opcode_references_extra(u8 op) {
@@ -313,7 +354,6 @@ internal b32 opcode_references_extra(u8 op) {
   }
 }
 
-// IrType and IrCall are each followed by an `arg_count`-long array of IrRef beyond their base struct.
 internal u32 flex_array_size(u8 op, void *payload) {
   switch (Cast(enum IrOpcode, op)) {
   case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);

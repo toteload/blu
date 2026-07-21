@@ -17,7 +17,8 @@ void parser_dummy_add_message(void *user, u8 severity, SourceIndex source, Messa
   Unused(user, severity, source, location, format);
 }
 
-void parser_test(TestResult *test, FnParserTest fn) {
+void parser_test(TestResult *test, void *user) {
+  FnParserTest fn = Cast(FnParserTest, user);
   MessageSink sink = {
     .user        = Null,
     .add_message = parser_dummy_add_message,

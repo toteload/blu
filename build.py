@@ -11,6 +11,8 @@ join = os.path.join
 is_macos = platform.system() == 'Darwin'
 is_windows = platform.system() == 'Windows'
 
+USE_SANITIZERS = True
+
 def exe(name):
     if is_windows:
         return f'{name}.exe'
@@ -80,7 +82,7 @@ def create_build_ninja():
                   '-DTTLD_DEBUG',
                   '-g',
                   '-gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
-                  #'-fsanitize=address,undefined',
+                  '-fsanitize=address,undefined' if USE_SANITIZERS else '',
                   '$cflags',
                   '-c',
                   '$in',
@@ -93,7 +95,7 @@ def create_build_ninja():
         command = ' '.join([
             'clang',
             '-g',
-            #'-fsanitize=address,undefined', 
+            '-fsanitize=address,undefined' if USE_SANITIZERS else '',
             '$in',
             '-o $out']),
         )
@@ -113,6 +115,7 @@ def create_build_ninja():
         'compiler.c',
         'cli_options.c',
         'codegen.c',
+        'ir_print.c',
     ]
 
     outputs = []

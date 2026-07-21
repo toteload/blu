@@ -362,6 +362,7 @@ next_iter:
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
     for (u32 j = 0; j < source->decl_count; j++) {
       is_ok &= source_generate_code(&context, source, j);
+      ir_chunk_print(stdout, &source->ir_chunks[j], &compiler->types, &compiler->values);
     }
   }
 

@@ -69,21 +69,9 @@ internal CallFrame *push_and_init_callframe(IrMachine *machine, IrLocation addre
   return frame;
 }
 
-internal always_inline InstructionIndex ref_to_instruction_index(IrRef ref) {
-  return ref;
-}
-
-internal always_inline ValueIndex ref_to_value_index(IrRef ref) {
-  return ref & ~Bitmask_ir_ref_is_value_index;
-}
-
 internal always_inline Value *ref_value(ValueStore *values, IrRef ref) {
   ValueIndex idx = ref_to_value_index(ref);
   return values_get(values, idx);
-}
-
-internal always_inline b32 ref_is_value_index(IrRef ref) {
-  return (ref & Bitmask_ir_ref_is_value_index) != 0;
 }
 
 #if 0

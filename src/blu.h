@@ -11,7 +11,7 @@ typedef u32 TokenIndex;       // Offset, not optional
 typedef u32 AstIndex;         // Optional, 0 means nil
 typedef u32 TypeIndex;        // Optional, 0 means nil
 typedef u32 StringIndex;      // Optional, 0 means nil
-typedef u32 InstructionIndex; // Optional, 0 means nil
+typedef u32 InstructionIndex; // Offset, not optional
 typedef u32 SourceIndex;
 typedef u32 ValueIndex;
 typedef u32 DeclarationIndex;

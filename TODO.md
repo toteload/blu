@@ -3,9 +3,11 @@
 I am trying to figure out how to generate code that when ran produces the partial evaluation of the
 function; basically all the comptime stuff in the original function has been replaced with constants.
 
-- [ ] Make sure that `0` for IrRef means nil
-- [ ] Add IR pretty printer
-- [ ] Debug IR generation (if necessary)
+- [x] Update code such that `0` for `IrRef` means nil.
+- [x] Investigate if making IrRef a newtype is worth it.
+  - For now: NO. But... the current setup is a bit error prone, because all the types alias to u32.
+- [x] Add IR pretty printer
+- [x] Debug IR generation (if necessary)
 - [ ] Interpret the IR to produce "runtime IR"
 - [ ] Interpret runtime IR to execute the program!
 

@@ -3,14 +3,14 @@
 #endif
 
 X(IR_func,                 True,  IrFunc,        "func")
-X(IR_arg,                  False, u32,          "arg")
+X(IR_param,                False, u32,          "param")
 X(IR_alloc,                False, u32,          "alloc")
 X(IR_cond_br,              True,  IrCondBr,      "cond-br")
 X(IR_block,                False, u32,          "block")
 X(IR_loop,                 False, u32,          "loop")
-X(IR_br,                   False, u32,          "br")
-X(IR_repeat,               False, u32,          "repeat")
+X(IR_br,                   True,  IrBr,          "br")
 X(IR_ret,                  False, u32,          "ret")
+X(IR_repeat,               False, u32,          "repeat")
 X(IR_load,                 False, u32,          "load")
 X(IR_store,                True,  IrStore,       "store")
 X(IR_call,                 True,  IrCall,        "call")

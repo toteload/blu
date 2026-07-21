@@ -9,7 +9,9 @@ void dummy_add_message(void *user, u8 severity, SourceIndex source, MessageLocat
   Unused(user, severity, source, location, format);
 }
 
-void tokenizer_test(TestResult *test, FnTokenizerTest fn) {
+void tokenizer_test(TestResult *test, void *user) {
+  FnTokenizerTest fn = Cast(FnTokenizerTest, user);
+
   MessageSink sink = {
     .user = Null,
     .add_message = dummy_add_message,
