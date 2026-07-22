@@ -10,6 +10,8 @@ enum IrResult {
   IrResult_ok,
 };
 
+// -------------------------------------------------------------------------------------------------
+
 // The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
 // If the MSB is 1, then the `IrRef` is a `InstructionIndex`.
 // The reasoning behind this is that `InstructionIndex` is treated as an offset and is non-optional.
@@ -44,6 +46,8 @@ always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
   return idx;
 }
 
+// -------------------------------------------------------------------------------------------------
+
 enum IrOpcode {
   IR_func,      // data references `IrFunc` in extra
   IR_param,     // data contains `IrRef`
@@ -75,6 +79,8 @@ enum IrOpcode {
   IR_function_return_type, // data contains `IrRef`
 };
 
+// -------------------------------------------------------------------------------------------------
+
 typedef struct {
   u8 kind; // TypeKind
   u32 arg_count;
@@ -96,7 +102,7 @@ typedef struct {
 
 typedef struct {
   IrRef type_to;
-  IrRef type_from;
+  IrRef val;
 } IrAs;
 
 typedef struct {
@@ -133,7 +139,7 @@ typedef struct {
   IrRef args[];
 } IrCall;
 
-// ---
+// -------------------------------------------------------------------------------------------------
 
 typedef struct {
   u32   opcode_count;
@@ -146,11 +152,63 @@ u8    opcode(IrChunk *chunk, InstructionIndex idx);
 u32   instruction_data(IrChunk *chunk, InstructionIndex idx);
 void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
 
+// -------------------------------------------------------------------------------------------------
+
+#define OPCODELIST_MIN_SIZE_LOG_2 8
+#define OPCODELIST_SEGMENT_COUNT  24
+#define OPCODELIST_NAME           OpcodeList
+#define OPCODELIST_TYPE           u8
+
+#define SEGMENTLIST_NAME          OPCODELIST_NAME
+#define SEGMENTLIST_TYPE          OPCODELIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 OPCODELIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT OPCODELIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef union {
+  u32   data;
+  void *ptr;
+} InstData;
+
+#define INSTDATALIST_MIN_SIZE_LOG2 8
+#define INSTDATALIST_SEGMENT_COUNT 24
+#define INSTDATALIST_NAME          InstDataList
+#define INSTDATALIST_TYPE          InstData
+
+#define SEGMENTLIST_NAME           INSTDATALIST_NAME
+#define SEGMENTLIST_TYPE           INSTDATALIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2  INSTDATALIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT  INSTDATALIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
+  Arena        *scratch;
+  OpcodeList    kinds;
+  InstDataList  data;
+} IrBuilder;
+
+InstructionIndex inst_alloc(IrBuilder *builder);
+void             inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
+void             inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
+void            *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
+u32              inst_offset(IrBuilder *builder, InstructionIndex start);
+InstructionIndex inst_block_begin(IrBuilder *builder);
+void             inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val);
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val);
+
+void             irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
+
+#define inst_push_data(builder,idx,type) inst_push_data_raw(builder, idx, sizeof(type), Align_of(type))
+
+// -------------------------------------------------------------------------------------------------
+
 u32 generate_ir(Source *source);
 
 void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values);
 
-// ---
+// -------------------------------------------------------------------------------------------------
 
 enum ValueStackElementKind {
   ValueStackElement_marker_frame,

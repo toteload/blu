@@ -252,7 +252,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
       IrAs *as = extra;
       ir_ref_print(out, as->type_to, types, values);
       fputs(" ", out);
-      ir_ref_print(out, as->type_from, types, values);
+      ir_ref_print(out, as->val, types, values);
     } break;
     case IR_unify: {
       IrUnify *unify = extra;

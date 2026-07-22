@@ -280,7 +280,7 @@ b32 compile(Compiler *compiler) {
         decls_set_extra(
           &compiler->decls,
           idx,
-          (Declaration){ .kind = Declaration_mod, .data.loc = { .source = source->idx, .ast = decl->node }}
+          (Declaration){ .kind = Declaration_mod, .data.loc = { .source = source->idx, .source_decl_idx = offset }}
         );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
@@ -305,7 +305,7 @@ b32 compile(Compiler *compiler) {
 
         decls_set_extra(&compiler->decls, idx, (Declaration){
           .kind = Declaration_decl,
-          .data.loc = { .source = source->idx, .ast = decl->node },
+          .data.loc = { .source = source->idx, .source_decl_idx = offset },
         });
       }
 

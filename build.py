@@ -116,6 +116,7 @@ def create_build_ninja():
         'cli_options.c',
         'codegen.c',
         'interpret.c',
+        'ir.c',
         'ir_print.c',
     ]
 

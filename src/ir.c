@@ -1,7 +1,152 @@
 #include "ir.h"
-#include "value.h"
-#include "types.h"
 
+#define SEGMENTLIST_NAME            OPCODELIST_NAME
+#define SEGMENTLIST_TYPE            OPCODELIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2   OPCODELIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT   OPCODELIST_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX opcodelist
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+#define SEGMENTLIST_NAME            INSTDATALIST_NAME
+#define SEGMENTLIST_TYPE            INSTDATALIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2   INSTDATALIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT   INSTDATALIST_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX datalist
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+InstructionIndex inst_alloc(IrBuilder *builder) {
+  InstructionIndex idx = builder->kinds.len;
+  opcodelist_append(&builder->kinds, builder->scratch, 0);
+  datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
+  return idx;
+}
+
+void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode) {
+  *opcodelist_ptr_at_unchecked(&builder->kinds, idx) = opcode;
+}
+
+void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data) {
+  *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
+}
+
+void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align) {
+  void *p = arena_push(builder->scratch, size, align);
+  *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .ptr = p };
+  return p;
+}
+
+u32 inst_offset(IrBuilder *builder, InstructionIndex start) {
+  u32 at = builder->kinds.len;
+  return at - start - 1;
+}
+
+InstructionIndex inst_block_begin(IrBuilder *builder) {
+  InstructionIndex block = inst_alloc(builder);
+  inst_set_opcode(builder, block, IR_block);
+  return block;
+}
+
+void inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val) {
+  InstructionIndex br = inst_alloc(builder);
+  inst_set_opcode(builder, br, IR_br);
+  IrBr *data_br = inst_push_data(builder, br, IrBr);
+  *data_br = (IrBr){
+    .block = block,
+    .value = val,
+  };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+}
+
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val) {
+  InstructionIndex idx = inst_alloc(builder);
+  inst_set_opcode(builder, idx, IR_as);
+
+  IrAs *data = inst_push_data(builder, idx, IrAs);
+  *data = (IrAs){
+    .type_to   = type_destination,
+    .val = val,
+  };
+
+  return idx;
+}
+
+internal b32 opcode_references_extra(u8 op) {
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,e,_1,_2) case k: return e;
+#include "x_ir.h"
+#undef X
+  }
+}
+
+internal u32 flex_array_size(u8 op, void *payload) {
+  switch (Cast(enum IrOpcode, op)) {
+  case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);
+  case IR_call: return Cast(IrCall*, payload)->arg_count * sizeof(IrRef);
+  default:      return 0;
+  }
+}
+
+internal u32 extra_payload_size(u8 op, void *payload) {
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,_1,d,_2) case k: return sizeof(d) + flex_array_size(op, payload);
+#include "x_ir.h"
+#undef X
+  }
+}
+
+internal u32 extra_payload_align(u8 op) {
+  switch (Cast(enum IrOpcode, op)) {
+#define X(k,_1,d,_2) case k: return Align_of(d);
+#include "x_ir.h"
+#undef X
+  }
+}
+
+internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionIndex i, u32 size, u32 align) {
+  void *p = arena_push(arena, size, align);
+  u32 offset = ptr_diff(p, extra_base);
+  data[i] = offset;
+  return p;
+}
+
+void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk) {
+  u32 count = Cast(u32, builder->kinds.len);
+
+  u8  *opcodes = arena_push_array(u8,  arena, count);
+  u32 *data    = arena_push_array(u32, arena, count);
+
+  opcodelist_copy_to_array(&builder->kinds, opcodes);
+
+  void *extra = arena->at;
+
+  for (InstructionIndex i = 0; i < count; i++) {
+    u8 op = opcodes[i];
+    InstData entry = datalist_at_unchecked(&builder->data, i);
+
+    if (!opcode_references_extra(op)) {
+      data[i] = entry.data;
+      continue;
+    }
+
+    u32 size  = extra_payload_size(op, entry.ptr);
+    u32 align = extra_payload_align(op);
+    void *mem = flatten_push_data(extra, arena, data, i, size, align);
+    memcpy(mem, entry.ptr, size);
+  }
+
+  *chunk = (IrChunk){
+    .opcode_count = count,
+    .opcodes      = opcodes,
+    .data         = data,
+    .extra        = extra,
+  };
+}
+
+#if 0
 extern u32 eval_cast_int(TypeInteger, void*, TypeInteger, void*);
 
 #define SEGMENTLIST_NAME            ChunkList
@@ -143,7 +288,6 @@ internal void clear_frame_values(IrMachine *machine, CallFrame *frame) {
   }
 }
 
-#if 0
 u32 ir_run(IrMachine *machine) {
   ValueStore *values = machine->values;
   TypeInterner *types = machine->types;
