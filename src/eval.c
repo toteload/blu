@@ -145,3 +145,26 @@ u32 eval_cast_int(
   return CastResult_ok;
 }
 
+enum CoerceResult {
+  CoerceResult_ok,
+  CoerceResult_invalid_coercion_types,
+  CoerceResult_comptime_int_value_too_big,
+};
+
+u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
+  if (dst == val->type) {
+    Panic();
+    return CoerceResult_ok;
+  }
+
+  Type *type_dst = types_get(types, dst);
+  Type *type_val = types_get(types, val->type);
+
+  if (type_val->kind == Type_comptime_int && type_dst->kind == Type_integer) {
+    Panic();
+    // This may still fail! The value of the comptime_int may be too big.
+    return CoerceResult_ok;
+  }
+
+  return CoerceResult_invalid_coercion_types;
+}

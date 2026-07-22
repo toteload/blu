@@ -11,11 +11,13 @@ typedef struct {
     TypeIndex comptime_int;
     TypeIndex nil;
     TypeIndex type;
+    TypeIndex i32;
   } type;
 
   struct {
     ValueIndex type;
     ValueIndex nil;
+    ValueIndex i32;
   } val;
 } Common;
 

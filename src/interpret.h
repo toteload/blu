@@ -12,6 +12,7 @@ typedef struct {
   MessageSink *msg_sink;
   DeclarationInterner *decls;
   ValueStore *values;
+  TypeInterner *types;
 } InterpretContext;
 
 b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration);

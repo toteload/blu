@@ -26,6 +26,10 @@ always_inline b32 ref_is_value_index(IrRef ref) {
   return (ref & Bitmask_ir_ref_is_instruction_index) == 0;
 }
 
+always_inline b32 ref_is_instruction_index(IrRef ref) {
+  return (ref & Bitmask_ir_ref_is_instruction_index) != 0;
+}
+
 always_inline b32 ir_ref_is_nil(IrRef ref) {
   return ref == 0;
 }

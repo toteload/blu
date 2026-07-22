@@ -116,6 +116,7 @@ void compiler_init(Compiler *compiler) {
   compiler->common.type.comptime_int  = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
   compiler->common.type.nil  = types_add(&compiler->types, &(Type){ .kind = Type_nil });
   compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
+  compiler->common.type.i32 = types_add(&compiler->types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
   {
     Value *v;
     compiler->common.val.nil  = values_alloc(&compiler->values, &v);
@@ -138,6 +139,17 @@ void compiler_init(Compiler *compiler) {
       .data = data,
     };
   }
+  {
+    Value *v;
+    compiler->common.val.i32  = values_alloc(&compiler->values, &v);
+    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
+    *data = compiler->common.type.i32;
+    *v = (Value){
+      .type = compiler->common.type.type,
+      .data_size = sizeof(TypeIndex),
+      .data = data,
+    };
+  }
 
   decls_init(&compiler->decls, &(InternerOptions){
     .arena            = &compiler->arena,
@@ -147,7 +159,17 @@ void compiler_init(Compiler *compiler) {
 
   // DeclarationIndex 0 is reserved for the root
   decls_add(&compiler->decls, (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX });
-  decls_add(&compiler->decls, (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, string_lit("i32")) });
+  {
+    DeclarationIndex decl_i32 = decls_add(
+      &compiler->decls,
+      (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, string_lit("i32")) }
+    );
+    decls_set_extra(
+      &compiler->decls,
+      decl_i32,
+      (Declaration){ .kind = Declaration_value, .data.val = compiler->common.val.i32 }
+    );
+  }
 }
 
 void compiler_deinit(Compiler *compiler) {

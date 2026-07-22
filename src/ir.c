@@ -2,6 +2,20 @@
 
 // -------------------------------------------------------------------------------------------------
 
+u8 chunk_opcode(IrChunk *chunk, InstructionIndex idx) {
+  return chunk->opcodes[idx];
+}
+
+u32 chunk_data(IrChunk *chunk, InstructionIndex idx) {
+  return chunk->data[idx];
+}
+
+void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
+
+// -------------------------------------------------------------------------------------------------
+
 #define SEGMENTLIST_NAME            OPCODELIST_NAME
 #define SEGMENTLIST_TYPE            OPCODELIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2   OPCODELIST_MIN_SIZE_LOG_2
@@ -146,10 +160,6 @@ void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk) {
     .data         = data,
     .extra        = extra,
   };
-}
-
-void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
-  return ptr_offset(chunk->extra, chunk->data[idx]);
 }
 
 // -------------------------------------------------------------------------------------------------
