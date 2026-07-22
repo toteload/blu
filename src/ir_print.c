@@ -145,7 +145,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
   Stack(BlockPrint) blocks;
   stack_init(blocks, buf, 64);
 
-  for (InstructionIndex i = 1; i < chunk->opcode_count; i++) {
+  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
     u8  op   = chunk->opcodes[i];
     u32 data = chunk->data[i];
 

@@ -6,6 +6,11 @@ function; basically all the comptime stuff in the original function has been rep
 - [ ] Interpret the IR to produce "runtime IR"
 - [ ] Interpret runtime IR to execute the program!
 
+## Some things to keep in mind
+- If a type has multiple method sets that are active, which ones are actually used?
+  Just all the ones that match and if they have overlap it's an error?
+- Are anonymous structs nominal or structural?
+
 ### Types
 
 ### Control flow

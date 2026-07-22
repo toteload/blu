@@ -148,9 +148,9 @@ typedef struct {
   void *extra;
 } IrChunk;
 
-u8    opcode(IrChunk *chunk, InstructionIndex idx);
-u32   instruction_data(IrChunk *chunk, InstructionIndex idx);
-void *instruction_extra(IrChunk *chunk, InstructionIndex idx);
+u8    chunk_opcode(IrChunk *chunk, InstructionIndex idx);
+u32   chunk_data(IrChunk *chunk, InstructionIndex idx);
+void *chunk_extra(IrChunk *chunk, InstructionIndex idx);
 
 // -------------------------------------------------------------------------------------------------
 
@@ -204,49 +204,6 @@ void             irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *ch
 
 // -------------------------------------------------------------------------------------------------
 
-u32 generate_ir(Source *source);
-
 void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values);
-
-// -------------------------------------------------------------------------------------------------
-
-enum ValueStackElementKind {
-  ValueStackElement_marker_frame,
-  ValueStackElement_marker_block,
-  ValueStackElement_value,
-};
-
-typedef struct {
-  u8 kind;
-  InstructionIndex idx;
-} ValueStackElement;
-
-#define ValueStack_min_size_log2  5
-#define ValueStack_segment_count  24
-#define SEGMENTLIST_NAME          ValueStack
-#define SEGMENTLIST_TYPE          ValueStackElement
-#define SEGMENTLIST_MIN_SIZE_LOG2 ValueStack_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT ValueStack_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
-#define HASHMAP_NAME       InstructionResultMap
-#define HASHMAP_KEY_TYPE   InstructionIndex
-#define HASHMAP_VALUE_TYPE ValueIndex
-#define HASHMAP_OUTPUT_TYPES
-#include "hashmap.h"
-
-typedef struct {
-  InstructionResultMap inst_map;
-} CallFrame;
-
-#define CallStack_min_size_log2   5
-#define CallStack_segment_count   24
-#define SEGMENTLIST_NAME          CallStack
-#define SEGMENTLIST_TYPE          CallFrame
-#define SEGMENTLIST_MIN_SIZE_LOG2 CallStack_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT CallStack_segment_count
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
 
 #endif // IR_H

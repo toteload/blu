@@ -1,5 +1,7 @@
 #include "ir.h"
 
+// -------------------------------------------------------------------------------------------------
+
 #define SEGMENTLIST_NAME            OPCODELIST_NAME
 #define SEGMENTLIST_TYPE            OPCODELIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2   OPCODELIST_MIN_SIZE_LOG_2
@@ -146,6 +148,12 @@ void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk) {
   };
 }
 
+void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
+
+// -------------------------------------------------------------------------------------------------
+
 #if 0
 extern u32 eval_cast_int(TypeInteger, void*, TypeInteger, void*);
 
@@ -228,9 +236,7 @@ u32 instruction_data(IrChunk *chunk, InstructionIndex idx) {
   return chunk->data[idx];
 }
 
-void *instruction_extra(IrChunk *chunk, InstructionIndex idx) {
-  return ptr_offset(chunk->extra, chunk->data[idx]);
-}
+
 #endif
 
 internal CallFrame *top_frame(IrMachine *machine) {

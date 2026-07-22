@@ -354,7 +354,7 @@ next_iter:
       };
 
       for (u32 j = 0; j < source->decl_count; j++) {
-        is_ok &= source_interpret_code(&context, source, j);
+        is_ok &= source_interpret_declaration(&context, source, j);
         ir_chunk_print(stdout, &source->runtime_chunks[j], &compiler->types, &compiler->values);
       }
     }

@@ -14,6 +14,6 @@ typedef struct {
   ValueStore *values;
 } InterpretContext;
 
-b32 source_interpret_code(InterpretContext *context, Source *source, u32 idx_declaration);
+b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration);
 
 #endif // INTERPRET_H

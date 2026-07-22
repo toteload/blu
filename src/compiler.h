@@ -46,7 +46,9 @@ typedef struct {
 #define INTERNER_TYPE       DeclarationKey
 #define INTERNER_INDEX_TYPE DeclarationIndex
 #define INTERNER_EXTRA_TYPE Declaration
+#define INTERNER_FUNCTION_PREFIX decls
 #define INTERNER_OUTPUT_TYPES
+#define INTERNER_OUTPUT_DECLARATIONS
 #include "interner.h"
 
 #define SourceList_min_size_log2  4
