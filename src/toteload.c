@@ -118,7 +118,7 @@ void *arena_push(Arena *arena, usize size, u32 align) {
   }
 
   if (at_after_alloc > arena->reserve_end) {
-    Panic("Out of memory");
+    Panic();
     return Null;
   }
 

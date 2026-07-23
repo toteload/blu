@@ -40,5 +40,6 @@ ValueIndex  values_alloc(ValueStore *values, Value **out);
 void       *values_alloc_data(ValueStore *values, u32 size, u32 align);
 void        values_dealloc(ValueStore *values, ValueIndex idx);
 Value      *values_get(ValueStore *values, ValueIndex idx);
+ValueIndex  values_copy(ValueStore *values, ValueIndex val);
 
 #endif // VALUE_H

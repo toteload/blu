@@ -151,7 +151,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   case Type_never:
     return (TypeSizeInfo){ .size = 0, .align = 0, .stride = 0 };
   case Type_type:
-    return (TypeSizeInfo){ .size = 0, .align = 0, .stride = 0 };
+    return (TypeSizeInfo){ .size = 4, .align = 4, .stride = 4 };
   case Type_integer: { 
     // ASSUME: the bitwidth of integers is always a multiple of 8.
     u32 size = type->data.integer.bitwidth / 8;

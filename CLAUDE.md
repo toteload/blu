@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Blu is a hobby programming language with a compiler written in C11 (previously C++17).
 The long-term design supports compile-time code execution: AST → IR, interpret the IR for comptime evaluation, and eventually translate IR → C.
-The rewrite is in progress; `TODO.md` and `NOTES.md` track current design work.
+The rewrite is in progress; `TODO.md` tracks current design work.
 
 ## Code style
 
@@ -59,9 +59,7 @@ The IR chunks are printed (`ir_print.c` / `ir_chunk_print`) after codegen and af
 
 `Compiler.common` caches interned builtin types and values (`nil`, `type`, `i32`, `comptime_int`).
 
-Not yet wired into the pipeline:
-
-- `src/check.c` / `check.h` — type checker (`Checker`); **not in the `build.py` inputs list**
+`src/env.h` / `env.c` (`Env` lexical scoping) exists but is **not in the `build.py` inputs list** and is not currently wired in.
 
 Diagnostics flow through `MessageSink` (`src/messages.h`), a function-pointer sink that stages append errors to. Messages are collected on the `Compiler` (and per-`Source`) and printed at the end by `compiler_print_all_messages`.
 Note: message formatting (`{tok}`/`{str}` placeholders) and the vararg arg path are still unimplemented / known-buggy — see `TODO.md`.
@@ -84,16 +82,16 @@ Note: message formatting (`{tok}`/`{str}` placeholders) and the vararg arg path 
 | `src/types.h` / `types.c` | `TypeInterner` — interns types by value; `TypeIndex` is an opaque `u32` |
 | `src/value.h` / `value.c` | `ValueStore` — runtime/comptime values |
 | `src/eval.c` | Value reading/casting helpers used during evaluation |
-| `src/env.h` / `env.c` | `Env` / `EnvAllocator` — lexical scoping |
+| `src/env.h` / `env.c` | `Env` / `EnvAllocator` — lexical scoping (not currently built) |
 | `src/messages.h` / `messages.c` | `Message`, `MessageSink`, severity and location kinds |
 | `src/string_interner.h` / `string_interner.c` | `StringInterner` — string deduplication (an `interner.h` instantiation) |
 | `src/interner.h` | Macro-templated interner (see below) |
 | `src/segment_list.h` | Macro-templated segmented list (see below) |
 | `src/hashmap.h` | Macro-templated hash map (see below) |
 | `src/x_ast_kinds.h`, `src/x_ir.h` | X-macro tables (kind enum ↔ payload type ↔ name string) `#include`d with an `X(...)` macro defined by the includer |
-| `ext/` | Vendored single-file libraries (`xxhash.h`, `khash.h`, …) |
+| `vendor/` | Vendored code: `xxhash.h`, `khash.h`, and the `splitmix64`/`xoshiro256plusplus` RNGs used by the fuzz tests |
 
-`src/builder.cc`, `formatcode.sh`/`formatcode.bat`, and the `.bat` build scripts are leftovers from the pre-rewrite C++ codebase and are not part of the build.
+`src/builder.cc` is a leftover from the pre-rewrite C++ codebase and is not part of the build.
 
 ## Generic container pattern
 
@@ -120,7 +118,7 @@ It can optionally hold an `INTERNER_EXTRA_TYPE` per entry (e.g. `DeclarationInte
 
 Everything is arena-based (`Arena` in `toteload.h` reserves virtual memory upfront and commits pages on demand).
 The `Compiler` owns an `arena` and a `scratch` arena.
-Each `Source` additionally owns its own `arena`/`scratch`, which back its filename, text, tokens, IR, and messages.
+Each `Source` additionally owns its own `arena`, which back its filename, text, tokens, IR, and messages.
 `Allocator` is a function-pointer allocator interface; `compiler.c` wraps `realloc`/`free` as `cstd_allocator` for growable collections.
 
 ## Language syntax (Blu)

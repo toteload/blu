@@ -4,100 +4,106 @@
 
 extern u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res);
 
-// The LiveValueStack is meant to keep track of live values, so that when you leave a scope or function
-// these values can be freed. Otherwise, we would have an evergrowing heap.
-
-enum LiveValueKind {
-  LiveValue_marker_frame,
-  LiveValue_marker_block,
-  LiveValue_value,
-};
+// For simplicity the maximum depths are a fixed number. This will likely change.
+#define MAX_SCOPE_DEPTH 64
+#define MAX_CALL_DEPTH  128
 
 typedef struct {
-  u8 kind;
-  InstructionIndex idx;
-} LiveValueElement;
-
-#define VALUESTACK_MIN_SIZE_LOG2  5
-#define VALUESTACK_SEGMENT_COUNT  24
-#define SEGMENTLIST_NAME          LiveValueStack
-#define SEGMENTLIST_TYPE          LiveValueElement
-#define SEGMENTLIST_MIN_SIZE_LOG2 VALUESTACK_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT VALUESTACK_SEGMENT_COUNT
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_FUNCTION_PREFIX value_stack
-#define SEGMENTLIST_OUTPUT_TYPES
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
-
-internal u32 instruction_index_hash(void *context, InstructionIndex idx) {
-  Unused(context);
-  return idx;
-}
-
-internal b32 instruction_index_eq(void *context, InstructionIndex a, InstructionIndex b) {
-  Unused(context);
-  return a == b;
-}
-
-#define HASHMAP_NAME       InstValueMap
-#define HASHMAP_KEY_TYPE   InstructionIndex
-#define HASHMAP_VALUE_TYPE IrRef
-#define HASHMAP_FUNCTION_PREFIX map
-#define HASHMAP_HASH_FN         instruction_index_hash
-#define HASHMAP_KEY_COMPARE_FN  instruction_index_eq
-#define HASHMAP_LINKAGE         internal
-#define HASHMAP_OUTPUT_TYPES
-#define HASHMAP_OUTPUT_DEFINITIONS
-#include "hashmap.h"
-
-typedef struct {
-  u32 ok;
-  IrChunk *chunk;
-  InstructionIndex pc;
+  InstructionIndex start;
   InstructionIndex end;
-  InstValueMap inst_map;
+} ScopeSpan;
+
+typedef Stack(ScopeSpan) ScopeStack;
+
+typedef struct {
+  // This struct probably will also have to carry arguments for when function calls get added.
+  // And return value.
+
+  b32 ok;
+
+  IrChunk *chunk;
+
+  InstructionIndex pc;
+
+  ArenaSnapshot snapshot;
+
+  ValueIndex *inst_map;
+
+  ScopeStack scopes;
 } CallFrame;
 
-#define CALLSTACK_MIN_SIZE_LOG2   5
-#define CALLSTACK_SEGMENT_COUNT   24
-#define SEGMENTLIST_NAME          CallStack
-#define SEGMENTLIST_TYPE          CallFrame
-#define SEGMENTLIST_FUNCTION_PREFIX call_stack
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_MIN_SIZE_LOG2 CALLSTACK_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT CALLSTACK_SEGMENT_COUNT
-#define SEGMENTLIST_OUTPUT_TYPES
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
+typedef Stack(CallFrame) CallStack;
 
 typedef struct {
   IrBuilder builder;
 
   Arena *scratch;
-
   MessageSink *msg_sink;
-
   DeclarationInterner *declarations;
   TypeInterner *types;
   ValueStore *values;
   Common *common;
 
-  IrRef result;
-
-  LiveValueStack value_stack;
-  CallStack      call_stack;
+  CallStack call_stack;
 } Interpreter;
 
 // The interpreter's per-frame maps grow with the C allocator; cstd_allocator is defined in compiler.c.
 extern Allocator const cstd_allocator;
 
-internal CallFrame *top_frame(Interpreter *in) {
-  return call_stack_ptr_at_unchecked(&in->call_stack, in->call_stack.len - 1);
+internal always_inline CallFrame *top_frame(Interpreter *in) {
+  return stack_peek_ptr_unsafe(&in->call_stack);
 }
 
-internal void store_inst_value(Interpreter *in, InstructionIndex idx, IrRef val) {
-  map_insert(&top_frame(in)->inst_map, idx, val);
+internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx, IrRef val) {
+  f->inst_map[idx] = val;
+}
+
+internal void frame_push(Interpreter *in, IrChunk *chunk, InstructionIndex start, InstructionIndex end) {
+  CallFrame f = {
+    .chunk = chunk,
+    .pc = start,
+    .snapshot = arena_scope_begin(in->scratch),
+    .inst_map = arena_push_array(ValueIndex, in->scratch, chunk->opcode_count),
+  };
+
+  stack_init(&f.scopes, arena_push_array(ScopeSpan, in->scratch, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
+  stack_push(&f.scopes, ((ScopeSpan){ .start = start, .end = end }));
+
+  stack_push(&in->call_stack, f);
+}
+
+internal void frame_pop(Interpreter *in) {
+  CallFrame f = stack_pop_unsafe(&in->call_stack);
+
+  ScopeSpan span = f.scopes.data[0];
+  for (u32 i = span.start; i < span.end; i++) {
+    if (f.inst_map[i]) {
+      values_dealloc(in->values, f.inst_map[i]);
+    }
+  }
+
+  arena_scope_end(in->scratch, f.snapshot);
+}
+
+internal void scope_push(CallFrame *f, u32 inst_count) {
+  stack_push(&f->scopes, ((ScopeSpan){ .start = f->pc, .end = f->pc + inst_count }));
+}
+
+internal void scopes_end(Interpreter *in, CallFrame *f, InstructionIndex idx) {
+  for (u32 i = f->scopes.len; i-- > 0;) {
+    ScopeSpan span = f->scopes.data[i];
+    if (span.start == idx) {
+      // Do not dealloc the value stored at the block address
+      for (u32 j = span.start + 1; j < span.end; j++) {
+        if (f->inst_map[j]) {
+          values_dealloc(in->values, f->inst_map[j]);
+          f->inst_map[j] = 0;
+        }
+      }
+
+      break;
+    }
+  }
 }
 
 // A value-index ref is already a comptime value; an instruction-index ref is the result recorded
@@ -107,7 +113,7 @@ internal IrRef resolve(CallFrame *f, IrRef ref) {
     return ref;
   }
 
-  return *map_find(&f->inst_map, ref_to_instruction_index(ref));
+  return f->inst_map[ref_to_instruction_index(ref)];
 }
 
 // If this function returns False, then the ref refers to a residual value and has no comptime value.
@@ -117,27 +123,17 @@ internal b32 must_resolve(CallFrame *f, IrRef ref, ValueIndex *res) {
     return True;
   }
 
-  IrRef *x = map_find(&f->inst_map, ref_to_instruction_index(ref));
+  IrRef x = f->inst_map[ref_to_instruction_index(ref)];
 
-  Assert(!is_null(x)); // if the code is properly generated, this should never happen
+  Assert(!ir_ref_is_nil(x)); // if the code is properly generated, this should never happen
 
-  if (ref_is_instruction_index(*x)) {
+  if (ref_is_instruction_index(x)) {
     return False;
   }
 
-  *res = ref_is_value_index(*x);
+  *res = ref_is_value_index(x);
 
   return True;
-}
-
-internal void frame_push(Interpreter *in, IrChunk *chunk, InstructionIndex start, InstructionIndex end) {
-  CallFrame *f = call_stack_push(&in->call_stack, in->scratch);
-  f->chunk = chunk;
-  f->pc    = start;
-  f->end   = end;
-  map_init(&f->inst_map, &(HashMapOptions){ .allocator = cstd_allocator, .initial_size = 8, .context = Null });
-
-  value_stack_append(&in->value_stack, in->scratch, (LiveValueElement){ .kind = LiveValue_marker_frame });
 }
 
 // ASSUME: `v` refers to a TypeIndex
@@ -166,7 +162,8 @@ internal void step(Interpreter *in, CallFrame *f) {
 
   switch (Cast(enum IrOpcode, op)) {
   case IR_block: {
-    value_stack_append(&in->value_stack, in->scratch, (LiveValueElement){ .kind = LiveValue_marker_block, .idx = pc });
+    u32 inst_count = chunk_data(f->chunk, pc);
+    scope_push(f, inst_count);
     f->pc = pc + 1;
   } break;
   case IR_lookup: {
@@ -175,12 +172,15 @@ internal void step(Interpreter *in, CallFrame *f) {
 
     Assert(decl.kind == Declaration_value); // only values supported for now
 
-    store_inst_value(in, pc, ir_ref_from_value_index(decl.data.val));
+    ValueIndex copy = values_copy(in->values, decl.data.val);
+    store_inst_value(f, pc, ir_ref_from_value_index(copy));
     f->pc = pc + 1;
   } break;
   case IR_as: {
     IrAs *as = chunk_extra(f->chunk, pc);
     IrRef ref = resolve(f, as->val);
+
+    IrRef res;
 
     // If the value is comptime known, we try to do the coercion right away.
     if (ref_is_value_index(ref)) {
@@ -200,21 +200,27 @@ internal void step(Interpreter *in, CallFrame *f) {
       f->ok = !err;
 
       Assert(!err);
+
+      res = ir_ref_from_value_index(val_coerced);
     } else {
       // as->val is a non-comptime known value, so we can only check if the types are valid for coercion.
       // probably also insert some sort of widening cast that cannot fail
-      Panic(); // TODO
+      Todo();
     }
 
-    Panic(); // TODO save the inst value
+    store_inst_value(f, pc, res);
+
     f->pc = pc + 1;
   } break;
   case IR_br: {
     IrBr *br = chunk_extra(f->chunk, pc);
     IrRef val = resolve(f, br->value);
-    store_inst_value(in, br->block, val);
-    in->result = val;
-    f->pc = br->block + chunk_data(f->chunk, br->block) + 1;
+    if (ref_is_value_index(val)) {
+      val = values_copy(in->values, ref_to_value_index(val));
+    }
+    store_inst_value(f, br->block, val);
+    scopes_end(in, f, br->block);
+    f->pc = br->block + chunk_data(f->chunk, br->block);
   } break;
   case IR_type: {
     IrType *type = chunk_extra(f->chunk, pc);
@@ -224,7 +230,7 @@ internal void step(Interpreter *in, CallFrame *f) {
       Assert(type->arg_count >= 1);
 
       Assert(type->arg_count == 1); // For now don't support params
-      TypeIndex return_type = type_from_val(in, type->args[0]);
+      TypeIndex return_type = type_from_val(in, resolve(f, type->args[0]));
       t = types_add(in->types, &(Type){
         .kind = Type_function,
         .data.function = { .return_type = return_type, .param_count = 0 },
@@ -234,33 +240,28 @@ internal void step(Interpreter *in, CallFrame *f) {
     default: Panic();
     }
     ValueIndex v = val_from_type(in, t);
-    store_inst_value(in, pc, v);
+    store_inst_value(f, pc, v);
     f->pc += 1;
   } break;
   default: Panic();
   }
 }
 
-// Run pushed frames until the call stack returns to `base_depth`; the finished region's value is in
-// `in->result`.
-internal IrRef run(Interpreter *in, u32 base_depth) {
-  while (in->call_stack.len > base_depth) {
+internal IrRef eval_block(Interpreter *in, IrChunk *chunk, InstructionIndex block) {
+  Assert(chunk_opcode(chunk, block) == IR_block);
+  CallFrame *base = top_frame(in);
+  base->pc = block;
+
+  InstructionIndex end = block + chunk_data(chunk, block);
+  while (True) {
     CallFrame *f = top_frame(in);
-    if (f->pc >= f->end) {
-      in->call_stack.len -= 1;
-      // ponytail: no inter-frame result routing yet; add when IR_call/IR_ret land.
-      continue;
+    if (f == base && f->pc == end) {
+      return f->inst_map[block];
     }
     step(in, f);
   }
-  return in->result;
-}
 
-// Evaluate a self-contained region (e.g. a declaration's declared-type block) on a fresh frame.
-internal IrRef eval_region(Interpreter *in, IrChunk *chunk, InstructionIndex start, InstructionIndex end) {
-  u32 base = in->call_stack.len;
-  frame_push(in, chunk, start, end);
-  return run(in, base);
+  Unreachable();
 }
 
 b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration) {
@@ -273,19 +274,27 @@ b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 
   Interpreter in = {
     .scratch      = context->scratch,
     .declarations = context->decls,
+    .types = context->types,
+    .values = context->values,
+    .common = context->common,
   };
 
+  stack_init(&in.call_stack, arena_push_array(CallFrame, context->scratch, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
+  frame_push(&in, chunk, 0, chunk->opcode_count);
+
+  IrRef declared_type;
   if (!ir_ref_is_nil(decl->declared_type)) {
-    InstructionIndex block = ref_to_instruction_index(decl->declared_type);
-    InstructionIndex end   = block + chunk_data(chunk, block) + 1;
-    IrRef declared_type = eval_region(&in, chunk, block, end);
-    Unused(declared_type); // TODO: check/coerce decl->value against this
-    Panic();
+    Assert(ref_is_instruction_index(decl->declared_type));
+    declared_type = eval_block(&in, chunk, ref_to_instruction_index(decl->declared_type));
   }
+
+  Todo(); // eval declaration value
 
   // TODO: evaluate decl->value and emit residual IR. For now emit an empty runtime chunk so the
   // pipeline's print stage has something well-formed to walk.
   irbuilder_flatten(&in.builder, context->perm, &source->runtime_chunks[idx_declaration]);
+
+  frame_pop(&in);
 
   return True;
 }

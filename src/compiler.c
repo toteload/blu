@@ -254,18 +254,18 @@ b32 compile(Compiler *compiler) {
 
     DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
-    stack_init(stack, stackmem, 4);
-    stack_push(stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
+    stack_init(&stack, stackmem, 4);
+    stack_push(&stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
 
     source->decl_idxs[0] = 0;
 
     u32 offset = 1;
 
-    while (!stack_is_empty(stack)) {
-      DeclFrame *top = stack_peek_ptr(stack);
+    while (!stack_is_empty(&stack)) {
+      DeclFrame *top = stack_peek_ptr_unsafe(&stack);
 
       if (top->n == 0) {
-        stack_pop(stack);
+        stack_pop_unsafe(&stack);
         continue;
       }
 
@@ -295,7 +295,7 @@ b32 compile(Compiler *compiler) {
           }
         }
 
-        stack_push(stack, ((DeclFrame){ .mod = idx, .n = decl->child_count }));
+        stack_push(&stack, ((DeclFrame){ .mod = idx, .n = decl->child_count }));
 
         source->decl_idxs[offset] = idx;
 
@@ -373,6 +373,7 @@ next_iter:
         .msg_sink = &compiler->msg_sink,
         .decls = &compiler->decls,
         .values = &compiler->values,
+        .types = &compiler->types,
       };
 
       for (u32 j = 0; j < source->decl_count; j++) {

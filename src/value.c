@@ -37,3 +37,20 @@ void values_dealloc(ValueStore *values, ValueIndex idx) {
 Value *values_get(ValueStore *values, ValueIndex idx) {
   return list_ptr_at_unchecked(&values->list, idx);
 }
+
+ValueIndex values_copy(ValueStore *values, ValueIndex val) {
+  Value *v;
+  ValueIndex res = values_alloc(values, &v);
+  {
+    Value *s = values_get(values, val);
+    u32 align = 16; // TODO: not the nicest solution as this could be too small.
+    void *data = values_alloc_data(values, s->data_size, align);
+    memcpy(data, s->data, s->data_size);
+    *v = (Value){
+      .type = s->type,
+      .data = data,
+      .data_size = s->data_size,
+    };
+  }
+  return res;
+}

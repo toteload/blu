@@ -143,7 +143,7 @@ typedef struct {
 void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values) {
   BlockPrint buf[64];
   Stack(BlockPrint) blocks;
-  stack_init(blocks, buf, 64);
+  stack_init(&blocks, buf, 64);
 
   for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
     u8  op   = chunk->opcodes[i];
@@ -151,22 +151,22 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
 
     u32 depth = blocks.len;
 
-    if (!stack_is_empty(blocks)) {
-      BlockPrint *b = stack_peek_ptr(blocks);
+    if (!stack_is_empty(&blocks)) {
+      BlockPrint *b = stack_peek_ptr_unsafe(&blocks);
       b->at += 1;
     }
 
-    while (!stack_is_empty(blocks)) {
-      BlockPrint *b = stack_peek_ptr(blocks);
+    while (!stack_is_empty(&blocks)) {
+      BlockPrint *b = stack_peek_ptr_unsafe(&blocks);
       if (b->at < b->count) {
         break;
       }
 
       u32 count = b->count;
-      stack_pop(blocks);
+      stack_pop_unsafe(&blocks);
 
-      if (!stack_is_empty(blocks)) {
-        stack_peek_ptr(blocks)->at += count;
+      if (!stack_is_empty(&blocks)) {
+        stack_peek_ptr_unsafe(&blocks)->at += count;
       }
     }
 
@@ -180,7 +180,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
       fputs("return_type=", out);
       ir_ref_print(out, func->return_type, types, values);
       fprintf(out, " arg_count=%u instruction_count=%u", func->arg_count, func->instruction_count);
-      stack_push(blocks, ((BlockPrint){ .count = func->instruction_count, .at = 0 }));
+      stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {
       type_index_print(out, types, data);
@@ -194,7 +194,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     case IR_block:
     case IR_loop: {
       fprintf(out, "count=%u", data);
-      stack_push(blocks, ((BlockPrint){ .count = data, .at = 0 }));
+      stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
     } break;
     case IR_br: {
       IrBr *br = extra;

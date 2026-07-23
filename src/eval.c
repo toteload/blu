@@ -146,6 +146,10 @@ u32 eval_cast_int(
   return CastResult_ok;
 }
 
+u32 eval_unify(TypeIndex a, TypeIndex b, TypeIndex *unified) {
+  Todo();
+}
+
 enum CoerceResult {
   CoerceResult_ok,
   CoerceResult_invalid_coercion_types,
@@ -154,7 +158,20 @@ enum CoerceResult {
 
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
   if (dst == val->type) {
-    Panic();
+    Value *p;
+    ValueIndex idx = values_alloc(values, &p);
+
+    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    void *data = values_alloc_data(values, size_info.size, size_info.align);
+    memcpy(data, val->data, size_info.size);
+
+    *p = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size_info.size,
+    };
+
+    *res = idx;
     return CoerceResult_ok;
   }
 

@@ -6,6 +6,10 @@ function; basically all the comptime stuff in the original function has been rep
 - [ ] Interpret the IR to produce "runtime IR"
 - [ ] Interpret runtime IR to execute the program!
 
+- [ ] Update IR_declaration to use positional arguments. So, the declared type follows right after
+      the IR_declaration instruction and the declared type is followed by the declared value.
+      Problem: declared type is optional. Solution: introduce IR_declaration_with_type.
+
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
   Just all the ones that match and if they have overlap it's an error?

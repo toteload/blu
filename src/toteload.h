@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -39,6 +40,12 @@ typedef uint64_t b64;
 #define TTLD_OS_MACOS 1
 #endif
 
+#ifdef TTLD_COMPILER_CLANG
+#define TTLD_FUNC __func__
+#else
+#error "unimplemented: function name macro"
+#endif
+
 #define Cat_(a, b) a##b
 #define Cat(a, b) Cat_(a, b)
 
@@ -55,6 +62,15 @@ always_inline u32 bitwidth(u64 x) {
   return 64 - Cast(u32, __builtin_clzll(x));
 #else
 #error "todo: bitwidth is not implemented for this platform"
+#endif
+}
+
+// undefined if x == 0
+always_inline u32 count_trailing_zeros64(u64 x) {
+#ifdef TTLD_COMPILER_CLANG
+  return Cast(u32, __builtin_ctzll(x));
+#else
+#error "todo: count_trailing_zeros64"
 #endif
 }
 
@@ -117,9 +133,15 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 #define Align_of(x) _Alignof(x)
 #define Offsetof(s,m) offsetof(s,m)
 
+#define Todo() do { fprintf(stderr, "Todo encountered -> "); Panic(); } while (0)
 #define Assert(e) assert(e)
-#define Panic(Reason) abort()
-#define Unreachable() Panic()
+#define Panic() do { fprintf(stderr, "panic in %s at %s:%u\n", TTLD_FUNC, __FILE__, __LINE__); abort(); } while (0)
+
+#ifdef TTLD_COMPILER_CLANG
+#define Unreachable() __builtin_unreachable()
+#else
+#error "unimplemented: Unreachable"
+#endif
 
 typedef struct String {
   u8 const *str;
@@ -165,11 +187,11 @@ void  vmem_release(void *p, usize size);
 
 #define Stack(type) struct { type* data; u32 len; u32 cap; }
 
-#define stack_init(s,p,c) do { (s).data = (p); (s).len = 0; (s).cap = (c); } while (0)
-#define stack_push(s,x) ((s).data[(s).len++] = (x))
-#define stack_pop(s) ((s).data[--(s).len])
-#define stack_peek_ptr(s) (&((s).data[(s).len-1]))
-#define stack_is_empty(s) ((s).len == 0)
+#define stack_init(sp,p,c) do { (sp)->data = (p); (sp)->len = 0; (sp)->cap = (c); } while (0)
+#define stack_push(sp,x) do { if ((sp)->len == (sp)->cap) { Panic(); } ((sp)->data[(sp)->len++] = (x)); } while (0)
+#define stack_pop_unsafe(sp) ((sp)->data[--(sp)->len])
+#define stack_peek_ptr_unsafe(sp) (&((sp)->data[(sp)->len-1]))
+#define stack_is_empty(sp) ((sp)->len == 0)
 
 typedef struct {
   void *base;

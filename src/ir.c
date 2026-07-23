@@ -55,7 +55,7 @@ void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32
 
 u32 inst_offset(IrBuilder *builder, InstructionIndex start) {
   u32 at = builder->kinds.len;
-  return at - start - 1;
+  return at - start;
 }
 
 InstructionIndex inst_block_begin(IrBuilder *builder) {
