@@ -185,15 +185,21 @@ internal void step(Interpreter *in, CallFrame *f) {
     // If the value is comptime known, we try to do the coercion right away.
     if (ref_is_value_index(ref)) {
       Value *v = values_get(in->values, ref_to_value_index(ref));
+
+      // TODO: may we assume that `type_to` is always comptime known?
       ValueIndex idx_dst_type;
       b32 ok = must_resolve(f, as->type_to, &idx_dst_type); 
       if (!ok) {
         Panic();
       }
 
+      TypeIndex type_dst = type_from_val(in, idx_dst_type);
+
       ValueIndex val_coerced;
-      u32 err = eval_coerce(in->types, in->values, _, v, &val_coerced);
+      u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
       f->ok = !err;
+
+      Assert(!err);
     } else {
       // as->val is a non-comptime known value, so we can only check if the types are valid for coercion.
       // probably also insert some sort of widening cast that cannot fail

@@ -1,4 +1,5 @@
 #include "types.h"
+#include "value.h"
 
 enum CastResult {
   CastResult_ok,

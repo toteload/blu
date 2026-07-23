@@ -4,6 +4,8 @@
 *.pdb
 *.html
 
+.claude/
+
 .vs/
 .vscode/
 

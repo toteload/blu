@@ -11,6 +11,41 @@ function; basically all the comptime stuff in the original function has been rep
   Just all the ones that match and if they have overlap it's an error?
 - Are anonymous structs nominal or structural?
 
+## Bugs/issues found by Claude (may be out of date)
+
+# M3 — Message formatting is unimplemented and the vararg path is UB
+
+`src/messages.c:69-95`, `src/messages.h:29-61`, `src/source_file.c:6-30`, `src/compiler.c:61-83`
+
+`print_message` prints the raw format string (`{tok}`, `{str}` placeholders appear literally) and
+never consumes the collected `args`. Meanwhile the sinks read each argument with
+`va_arg(vl, MessageArg)`, where `MessageArg` is a 4-byte union — but callers pass a 16-byte
+`String` for `{str}` (e.g. `source_read_file`). Reading a `String` as a 4-byte union is undefined
+and would desync any message with multiple args. The `{tok}`/`{type}` cases happen to work only
+because a promoted `int` and a 4-byte union pass identically on the ABI. The whole arg-collection
+path is effectively dead until formatting is implemented — but it's live UB in the meantime.
+
+---
+
+# Low / nits
+
+- **N2 — `arena_push` can commit past the reservation** (`src/toteload.c:108-117`): near the end of
+  the reserved range it commits `Max(512KiB, needed)` rounded up, without clamping to `reserve_end`,
+  so `vmem_commit` could run past the mapping and trip the `Assert`. Only reachable with near-full
+  arenas.
+- **N3 — hashmap rehash can theoretically drop a bucket** (`src/hashmap.h:321-349`): if the chained
+  relocation `for j` loop runs `cap` iterations without placing the displaced bucket, it falls
+  through to `next` and the in-hand bucket is lost. Very low probability, but silent data loss
+  rather than a `return False` retry.
+- **N4 — `segment_list` `_copy_to_array` does `memcpy(dst, NULL, 0)`** (`src/segment_list.h:142`)
+  when `len` lands exactly on a segment boundary (the last segment pointer is still `NULL`).
+  Harmless in practice but technically UB.
+- **N5 — little-endian assumption** in `read_unsigned_integer_extend` / `eval_cast_int`
+  (`src/eval.c:24-29`) and the 8-byte-pointer assumptions in `types_size_info`. Fine for current
+  targets; worth a comment.
+- **N6 — `read_file` uses `i32` for `ftell`** (2 GB cap) and `arena_init` doesn't check for `mmap`'s
+  `MAP_FAILED` (`src/toteload.c:56`, `src/source_file.c:79`).
+
 ### Types
 
 ### Control flow

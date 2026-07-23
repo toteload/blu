@@ -1,2 +1,5 @@
-main : (): i32 = || { 0 }
-T : type = T
+mod main
+
+T: type = T
+
+main: () i32 = || { 0 }

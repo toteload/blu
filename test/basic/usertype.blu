@@ -1,6 +1,0 @@
-main : (): i32 = || {
-  a : SmolNumber = 0
-  a
-}
-
-SmolNumber : type = i8

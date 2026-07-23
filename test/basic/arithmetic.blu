@@ -1,39 +1,10 @@
 mod main
 
-main : () i32 = || {
-  a : i32 = 2
-  b : i32 = 3
-  c : i32 = a + b
-  d : i32 = b - a
-  e : i32 = a * b
+main: () i32 = || {
+  a: i32 = 2
+  b: i32 = 3
+  c: i32 = a + b
+  d: i32 = b - a
+  e: i32 = a * b
   { c + d } / e - 1
 }
-
-
-; comptime_func (0 comptime params, 0 runtime params) i32
-; %0 = const (i64) 2
-; %1 = const (i64) 3
-; %2 = const (i64) 1
-; %3 = const (type) i32
-; emit
-;   %a = alloc %3
-;   %c0 = eval @e0
-;     %c1 = cast_int %3 %0
-;     br @e0 %c1
-;   store %a %c0
-;
-;   %b = alloc %3
-;   store %b %1
-;
-;   %c = alloc %3
-;   %t0 = load %a
-;   %t1 = load %b
-;   %t2 = add %3 %t0 %t1
-;   store %c %t2
-;
-;   %d = alloc %3
-;   %t3 = load %a
-;   %t4 = load %b
-;   %t5 = sub %3 %t4 %t3
-;
-;   %e = alloc %3

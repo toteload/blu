@@ -1,1 +1,3 @@
-main: (): i32 = || { if true { 0 } else { 1 } }
+mod main
+
+main: () i32 = || { if true { 0 } else { 1 } }

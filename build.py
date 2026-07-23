@@ -43,7 +43,7 @@ def add_test_suite(out):
             rule      = 'compile_c_debug',
             inputs    = join('test', f),
             variables = {
-                'cflags': '-Iext -Isrc',
+                'cflags': '-Ivendor -Isrc',
             },
             )
 
@@ -109,7 +109,6 @@ def create_build_ninja():
         'types.c',
         'value.c',
         'messages.c',
-        'env.c',
         'eval.c',
         'source_file.c',
         'compiler.c',
@@ -130,7 +129,7 @@ def create_build_ninja():
             rule      = 'compile_c_debug',
             inputs    = join('src', f),
             variables = {
-                'cflags': '-Iext -Isrc',
+                'cflags': '-Ivendor -Isrc',
             },
             )
 
