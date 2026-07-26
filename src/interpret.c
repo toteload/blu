@@ -1,8 +1,7 @@
 #include "interpret.h"
 #include "ir.h"
 #include "source_file.h"
-
-extern u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res);
+#include "eval.h"
 
 // For simplicity the maximum depths are a fixed number. This will likely change.
 #define MAX_SCOPE_DEPTH 64
@@ -131,13 +130,17 @@ internal b32 must_resolve(CallFrame *f, IrRef ref, ValueIndex *res) {
     return False;
   }
 
-  *res = ref_is_value_index(x);
+  *res = ref_to_value_index(x);
 
   return True;
 }
 
 // ASSUME: `v` refers to a TypeIndex
 internal TypeIndex type_from_val(Interpreter *in, ValueIndex v) {
+  if (v == 0) {
+    return 0;
+  }
+
   Value *val = values_get(in->values, v);
   TypeIndex *t = val->data;
   return *t;
@@ -165,6 +168,12 @@ internal void step(Interpreter *in, CallFrame *f) {
     u32 inst_count = chunk_data(f->chunk, pc);
     scope_push(f, inst_count);
     f->pc = pc + 1;
+  } break;
+  case IR_func: {
+    IrFunc *func = chunk_extra(f->chunk, pc);
+    u32 inst_count = func->instruction_count;
+    scope_push(f, inst_count);
+    f->pc += 1;
   } break;
   case IR_lookup: {
     DeclarationIndex decl_idx = chunk_data(f->chunk, pc);
@@ -243,12 +252,54 @@ internal void step(Interpreter *in, CallFrame *f) {
     store_inst_value(f, pc, v);
     f->pc += 1;
   } break;
+  case IR_unify: {
+    IrUnify *unify = chunk_extra(f->chunk, pc);
+
+    ValueIndex lhs;
+    b32 ok = must_resolve(f, unify->type_lhs, &lhs);
+    Assert(ok);
+
+    ValueIndex rhs;
+    ok = must_resolve(f, unify->type_rhs, &rhs);
+    Assert(ok);
+
+    TypeIndex type_lhs = type_from_val(in, lhs);
+    TypeIndex type_rhs = type_from_val(in, rhs);
+
+    TypeIndex type_unified;
+    u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
+    Assert(!err);
+
+    ValueIndex v = val_from_type(in, type_unified);
+    store_inst_value(f, pc, v);
+    f->pc += 1;
+  } break;
+  case IR_function_return_type: {
+    IrRef ref_func = chunk_data(f->chunk, pc);
+
+    ValueIndex func;
+    b32 ok = must_resolve(f, ref_func, &func);
+
+    TypeIndex idx = type_from_val(in, func);
+    Type *t = types_get(in->types, idx);
+    ValueIndex v = val_from_type(in, t->data.function.return_type);
+    store_inst_value(f, pc, v);
+    f->pc += 1;
+  } break;
+  case IR_ret: {
+    IrBuilder *builder = &in->builder;
+    InstructionIndex inst = inst_alloc(builder);
+    inst_set_opcode(builder, inst, IR_ret);
+    inst_set_data(builder, inst, chunk_data(f->chunk, pc));
+    f->pc += 1;
+  } break;
   default: Panic();
   }
 }
 
 internal IrRef eval_block(Interpreter *in, IrChunk *chunk, InstructionIndex block) {
   Assert(chunk_opcode(chunk, block) == IR_block);
+
   CallFrame *base = top_frame(in);
   base->pc = block;
 
@@ -264,6 +315,31 @@ internal IrRef eval_block(Interpreter *in, IrChunk *chunk, InstructionIndex bloc
   Unreachable();
 }
 
+internal IrRef eval_func(Interpreter *in, IrChunk *chunk, InstructionIndex idx) {
+  Assert(chunk_opcode(chunk, idx) == IR_func);
+
+  CallFrame *base = top_frame(in);
+  base->pc = idx;
+
+  IrFunc *func = chunk_extra(chunk, idx);
+  InstructionIndex end = idx + func->instruction_count;
+
+  while (True) {
+    CallFrame *f = top_frame(in);
+    if (f == base && f->pc == end) {
+      return f->inst_map[idx];
+    }
+    step(in, f);
+  }
+
+  Unreachable();
+}
+
+// How to generate code for a function:
+// 1. Evaluate the type expression for the declared type. This may not reference the function itself.
+// 2. Evaluate the "prototype" of the function value. Make sure the prototype and the declared type can be unified.
+// 3. Output a function for the runtime code.
+
 b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration) {
   IrChunk *chunk = &source->ir_chunks[idx_declaration];
 
@@ -277,6 +353,7 @@ b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 
     .types = context->types,
     .values = context->values,
     .common = context->common,
+    .builder = { .scratch = context->scratch },
   };
 
   stack_init(&in.call_stack, arena_push_array(CallFrame, context->scratch, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
@@ -288,10 +365,9 @@ b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 
     declared_type = eval_block(&in, chunk, ref_to_instruction_index(decl->declared_type));
   }
 
-  Todo(); // eval declaration value
+  Assert(ref_is_instruction_index(decl->value));
+  IrRef decl_value = eval_func(&in, chunk, ref_to_instruction_index(decl->value));
 
-  // TODO: evaluate decl->value and emit residual IR. For now emit an empty runtime chunk so the
-  // pipeline's print stage has something well-formed to walk.
   irbuilder_flatten(&in.builder, context->perm, &source->runtime_chunks[idx_declaration]);
 
   frame_pop(&in);

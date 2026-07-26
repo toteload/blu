@@ -13,7 +13,7 @@ typedef u32 TypeIndex;        // Optional, 0 means nil
 typedef u32 StringIndex;      // Optional, 0 means nil
 typedef u32 InstructionIndex; // Offset, not optional
 typedef u32 SourceIndex;
-typedef u32 ValueIndex;
+typedef u32 ValueIndex;       // Optional, 0 means nil
 typedef u32 DeclarationIndex;
 
 typedef struct EnvAllocator EnvAllocator;

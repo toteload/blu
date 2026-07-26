@@ -53,7 +53,17 @@ always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
 // -------------------------------------------------------------------------------------------------
 
 enum IrOpcode {
-  IR_func,      // data references `IrFunc` in extra
+
+  // A func instruction is followed by:
+  // - An expression for the type.
+  // - The body 
+  // func references `IrFunc`. A func instruction is followed by:
+  // - return type expression (optional)
+  // - param type expressions (optional)
+  // - n (n >= 0) IR_param instructions, can refer to previously defined type expressions
+  // - body
+  IR_func,      // data contains `IrFunc` in extra
+
   IR_param,     // data contains `IrRef`
   IR_alloc,     // data contains `TypeIndex`
   IR_cond_br,   // data references `IrCondBr` in extra
@@ -110,9 +120,7 @@ typedef struct {
 } IrAs;
 
 typedef struct {
-  IrRef return_type;
-  u32 arg_offset;
-  u32 arg_count;
+  u32 offset_first_param_or_body;
   u32 instruction_count;
 } IrFunc;
 

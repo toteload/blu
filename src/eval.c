@@ -1,10 +1,6 @@
 #include "types.h"
 #include "value.h"
-
-enum CastResult {
-  CastResult_ok,
-  CastResult_integer_value_out_of_range,
-};
+#include "eval.h"
 
 internal i64 read_signed_integer_extend(u16 bitwidth, void *payload) {
   i64 res;
@@ -146,15 +142,75 @@ u32 eval_cast_int(
   return CastResult_ok;
 }
 
-u32 eval_unify(TypeIndex a, TypeIndex b, TypeIndex *unified) {
-  Todo();
-}
+u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified) {
+  if (a == b) {
+    *unified = a;
+    return UnifyResult_ok;
+  }
 
-enum CoerceResult {
-  CoerceResult_ok,
-  CoerceResult_invalid_coercion_types,
-  CoerceResult_comptime_int_value_too_big,
-};
+  if (a == 0 && b == 0) {
+    return UnifyResult_no_concrete_type_provided;
+  }
+
+  if (a == 0) {
+    *unified = b;
+    return UnifyResult_ok;
+  }
+
+  if (b == 0) {
+    *unified = a;
+    return UnifyResult_ok;
+  }
+
+  Type *type_lhs = types_get(types, a);
+  Type *type_rhs = types_get(types, b);
+
+  if (type_lhs->kind == Type_function && type_rhs->kind == Type_function) {
+    u32 param_count = type_lhs->data.function.param_count;
+    if (param_count != type_rhs->data.function.param_count) {
+      return UnifyResult_unable_to_unify;
+    }
+
+    TypeIndex return_type;
+    u32 err = eval_unify(scratch, types, type_lhs->data.function.return_type, type_rhs->data.function.return_type, &return_type);
+    if (err) {
+      return UnifyResult_unable_to_unify;
+    }
+
+    ArenaSnapshot snapshot = arena_scope_begin(scratch);
+
+    Type *f = arena_push_type_function(scratch, param_count);
+    f->kind = Type_function;
+    f->data.function.return_type = return_type;
+
+    for (u32 i = 0; i < param_count; i++) {
+      TypeIndex param_type;
+      err = eval_unify(scratch, types, type_lhs->data.function.param_types[i], type_rhs->data.function.param_types[i], &param_type);
+      if (err) {
+        break;
+      }
+
+      f->data.function.param_types[i] = param_type;
+    }
+
+    if (!err) {
+      *unified = types_add(types, f);
+    }
+
+    arena_scope_end(scratch, snapshot);
+
+    return UnifyResult_ok;
+  }
+
+  if ((type_lhs->kind == Type_comptime_int && type_rhs->kind == Type_integer) || (type_lhs->kind == Type_integer && type_rhs->kind == Type_comptime_int)) {
+    *unified = b;
+    return UnifyResult_ok;
+  }
+
+  Todo();
+
+  return UnifyResult_unable_to_unify;
+}
 
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
   if (dst == val->type) {
@@ -179,8 +235,30 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   Type *type_val = types_get(types, val->type);
 
   if (type_val->kind == Type_comptime_int && type_dst->kind == Type_integer) {
-    Panic();
-    // This may still fail! The value of the comptime_int may be too big.
+    TypeInteger comptime_int = {
+      .signedness = Signed,
+      .bitwidth   = sizeof(ComptimeInt) * 8,
+    };
+
+    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    void *data = values_alloc_data(values, size_info.size, size_info.align);
+
+    u32 err = eval_cast_int(comptime_int, val->data, type_dst->data.integer, data);
+    if (err) {
+      values_dealloc_data(values, data, size_info.size);
+      return CoerceResult_comptime_int_value_out_of_range;
+    }
+
+    Value *v;
+    ValueIndex idx = values_alloc(values, &v);
+    *v = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size_info.size,
+    };
+
+    *res = idx;
+
     return CoerceResult_ok;
   }
 

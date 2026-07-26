@@ -20,5 +20,6 @@ b32 str_eq(void *context, String a, String b) {
 #define INTERNER_HASH_FN         str_hash
 #define INTERNER_COMPARE_FN      str_eq
 #define INTERNER_COPY_FN         arena_copy_string
+#define INTERNER_RESERVE_ZERO_INDEX
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"

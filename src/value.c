@@ -15,6 +15,7 @@ void values_init(ValueStore *values, ValueStoreOptions *options) {
     .payload_allocator = options->payload_allocator,
     .list              = {0},
   };
+  list_push(&values->list, values->arena); // Reserve nil entry
 }
 
 ValueIndex values_alloc(ValueStore *values, Value **out) {
@@ -25,6 +26,10 @@ ValueIndex values_alloc(ValueStore *values, Value **out) {
 
 void *values_alloc_data(ValueStore *values, u32 size, u32 align) {
   return Alloc(values->payload_allocator, size, align);
+}
+
+void values_dealloc_data(ValueStore *values, void *data, u32 size) {
+  Free(values->payload_allocator, data, size);
 }
 
 void values_dealloc(ValueStore *values, ValueIndex idx) {

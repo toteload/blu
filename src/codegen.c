@@ -164,8 +164,14 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
       ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
     }
 
-    u32 arg_offset = inst_offset(&gen->builder, inst_func);
+    // Output param type expressions
+    for (u32 i = 0; i < func->count; i++) {
+      Panic();
+    }
 
+    u32 offset_first_param_or_body = inst_offset(&gen->builder, inst_func);
+
+    // Output IR_param instructions
     for (u32 i = 0; i < func->count; i++) {
       Panic();
     }
@@ -173,6 +179,8 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     InstructionIndex inst_type = inst_alloc(&gen->builder);
     inst_set_opcode(&gen->builder, inst_type, IR_type);
     u32 arg_count = func->count + 1; // parameters + return type
+
+    Assert(func->count == 0);
 
     IrType *data_type = inst_push_data_raw(&gen->builder, inst_type, sizeof(IrType) + arg_count * sizeof(IrRef), Align_of(IrType));
     *data_type = (IrType){
@@ -203,10 +211,8 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     u32 func_instruction_count = inst_offset(&gen->builder, inst_func);
 
     *data_func = (IrFunc){
-      .return_type = ref_ret_type,
-      .arg_offset = arg_offset,
-      .arg_count = func->count,
-      .instruction_count = func_instruction_count,
+      .offset_first_param_or_body = offset_first_param_or_body,
+      .instruction_count          = func_instruction_count,
     };
 
     return ir_ref_from_instruction_index(inst_func);
@@ -241,11 +247,11 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     Value *v;
     ValueIndex idx = values_alloc(gen->values, &v);
-    i64 *data = values_alloc_data(gen->values, sizeof(i64), Align_of(i64));
+    ComptimeInt *data = values_alloc_data(gen->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
     *data = value;
     *v = (Value){
       .type      = gen->common->type.comptime_int,
-      .data_size = sizeof(i64),
+      .data_size = sizeof(ComptimeInt),
       .data      = data,
     };
 

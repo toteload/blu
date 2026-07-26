@@ -15,6 +15,9 @@ enum TypeKind {
   Type_type,
 };
 
+// How a comptime_int is actually stored. This will probably grow at some point.
+typedef i64 ComptimeInt;
+
 enum Signedness {
   Unsigned,
   Signed,
@@ -43,7 +46,7 @@ typedef struct {
 typedef struct {
   TypeIndex return_type;
   u32 param_count;
-  TypeIndex function_param_types[];
+  TypeIndex param_types[];
 } TypeFunction;
 
 typedef struct {
@@ -69,6 +72,8 @@ typedef Type *TypePtr;
 #define INTERNER_OUTPUT_TYPES
 #define INTERNER_OUTPUT_DECLARATIONS
 #include "interner.h"
+
+#define arena_push_type_function(arena,param_count) arena_push(arena, sizeof(Type) + (param_count) *sizeof(TypeIndex), Align_of(Type))
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.
 u32 type_intern_byte_size(Type *type);

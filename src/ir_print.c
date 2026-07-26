@@ -34,7 +34,7 @@ internal void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
       if (i != 0) {
         fputs(", ", out);
       }
-      type_index_print(out, types, type->data.function.function_param_types[i]);
+      type_index_print(out, types, type->data.function.param_types[i]);
     }
     fputs(") ", out);
     type_index_print(out, types, type->data.function.return_type);
@@ -177,9 +177,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     switch (Cast(enum IrOpcode, op)) {
     case IR_func: {
       IrFunc *func = extra;
-      fputs("return_type=", out);
-      ir_ref_print(out, func->return_type, types, values);
-      fprintf(out, " arg_count=%u instruction_count=%u", func->arg_count, func->instruction_count);
+      fprintf(out, "first_param_or_body=%u instruction_count=%u", i + func->offset_first_param_or_body, func->instruction_count);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {

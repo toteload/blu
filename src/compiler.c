@@ -97,14 +97,12 @@ void compiler_init(Compiler *compiler) {
     .arena              = &compiler->arena,
     .map_allocator      = cstd_allocator,
     .map_initial_size   = 32,
-    .reserve_zero_index = True,
   });
 
   types_init(&compiler->types, &(InternerOptions){
     .arena              = &compiler->arena,
     .map_allocator      = cstd_allocator,
     .map_initial_size   = 32,
-    .reserve_zero_index = True,
     .context            = &compiler->scratch,
   });
 
