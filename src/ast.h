@@ -4,7 +4,7 @@
 #include "blu.h"
 #include "tokens.h"
 
-enum AstKind {
+typedef enum {
   Ast_source,
   Ast_mod_section,
   Ast_block,
@@ -30,7 +30,7 @@ enum AstKind {
   Ast_cast,
   Ast_as,
   Ast_kind_max,
-};
+} AstKind;
 
 enum BuiltinKind {
   Builtin_print,

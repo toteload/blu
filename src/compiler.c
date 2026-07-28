@@ -9,8 +9,8 @@
 #define SEGMENTLIST_NAME            SourceList
 #define SEGMENTLIST_TYPE            Source
 #define SEGMENTLIST_FUNCTION_PREFIX sources
-#define SEGMENTLIST_MIN_SIZE_LOG2   SourceList_min_size_log2
-#define SEGMENTLIST_SEGMENT_COUNT   SourceList_segment_count
+#define SEGMENTLIST_MIN_SIZE_LOG2   SOURCELIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT   SOURCELIST_SEGMENT_COUNT
 #define SEGMENTLIST_LINKAGE         internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
@@ -111,13 +111,20 @@ void compiler_init(Compiler *compiler) {
     .payload_allocator = cstd_allocator,
   });
 
-  compiler->common.type.comptime_int  = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
-  compiler->common.type.nil  = types_add(&compiler->types, &(Type){ .kind = Type_nil });
-  compiler->common.type.type = types_add(&compiler->types, &(Type){ .kind = Type_type });
-  compiler->common.type.i32 = types_add(&compiler->types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  decls_init(&compiler->decls, &(InternerOptions){
+    .arena            = &compiler->arena,
+    .map_allocator    = cstd_allocator,
+    .map_initial_size = 32,
+  });
+
+  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
+  compiler->common.type.nil          = types_add(&compiler->types, &(Type){ .kind = Type_nil });
+  compiler->common.type.type         = types_add(&compiler->types, &(Type){ .kind = Type_type });
+  compiler->common.type.i32          = types_add(&compiler->types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+
   {
     Value *v;
-    compiler->common.val.nil  = values_alloc(&compiler->values, &v);
+    compiler->common.val.nil = values_alloc(&compiler->values, &v);
     TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
     *data = compiler->common.type.nil;
     *v = (Value){
@@ -128,7 +135,7 @@ void compiler_init(Compiler *compiler) {
   }
   {
     Value *v;
-    compiler->common.val.type  = values_alloc(&compiler->values, &v);
+    compiler->common.val.type = values_alloc(&compiler->values, &v);
     TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
     *data = compiler->common.type.type;
     *v = (Value){
@@ -139,7 +146,7 @@ void compiler_init(Compiler *compiler) {
   }
   {
     Value *v;
-    compiler->common.val.i32  = values_alloc(&compiler->values, &v);
+    compiler->common.val.i32 = values_alloc(&compiler->values, &v);
     TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
     *data = compiler->common.type.i32;
     *v = (Value){
@@ -148,12 +155,6 @@ void compiler_init(Compiler *compiler) {
       .data = data,
     };
   }
-
-  decls_init(&compiler->decls, &(InternerOptions){
-    .arena            = &compiler->arena,
-    .map_allocator    = cstd_allocator,
-    .map_initial_size = 16,
-  });
 
   // DeclarationIndex 0 is reserved for the root
   decls_add(&compiler->decls, (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX });
@@ -358,7 +359,32 @@ next_iter:
   // have output their dependencies on other declarations. Use these dependencies to determine
   // an evaluation order.
   //
+  // Alternatively, just run a job and if it depends on another job, suspend the current job and 
+  // process the other job first.
+  //
   // For now that is not necessary (just one function).
+
+  {
+    for (u32 i = 0; i < compiler->decls.len; i++) {
+      Declaration *decl = decls_ptr_at_unchecked(&compiler->decls, i);
+      if (decl->resolve_status == ResolveStatus_fully_resolved) {
+        continue;
+      }
+
+      Assert(decl->resolve_status != ResolveStatus_resolving_type);
+      Assert(decl->resolve_status != ResolveStatus_resolving_value);
+
+      if (decl->resolve_status == ResolveStatus_unresolved) {
+        decl_resolve_type(decl);
+      }
+
+      if (decl->resolve_status == ResolveStatus_type_resolved) {
+        decl_resolve_value(decl);
+      }
+
+      Assert(decl->resolve_status == ResolveStatus_fully_resolved);
+    }
+  }
 
   {
     for (u32 i = 0; i < compiler->sources.len; i++) {

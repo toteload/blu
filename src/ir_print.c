@@ -177,7 +177,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     switch (Cast(enum IrOpcode, op)) {
     case IR_func: {
       IrFunc *func = extra;
-      fprintf(out, "first_param_or_body=%u instruction_count=%u", i + func->offset_first_param_or_body, func->instruction_count);
+      fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {
@@ -202,12 +202,15 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     case IR_repeat: {
       fprintf(out, "%%%u", data);
     } break;
+    case IR_param_type: {
+      IrParamType *p = extra;
+      ir_ref_print(out, p->function, types, values);
+      fprintf(out, " %u", p->param_index);
+    } break;
     case IR_param:
     case IR_ret:
     case IR_load:
-    case IR_typeof:
-    case IR_typeinfo:
-    case IR_function_return_type: {
+    case IR_return_type: {
       ir_ref_print(out, data, types, values);
     } break;
     case IR_store: {
@@ -238,14 +241,6 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     case IR_lookup: {
       fprintf(out, "decl=%u", data);
     } break;
-    case IR_cast_int:
-    case IR_cast_int_safe: {
-      IrCastInt *cast = extra;
-      fputs("to=", out);
-      type_index_print(out, types, cast->type);
-      fputs(" value=", out);
-      ir_ref_print(out, cast->value, types, values);
-    } break;
     case IR_as: {
       IrAs *as = extra;
       ir_ref_print(out, as->type_to, types, values);
@@ -260,14 +255,29 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     } break;
     case IR_type: {
       IrType *type = extra;
-      fprintf(out, "%s args=[", typekind_string(type->kind));
-      for (u32 j = 0; j < type->arg_count; j++) {
-        if (j != 0) {
-          fputs(", ", out);
+      fprintf(out, "%s ", typekind_string(type->kind));
+      if (type->kind == Type_function) {
+        Assert(type->arg_count > 0);
+
+        fputs("(", out);
+        if (type->arg_count > 1) {
+          for (u32 j = 1; j < type->arg_count; j++) {
+            if (j != 1) {
+              fputs(", ", out);
+            }
+            ir_ref_print(out, type->args[j], types, values);
+          }
         }
-        ir_ref_print(out, type->args[j], types, values);
+        fputs(") ", out);
+        ir_ref_print(out, type->args[type->arg_count-1], types, values);
+      } else {
+        for (u32 j = 0; j < type->arg_count; j++) {
+          if (j != 0) {
+            fputs(", ", out);
+          }
+          ir_ref_print(out, type->args[j], types, values);
+        }
       }
-      fputc(']', out);
     } break;
     }
 

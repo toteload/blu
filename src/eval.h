@@ -14,8 +14,11 @@ u32 eval_cast_int(TypeInteger type_src, void *payload_src, TypeInteger type_dst,
 
 typedef enum {
   UnifyResult_ok,
-  UnifyResult_unable_to_unify,
-  UnifyResult_no_concrete_type_provided,
+  UnifyResult_types_cannot_be_unified,
+
+  // Types could be unified, but resulted in an incomplete type.
+  // When this is returned, `unified` is written to and the incomplete type can be retrieved with it.
+  UnifyResult_type_is_incomplete,
 } UnifyResult;
 
 u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified);

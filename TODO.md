@@ -4,11 +4,28 @@ I am trying to figure out how to generate code that when ran produces the partia
 function; basically all the comptime stuff in the original function has been replaced with constants.
 
 - [ ] Interpret the IR to produce "runtime IR"
-- [ ] Interpret runtime IR to execute the program!
+  What I am trying now is that each declaration generates a block of IR where the first part of the
+  generated block contains "typechecking code" and the second part contains code for the actual value.
 
-- [ ] Update IR_declaration to use positional arguments. So, the declared type follows right after
-      the IR_declaration instruction and the declared type is followed by the declared value.
-      Problem: declared type is optional. Solution: introduce IR_declaration_with_type.
+  Each declaration gets push onto a stack with a resolve status and a callframe.
+  Then while the stack has items, the top item gets popped off and we try to run the associated code.
+  First the typechecking code and then the code that produces a value.
+  These two steps have separate statusses.
+
+  The typechecking code starts with code coming from the declared type followed by code of the value
+  up to a leaf node in the value expression. Then we try to unify the declared type with the type of
+  the encountered leaf expression. When running this code it is possible that other declarations are
+  referenced. If this happens, execution is paused and saved, and we push the referenced declaration
+  onto the stack. This declaration then gets popped off the stack and we try to resolve it. And so
+  on. If in the typechecking code of declaration "a" "a" is referenced again you have a recursive
+  type problem.
+
+  In some cases it is good enough if only the type of a declaration has been resolved
+  and not yet the value. For example, a recursive call or a type that contains a pointer to
+  itself. In the second case it must be through a pointer (an indirection) try to contain
+  itself directly would be illegal.
+
+- [ ] Interpret runtime IR to execute the program!
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
@@ -82,9 +99,6 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 
 ## Code organization
-
-- [ ] Some form of encapsulation of declarations, think packages or modules.
-  - Use a toplevel package declaration to say what package you are part of.
 
 
 ## Control flow

@@ -4,9 +4,8 @@
 #include "blu.h"
 
 typedef struct {
-  Arena *arena;
+  Arena *perm; // The generated code is stored in this arena
   Arena *scratch;
-
   Common         *common;
   MessageSink    *msg_sink;
   StringInterner *strings;
@@ -14,6 +13,6 @@ typedef struct {
   ValueStore          *values;
 } CodeGenContext;
 
-b32 source_generate_code(CodeGenContext *context, Source *source, u32 idx_declaration);
+b32 generate_code(CodeGenContext *context, Declaration *decl);
 
 #endif // CODEGEN_H

@@ -133,9 +133,9 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 #define Align_of(x) _Alignof(x)
 #define Offsetof(s,m) offsetof(s,m)
 
-#define Todo() do { fprintf(stderr, "Todo encountered -> "); Panic(); } while (0)
+#define Todo()    do { fprintf(stderr, "TODO -> "); Panic(); } while (0)
 #define Assert(e) assert(e)
-#define Panic() do { fprintf(stderr, "panic in %s at %s:%u\n", TTLD_FUNC, __FILE__, __LINE__); abort(); } while (0)
+#define Panic()   do { fprintf(stderr, "panic in %s at %s:%u\n", TTLD_FUNC, __FILE__, __LINE__); abort(); } while (0)
 
 #ifdef TTLD_COMPILER_CLANG
 #define Unreachable() __builtin_unreachable()

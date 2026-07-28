@@ -53,17 +53,7 @@ always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
 // -------------------------------------------------------------------------------------------------
 
 enum IrOpcode {
-
-  // A func instruction is followed by:
-  // - An expression for the type.
-  // - The body 
-  // func references `IrFunc`. A func instruction is followed by:
-  // - return type expression (optional)
-  // - param type expressions (optional)
-  // - n (n >= 0) IR_param instructions, can refer to previously defined type expressions
-  // - body
-  IR_func,      // data contains `IrFunc` in extra
-
+  IR_func,      // data references `IrFunc` in extra
   IR_param,     // data contains `IrRef`
   IR_alloc,     // data contains `TypeIndex`
   IR_cond_br,   // data references `IrCondBr` in extra
@@ -78,22 +68,22 @@ enum IrOpcode {
 
   IR_declaration, // data references `IrDeclaration` in extra
   IR_lookup, // data contains `DeclarationIndex`
-  
-  IR_cast_int,  // data references `IrCastInt` in extra
-  IR_cast_int_safe,
 
   IR_as, // data references `IrAs` in extra
   IR_unify, // data references `IrUnify` in extra
 
-  // Create a type
   IR_type, // data references `IrType` in extra
-  IR_typeof,
-  IR_typeinfo,
 
-  IR_function_return_type, // data contains `IrRef`
+  IR_return_type, // data contains `IrRef`
+  IR_param_type,  // data references `IrParamType` in extra
 };
 
 // -------------------------------------------------------------------------------------------------
+
+typedef struct {
+  IrRef function;
+  u32 param_index;
+} IrParamType;
 
 typedef struct {
   u8 kind; // TypeKind
@@ -101,6 +91,9 @@ typedef struct {
   IrRef args[];
 } IrType;
 
+// You can put the value directly after the declaration instruction by convention.
+// `data` can then hold an optional ref to the optional declared type.
+// This way you don't need this IrDeclaration.
 typedef struct {
   IrRef declared_type;
   IrRef value;
@@ -120,14 +113,9 @@ typedef struct {
 } IrAs;
 
 typedef struct {
-  u32 offset_first_param_or_body;
+  u32 param_count;
   u32 instruction_count;
 } IrFunc;
-
-typedef struct {
-  IrRef type;
-  IrRef value;
-} IrCastInt;
 
 typedef struct {
   InstructionIndex block;

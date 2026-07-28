@@ -8,29 +8,20 @@
 #include "codegen.h"
 #include "ir.h"
 
-#define SEGMENTLIST_NAME            DependencyList
-#define SEGMENTLIST_TYPE            DeclarationIndex
-#define SEGMENTLIST_FUNCTION_PREFIX depslist
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_MIN_SIZE_LOG2   8
-#define SEGMENTLIST_SEGMENT_COUNT   24
-#define SEGMENTLIST_OUTPUT_TYPES
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
-
 typedef struct {
-  b32      has_error;
-  IrBuilder builder;
-  DependencyList dependencies; // []DeclarationIndex
+  b32           has_error;
+  IrBuilder     builder;
   ArenaSnapshot scope_scratch;
 
   Arena *arena;
   Arena *scratch;
-  Common *common;
-  MessageSink *msg_sink;
-  StringInterner *strings;
+
+  Common              *common;
+  MessageSink         *msg_sink;
+  StringInterner      *strings;
   DeclarationInterner *decls;
-  ValueStore *values;
+  ValueStore          *values;
+
   Source *source;
 
   // the module stack that the current declaration is in
@@ -40,15 +31,15 @@ typedef struct {
 
 void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx) {
   *gen = (CodeGen){
-    .arena = context->arena,
-    .scratch = context->scratch,
-    .common = context->common,
-    .strings = context->strings,
+    .arena    = context->arena,
+    .scratch  = context->scratch,
+    .common   = context->common,
+    .strings  = context->strings,
     .msg_sink = context->msg_sink,
-    .decls = context->decls,
-    .values = context->values,
-    .source = source,
-    .builder = (IrBuilder){ .scratch = context->scratch },
+    .decls    = context->decls,
+    .values   = context->values,
+    .source   = source,
+    .builder  = (IrBuilder){ .scratch = context->scratch },
   };
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
@@ -93,8 +84,6 @@ InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   inst_set_opcode(&gen->builder, lookup, IR_lookup);
   inst_set_data(&gen->builder, lookup, decl);
 
-  depslist_append(&gen->dependencies, gen->scratch, decl);
-
   return lookup;
 }
 
@@ -117,11 +106,12 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   String    text   = gen->source->text;
   Tokens   *tokens = &gen->source->tokens;
   AstNodes *ast    = &gen->source->ast;
+  IrBuilder *builder = &gen->builder;
 
   IrRef res = 0;
 
   u8 kind = ast->kinds[idx_ast];
-  switch (Cast(enum AstKind, kind)) {
+  switch (Cast(AstKind, kind)) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
     res = ir_ref_from_instruction_index(inst_add_lookup(gen, *name));
@@ -154,53 +144,31 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
-    InstructionIndex inst_func = inst_alloc(&gen->builder);
-    inst_set_opcode(&gen->builder, inst_func, IR_func);
+    InstructionIndex inst_return_type = inst_alloc(builder);
+    inst_set_opcode(builder, inst_return_type, IR_return_type);
+    inst_set_data(builder, inst_return_type, ir_ref_from_instruction_index(type_destination));
 
-    IrFunc *data_func = inst_push_data(&gen->builder, inst_func, IrFunc);
-
-    IrRef ref_ret_type = 0;
-    if (func->return_type) {
-      ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
-    }
-
-    // Output param type expressions
     for (u32 i = 0; i < func->count; i++) {
-      Panic();
+      InstructionIndex inst_param_type = inst_alloc(builder);
+      inst_set_opcode(builder, inst_param_type, IR_param_type);
+      IrParamType *param_type = inst_push_data(builder, inst_param_type, IrParamType);
+      *param_type = (IrParamType){
+        .function = type_destination,
+        .param_index = i,
+      };
     }
 
-    u32 offset_first_param_or_body = inst_offset(&gen->builder, inst_func);
+    InstructionIndex inst_func = inst_alloc(builder);
+    inst_set_opcode(builder, inst_func, IR_func);
+    IrFunc *data_func = inst_push_data(builder, inst_func, IrFunc);
 
-    // Output IR_param instructions
+    InstructionIndex first_param_type = inst_return_type + 1;
+
     for (u32 i = 0; i < func->count; i++) {
-      Panic();
+      InstructionIndex inst_param = inst_alloc(builder);
+      inst_set_opcode(builder, inst_param, IR_param);
+      inst_set_data(builder, inst_param, ir_ref_from_instruction_index(first_param_type + i));
     }
-
-    InstructionIndex inst_type = inst_alloc(&gen->builder);
-    inst_set_opcode(&gen->builder, inst_type, IR_type);
-    u32 arg_count = func->count + 1; // parameters + return type
-
-    Assert(func->count == 0);
-
-    IrType *data_type = inst_push_data_raw(&gen->builder, inst_type, sizeof(IrType) + arg_count * sizeof(IrRef), Align_of(IrType));
-    *data_type = (IrType){
-      .kind = Type_function,
-      .arg_count = arg_count,
-    };
-
-    data_type->args[0] = ref_ret_type;
-
-    InstructionIndex inst_unify = inst_alloc(&gen->builder);
-    inst_set_opcode(&gen->builder, inst_unify, IR_unify);
-    IrUnify *data_unify = inst_push_data(&gen->builder, inst_unify, IrUnify);
-    *data_unify = (IrUnify){
-      .type_lhs = type_destination,
-      .type_rhs = ir_ref_from_instruction_index(inst_type),
-    };
-
-    InstructionIndex inst_return_type = inst_alloc(&gen->builder);
-    inst_set_opcode(&gen->builder, inst_return_type, IR_function_return_type);
-    inst_set_data(&gen->builder, inst_return_type, ir_ref_from_instruction_index(inst_unify));
 
     IrRef inst_body = gen_code(gen, func->body, ir_ref_from_instruction_index(inst_return_type));
 
@@ -211,8 +179,8 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     u32 func_instruction_count = inst_offset(&gen->builder, inst_func);
 
     *data_func = (IrFunc){
-      .offset_first_param_or_body = offset_first_param_or_body,
-      .instruction_count          = func_instruction_count,
+      .param_count = func->count,
+      .instruction_count = func_instruction_count,
     };
 
     return ir_ref_from_instruction_index(inst_func);
@@ -220,26 +188,20 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
 
-    InstructionIndex idx_decl = inst_alloc(&gen->builder);
-
-    inst_set_opcode(&gen->builder, idx_decl, IR_declaration);
-
-    IrDeclaration *data_decl = inst_push_data(&gen->builder, idx_decl, IrDeclaration);
+    InstructionIndex block = inst_block_begin(builder);
 
     IrRef ref_type = ir_ref_from_value_index(gen->common->val.type);
+
     IrRef ref_decl_type = 0;
     if (decl->type) {
-      InstructionIndex block = inst_block_begin(&gen->builder);
       IrRef type = gen_code(gen, decl->type, ref_type);
-      inst_block_end(&gen->builder, block, type);
-      ref_decl_type = ir_ref_from_instruction_index(block);
+      ref_decl_type = ir_ref_from_instruction_index(type);
     }
     IrRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
 
-    data_decl->declared_type = ref_decl_type;
-    data_decl->value = ref_decl_val;
+    inst_block_end(builder, block, ref_decl_val);
 
-    return ir_ref_from_instruction_index(idx_decl);
+    return ir_ref_from_instruction_index(block);
   } break;
   case Ast_literal_int: {
     TokenIndex *tok = ast_data(ast, idx_ast);
@@ -269,16 +231,97 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   return res;
 }
 
-b32 source_generate_code(CodeGenContext *context, Source *source, u32 idx) {
+IrRef gen_declaration_type_of_val_code(CodeGen *gen, AstIndex idx_ast, IrRef declared_type) {
+  AstNodes *ast    = &gen->source->ast;
+  IrBuilder *builder = &gen->builder;
+
+  u8 kind = ast->kinds[idx_ast];
+  switch (Cast(AstKind, kind)) {
+  case Ast_function: {
+    AstFunction *func = ast_data(ast, idx_ast);
+
+    IrRef ref_ret_type = 0;
+    if (func->return_type) {
+      ref_ret_type = gen_code(gen, func->return_type, ir_ref_from_value_index(gen->common->val.type));
+    }
+
+    // Output param type expressions
+    for (u32 i = 0; i < func->count; i++) {
+      Todo();
+    }
+
+    InstructionIndex inst_type = inst_alloc(builder);
+    inst_set_opcode(builder, inst_type, IR_type);
+    u32 arg_count = func->count + 1; // parameters + return type
+
+    Assert(func->count == 0);
+
+    IrType *data_type = inst_push_data_raw(&gen->builder, inst_type, sizeof(IrType) + arg_count * sizeof(IrRef), Align_of(IrType));
+    *data_type = (IrType){
+      .kind = Type_function,
+      .arg_count = arg_count,
+    };
+
+    data_type->args[0] = ref_ret_type;
+
+    InstructionIndex inst_unify = inst_alloc(builder);
+    inst_set_opcode(builder, inst_unify, IR_unify);
+    IrUnify *data_unify = inst_push_data(builder, inst_unify, IrUnify);
+    *data_unify = (IrUnify){
+      .type_lhs = declared_type,
+      .type_rhs = ir_ref_from_instruction_index(inst_type),
+    };
+
+    return ir_ref_from_instruction_index(inst_unify);
+  } break;
+  default: Todo();
+  } 
+
+  Todo();
+}
+
+b32 generate_code(CodeGenContext *context, Declaration *decl) {
+  // NOTE: It is possible to output dependencies on other declarations for the pieces of code.
+  // However, these dependencies may contain false positives, because whether another declaration is
+  // actually used can depend on running a piece of comptime code.
+  // For example, `a := if buzz() { foo() } else { bar() }`.
+  // Whether `a` will use foo or bar depends on buzz(). But we can output both foo and bar and accept
+  // that one of them will be a false positive. This may still be useful in sorting jobs.
+
   CodeGen gen;
   codegen_init(&gen, context, source, idx);
 
-  gen_code(&gen, source->decls[source->tree_idxs[idx]].node, ir_ref_from_value_index(context->common->val.nil));
+  Source *source = dec->data.decl.source;
+
+  AstIndex ast_decl = source->decls[decl->data.decl.tree_idx].node;
+  AstDeclaration *decl = ast_data(&source->ast, ast_decl);
+
+  Assert(gen.source->ast.kinds[ast_decl] == Ast_declaration);
+
+  InstructionIndex block = inst_block_begin(&gen.builder);
+
+  IrRef ref_decl_type = 0;
+  if (decl->type) {
+    IrRef ref_type = ir_ref_from_value_index(gen.common->val.type);
+    IrRef type = gen_code(&gen, decl->type, ref_type);
+    ref_decl_type = ir_ref_from_instruction_index(type);
+  }
+
+  u32 typecheck_end = inst_offset(&gen.builder, block);
+
+  IrRef ref_decl_type_of_val = gen_declaration_type_of_val_code(&gen, decl->value, ref_decl_type);
+
+  // Generate code until all the leaf nodes.
+  // Then generate potential type checking code for the leaf.
+  // For example, based on the typed parameters of a function.
+  // This marks the end of type resolution code.
+  // After this the value starts.
+
+  IrRef ref_decl_val = gen_code(&gen, decl->value, ref_decl_type_of_val);
+
+  inst_block_end(&gen.builder, block, ref_decl_val);
 
   irbuilder_flatten(&gen.builder, context->arena, &source->ir_chunks[idx]);
-
-  // TODO
-  // - output all the dependencies somewhere.
 
   codegen_deinit(&gen);
 

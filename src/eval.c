@@ -142,6 +142,27 @@ u32 eval_cast_int(
   return CastResult_ok;
 }
 
+internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
+  Type *t = types_get(types, idx);
+
+  switch (t->kind) {
+  case Type_function: {
+    if (t->data.function.return_type == 0) {
+      return False;
+    }
+
+    for (u32 i = 0; i < t->data.function.param_count; i++) {
+      if (t->data.function.param_types[i] == 0) {
+        return False;
+      }
+    }
+  } break;
+  default: Todo();
+  }
+
+  return True;
+}
+
 u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified) {
   if (a == b) {
     *unified = a;
@@ -149,7 +170,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
   }
 
   if (a == 0 && b == 0) {
-    return UnifyResult_no_concrete_type_provided;
+    return UnifyResult_type_is_incomplete;
   }
 
   if (a == 0) {
@@ -168,13 +189,13 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
   if (type_lhs->kind == Type_function && type_rhs->kind == Type_function) {
     u32 param_count = type_lhs->data.function.param_count;
     if (param_count != type_rhs->data.function.param_count) {
-      return UnifyResult_unable_to_unify;
+      return UnifyResult_types_cannot_be_unified;
     }
 
     TypeIndex return_type;
     u32 err = eval_unify(scratch, types, type_lhs->data.function.return_type, type_rhs->data.function.return_type, &return_type);
     if (err) {
-      return UnifyResult_unable_to_unify;
+      return UnifyResult_types_cannot_be_unified;
     }
 
     ArenaSnapshot snapshot = arena_scope_begin(scratch);
@@ -193,11 +214,17 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
       f->data.function.param_types[i] = param_type;
     }
 
+    TypeIndex res = types_add(types, f);
+
     if (!err) {
-      *unified = types_add(types, f);
+      *unified = res;
     }
 
     arena_scope_end(scratch, snapshot);
+
+    if (!is_type_complete(types, res)) {
+      return UnifyResult_type_is_incomplete;
+    }
 
     return UnifyResult_ok;
   }
@@ -209,7 +236,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
 
   Todo();
 
-  return UnifyResult_unable_to_unify;
+  return UnifyResult_types_cannot_be_unified;
 }
 
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
