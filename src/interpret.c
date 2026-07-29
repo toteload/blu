@@ -3,85 +3,43 @@
 #include "source_file.h"
 #include "eval.h"
 
-// For simplicity the maximum depths are a fixed number. This will likely change.
-#define MAX_SCOPE_DEPTH 64
-#define MAX_CALL_DEPTH  128
-
-typedef struct {
-  InstructionIndex start;
-  InstructionIndex end;
-} ScopeSpan;
-
-typedef Stack(ScopeSpan) ScopeStack;
-
-typedef struct {
-  // This struct probably will also have to carry arguments for when function calls get added.
-  // And return value (maybe?)
-
-  b32 ok;
-
-  InstructionIndex pc;
-
-  IrChunk *chunk;
-
-  ArenaSnapshot snapshot;
-
-  ValueIndex *inst_map;
-
-  ScopeStack scopes;
-} CallFrame;
-
-typedef Stack(CallFrame) CallStack;
-
-typedef struct {
-  IrBuilder builder;
-
-  CallStack call_stack;
-
-  Arena *scratch;
-  MessageSink *msg_sink;
-  DeclarationInterner *declarations;
-  TypeInterner *types;
-  ValueStore *values;
-  Common *common;
-} Interpreter;
-
 // The interpreter's per-frame maps grow with the C allocator; cstd_allocator is defined in compiler.c.
 extern Allocator const cstd_allocator;
 
-internal always_inline CallFrame *top_frame(Interpreter *in) {
-  return stack_peek_ptr_unsafe(&in->call_stack);
+internal IrBuilder *get_builder(Interpreter *in) {
+  return stack_peek_ptr_unchecked(&in->builders);
 }
 
 internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx, IrRef val) {
   f->inst_map[idx] = val;
 }
 
-void frame_push(Interpreter *in, IrChunk *chunk) {
+void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk) {
   CallFrame f = {
-    .chunk = chunk,
+    .ok = True,
     .pc = 0,
-    .snapshot = arena_scope_begin(in->scratch),
-    .inst_map = arena_push_array(ValueIndex, in->scratch, chunk->opcode_count),
+    .chunk = chunk,
+    .inst_map = arena_push_array(ValueIndex, arena, chunk->opcode_count),
+    .snapshot = arena_scope_begin(arena),
   };
 
-  stack_init(&f.scopes, arena_push_array(ScopeSpan, in->scratch, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
-  stack_push(&f.scopes, ((ScopeSpan){ .start = start, .end = chunk->opcode_count }));
+  stack_init(&f.scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
+  stack_push(&f.scopes, ((ScopeSpan){ .start = 0, .end = chunk->opcode_count }));
 
-  stack_push(&in->call_stack, f);
+  stack_push(call_stack, f);
 }
 
-void frame_pop(Interpreter *in) {
-  CallFrame f = stack_pop_unsafe(&in->call_stack);
+void frame_pop(CallStack *call_stack, Arena *arena, ValueStore *values) {
+  CallFrame f = stack_pop_unchecked(call_stack);
 
   ScopeSpan span = f.scopes.data[0];
   for (u32 i = span.start; i < span.end; i++) {
     if (f.inst_map[i]) {
-      values_dealloc(in->values, f.inst_map[i]);
+      values_dealloc(values, f.inst_map[i]);
     }
   }
 
-  arena_scope_end(in->scratch, f.snapshot);
+  arena_scope_end(arena, f.snapshot);
 }
 
 internal void scope_push(CallFrame *f, u32 inst_count) {
@@ -181,12 +139,11 @@ void step(Interpreter *in, CallFrame *f) {
 
     if (decl->kind == Declaration_decl) {
       Todo();
-      decl_resolve_full();
     }
 
-    Assert(decl.kind == Declaration_value); // only values supported for now
+    Assert(decl->kind == Declaration_primitive); // only primitives supported for now
 
-    ValueIndex copy = values_copy(in->values, decl.data.val);
+    ValueIndex copy = values_copy(in->values, decl->data.primitive);
     store_inst_value(f, pc, ir_ref_from_value_index(copy));
     f->pc = pc + 1;
   } break;
@@ -292,7 +249,7 @@ void step(Interpreter *in, CallFrame *f) {
     f->pc += 1;
   } break;
   case IR_ret: {
-    IrBuilder *builder = &in->builder;
+    IrBuilder *builder = get_builder(in);
     InstructionIndex inst = inst_alloc(builder);
     inst_set_opcode(builder, inst, IR_ret);
     inst_set_data(builder, inst, chunk_data(f->chunk, pc));
@@ -345,106 +302,52 @@ internal IrRef eval_func(Interpreter *in, IrChunk *chunk, InstructionIndex idx) 
 // 2. Evaluate the "prototype" of the function value. Make sure the prototype and the declared type can be unified.
 // 3. Output a function for the runtime code.
 
-b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration) {
-  IrChunk *chunk = &source->ir_chunks[idx_declaration];
-
-  Assert(chunk->opcodes[0] == IR_declaration);
-
-  IrDeclaration *decl = chunk_extra(chunk, 0);
-
-  Interpreter in = {
-    .scratch      = context->scratch,
-    .declarations = context->decls,
-    .types        = context->types,
-    .values       = context->values,
-    .common       = context->common,
-    .builder      = { .scratch = context->scratch },
-  };
-
-  stack_init(&in.call_stack, arena_push_array(CallFrame, context->scratch, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
-  frame_push(&in, chunk, 0, chunk->opcode_count);
-
-  IrRef declared_type = 0;
-  if (!ir_ref_is_nil(decl->declared_type)) {
-    Assert(ref_is_instruction_index(decl->declared_type));
-    declared_type = eval_block(&in, chunk, ref_to_instruction_index(decl->declared_type));
-  }
-  Assert(ref_is_value_index(declared_type));
-
-  Assert(ref_is_instruction_index(decl->value));
-  if (chunk_opcode(chunk, ref_to_instruction_index(decl->value)) == IR_func) {
-    // TODO func_type and declared_type must unify and be complete
-    IrRef decl_value = eval_func(&in, chunk, ref_to_instruction_index(decl->value));
-  } else {
-    Panic();
-  }
-
-  irbuilder_flatten(&in.builder, context->perm, &source->runtime_chunks[idx_declaration]);
-
-  frame_pop(&in);
-
-  return True;
-}
-
-b32 resolve_decl_full(..., Declaration *decl) {
-}
+//b32 source_interpret_declaration(InterpretContext *context, Source *source, u32 idx_declaration) {
+//  IrChunk *chunk = &source->ir_chunks[idx_declaration];
+//
+//  Assert(chunk->opcodes[0] == IR_declaration);
+//
+//  IrDeclaration *decl = chunk_extra(chunk, 0);
+//
+//  Interpreter in = {
+//    .scratch      = context->scratch,
+//    .declarations = context->decls,
+//    .types        = context->types,
+//    .values       = context->values,
+//    .common       = context->common,
+//    .builder      = { .scratch = context->scratch },
+//  };
+//
+//  stack_init(&in.call_stack, arena_push_array(CallFrame, context->scratch, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
+//  frame_push(&in, chunk, 0, chunk->opcode_count);
+//
+//  IrRef declared_type = 0;
+//  if (!ir_ref_is_nil(decl->declared_type)) {
+//    Assert(ref_is_instruction_index(decl->declared_type));
+//    declared_type = eval_block(&in, chunk, ref_to_instruction_index(decl->declared_type));
+//  }
+//  Assert(ref_is_value_index(declared_type));
+//
+//  Assert(ref_is_instruction_index(decl->value));
+//  if (chunk_opcode(chunk, ref_to_instruction_index(decl->value)) == IR_func) {
+//    // TODO func_type and declared_type must unify and be complete
+//    IrRef decl_value = eval_func(&in, chunk, ref_to_instruction_index(decl->value));
+//  } else {
+//    Panic();
+//  }
+//
+//  irbuilder_flatten(&in.builder, context->perm, &source->runtime_chunks[idx_declaration]);
+//
+//  frame_pop(&in);
+//
+//  return True;
+//}
 
 CallFrame *alloc_callframe(IrChunk *chunk) {
   Todo();
 }
 
-typedef struct {
-  Declaration *decl;
-  CallFrame   *frame;
-} DeclarationResolution;
-
-b32 resolve_declarations() {
-
-  // This should turn into a stack of call stack, but I don't support function calls yet, so one frame
-  // per resolve suffices.
-  Stack(DeclarationResolution) resolve_stack;
-
-  for (u32 i = 0; i < compiler->decls.len; i++) {
-    Declaration *decl = decls_ptr_at_unchecked(&compiler->decls, i);
-    CallFrame *f = alloc_callframe({}, ..., decl->data.decl.chunk);
-    stack_push(&resolve_stack, { .decl = decl, .frame = f });
-  }
-
-  while (!stack_is_empty(&resolve_stack)) {
-    DeclarationResolution resolution = stack_pop_unsafe(&resolve_stack);
-
-    CallFrame *f = resolution.frame;
-    u8 resolve_status = resolution.decl->resolve_status;
-
-    // TODO: in some cases it is good enough if only the type of a declaration has been resolved
-    // and not yet the value. For example, a recursive call or a type that contains a pointer to
-    // itself. In the second case it must be through a pointer (an indirection) try to contain
-    // itself directly would be illegal.
-
-    if (resolve_status == ResolveStatus_fully_resolved || resolve_status == ResolveStatus_resolving_value) {
-      continue;
-    }
-
-    if (resolve_status == ResolveStatus_resolving_type) {
-      Panic();
-    }
-
-    if (resolve_status == ResolveStatus_unresolved) {
-      resolution.decl->resolve_status = ResolveStatus_resolving_type;
-
-      u32 err = run_until({}, f, resolution.decl->data.decl.typecheck_end);
-      if (err == Run_resolve_declaration) {
-        DeclarationIndex idx = chunk_data(f->chunk, f->pc);
-
-        Todo();
-      }
-
-      resolution.decl->resolve_status = ResolveStatus_type_resolved;
-    }
-
-    if (resolve_status == ResolveStatus_type_resolved) {
-      resolution.decl->resolve_status = ResolveStatus_resolving_value;
-    }
-
-  }
+void dealloc_callframe(CallFrame *f) {
+  Todo();
 }
+

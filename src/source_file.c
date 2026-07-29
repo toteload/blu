@@ -206,21 +206,9 @@ void source_index_declarations(Source *source, StringInterner *strings) {
     }
   }
 
-  source->decl_count = decl_count;
   source->decl_tree_size = count;
-  source->decls = decls;
-  source->decl_idxs = arena_push_array(DeclarationIndex, &source->arena, count);
-  source->tree_idxs = arena_push_array(u32, &source->arena, decl_count);
-  source->ir_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
-  source->runtime_chunks = arena_push_array(IrChunk, &source->arena, decl_count);
-
-  u32 i_decl = 0;
-  for (u32 i = 0; i < count; i++) {
-    if (decls[i].kind == SourceDeclaration_declaration) {
-      source->tree_idxs[i_decl] = i;
-      i_decl += 1;
-    }
-  }
+  source->decls          = decls;
+  source->decl_idxs      = arena_push_array(DeclarationIndex, &source->arena, count);
 }
 
 void source_print_all_messages(Source *source) {

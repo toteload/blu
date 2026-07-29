@@ -152,21 +152,21 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
     u32 depth = blocks.len;
 
     if (!stack_is_empty(&blocks)) {
-      BlockPrint *b = stack_peek_ptr_unsafe(&blocks);
+      BlockPrint *b = stack_peek_ptr_unchecked(&blocks);
       b->at += 1;
     }
 
     while (!stack_is_empty(&blocks)) {
-      BlockPrint *b = stack_peek_ptr_unsafe(&blocks);
+      BlockPrint *b = stack_peek_ptr_unchecked(&blocks);
       if (b->at < b->count) {
         break;
       }
 
       u32 count = b->count;
-      stack_pop_unsafe(&blocks);
+      stack_pop_unchecked(&blocks);
 
       if (!stack_is_empty(&blocks)) {
-        stack_peek_ptr_unsafe(&blocks)->at += count;
+        stack_peek_ptr_unchecked(&blocks)->at += count;
       }
     }
 

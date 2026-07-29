@@ -13,7 +13,7 @@ typedef struct {
   IrBuilder     builder;
   ArenaSnapshot scope_scratch;
 
-  Arena *arena;
+  Arena *perm;
   Arena *scratch;
 
   Common              *common;
@@ -29,9 +29,9 @@ typedef struct {
   DeclarationIndex *mods;
 } CodeGen;
 
-void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx) {
+void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tree_idx) {
   *gen = (CodeGen){
-    .arena    = context->arena,
+    .perm     = context->perm,
     .scratch  = context->scratch,
     .common   = context->common,
     .strings  = context->strings,
@@ -39,13 +39,12 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx
     .decls    = context->decls,
     .values   = context->values,
     .source   = source,
-    .builder  = (IrBuilder){ .scratch = context->scratch },
   };
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
 
   DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, Max_module_depth);
-  u32 i = source->decls[source->tree_idxs[idx]].parent;
+  u32 i = source->decls[tree_idx].parent;
   u32 offset = 0;
   Assert(source->decls[0].kind == SourceDeclaration_root);
   while (i) {
@@ -62,7 +61,6 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 idx
 void codegen_deinit(CodeGen *gen) {
   arena_scope_end(gen->scratch, gen->scope_scratch);
 }
-
 
 InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, name));
@@ -288,40 +286,36 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   // Whether `a` will use foo or bar depends on buzz(). But we can output both foo and bar and accept
   // that one of them will be a false positive. This may still be useful in sorting jobs.
 
+  Source *source = decl->data.decl.source;
+
   CodeGen gen;
-  codegen_init(&gen, context, source, idx);
+  codegen_init(&gen, context, source, decl->data.decl.tree_idx);
 
-  Source *source = dec->data.decl.source;
+  AstIndex ast_idx_decl = source->decls[decl->data.decl.tree_idx].node;
+  AstDeclaration *ast_decl = ast_data(&source->ast, ast_idx_decl);
 
-  AstIndex ast_decl = source->decls[decl->data.decl.tree_idx].node;
-  AstDeclaration *decl = ast_data(&source->ast, ast_decl);
-
-  Assert(gen.source->ast.kinds[ast_decl] == Ast_declaration);
+  Assert(gen.source->ast.kinds[ast_idx_decl] == Ast_declaration);
 
   InstructionIndex block = inst_block_begin(&gen.builder);
 
   IrRef ref_decl_type = 0;
-  if (decl->type) {
+  if (ast_decl->type) {
     IrRef ref_type = ir_ref_from_value_index(gen.common->val.type);
-    IrRef type = gen_code(&gen, decl->type, ref_type);
+    IrRef type = gen_code(&gen, ast_decl->type, ref_type);
     ref_decl_type = ir_ref_from_instruction_index(type);
   }
 
+  IrRef ref_decl_type_of_val = gen_declaration_type_of_val_code(&gen, ast_decl->value, ref_decl_type);
+
   u32 typecheck_end = inst_offset(&gen.builder, block);
 
-  IrRef ref_decl_type_of_val = gen_declaration_type_of_val_code(&gen, decl->value, ref_decl_type);
+  decl->data.decl.typecheck_end = typecheck_end;
 
-  // Generate code until all the leaf nodes.
-  // Then generate potential type checking code for the leaf.
-  // For example, based on the typed parameters of a function.
-  // This marks the end of type resolution code.
-  // After this the value starts.
-
-  IrRef ref_decl_val = gen_code(&gen, decl->value, ref_decl_type_of_val);
+  IrRef ref_decl_val = gen_code(&gen, ast_decl->value, ref_decl_type_of_val);
 
   inst_block_end(&gen.builder, block, ref_decl_val);
 
-  irbuilder_flatten(&gen.builder, context->arena, &source->ir_chunks[idx]);
+  irbuilder_flatten(&gen.builder, context->perm, &decl->data.decl.chunk);
 
   codegen_deinit(&gen);
 

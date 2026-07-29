@@ -15,6 +15,15 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+#define SEGMENTLIST_NAME            DeclIdxList
+#define SEGMENTLIST_TYPE            DeclarationIndex
+#define SEGMENTLIST_FUNCTION_PREFIX user_decls
+#define SEGMENTLIST_MIN_SIZE_LOG2   DECLIDXLIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT   DECLIDXLIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
@@ -166,7 +175,7 @@ void compiler_init(Compiler *compiler) {
     decls_set_extra(
       &compiler->decls,
       decl_i32,
-      (Declaration){ .kind = Declaration_value, .data.val = compiler->common.val.i32 }
+      (Declaration){ .kind = Declaration_primitive, .data.primitive = compiler->common.val.i32 }
     );
   }
 }
@@ -213,6 +222,152 @@ b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u3
 
   return False;
 }
+
+// -------------------------------------------------------------------------------------------------
+
+#define MAX_RESOLVE_DEPTH 64
+
+typedef enum {
+  Run_ok,
+
+  // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
+  // which needs to be resolved.
+  Run_resolve_declaration_type,
+  Run_resolve_declaration_value,
+} RunResult;
+
+typedef struct {
+  Declaration *decl;
+  CallStack    call_stack;
+  b8           is_fresh;
+  u8           min_required_resolve_status;
+} ResolveEntry;
+
+typedef struct {
+  Arena *scratch;
+  u32 declaration_count;
+  Declaration **declarations;
+  Interpreter *in;
+  Stack(ResolveEntry) resolve_stack;
+} Resolver;
+
+internal CallStack alloc_callstack(Arena *arena) {
+  CallStack stack;
+  stack_init(&stack, arena_push_array(CallFrame, arena, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
+  return stack;
+}
+
+internal b32 resolve_run_entry_until(Resolver *resolver, ResolveEntry *entry, u32 end) {
+  u32 err = run_until(resolver->in, &entry->call_stack, end);
+
+  if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
+    CallFrame *f = stack_peek_ptr_unchecked(&entry->call_stack);
+    DeclarationIndex idx = chunk_data(f->chunk, f->pc);
+
+    Declaration *decl = resolver->declarations[idx];
+
+    CallStack call_stack = alloc_callstack(resolver->scratch);
+    frame_push(&call_stack, resolver->scratch, &decl->data.decl.chunk);
+
+    u8 min_required_resolve_status;
+    switch (err) {
+    case Run_resolve_declaration_type:  min_required_resolve_status = ResolveStatus_type_resolved;  break;
+    case Run_resolve_declaration_value: min_required_resolve_status = ResolveStatus_fully_resolved; break;
+    default: Unreachable();
+    }
+
+    stack_push_unchecked(
+      &resolver->resolve_stack,
+      ((ResolveEntry){
+        .decl       = decl,
+        .call_stack = call_stack, 
+        .is_fresh   = True,
+        .min_required_resolve_status = min_required_resolve_status,
+      })
+    );
+
+    entry->is_fresh = False;
+
+    return True;
+  }
+
+  return False;
+}
+
+b32 resolve_declarations(Resolver *resolver) {
+  for (u32 i = 0; i < resolver->declaration_count; i++) {
+    {
+      Declaration *decl = resolver->declarations[i];
+
+      u8 resolve_status = decl->resolve_status;
+
+      if (resolve_status == ResolveStatus_fully_resolved) {
+        continue;
+      }
+
+      Assert(resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved);
+
+      CallStack call_stack = alloc_callstack(resolver->scratch);
+      frame_push(&call_stack, resolver->scratch, &decl->data.decl.chunk);
+
+      stack_push(
+        &resolver->resolve_stack,
+        ((ResolveEntry){ 
+          .decl       = decl,
+          .call_stack = call_stack, 
+          .is_fresh   = True,
+          .min_required_resolve_status = ResolveStatus_fully_resolved,
+        })
+      );
+    }
+
+    while (!stack_is_empty(&resolver->resolve_stack)) {
+      ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
+      Declaration *decl = entry->decl;
+
+      CallStack *call_stack = &entry->call_stack;
+      u8 resolve_status = decl->resolve_status;
+
+      if (resolve_status >= entry->min_required_resolve_status) {
+        stack_pop_unchecked(&resolver->resolve_stack);
+        continue;
+      }
+
+      if (entry->is_fresh && resolve_status == ResolveStatus_resolving_type) {
+        Panic();
+      }
+
+      if (entry->is_fresh && resolve_status == ResolveStatus_resolving_value) {
+        Panic();
+      }
+
+      entry->is_fresh = False;
+
+      if (resolve_status < ResolveStatus_type_resolved) {
+        decl->resolve_status = ResolveStatus_resolving_type;
+        b32 has_pushed = resolve_run_entry_until(resolver, entry, decl->data.decl.typecheck_end);
+        if (has_pushed) {
+          continue;
+        }
+
+        decl->resolve_status = ResolveStatus_type_resolved;
+      }
+
+      if (resolve_status < ResolveStatus_fully_resolved) {
+        decl->resolve_status = ResolveStatus_resolving_value;
+        b32 has_pushed = resolve_run_entry_until(resolver, entry, decl->data.decl.chunk.opcode_count);
+        if (has_pushed) {
+          continue;
+        }
+
+        decl->resolve_status = ResolveStatus_fully_resolved;
+        stack_pop_unchecked(&resolver->resolve_stack);
+      }
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
 
 typedef struct {
   DeclarationIndex mod;
@@ -261,10 +416,10 @@ b32 compile(Compiler *compiler) {
     u32 offset = 1;
 
     while (!stack_is_empty(&stack)) {
-      DeclFrame *top = stack_peek_ptr_unsafe(&stack);
+      DeclFrame *top = stack_peek_ptr_unchecked(&stack);
 
       if (top->n == 0) {
-        stack_pop_unsafe(&stack);
+        stack_pop_unchecked(&stack);
         continue;
       }
 
@@ -301,7 +456,7 @@ b32 compile(Compiler *compiler) {
         decls_set_extra(
           &compiler->decls,
           idx,
-          (Declaration){ .kind = Declaration_mod, .data.loc = { .source = source->idx, .source_decl_idx = offset }}
+          (Declaration){ .kind = Declaration_mod, .data.mod = { .source = source, .tree_idx = offset }}
         );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
@@ -322,11 +477,16 @@ b32 compile(Compiler *compiler) {
           goto next_iter;
         }
 
+        user_decls_append(&compiler->user_decls, &compiler->arena, idx);
+
         source->decl_idxs[offset] = idx;
 
         decls_set_extra(&compiler->decls, idx, (Declaration){
           .kind = Declaration_decl,
-          .data.loc = { .source = source->idx, .source_decl_idx = offset },
+          .data.decl = {
+            .source = source,
+            .tree_idx = offset,
+          },
         });
       }
 
@@ -335,9 +495,11 @@ next_iter:
     }
   }
 
+  Declaration **decls = arena_push_array(Declaration*, &compiler->scratch, compiler->user_decls.len);
+
   {
     CodeGenContext context = {
-      .arena    = &compiler->arena,
+      .perm     = &compiler->arena,
       .scratch  = &compiler->scratch,
       .common   = &compiler->common,
       .msg_sink = &compiler->msg_sink,
@@ -346,66 +508,53 @@ next_iter:
       .values   = &compiler->values,
     };
 
-    for (u32 i = 0; i < compiler->sources.len; i++) {
-      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-      for (u32 j = 0; j < source->decl_count; j++) {
-        is_ok &= source_generate_code(&context, source, j);
-        ir_chunk_print(stdout, &source->ir_chunks[j], &compiler->types, &compiler->values);
-      }
-    }
-  }
-
-  // TODO: At this stage all the declarations in all the source files have generated code and
-  // have output their dependencies on other declarations. Use these dependencies to determine
-  // an evaluation order.
-  //
-  // Alternatively, just run a job and if it depends on another job, suspend the current job and 
-  // process the other job first.
-  //
-  // For now that is not necessary (just one function).
-
-  {
-    for (u32 i = 0; i < compiler->decls.len; i++) {
-      Declaration *decl = decls_ptr_at_unchecked(&compiler->decls, i);
-      if (decl->resolve_status == ResolveStatus_fully_resolved) {
-        continue;
-      }
-
-      Assert(decl->resolve_status != ResolveStatus_resolving_type);
-      Assert(decl->resolve_status != ResolveStatus_resolving_value);
-
-      if (decl->resolve_status == ResolveStatus_unresolved) {
-        decl_resolve_type(decl);
-      }
-
-      if (decl->resolve_status == ResolveStatus_type_resolved) {
-        decl_resolve_value(decl);
-      }
-
-      Assert(decl->resolve_status == ResolveStatus_fully_resolved);
+    for (u32 i = 0; compiler->user_decls.len; i++) {
+      Declaration *decl = decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
+      decls[i] = decl;
+      is_ok &= generate_code(&context, decl);
+      ir_chunk_print(stdout, &decl->data.decl.chunk, &compiler->types, &compiler->values);
     }
   }
 
   {
-    for (u32 i = 0; i < compiler->sources.len; i++) {
-      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+    Todo(); // put the declaration resolution here
 
-      InterpretContext context = {
-        .perm = &source->arena,
-        .scratch = &compiler->scratch,
-        .common = &compiler->common,
-        .msg_sink = &compiler->msg_sink,
-        .decls = &compiler->decls,
-        .values = &compiler->values,
-        .types = &compiler->types,
-      };
+    Interpreter interpreter;
+    Todo(); // Initialize interpreter
 
-      for (u32 j = 0; j < source->decl_count; j++) {
-        is_ok &= source_interpret_declaration(&context, source, j);
-        ir_chunk_print(stdout, &source->runtime_chunks[j], &compiler->types, &compiler->values);
-      }
-    }
+    Resolver resolver = {
+      .scratch = &compiler->scratch,
+      .declaration_count = compiler->user_decls.len,
+      .declarations = decls,
+      .in = &interpreter,
+    };
+
+    ResolveEntry *entries = arena_push_array(ResolveEntry, &compiler->scratch, MAX_RESOLVE_DEPTH);
+    stack_init(&resolver.resolve_stack, entries, MAX_RESOLVE_DEPTH);
+
+    b32 ok = resolve_declarations(&resolver);
   }
+
+  //{
+  //  for (u32 i = 0; i < compiler->sources.len; i++) {
+  //    Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+
+  //    InterpretContext context = {
+  //      .perm = &source->arena,
+  //      .scratch = &compiler->scratch,
+  //      .common = &compiler->common,
+  //      .msg_sink = &compiler->msg_sink,
+  //      .decls = &compiler->decls,
+  //      .values = &compiler->values,
+  //      .types = &compiler->types,
+  //    };
+
+  //    for (u32 j = 0; j < source->decl_count; j++) {
+  //      is_ok &= source_interpret_declaration(&context, source, j);
+  //      ir_chunk_print(stdout, &source->runtime_chunks[j], &compiler->types, &compiler->values);
+  //    }
+  //  }
+  //}
 
   return is_ok;
 }

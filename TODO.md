@@ -3,7 +3,10 @@
 I am trying to figure out how to generate code that when ran produces the partial evaluation of the
 function; basically all the comptime stuff in the original function has been replaced with constants.
 
-- [ ] Interpret the IR to produce "runtime IR"
+- [ ] Finish declaration resolution / partial evaluation
+  - [ ] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
+  - [ ] Output runtime code for functions that are evaluated during resolution.
+
   What I am trying now is that each declaration generates a block of IR where the first part of the
   generated block contains "typechecking code" and the second part contains code for the actual value.
 

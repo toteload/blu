@@ -1,5 +1,10 @@
 #include "toteload.h"
 
+void ttld_panic_handler(char const *func, char const *file, i32 line) {
+  fprintf(stderr, "panic in %s at %s:%d\n", func, file, line);
+  abort();
+}
+
 String string_from_cstr(char const *s) {
   u32 len = strlen(s);
   return (String){

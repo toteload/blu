@@ -8,6 +8,8 @@
 #define MAX_SCOPE_DEPTH 64
 #define MAX_CALL_DEPTH  128
 
+#define MAX_BUILDERS 64 // Arbitrary number.
+
 typedef struct {
   InstructionIndex start;
   InstructionIndex end;
@@ -19,7 +21,7 @@ typedef struct {
   // This struct probably will also have to carry arguments for when function calls get added.
   // And return value (maybe?)
 
-  b32 ok;
+  u32 ok;
   InstructionIndex pc;
   IrChunk *chunk;
   ValueIndex *inst_map;
@@ -29,44 +31,36 @@ typedef struct {
 
 typedef Stack(CallFrame) CallStack;
 
+void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk);
+void frame_pop(CallStack *call_stack, Arena *arena, ValueStore *values);
+
 typedef struct {
   Arena *perm;
   Arena *scratch;
 
-  Common *common;
-  MessageSink *msg_sink;
+  Common              *common;
+  MessageSink         *msg_sink;
   DeclarationInterner *decls;
-  ValueStore *values;
-  TypeInterner *types;
+  ValueStore          *values;
+  TypeInterner        *types;
 } InterpretContext;
 
 typedef struct {
-  IrBuilder builder;
-  CallStack call_stack;
+  Arena               *perm;
+  Arena               *scratch;
 
-  Arena *scratch;
-  MessageSink *msg_sink;
+  MessageSink         *msg_sink;
+
   DeclarationInterner *declarations;
-  TypeInterner *types;
-  ValueStore *values;
-  Common *common;
-} Interpreter;
+  TypeInterner        *types;
+  ValueStore          *values;
+  Common              *common;
 
-void frame_push(InterpretContext *ctx, CallStack *stack, IrChunk *chunk);
-void frame_pop(InterpretContext *ctx, CallStack *stack);
+  Stack(IrBuilder)     builders;
+} Interpreter;
 
 void step(Interpreter *in, CallFrame *f);
 
-typedef enum {
-  Run_ok,
-  Run_resolve_declaration,
-} RunResult;
-
-u32 run_until(..., CallFrame *f, u32 idx);
-
-typedef struct {
-} Resolver;
-
-b32 resolve_declarations();
+u32 run_until(Interpreter *in, CallStack *stack, u32 idx);
 
 #endif // INTERPRET_H

@@ -47,13 +47,19 @@ typedef struct {
   u8 resolve_status;
 
   union {
-    ValueIndex val;
+    ValueIndex primitive;
+
+    struct {
+      Source *source;
+      u32     tree_idx;
+    } mod;
 
     struct {
       Source  *source;
       u32      tree_idx;
       u32      typecheck_end;
-      IrChunk *chunk;
+      IrChunk  chunk;
+      ValueIndex val;
     } decl;
   } data;
 } Declaration;
@@ -76,6 +82,15 @@ typedef struct {
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+#define DECLIDXLIST_MIN_SIZE_LOG2 4
+#define DECLIDXLIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME          DeclIdxList
+#define SEGMENTLIST_TYPE          DeclarationIndex
+#define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
 typedef struct {
   Arena arena;
   Arena scratch;
@@ -91,6 +106,7 @@ typedef struct {
   TypeInterner   types;
 
   DeclarationInterner decls;
+  DeclIdxList         user_decls;
 } Compiler;
 
 void compiler_init(Compiler *compiler);

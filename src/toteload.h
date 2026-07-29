@@ -133,9 +133,11 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 #define Align_of(x) _Alignof(x)
 #define Offsetof(s,m) offsetof(s,m)
 
+void ttld_panic_handler(char const *func, char const *file, i32 line);
+
 #define Todo()    do { fprintf(stderr, "TODO -> "); Panic(); } while (0)
 #define Assert(e) assert(e)
-#define Panic()   do { fprintf(stderr, "panic in %s at %s:%u\n", TTLD_FUNC, __FILE__, __LINE__); abort(); } while (0)
+#define Panic()   ttld_panic_handler(TTLD_FUNC, __FILE__, __LINE__)
 
 #ifdef TTLD_COMPILER_CLANG
 #define Unreachable() __builtin_unreachable()
@@ -188,9 +190,12 @@ void  vmem_release(void *p, usize size);
 #define Stack(type) struct { type* data; u32 len; u32 cap; }
 
 #define stack_init(sp,p,c) do { (sp)->data = (p); (sp)->len = 0; (sp)->cap = (c); } while (0)
-#define stack_push(sp,x) do { if ((sp)->len == (sp)->cap) { Panic(); } ((sp)->data[(sp)->len++] = (x)); } while (0)
-#define stack_pop_unsafe(sp) ((sp)->data[--(sp)->len])
-#define stack_peek_ptr_unsafe(sp) (&((sp)->data[(sp)->len-1]))
+#define stack_push_unchecked(sp,x) (((sp)->len == (sp)->cap) ? (Panic(), Cast(void,0)) : Cast(void,((sp)->data[(sp)->len++] = (x))))
+#define stack_push(sp,x) (Assert((sp)->len < (sp)->cap), stack_push_unchecked((sp),(x)))
+#define stack_pop_unchecked(sp) ((sp)->data[--(sp)->len])
+#define stack_pop(sp) (Assert(!stack_is_empty(sp)), stack_pop_unchecked(sp))
+#define stack_peek_ptr_unchecked(sp) (&((sp)->data[(sp)->len-1]))
+#define stack_peek_ptr(sp) (Assert(!stack_is_empty(sp)), stack_peek_ptr_unchecked(sp))
 #define stack_is_empty(sp) ((sp)->len == 0)
 
 typedef struct {
