@@ -1035,23 +1035,23 @@ internal b32 has_variable_length_payload(u8 kind) {
 }
 
 internal u32 base_payload_size(u8 kind) {
-  switch (kind) {
+  switch (Cast(AstKind, kind)) {
 #define X(k,d,s) case k: return sizeof(d);
 #include "x_ast_kinds.h"
 #undef X
   }
 
-  Panic();
+  Unreachable();
 }
 
 internal u32 payload_align(u8 kind) {
-  switch (kind) {
+  switch (Cast(AstKind, kind)) {
 #define X(k,d,s) case k: return Align_of(d);
 #include "x_ast_kinds.h"
 #undef X
   }
 
-  Panic();
+  Unreachable();
 }
 
 internal void *push_data(void *base, Arena *extra, u32 *datas, AstIndex i, u32 size, u32 align) {

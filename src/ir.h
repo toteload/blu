@@ -59,6 +59,8 @@ enum IrOpcode {
   IR_cond_br,   // data references `IrCondBr` in extra
   IR_block,     // data contains instruction count of block
   IR_loop,      // data contains instruction count of block
+
+  // br is allowed to br arbitrarily high.
   IR_br,        // data references `IrBr` in extra
   IR_ret,       // data contains `IrRef`
   IR_repeat,    // data contains `InstructionIndex`
@@ -67,7 +69,8 @@ enum IrOpcode {
   IR_call,      // data references `IrCall` in extra
 
   IR_declaration, // data references `IrDeclaration` in extra
-  IR_lookup, // data contains `DeclarationIndex`
+  IR_lookup_typeof, // data contains `DeclarationIndex`
+  IR_lookup_value, // data contains `DeclarationIndex`
 
   IR_as, // data references `IrAs` in extra
   IR_unify, // data references `IrUnify` in extra

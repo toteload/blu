@@ -29,8 +29,9 @@ typedef enum {
   Ast_const,
   Ast_cast,
   Ast_as,
-  Ast_kind_max,
 } AstKind;
+
+#define Ast_kind_max (Ast_as + 1)
 
 enum BuiltinKind {
   Builtin_print,

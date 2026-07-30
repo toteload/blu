@@ -39,6 +39,7 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
     .decls    = context->decls,
     .values   = context->values,
     .source   = source,
+    .builder  = (IrBuilder){ .scratch = context->scratch },
   };
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
@@ -79,7 +80,7 @@ InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   }
 
   InstructionIndex lookup = inst_alloc(&gen->builder);
-  inst_set_opcode(&gen->builder, lookup, IR_lookup);
+  inst_set_opcode(&gen->builder, lookup, IR_lookup_value);
   inst_set_data(&gen->builder, lookup, decl);
 
   return lookup;
@@ -276,6 +277,8 @@ IrRef gen_declaration_type_of_val_code(CodeGen *gen, AstIndex idx_ast, IrRef dec
   } 
 
   Todo();
+  
+  return 0;
 }
 
 b32 generate_code(CodeGenContext *context, Declaration *decl) {
@@ -313,7 +316,9 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
   IrRef ref_decl_val = gen_code(&gen, ast_decl->value, ref_decl_type_of_val);
 
-  inst_block_end(&gen.builder, block, ref_decl_val);
+  IrRef res = ir_ref_from_instruction_index(inst_as(&gen.builder, ref_decl_type_of_val, ref_decl_val));
+
+  inst_block_end(&gen.builder, block, res);
 
   irbuilder_flatten(&gen.builder, context->perm, &decl->data.decl.chunk);
 

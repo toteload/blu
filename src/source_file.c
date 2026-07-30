@@ -159,7 +159,6 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   };
 
   u32 count = 1;
-  u32 decl_count = 0;
 
   for (u32 i = 0; i < s->count; i++) {
     AstIndex item = s->items[i];
@@ -183,7 +182,6 @@ void source_index_declarations(Source *source, StringInterner *strings) {
     };
 
     count += 1 + mod_section->count;
-    decl_count += mod_section->count;
 
     for (u32 j = 0; j < mod_section->count; j++) {
       AstIndex decl_idx = mod_section->items[j];

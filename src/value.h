@@ -3,6 +3,7 @@
 
 #include "blu.h"
 #include "types.h"
+#include "ir.h"
 
 typedef struct {
   TypeIndex  type;
@@ -27,6 +28,9 @@ struct ValueStore {
   Allocator  payload_allocator;
   ValueList  list;
 };
+typedef struct {
+  IrChunk chunk;
+} ValueFunc;
 
 typedef struct {
   Arena     *arena;

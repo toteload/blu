@@ -289,5 +289,40 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     return CoerceResult_ok;
   }
 
+  if (type_val->kind == Type_function && type_dst->kind == Type_function) {
+    u32 param_count = type_val->data.function.param_count;
+    if (param_count != type_dst->data.function.param_count) {
+      return CoerceResult_invalid_coercion_types;
+    }
+
+    TypeIndex return_type = type_val->data.function.return_type;
+
+    if (return_type && return_type != type_dst->data.function.return_type) {
+      return CoerceResult_invalid_coercion_types;
+    }
+
+    for (u32 i = 0; i < param_count; i++) {
+      TypeIndex param_type = type_val->data.function.param_types[i];
+      if (param_type && param_type != type_dst->data.function.param_types[i]) {
+        return CoerceResult_invalid_coercion_types;
+      }
+    }
+
+    Value *p;
+    ValueIndex idx = values_alloc(values, &p);
+
+    u32 size = sizeof(ValueFunc);
+    void *data = values_alloc_data(values, size, Align_of(ValueFunc));
+    memcpy(data, val->data, size);
+    *p = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size,
+    };
+
+    *res = idx;
+    return CoerceResult_ok;
+  }
+
   return CoerceResult_invalid_coercion_types;
 }

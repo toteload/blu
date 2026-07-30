@@ -238,7 +238,8 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *
       fputs(" value=", out);
       ir_ref_print(out, decl->value, types, values);
     } break;
-    case IR_lookup: {
+    case IR_lookup_typeof:
+    case IR_lookup_value: {
       fprintf(out, "decl=%u", data);
     } break;
     case IR_as: {

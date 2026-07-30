@@ -35,17 +35,6 @@ void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk);
 void frame_pop(CallStack *call_stack, Arena *arena, ValueStore *values);
 
 typedef struct {
-  Arena *perm;
-  Arena *scratch;
-
-  Common              *common;
-  MessageSink         *msg_sink;
-  DeclarationInterner *decls;
-  ValueStore          *values;
-  TypeInterner        *types;
-} InterpretContext;
-
-typedef struct {
   Arena               *perm;
   Arena               *scratch;
 
@@ -59,8 +48,15 @@ typedef struct {
   Stack(IrBuilder)     builders;
 } Interpreter;
 
-void step(Interpreter *in, CallFrame *f);
+typedef enum {
+  Run_ok,
 
-u32 run_until(Interpreter *in, CallStack *stack, u32 idx);
+  // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
+  // which needs to be resolved.
+  Run_resolve_declaration_type,
+  Run_resolve_declaration_value,
+} RunResult;
+
+u32 run_until(Interpreter *in, CallStack *stack, u32 end, b32 reentry);
 
 #endif // INTERPRET_H

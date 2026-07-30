@@ -227,19 +227,9 @@ b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u3
 
 #define MAX_RESOLVE_DEPTH 64
 
-typedef enum {
-  Run_ok,
-
-  // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
-  // which needs to be resolved.
-  Run_resolve_declaration_type,
-  Run_resolve_declaration_value,
-} RunResult;
-
 typedef struct {
   Declaration *decl;
   CallStack    call_stack;
-  b8           is_fresh;
   u8           min_required_resolve_status;
 } ResolveEntry;
 
@@ -249,6 +239,7 @@ typedef struct {
   Declaration **declarations;
   Interpreter *in;
   Stack(ResolveEntry) resolve_stack;
+  b32 is_new_entry;
 } Resolver;
 
 internal CallStack alloc_callstack(Arena *arena) {
@@ -258,7 +249,7 @@ internal CallStack alloc_callstack(Arena *arena) {
 }
 
 internal b32 resolve_run_entry_until(Resolver *resolver, ResolveEntry *entry, u32 end) {
-  u32 err = run_until(resolver->in, &entry->call_stack, end);
+  u32 err = run_until(resolver->in, &entry->call_stack, end, !resolver->is_new_entry);
 
   if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
     CallFrame *f = stack_peek_ptr_unchecked(&entry->call_stack);
@@ -281,12 +272,11 @@ internal b32 resolve_run_entry_until(Resolver *resolver, ResolveEntry *entry, u3
       ((ResolveEntry){
         .decl       = decl,
         .call_stack = call_stack, 
-        .is_fresh   = True,
         .min_required_resolve_status = min_required_resolve_status,
       })
     );
 
-    entry->is_fresh = False;
+    resolver->is_new_entry = True;
 
     return True;
   }
@@ -315,33 +305,32 @@ b32 resolve_declarations(Resolver *resolver) {
         ((ResolveEntry){ 
           .decl       = decl,
           .call_stack = call_stack, 
-          .is_fresh   = True,
           .min_required_resolve_status = ResolveStatus_fully_resolved,
         })
       );
+
+      resolver->is_new_entry = True;
     }
 
     while (!stack_is_empty(&resolver->resolve_stack)) {
       ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
       Declaration *decl = entry->decl;
 
-      CallStack *call_stack = &entry->call_stack;
       u8 resolve_status = decl->resolve_status;
 
       if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(&resolver->resolve_stack);
+        stack_pop_unchecked(&resolver->resolve_stack); // free callstack of entry?
+        resolver->is_new_entry = False;
         continue;
       }
 
-      if (entry->is_fresh && resolve_status == ResolveStatus_resolving_type) {
+      if (resolver->is_new_entry && resolve_status == ResolveStatus_resolving_type) {
         Panic();
       }
 
-      if (entry->is_fresh && resolve_status == ResolveStatus_resolving_value) {
+      if (resolver->is_new_entry && resolve_status == ResolveStatus_resolving_value) {
         Panic();
       }
-
-      entry->is_fresh = False;
 
       if (resolve_status < ResolveStatus_type_resolved) {
         decl->resolve_status = ResolveStatus_resolving_type;
@@ -360,11 +349,14 @@ b32 resolve_declarations(Resolver *resolver) {
           continue;
         }
 
+        CallFrame *f = stack_peek_ptr_unchecked(&entry->call_stack);
+        decl->data.decl.val = values_copy(resolver->in->values, f->inst_map[0]);
         decl->resolve_status = ResolveStatus_fully_resolved;
-        stack_pop_unchecked(&resolver->resolve_stack);
       }
     }
   }
+
+  return True;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -508,7 +500,7 @@ next_iter:
       .values   = &compiler->values,
     };
 
-    for (u32 i = 0; compiler->user_decls.len; i++) {
+    for (u32 i = 0; i < compiler->user_decls.len; i++) {
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
       decls[i] = decl;
       is_ok &= generate_code(&context, decl);
@@ -517,10 +509,18 @@ next_iter:
   }
 
   {
-    Todo(); // put the declaration resolution here
+    Interpreter interpreter = {
+      .perm = &compiler->arena,
+      .scratch = &compiler->scratch,
+      .msg_sink = &compiler->msg_sink,
+      .declarations = &compiler->decls,
+      .types = &compiler->types,
+      .values = &compiler->values,
+      .common = &compiler->common,
+    };
 
-    Interpreter interpreter;
-    Todo(); // Initialize interpreter
+    IrBuilder *builders = arena_push_array(IrBuilder, &compiler->scratch, MAX_BUILDERS);
+    stack_init(&interpreter.builders, builders, MAX_BUILDERS);
 
     Resolver resolver = {
       .scratch = &compiler->scratch,
@@ -533,6 +533,10 @@ next_iter:
     stack_init(&resolver.resolve_stack, entries, MAX_RESOLVE_DEPTH);
 
     b32 ok = resolve_declarations(&resolver);
+
+    if (!ok) {
+      return False;
+    }
   }
 
   //{

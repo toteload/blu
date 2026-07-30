@@ -190,12 +190,15 @@ void  vmem_release(void *p, usize size);
 #define Stack(type) struct { type* data; u32 len; u32 cap; }
 
 #define stack_init(sp,p,c) do { (sp)->data = (p); (sp)->len = 0; (sp)->cap = (c); } while (0)
-#define stack_push_unchecked(sp,x) (((sp)->len == (sp)->cap) ? (Panic(), Cast(void,0)) : Cast(void,((sp)->data[(sp)->len++] = (x))))
+#define stack_push_ptr_unchecked(sp) ((sp)->data + ((sp)->len)++)
+#define stack_push_ptr(sp) (Assert((sp)->len < (sp)->cap), stack_push_ptr_unchecked(sp))
+#define stack_push_unchecked(sp,x) ((sp)->data[(sp)->len++] = (x))
 #define stack_push(sp,x) (Assert((sp)->len < (sp)->cap), stack_push_unchecked((sp),(x)))
 #define stack_pop_unchecked(sp) ((sp)->data[--(sp)->len])
 #define stack_pop(sp) (Assert(!stack_is_empty(sp)), stack_pop_unchecked(sp))
 #define stack_peek_ptr_unchecked(sp) (&((sp)->data[(sp)->len-1]))
 #define stack_peek_ptr(sp) (Assert(!stack_is_empty(sp)), stack_peek_ptr_unchecked(sp))
+#define stack_peek_unchecked(sp) (*stack_peek_ptr_unchecked(sp))
 #define stack_is_empty(sp) ((sp)->len == 0)
 
 typedef struct {
