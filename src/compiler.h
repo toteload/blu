@@ -10,14 +10,18 @@
 typedef struct {
   struct {
     TypeIndex comptime_int;
-    TypeIndex nil;
     TypeIndex type;
+    TypeIndex nil;
+    TypeIndex bool;
+    TypeIndex never;
     TypeIndex i32;
   } type;
 
   struct {
     ValueIndex type;
     ValueIndex nil;
+    ValueIndex bool;
+    ValueIndex never;
     ValueIndex i32;
   } val;
 } Common;

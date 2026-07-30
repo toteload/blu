@@ -84,6 +84,32 @@ internal void compiler_add_message(void *user, u8 severity, SourceIndex idx, Mes
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
 }
 
+internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
+  Value *v;
+  ValueIndex res = values_alloc(&compiler->values, &v);
+  TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
+  *data = t;
+  *v = (Value){
+    .type = compiler->common.type.type,
+    .data_size = sizeof(TypeIndex),
+    .data = data,
+  };
+  return res;
+}
+
+internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
+  DeclarationIndex idx = decls_add(
+    &compiler->decls,
+    (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, name) }
+  );
+
+  decls_set_extra(
+    &compiler->decls,
+    idx,
+    (Declaration){ .kind = Declaration_primitive, .data.primitive = val }
+  );
+}
+
 void compiler_init(Compiler *compiler) {
   zero_struct(Compiler, compiler);
 
@@ -127,57 +153,26 @@ void compiler_init(Compiler *compiler) {
   });
 
   compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
-  compiler->common.type.nil          = types_add(&compiler->types, &(Type){ .kind = Type_nil });
   compiler->common.type.type         = types_add(&compiler->types, &(Type){ .kind = Type_type });
+  compiler->common.type.nil          = types_add(&compiler->types, &(Type){ .kind = Type_nil });
+  compiler->common.type.bool         = types_add(&compiler->types, &(Type){ .kind = Type_bool });
+  compiler->common.type.never        = types_add(&compiler->types, &(Type){ .kind = Type_never });
   compiler->common.type.i32          = types_add(&compiler->types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
 
-  {
-    Value *v;
-    compiler->common.val.nil = values_alloc(&compiler->values, &v);
-    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
-    *data = compiler->common.type.nil;
-    *v = (Value){
-      .type = compiler->common.type.type,
-      .data_size = sizeof(TypeIndex),
-      .data = data,
-    };
-  }
-  {
-    Value *v;
-    compiler->common.val.type = values_alloc(&compiler->values, &v);
-    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
-    *data = compiler->common.type.type;
-    *v = (Value){
-      .type = compiler->common.type.type,
-      .data_size = sizeof(TypeIndex),
-      .data = data,
-    };
-  }
-  {
-    Value *v;
-    compiler->common.val.i32 = values_alloc(&compiler->values, &v);
-    TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
-    *data = compiler->common.type.i32;
-    *v = (Value){
-      .type = compiler->common.type.type,
-      .data_size = sizeof(TypeIndex),
-      .data = data,
-    };
-  }
+  compiler->common.val.type  = add_type_value(compiler, compiler->common.type.type);
+  compiler->common.val.nil   = add_type_value(compiler, compiler->common.type.nil);
+  compiler->common.val.bool  = add_type_value(compiler, compiler->common.type.bool);
+  compiler->common.val.never = add_type_value(compiler, compiler->common.type.never);
+  compiler->common.val.i32   = add_type_value(compiler, compiler->common.type.i32);
 
   // DeclarationIndex 0 is reserved for the root
   decls_add(&compiler->decls, (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX });
-  {
-    DeclarationIndex decl_i32 = decls_add(
-      &compiler->decls,
-      (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, string_lit("i32")) }
-    );
-    decls_set_extra(
-      &compiler->decls,
-      decl_i32,
-      (Declaration){ .kind = Declaration_primitive, .data.primitive = compiler->common.val.i32 }
-    );
-  }
+
+  add_primitive(compiler, string_lit("type"),  compiler->common.val.type);
+  add_primitive(compiler, string_lit("nil"),   compiler->common.val.nil);
+  add_primitive(compiler, string_lit("bool"),  compiler->common.val.bool);
+  add_primitive(compiler, string_lit("never"), compiler->common.val.never);
+  add_primitive(compiler, string_lit("i32"),   compiler->common.val.i32);
 }
 
 void compiler_deinit(Compiler *compiler) {
@@ -539,26 +534,20 @@ next_iter:
     }
   }
 
-  //{
-  //  for (u32 i = 0; i < compiler->sources.len; i++) {
-  //    Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+  for (u32 i = 0; i < compiler->user_decls.len; i++) {
+    DeclarationIndex idx  = user_decls_at_unchecked(&compiler->user_decls, i);
+    DeclarationKey   key  = decls_get(&compiler->decls, idx);
+    Declaration     *decl = decls_extra_get_ptr(&compiler->decls, idx);
+    String           name = strings_get(&compiler->strings, key.name);
 
-  //    InterpretContext context = {
-  //      .perm = &source->arena,
-  //      .scratch = &compiler->scratch,
-  //      .common = &compiler->common,
-  //      .msg_sink = &compiler->msg_sink,
-  //      .decls = &compiler->decls,
-  //      .values = &compiler->values,
-  //      .types = &compiler->types,
-  //    };
+    ValueIndex val = decl->data.decl.val;
 
-  //    for (u32 j = 0; j < source->decl_count; j++) {
-  //      is_ok &= source_interpret_declaration(&context, source, j);
-  //      ir_chunk_print(stdout, &source->runtime_chunks[j], &compiler->types, &compiler->values);
-  //    }
-  //  }
-  //}
+    printf("%.*s : ", Cast(int, name.len), name.str);
+    type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
+    printf(" = ");
+    value_print(stdout, &compiler->types, &compiler->values, val);
+    printf("\n");
+  }
 
   return is_ok;
 }

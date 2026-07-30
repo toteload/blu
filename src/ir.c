@@ -47,6 +47,10 @@ void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
+void *inst_get_extra(IrBuilder *builder, InstructionIndex idx) {
+  return datalist_at_unchecked(&builder->data, idx).ptr;
+}
+
 void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align) {
   void *p = arena_push(builder->scratch, size, align);
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .ptr = p };

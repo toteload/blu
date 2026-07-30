@@ -11,7 +11,7 @@ static char const *ir_opcode_names[] = {
 #undef X
 };
 
-internal void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
+void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
   if (idx == 0) {
     fputc('?', out);
     return;
@@ -25,11 +25,11 @@ internal void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
   case Type_integer: {
     fprintf(out, "%c%u", (type->data.integer.signedness == Signed) ? 'i' : 'u', type->data.integer.bitwidth);
   } break;
-  case Type_boolean: {
+  case Type_bool: {
     fputs("bool", out);
   } break;
   case Type_function: {
-    fputs("function(", out);
+    fputs("(", out);
     for (u32 i = 0; i < type->data.function.param_count; i++) {
       if (i != 0) {
         fputs(", ", out);
@@ -76,7 +76,7 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
   return res;
 }
 
-internal void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx) {
+void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx) {
   Value *value = values_get(values, idx);
   Type  *type  = types_get(types, value->type);
   switch (Cast(enum TypeKind, type->kind)) {
@@ -90,13 +90,17 @@ internal void value_print(FILE *out, TypeInterner *types, ValueStore *values, Va
       fprintf(out, "%llu", Cast(unsigned long long, read_unsigned(type->data.integer.bitwidth, value->data)));
     }
   } break;
-  case Type_boolean: {
+  case Type_bool: {
     fputs((*Cast(u8 *, value->data)) ? "true" : "false", out);
   } break;
   case Type_type: {
     type_index_print(out, types, *Cast(TypeIndex *, value->data));
   } break;
-  case Type_function:
+  case Type_function: {
+    ValueFunc *func = value->data;
+    fputs("\n", out);
+    ir_chunk_print(out, &func->chunk, types, values);
+  } break;
   case Type_nil:
   case Type_never:
   case Type_slice:
@@ -108,7 +112,7 @@ internal void value_print(FILE *out, TypeInterner *types, ValueStore *values, Va
 
 internal void ir_ref_print(FILE *out, IrRef ref, TypeInterner *types, ValueStore *values) {
   if (ir_ref_is_nil(ref)) {
-    fprintf(out, "nil");
+    fprintf(out, "_");
     return;
   }
 
@@ -123,7 +127,7 @@ internal char const* typekind_string(u8 kind) {
   switch (Cast(enum TypeKind, kind)) {
   case Type_comptime_int: return "comptime_int";
   case Type_integer:      return "integer";
-  case Type_boolean:      return "boolean";
+  case Type_bool:         return "bool";
   case Type_function:     return "function";
   case Type_nil:          return "nil";
   case Type_never:        return "never";

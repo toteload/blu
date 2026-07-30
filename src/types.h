@@ -6,7 +6,7 @@
 enum TypeKind {
   Type_comptime_int,
   Type_integer,
-  Type_boolean,
+  Type_bool,
   Type_function,
   Type_nil,
   Type_never,

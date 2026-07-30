@@ -196,6 +196,7 @@ InstructionIndex inst_alloc(IrBuilder *builder);
 void             inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
 void             inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
 void            *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
+void            *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32              inst_offset(IrBuilder *builder, InstructionIndex start);
 InstructionIndex inst_block_begin(IrBuilder *builder);
 void             inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val);
@@ -208,5 +209,7 @@ void             irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *ch
 // -------------------------------------------------------------------------------------------------
 
 void ir_chunk_print(FILE *out, IrChunk *chunk, TypeInterner *types, ValueStore *values);
+void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx);
+void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx);
 
 #endif // IR_H

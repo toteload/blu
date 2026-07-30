@@ -34,7 +34,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
   switch (a->kind) {
   case Type_nil:
   case Type_never:
-  case Type_boolean:
+  case Type_bool:
   case Type_type:
     return True;
   case Type_slice:
@@ -82,7 +82,7 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   switch (x->kind) {
   case Type_nil:
   case Type_never:
-  case Type_boolean:
+  case Type_bool:
   case Type_type:
     break;
   case Type_integer: {
@@ -125,7 +125,7 @@ u32 type_intern_byte_size(Type *type) {
   switch (Cast(enum TypeKind, type->kind)) {
   case Type_comptime_int:
   case Type_integer:
-  case Type_boolean:
+  case Type_bool:
   case Type_nil:
   case Type_never:
   case Type_type:
@@ -145,7 +145,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   // ASSUME: pointers are 8 bytes.
 
   switch (type->kind) {
-  case Type_boolean:
+  case Type_bool:
     return (TypeSizeInfo){ .size = 1, .align = 1, .stride = 1 };
   case Type_nil:
     return (TypeSizeInfo){ .size = 0, .align = 0, .stride = 0 };

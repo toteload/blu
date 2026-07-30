@@ -293,9 +293,14 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
 
     ScopeSpan span = stack_peek_unchecked(&f->scopes);
     if (f->pc == span.end) {
+      IrFunc *func = inst_get_extra(builder, 0);
+      func->instruction_count = inst_offset(builder, 0);
+
       IrChunk chunk;
       irbuilder_flatten(builder, in->perm, &chunk);
       pop_scopes_to(in, f, span.start);
+
+      // TODO pop the builder
 
       Value *v;
       ValueIndex vidx = values_alloc(in->values, &v);
