@@ -198,7 +198,6 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
 
       ValueIndex val_coerced;
       u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
-      f->ok = !err;
 
       Assert(!err);
 

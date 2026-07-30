@@ -166,7 +166,7 @@ void compiler_init(Compiler *compiler) {
   compiler->common.val.i32   = add_type_value(compiler, compiler->common.type.i32);
 
   // DeclarationIndex 0 is reserved for the root
-  decls_add(&compiler->decls, (DeclarationKey){ .parent = UINT32_MAX, .name = UINT32_MAX });
+  decls_add(&compiler->decls, (DeclarationKey){ .parent = 0, .name = 0 });
 
   add_primitive(compiler, string_lit("type"),  compiler->common.val.type);
   add_primitive(compiler, string_lit("nil"),   compiler->common.val.nil);

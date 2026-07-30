@@ -21,7 +21,9 @@ typedef struct {
   // This struct probably will also have to carry arguments for when function calls get added.
   // And return value (maybe?)
 
-  u32 ok;
+  b8 suspended;
+  b8 error;
+
   InstructionIndex pc;
   IrChunk *chunk;
   ValueIndex *inst_map;

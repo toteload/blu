@@ -1,11 +1,10 @@
 # Currently doing
 
-I am trying to figure out how to generate code that when ran produces the partial evaluation of the
-function; basically all the comptime stuff in the original function has been replaced with constants.
-
 - [ ] Finish declaration resolution / partial evaluation
-  - [ ] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
-  - [ ] Output runtime code for functions that are evaluated during resolution.
+  - [x] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
+  - [~] Output runtime code for functions that are evaluated during resolution.
+  - [ ] Add a way of returning errors from the resolving interpreter. These have to be communicated
+        to the user.
 
   What I am trying now is that each declaration generates a block of IR where the first part of the
   generated block contains "typechecking code" and the second part contains code for the actual value.
