@@ -71,8 +71,11 @@ InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name) {
   if (!found) {
     Message_error(
       gen->msg_sink,
-      gen->source->idx,
-      (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = name },
+      (MessageLocation){ 
+        .kind = MessageLocation_token_index,
+        .source_idx = gen->source->idx,
+        .data.token_index = name,
+      },
       string_lit("Could not find identifier.")
     );
     gen->has_error = True;

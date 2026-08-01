@@ -60,7 +60,7 @@ internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_
 
 Allocator const cstd_allocator = { .fn = cstd_alloc_fn, };
 
-internal void compiler_add_message(void *user, u8 severity, SourceIndex idx, MessageLocation location, String format, ...) {
+internal void compiler_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
   Compiler *compiler = user;
 
   u32 arg_count = message_format_arg_count(format);
@@ -68,7 +68,6 @@ internal void compiler_add_message(void *user, u8 severity, SourceIndex idx, Mes
   Message *msg = arena_push(&compiler->arena, sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message));
 
   msg->severity = severity;
-  msg->source   = idx;
   msg->location = location;
   msg->format   = arena_copy_string(&compiler->arena, format);
 
@@ -195,8 +194,14 @@ void compiler_print_all_messages(Compiler *compiler) {
   u32 count = compiler->msg_list.len;
   for (u32 i = 0; i < count; i++) {
     Message *msg = msglist_at_unchecked(&compiler->msg_list, i);
-    Source *source = sources_ptr_at_unchecked(&compiler->sources, msg->source);
-    print_message(msg, source);
+    Source *source = Null;
+    Declaration *decl = Null;
+
+    Todo();
+
+    //Source *source = sources_ptr_at_unchecked(&compiler->sources, msg->source);
+
+    print_message(msg, source, decl);
   }
 }
 
@@ -224,36 +229,80 @@ b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u3
 
 typedef struct {
   Declaration *decl;
-  CallStack    call_stack;
+  RunState     state;
   u8           min_required_resolve_status;
 } ResolveEntry;
 
 typedef struct {
   Arena *scratch;
+  MessageSink *msg_sink;
   u32 declaration_count;
   Declaration **declarations;
   Interpreter *in;
   Stack(ResolveEntry) resolve_stack;
-  b32 is_new_entry;
 } Resolver;
 
-internal CallStack alloc_callstack(Arena *arena) {
-  CallStack stack;
-  stack_init(&stack, arena_push_array(CallFrame, arena, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
-  return stack;
+internal void push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
+  ResolveEntry *entry = stack_push_ptr_unchecked(&resolver->resolve_stack);
+
+  entry->decl = decl;
+  entry->min_required_resolve_status = min_required_resolve_status;
+
+  runstate_init(&entry->state, resolver->scratch);
+
+  frame_push(&entry->state, resolver->scratch, &decl->data.decl.chunk);
 }
 
-internal b32 resolve_run_entry_until(Resolver *resolver, ResolveEntry *entry, u32 end) {
-  u32 err = run_until(resolver->in, &entry->call_stack, end, !resolver->is_new_entry);
+internal b32 resolve_entry(Resolver *resolver) {
+  ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
+  Declaration *decl = entry->decl;
+  u8 resolve_status = decl->resolve_status;
+
+  decl->resolve_status = (resolve_status + 1);
+
+  u32 inst_end;
+  if (resolve_status < ResolveStatus_type_resolved) {
+    inst_end = decl->data.decl.typecheck_end;
+  } else {
+    inst_end = decl->data.decl.chunk.opcode_count;
+  }
+
+  u32 err = run_until(resolver->in, &entry->state, inst_end);
+
+  if (err == Run_reached_end) {
+    if (resolve_status < ResolveStatus_type_resolved) {
+      decl->resolve_status = ResolveStatus_type_resolved;
+    } else {
+      decl->resolve_status = ResolveStatus_fully_resolved;
+
+      CallFrame *f = top_frame(&entry->state);
+      decl->data.decl.val = values_copy(resolver->in->values, f->inst_map[0]);
+    }
+
+    return True;
+  }
+
+  if (err == Run_encountered_error) {
+    Panic();
+    CallFrame *f = top_frame(&entry->state);
+    Message_error(
+      resolver->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ir_instruction,
+        .decl_idx = f->decl_idx,
+        .data.offset = f->pc,
+      },
+      string_lit("Encountered error in IR")
+    );
+
+    return False;
+  }
 
   if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
-    CallFrame *f = stack_peek_ptr_unchecked(&entry->call_stack);
+    CallFrame *f = top_frame(&entry->state);
     DeclarationIndex idx = chunk_data(f->chunk, f->pc);
 
-    Declaration *decl = resolver->declarations[idx];
-
-    CallStack call_stack = alloc_callstack(resolver->scratch);
-    frame_push(&call_stack, resolver->scratch, &decl->data.decl.chunk);
+    Declaration *decl_to_resolve = resolver->declarations[idx];
 
     u8 min_required_resolve_status;
     switch (err) {
@@ -262,21 +311,12 @@ internal b32 resolve_run_entry_until(Resolver *resolver, ResolveEntry *entry, u3
     default: Unreachable();
     }
 
-    stack_push_unchecked(
-      &resolver->resolve_stack,
-      ((ResolveEntry){
-        .decl       = decl,
-        .call_stack = call_stack, 
-        .min_required_resolve_status = min_required_resolve_status,
-      })
-    );
-
-    resolver->is_new_entry = True;
+    push_resolve_entry(resolver, decl_to_resolve, min_required_resolve_status);
 
     return True;
   }
 
-  return False;
+  Unreachable();
 }
 
 b32 resolve_declarations(Resolver *resolver) {
@@ -292,61 +332,30 @@ b32 resolve_declarations(Resolver *resolver) {
 
       Assert(resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved);
 
-      CallStack call_stack = alloc_callstack(resolver->scratch);
-      frame_push(&call_stack, resolver->scratch, &decl->data.decl.chunk);
-
-      stack_push(
-        &resolver->resolve_stack,
-        ((ResolveEntry){ 
-          .decl       = decl,
-          .call_stack = call_stack, 
-          .min_required_resolve_status = ResolveStatus_fully_resolved,
-        })
-      );
-
-      resolver->is_new_entry = True;
+      push_resolve_entry(resolver, decl, ResolveStatus_fully_resolved);
     }
 
     while (!stack_is_empty(&resolver->resolve_stack)) {
       ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-      Declaration *decl = entry->decl;
 
-      u8 resolve_status = decl->resolve_status;
+      u8 resolve_status = entry->decl->resolve_status;
 
       if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(&resolver->resolve_stack); // free callstack of entry?
-        resolver->is_new_entry = False;
+        stack_pop_unchecked(&resolver->resolve_stack); // free callstack of entry? yeah, sounds like a good idea
         continue;
       }
 
-      if (resolver->is_new_entry && resolve_status == ResolveStatus_resolving_type) {
+      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_type) {
         Panic();
       }
 
-      if (resolver->is_new_entry && resolve_status == ResolveStatus_resolving_value) {
+      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_value) {
         Panic();
       }
 
-      if (resolve_status < ResolveStatus_type_resolved) {
-        decl->resolve_status = ResolveStatus_resolving_type;
-        b32 has_pushed = resolve_run_entry_until(resolver, entry, decl->data.decl.typecheck_end);
-        if (has_pushed) {
-          continue;
-        }
-
-        decl->resolve_status = ResolveStatus_type_resolved;
-      }
-
-      if (resolve_status < ResolveStatus_fully_resolved) {
-        decl->resolve_status = ResolveStatus_resolving_value;
-        b32 has_pushed = resolve_run_entry_until(resolver, entry, decl->data.decl.chunk.opcode_count);
-        if (has_pushed) {
-          continue;
-        }
-
-        CallFrame *f = stack_peek_ptr_unchecked(&entry->call_stack);
-        decl->data.decl.val = values_copy(resolver->in->values, f->inst_map[0]);
-        decl->resolve_status = ResolveStatus_fully_resolved;
+      b32 ok = resolve_entry(resolver);
+      if (!ok) {
+        Panic();
       }
     }
   }
@@ -428,8 +437,11 @@ b32 compile(Compiler *compiler) {
             is_ok = False;
             Message_error(
               &compiler->msg_sink,
-              source->idx,
-              (MessageLocation){ .kind = MessageLocation_ast_index, .data.ast_index = decl->node },
+              (MessageLocation){
+                .kind = MessageLocation_ast_index, 
+                .source_idx = source->idx,
+                .data.ast_index = decl->node,
+              },
               string_lit("Declaration already exists.")
             );
             goto next_iter;
@@ -443,7 +455,11 @@ b32 compile(Compiler *compiler) {
         decls_set_extra(
           &compiler->decls,
           idx,
-          (Declaration){ .kind = Declaration_mod, .data.mod = { .source = source, .tree_idx = offset }}
+          (Declaration){
+            .kind = Declaration_mod,
+            .resolve_status = ResolveStatus_fully_resolved,
+            .data.mod = { .source = source, .tree_idx = offset },
+          }
         );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
@@ -457,8 +473,11 @@ b32 compile(Compiler *compiler) {
           is_ok = False;
           Message_error(
             &compiler->msg_sink,
-            source->idx,
-            (MessageLocation){ .kind = MessageLocation_ast_index, .data.ast_index = decl->node },
+            (MessageLocation){ 
+            .kind = MessageLocation_ast_index, 
+            .source_idx = source->idx,
+            .data.ast_index = decl->node,
+            },
             string_lit("Declaration already exists.")
           );
           goto next_iter;
@@ -470,6 +489,7 @@ b32 compile(Compiler *compiler) {
 
         decls_set_extra(&compiler->decls, idx, (Declaration){
           .kind = Declaration_decl,
+          .resolve_status = ResolveStatus_unresolved,
           .data.decl = {
             .source = source,
             .tree_idx = offset,

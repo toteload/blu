@@ -5,8 +5,8 @@
 
 typedef void (*FnTokenizerTest)(TestResult*, TokenizeContext*);
 
-void dummy_add_message(void *user, u8 severity, SourceIndex source, MessageLocation location, String format, ...) { 
-  Unused(user, severity, source, location, format);
+void dummy_add_message(void *user, u8 severity, MessageLocation location, String format, ...) { 
+  Unused(user, severity, location, format);
 }
 
 void tokenizer_test(TestResult *test, void *user) {

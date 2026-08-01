@@ -3,8 +3,8 @@
 
 #include "blu.h"
 #include "messages.h"
-#include "value.h"
 #include "string_interner.h"
+#include "value.h"
 #include "ir.h"
 
 typedef struct {
@@ -46,7 +46,7 @@ enum DeclarationKind {
   Declaration_decl,
 };
 
-typedef struct {
+struct Declaration {
   u8 kind;
   u8 resolve_status;
 
@@ -66,7 +66,7 @@ typedef struct {
       ValueIndex val;
     } decl;
   } data;
-} Declaration;
+};
 
 #define INTERNER_NAME       DeclarationInterner
 #define INTERNER_TYPE       DeclarationKey

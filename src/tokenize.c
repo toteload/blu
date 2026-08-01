@@ -218,8 +218,10 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     if (is_at_end(tokenizer)) {
       Message_error(
         tokenizer->msg_sink,
-        0,
-        (MessageLocation){ .kind = MessageLocation_end_of_file },
+        (MessageLocation){ 
+          .kind = MessageLocation_byte_offset,
+          .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
+        },
         string_lit("End of source encountered while parsing string literal.")
       );
       return TokResult_error;
@@ -248,7 +250,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
 
       Message_error(
         tokenizer->msg_sink,
-        0,
         (MessageLocation){
           .kind = MessageLocation_byte_offset,
           .data.offset = Cast(u32, ptr_diff(token_start, tokenizer->start)),
@@ -284,7 +285,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
 
   Message_error(
     tokenizer->msg_sink,
-    0,
     (MessageLocation){
       .kind = MessageLocation_byte_offset,
       .data.offset = Cast(u32, ptr_diff(token_start, tokenizer->start)),

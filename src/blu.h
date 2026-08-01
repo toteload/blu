@@ -12,8 +12,8 @@ typedef u32 AstIndex;         // Optional, 0 means nil
 typedef u32 TypeIndex;        // Optional, 0 means nil
 typedef u32 StringIndex;      // Optional, 0 means nil
 typedef u32 InstructionIndex; // Offset, not optional
-typedef u32 SourceIndex;
 typedef u32 ValueIndex;       // Optional, 0 means nil
+typedef u32 SourceIndex;
 typedef u32 DeclarationIndex;
 
 typedef struct EnvAllocator EnvAllocator;
@@ -21,5 +21,6 @@ typedef struct Env Env;
 typedef struct ValueStore ValueStore;
 typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;
+typedef struct Declaration Declaration;
 
 #endif // BLU_H

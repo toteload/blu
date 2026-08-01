@@ -83,7 +83,7 @@ internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
   };
 }
 
-void print_message(Message *message, Source *source) {
+void print_message(Message *message, Source *source, Declaration *decl) {
   // clang-format off
   switch (message->severity) {
   case Severity_Error:   printf("[error]"); break;

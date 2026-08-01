@@ -3,9 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-internal void source_add_message(void *user, u8 severity, SourceIndex idx, MessageLocation location, String format, ...) {
-  Unused(idx);
-
+internal void source_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
   Source *source = user;
 
   u32 arg_count = message_format_arg_count(format);
@@ -13,8 +11,8 @@ internal void source_add_message(void *user, u8 severity, SourceIndex idx, Messa
   Message *msg = arena_push(&source->arena, sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message));
 
   msg->severity = severity;
-  msg->source   = source->idx;
   msg->location = location;
+  msg->location.source_idx = source->idx;
   msg->format   = arena_copy_string(&source->arena, format);
 
   va_list vl;
@@ -110,7 +108,6 @@ b32 source_read_file(Source *source) {
   if (err) {
     Message_error(
       &source->msg_sink,
-      0,
       (MessageLocation){ .kind = MessageLocation_unspecified },
       string_lit("Could not open/read file {str}."), source->filename
     );
@@ -213,6 +210,6 @@ void source_print_all_messages(Source *source) {
   u32 count = source->msg_list.len;
   for (u32 i = 0; i < count; i++) {
     Message *msg = msglist_at_unchecked(&source->msg_list, i);
-    print_message(msg, source);
+    print_message(msg, source, Null);
   }
 }

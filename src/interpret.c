@@ -1,6 +1,5 @@
 #include "interpret.h"
 #include "ir.h"
-#include "source_file.h"
 #include "eval.h"
 
 // The interpreter's per-frame maps grow with the C allocator; cstd_allocator is defined in compiler.c.
@@ -20,9 +19,17 @@ internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx,
   f->inst_map[idx] = val;
 }
 
-void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk) {
+void runstate_init(RunState *state, Arena *arena) {
+  state->requested_resolution = False;
+  stack_init(&state->call_stack, arena_push_array(CallFrame, arena, MAX_CALL_DEPTH), MAX_CALL_DEPTH);
+}
+
+CallFrame *top_frame(RunState *state) {
+  return stack_peek_ptr_unchecked(&state->call_stack);
+}
+
+void frame_push(RunState *state, Arena *arena, IrChunk *chunk) {
   CallFrame f = {
-    .ok = True,
     .pc = 0,
     .chunk = chunk,
     .inst_map = arena_push_array(ValueIndex, arena, chunk->opcode_count),
@@ -32,11 +39,11 @@ void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk) {
   stack_init(&f.scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
   stack_push(&f.scopes, ((ScopeSpan){ .start = 0, .end = chunk->opcode_count }));
 
-  stack_push(call_stack, f);
+  stack_push(&state->call_stack, f);
 }
 
-void frame_pop(CallStack *call_stack, Arena *arena, ValueStore *values) {
-  CallFrame f = stack_pop_unchecked(call_stack);
+void frame_pop(RunState *state, Arena *arena, ValueStore *values) {
+  CallFrame f = stack_pop_unchecked(&state->call_stack);
 
   ScopeSpan span = f.scopes.data[0];
   for (u32 i = span.start; i < span.end; i++) {
@@ -119,8 +126,8 @@ internal ValueIndex val_from_type(Interpreter *in, TypeIndex t) {
   return res;
 }
 
-internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
-  CallFrame *f = stack_peek_ptr_unchecked(stack);
+internal u32 step(Interpreter *in, RunState *state) {
+  CallFrame *f = top_frame(state);
 
   InstructionIndex pc = f->pc;
   u8 op = chunk_opcode(f->chunk, pc);
@@ -148,9 +155,10 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
     DeclarationIndex decl_idx = chunk_data(f->chunk, pc);
     Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
 
-    if (!reentry) {
+    if (!state->requested_resolution) {
       if (decl->kind == Declaration_decl) {
-        return Run_resolve_declaration_type;
+        state->requested_resolution = True;
+        return Step_resolve_declaration_type;
       }
 
       Todo();
@@ -162,16 +170,17 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
     DeclarationIndex decl_idx = chunk_data(f->chunk, pc);
     Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
 
-    if (!reentry) {
-      if (decl->kind == Declaration_decl) {
-        return Run_resolve_declaration_value;
-      }
+    if (decl->kind == Declaration_primitive) {
+      ValueIndex copy = values_copy(in->values, decl->data.primitive);
+      store_inst_value(f, pc, ir_ref_from_value_index(copy));
+      f->pc = pc + 1;
+      break;
+    }
 
-      if (decl->kind == Declaration_primitive) {
-        ValueIndex copy = values_copy(in->values, decl->data.primitive);
-        store_inst_value(f, pc, ir_ref_from_value_index(copy));
-        f->pc = pc + 1;
-        break;
+    if (!state->requested_resolution) {
+      if (decl->kind == Declaration_decl) {
+        state->requested_resolution = True;
+        return Step_resolve_declaration_value;
       }
 
       Todo();
@@ -198,8 +207,9 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
 
       ValueIndex val_coerced;
       u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
-
-      Assert(!err);
+      if (err) {
+        return Step_encountered_error;
+      }
 
       res = ir_ref_from_value_index(val_coerced);
     } else {
@@ -334,20 +344,23 @@ internal u32 step(Interpreter *in, CallStack *stack, b32 reentry) {
   default: Panic();
   }
 
-  return Run_ok;
+  return Step_ok;
 }
 
-u32 run_until(Interpreter *in, CallStack *stack, u32 end, b32 reentry) {
-  u32 base_idx = stack->len;
-
+u32 run_until(Interpreter *in, RunState *state, u32 end) {
+  CallFrame *base_frame = top_frame(state);
   while (True) {
-    CallFrame *f = stack_peek_ptr_unchecked(stack);
-    if (stack->len == base_idx && f->pc == end) {
-      break;
+    CallFrame *f = top_frame(state);
+
+    if (f == base_frame && f->pc == end) {
+      return Run_reached_end;
     }
 
-    step(in, stack, reentry);
+    u32 err = step(in, state);
+    if (err != Step_ok) {
+      return err;
+    }
   }
 
-  return Run_ok;
+  Unreachable();
 }

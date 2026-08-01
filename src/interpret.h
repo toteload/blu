@@ -20,21 +20,25 @@ typedef Stack(ScopeSpan) ScopeStack;
 typedef struct {
   // This struct probably will also have to carry arguments for when function calls get added.
   // And return value (maybe?)
-
-  b8 suspended;
-  b8 error;
-
+  DeclarationIndex decl_idx;
   InstructionIndex pc;
   IrChunk *chunk;
   ValueIndex *inst_map;
   ScopeStack scopes;
-  ArenaSnapshot snapshot;
+  ArenaSnapshot snapshot; // TODO remove this or actually do something with it
 } CallFrame;
 
 typedef Stack(CallFrame) CallStack;
 
-void frame_push(CallStack *call_stack, Arena *arena, IrChunk *chunk);
-void frame_pop(CallStack *call_stack, Arena *arena, ValueStore *values);
+typedef struct {
+  b8 requested_resolution;
+  CallStack call_stack;
+} RunState;
+
+void runstate_init(RunState *state, Arena *arena);
+void frame_push(RunState *state, Arena *arena, IrChunk *chunk);
+void frame_pop(RunState *state, Arena *arena, ValueStore *values);
+CallFrame *top_frame(RunState *state);
 
 typedef struct {
   Arena               *perm;
@@ -51,14 +55,22 @@ typedef struct {
 } Interpreter;
 
 typedef enum {
-  Run_ok,
+  Step_ok,
+  Step_encountered_error,
+  Step_resolve_declaration_type,
+  Step_resolve_declaration_value,
+} StepResult;
+
+typedef enum {
+  Run_reached_end,
+  Run_encountered_error = Step_encountered_error,
 
   // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
   // which needs to be resolved.
-  Run_resolve_declaration_type,
-  Run_resolve_declaration_value,
+  Run_resolve_declaration_type = Step_resolve_declaration_type,
+  Run_resolve_declaration_value = Step_resolve_declaration_value,
 } RunResult;
 
-u32 run_until(Interpreter *in, CallStack *stack, u32 end, b32 reentry);
+u32 run_until(Interpreter *in, RunState *state, u32 inst_end);
 
 #endif // INTERPRET_H
