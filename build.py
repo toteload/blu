@@ -75,6 +75,7 @@ def create_build_ninja():
                   '-Wimplicit-function-declaration',
                   '-Wno-unused-function',
                   '-Werror=switch', # Enforce all enum values are handled
+                  '-Werror=incompatible-pointer-types',
                   #'-O2 -S -mllvm --x86-asm-syntax=intel',
                   '-fansi-escape-codes -fcolor-diagnostics',
                   '-std=c11',

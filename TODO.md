@@ -1,10 +1,13 @@
 # Currently doing
 
+- [ ] Add a way of returning errors from the resolving interpreter. These have to be communicated
+      to the user.
+- [ ] Add AST source to IrChunk.
+- [ ] Document if SourceIndex and DeclarationIndex are optional or not.
 - [ ] Finish declaration resolution / partial evaluation
   - [x] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
   - [~] Output runtime code for functions that are evaluated during resolution.
-  - [ ] Add a way of returning errors from the resolving interpreter. These have to be communicated
-        to the user.
+
 
   What I am trying now is that each declaration generates a block of IR where the first part of the
   generated block contains "typechecking code" and the second part contains code for the actual value.
@@ -28,6 +31,8 @@
   itself directly would be illegal.
 
 - [ ] Interpret runtime IR to execute the program!
+- [ ] Find a more natural(?) way of organizing the headers. the lsp gets confused about the current
+      header structure. I am also not completely happy with it.
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?

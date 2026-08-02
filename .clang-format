@@ -2,21 +2,18 @@ ColumnLimit: 100
 IndentWidth: 2
 ContinuationIndentWidth: 2
 SortIncludes: Never
-AlwaysBreakTemplateDeclarations: MultiLine
 BreakAfterAttributes: Always
 AlignConsecutiveAssignments:
-  Enabled: true
+  Enabled: false
   AlignCompound: true
   PadOperators: true
-AlignConsecutiveDeclarations: true
+AlignConsecutiveDeclarations: false
 AlignOperands: AlignAfterOperator
 AlignTrailingComments: Always
 AlignAfterOpenBracket: BlockIndent
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterFunction: false
-  AfterNamespace: true
 AllowAllArgumentsOnNextLine: false
 BinPackParameters: false
 BinPackArguments: false
-SpaceAfterTemplateKeyword: false

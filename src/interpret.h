@@ -36,7 +36,7 @@ typedef struct {
 } RunState;
 
 void runstate_init(RunState *state, Arena *arena);
-void frame_push(RunState *state, Arena *arena, IrChunk *chunk);
+void frame_push(RunState *state, Arena *arena, Declaration* decl);
 void frame_pop(RunState *state, Arena *arena, ValueStore *values);
 CallFrame *top_frame(RunState *state);
 

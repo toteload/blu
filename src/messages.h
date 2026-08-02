@@ -3,19 +3,19 @@
 
 #include "blu.h"
 
-enum MessageSeverity {
+typedef enum {
   Severity_Error,
   Severity_Warning,
   Severity_Info,
-};
+} MessageSeverity;
 
-enum MessageLocationKind {
+typedef enum {
   MessageLocation_unspecified,
   MessageLocation_byte_offset,
   MessageLocation_token_index,
   MessageLocation_ast_index,
   MessageLocation_ir_instruction,
-};
+} MessageLocationKind;
 
 typedef struct {
   u8 kind;

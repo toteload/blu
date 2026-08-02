@@ -6,21 +6,21 @@
 
 #include <stdarg.h>
 
-#define SEGMENTLIST_NAME            SourceList
-#define SEGMENTLIST_TYPE            Source
+#define SEGMENTLIST_NAME SourceList
+#define SEGMENTLIST_TYPE Source
 #define SEGMENTLIST_FUNCTION_PREFIX sources
-#define SEGMENTLIST_MIN_SIZE_LOG2   SOURCELIST_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT   SOURCELIST_SEGMENT_COUNT
-#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_MIN_SIZE_LOG2 SOURCELIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT SOURCELIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define SEGMENTLIST_NAME            DeclIdxList
-#define SEGMENTLIST_TYPE            DeclarationIndex
+#define SEGMENTLIST_NAME DeclIdxList
+#define SEGMENTLIST_TYPE DeclarationIndex
 #define SEGMENTLIST_FUNCTION_PREFIX user_decls
-#define SEGMENTLIST_MIN_SIZE_LOG2   DECLIDXLIST_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT   DECLIDXLIST_SEGMENT_COUNT
-#define SEGMENTLIST_LINKAGE         internal
+#define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
@@ -37,17 +37,18 @@ b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
   return a.parent == b.parent && a.name == b.name;
 }
 
-#define INTERNER_NAME            DeclarationInterner
-#define INTERNER_TYPE            DeclarationKey
-#define INTERNER_INDEX_TYPE      DeclarationIndex
-#define INTERNER_EXTRA_TYPE      Declaration
+#define INTERNER_NAME DeclarationInterner
+#define INTERNER_TYPE DeclarationKey
+#define INTERNER_INDEX_TYPE DeclarationIndex
+#define INTERNER_EXTRA_TYPE Declaration
 #define INTERNER_FUNCTION_PREFIX decls
-#define INTERNER_HASH_FN         hash_decl_key
-#define INTERNER_COMPARE_FN      cmp_decl_key
+#define INTERNER_HASH_FN hash_decl_key
+#define INTERNER_COMPARE_FN cmp_decl_key
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
 
-internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
+internal void *
+cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   Unused(ctx, old_byte_size, align);
 
   if (!is_null(p) && new_byte_size == 0) {
@@ -58,18 +59,25 @@ internal void *cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_
   return realloc(p, new_byte_size);
 }
 
-Allocator const cstd_allocator = { .fn = cstd_alloc_fn, };
+Allocator const cstd_allocator = {
+  .fn = cstd_alloc_fn,
+};
 
-internal void compiler_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
+internal void
+compiler_add_message(void *user, u8 severity, MessageLocation location, String format, ...) {
   Compiler *compiler = user;
 
   u32 arg_count = message_format_arg_count(format);
 
-  Message *msg = arena_push(&compiler->arena, sizeof(Message) + arg_count * sizeof(MessageArg), Align_of(Message));
+  Message *msg = arena_push(
+    &compiler->arena,
+    sizeof(Message) + arg_count * sizeof(MessageArg),
+    Align_of(Message)
+  );
 
   msg->severity = severity;
   msg->location = location;
-  msg->format   = arena_copy_string(&compiler->arena, format);
+  msg->format = arena_copy_string(&compiler->arena, format);
 
   va_list vl;
   va_start(vl, format);
@@ -99,79 +107,108 @@ internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
 internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
   DeclarationIndex idx = decls_add(
     &compiler->decls,
-    (DeclarationKey){ .parent = 0, .name = strings_add(&compiler->strings, name) }
+    (DeclarationKey){.parent = 0, .name = strings_add(&compiler->strings, name)}
   );
 
   decls_set_extra(
     &compiler->decls,
     idx,
-    (Declaration){ .kind = Declaration_primitive, .data.primitive = val }
+    (Declaration){.idx = idx, .kind = Declaration_primitive, .data.primitive = val}
   );
 }
 
 void compiler_init(Compiler *compiler) {
   zero_struct(Compiler, compiler);
 
-  arena_init(&compiler->arena, &(ArenaOptions){
-    .reserve_size        = MiB(16),
-    .initial_commit_size = MiB(1),
-  });
+  arena_init(
+    &compiler->arena,
+    &(ArenaOptions){
+      .reserve_size = MiB(16),
+      .initial_commit_size = MiB(1),
+    }
+  );
 
-  arena_init(&compiler->scratch, &(ArenaOptions){
-    .reserve_size        = MiB(16),
-    .initial_commit_size = MiB(1),
-  });
+  arena_init(
+    &compiler->scratch,
+    &(ArenaOptions){
+      .reserve_size = MiB(16),
+      .initial_commit_size = MiB(1),
+    }
+  );
 
   compiler->msg_sink = (MessageSink){
     .user = compiler,
     .add_message = compiler_add_message,
   };
 
-  strings_init(&compiler->strings, &(InternerOptions){
-    .arena              = &compiler->arena,
-    .map_allocator      = cstd_allocator,
-    .map_initial_size   = 32,
-  });
+  strings_init(
+    &compiler->strings,
+    &(InternerOptions){
+      .arena = &compiler->arena,
+      .map_allocator = cstd_allocator,
+      .map_initial_size = 32,
+    }
+  );
 
-  types_init(&compiler->types, &(InternerOptions){
-    .arena              = &compiler->arena,
-    .map_allocator      = cstd_allocator,
-    .map_initial_size   = 32,
-    .context            = &compiler->scratch,
-  });
+  types_init(
+    &compiler->types,
+    &(InternerOptions){
+      .arena = &compiler->arena,
+      .map_allocator = cstd_allocator,
+      .map_initial_size = 32,
+      .context = &compiler->scratch,
+    }
+  );
 
-  values_init(&compiler->values, &(ValueStoreOptions){
-    .arena = &compiler->arena,
-    .payload_allocator = cstd_allocator,
-  });
+  values_init(
+    &compiler->values,
+    &(ValueStoreOptions){
+      .arena = &compiler->arena,
+      .payload_allocator = cstd_allocator,
+    }
+  );
 
-  decls_init(&compiler->decls, &(InternerOptions){
-    .arena            = &compiler->arena,
-    .map_allocator    = cstd_allocator,
-    .map_initial_size = 32,
-  });
+  decls_init(
+    &compiler->decls,
+    &(InternerOptions){
+      .arena = &compiler->arena,
+      .map_allocator = cstd_allocator,
+      .map_initial_size = 32,
+    }
+  );
 
-  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){ .kind = Type_comptime_int });
-  compiler->common.type.type         = types_add(&compiler->types, &(Type){ .kind = Type_type });
-  compiler->common.type.nil          = types_add(&compiler->types, &(Type){ .kind = Type_nil });
-  compiler->common.type.bool         = types_add(&compiler->types, &(Type){ .kind = Type_bool });
-  compiler->common.type.never        = types_add(&compiler->types, &(Type){ .kind = Type_never });
-  compiler->common.type.i32          = types_add(&compiler->types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  compiler->common.type.comptime_int =
+    types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
+  compiler->common.type.type = types_add(&compiler->types, &(Type){.kind = Type_type});
+  compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
+  compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
+  compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
+  compiler->common.type.i32 = types_add(
+    &compiler->types,
+    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}
+  );
 
-  compiler->common.val.type  = add_type_value(compiler, compiler->common.type.type);
-  compiler->common.val.nil   = add_type_value(compiler, compiler->common.type.nil);
-  compiler->common.val.bool  = add_type_value(compiler, compiler->common.type.bool);
+  TypeIndex ti_i8 = types_add(
+    &compiler->types,
+    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}
+  );
+
+  compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
+  compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
+  compiler->common.val.bool = add_type_value(compiler, compiler->common.type.bool);
   compiler->common.val.never = add_type_value(compiler, compiler->common.type.never);
-  compiler->common.val.i32   = add_type_value(compiler, compiler->common.type.i32);
+  compiler->common.val.i32 = add_type_value(compiler, compiler->common.type.i32);
+  compiler->common.val.i8 = add_type_value(compiler, ti_i8);
 
   // DeclarationIndex 0 is reserved for the root
-  decls_add(&compiler->decls, (DeclarationKey){ .parent = 0, .name = 0 });
+  decls_add(&compiler->decls, (DeclarationKey){.parent = 0, .name = 0});
 
-  add_primitive(compiler, string_lit("type"),  compiler->common.val.type);
-  add_primitive(compiler, string_lit("nil"),   compiler->common.val.nil);
-  add_primitive(compiler, string_lit("bool"),  compiler->common.val.bool);
+  add_primitive(compiler, string_lit("type"), compiler->common.val.type);
+  add_primitive(compiler, string_lit("nil"), compiler->common.val.nil);
+  add_primitive(compiler, string_lit("bool"), compiler->common.val.bool);
   add_primitive(compiler, string_lit("never"), compiler->common.val.never);
-  add_primitive(compiler, string_lit("i32"),   compiler->common.val.i32);
+  add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
+  add_primitive(compiler, string_lit("i8"), compiler->common.val.i8);
 }
 
 void compiler_deinit(Compiler *compiler) {
@@ -197,19 +234,27 @@ void compiler_print_all_messages(Compiler *compiler) {
     Source *source = Null;
     Declaration *decl = Null;
 
-    Todo();
-
-    //Source *source = sources_ptr_at_unchecked(&compiler->sources, msg->source);
+    if (msg->location.kind == MessageLocation_ir_instruction) {
+      decl = decls_extra_get_ptr(&compiler->decls, msg->location.decl_idx);
+    } else if (msg->location.kind != MessageLocation_unspecified) {
+      source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
+    }
 
     print_message(msg, source, decl);
   }
 }
 
-b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out) {
+b32 lookup_identifier(
+  DeclarationInterner *decl_keys,
+  DeclarationIndex *mods,
+  u32 mod_count,
+  StringIndex name,
+  DeclarationIndex *out
+) {
   for (u32 i = 0; i < mod_count; i++) {
     DeclarationKey key = {
       .parent = mods[i],
-      .name   = name,
+      .name = name,
     };
 
     DeclarationIndex idx;
@@ -229,8 +274,8 @@ b32 lookup_identifier(DeclarationInterner *decl_keys, DeclarationIndex *mods, u3
 
 typedef struct {
   Declaration *decl;
-  RunState     state;
-  u8           min_required_resolve_status;
+  RunState state;
+  u8 min_required_resolve_status;
 } ResolveEntry;
 
 typedef struct {
@@ -242,7 +287,8 @@ typedef struct {
   Stack(ResolveEntry) resolve_stack;
 } Resolver;
 
-internal void push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
+internal void
+push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
   ResolveEntry *entry = stack_push_ptr_unchecked(&resolver->resolve_stack);
 
   entry->decl = decl;
@@ -250,7 +296,7 @@ internal void push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_r
 
   runstate_init(&entry->state, resolver->scratch);
 
-  frame_push(&entry->state, resolver->scratch, &decl->data.decl.chunk);
+  frame_push(&entry->state, resolver->scratch, decl);
 }
 
 internal b32 resolve_entry(Resolver *resolver) {
@@ -283,7 +329,6 @@ internal b32 resolve_entry(Resolver *resolver) {
   }
 
   if (err == Run_encountered_error) {
-    Panic();
     CallFrame *f = top_frame(&entry->state);
     Message_error(
       resolver->msg_sink,
@@ -306,9 +351,14 @@ internal b32 resolve_entry(Resolver *resolver) {
 
     u8 min_required_resolve_status;
     switch (err) {
-    case Run_resolve_declaration_type:  min_required_resolve_status = ResolveStatus_type_resolved;  break;
-    case Run_resolve_declaration_value: min_required_resolve_status = ResolveStatus_fully_resolved; break;
-    default: Unreachable();
+    case Run_resolve_declaration_type:
+      min_required_resolve_status = ResolveStatus_type_resolved;
+      break;
+    case Run_resolve_declaration_value:
+      min_required_resolve_status = ResolveStatus_fully_resolved;
+      break;
+    default:
+      Unreachable();
     }
 
     push_resolve_entry(resolver, decl_to_resolve, min_required_resolve_status);
@@ -320,6 +370,7 @@ internal b32 resolve_entry(Resolver *resolver) {
 }
 
 b32 resolve_declarations(Resolver *resolver) {
+  b32 all_ok = True;
   for (u32 i = 0; i < resolver->declaration_count; i++) {
     {
       Declaration *decl = resolver->declarations[i];
@@ -330,7 +381,9 @@ b32 resolve_declarations(Resolver *resolver) {
         continue;
       }
 
-      Assert(resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved);
+      Assert(
+        resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved
+      );
 
       push_resolve_entry(resolver, decl, ResolveStatus_fully_resolved);
     }
@@ -341,7 +394,9 @@ b32 resolve_declarations(Resolver *resolver) {
       u8 resolve_status = entry->decl->resolve_status;
 
       if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(&resolver->resolve_stack); // free callstack of entry? yeah, sounds like a good idea
+        stack_pop_unchecked(
+          &resolver->resolve_stack
+        ); // free callstack of entry? yeah, sounds like a good idea
         continue;
       }
 
@@ -355,12 +410,18 @@ b32 resolve_declarations(Resolver *resolver) {
 
       b32 ok = resolve_entry(resolver);
       if (!ok) {
-        Panic();
+        all_ok = False;
+
+        while (!stack_is_empty(&resolver->resolve_stack)) {
+          ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
+          entry->decl->resolve_status = ResolveStatus_error;
+          stack_pop_unchecked(&resolver->resolve_stack);
+        }
       }
     }
   }
 
-  return True;
+  return all_ok;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -377,13 +438,25 @@ b32 compile(Compiler *compiler) {
 
     b32 ok;
     ok = source_read_file(source);
-    if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
+    if (!ok) {
+      is_ok = False;
+      source->status = SourceStatus_failed_to_parse;
+      continue;
+    }
 
     ok = source_tokenize(source, &compiler->scratch);
-    if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
+    if (!ok) {
+      is_ok = False;
+      source->status = SourceStatus_failed_to_parse;
+      continue;
+    }
 
     ok = source_parse(source, &compiler->scratch);
-    if (!ok) { is_ok = False; source->status = SourceStatus_failed_to_parse; continue; }
+    if (!ok) {
+      is_ok = False;
+      source->status = SourceStatus_failed_to_parse;
+      continue;
+    }
 
     source_index_declarations(source, &compiler->strings);
 
@@ -398,14 +471,14 @@ b32 compile(Compiler *compiler) {
   for (u32 i = 0; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
-    // At the moment it is not possible to nest modules, so this stack will never grow beyond 2 (1. root, 2. mod).
-    // BUT this will likely change in the future. At that point some checks need to be inserted to
-    // ensure the stack doesn't overflow (and also make the stack a bit bigger :)).
+    // At the moment it is not possible to nest modules, so this stack will never grow beyond 2 (1.
+    // root, 2. mod). BUT this will likely change in the future. At that point some checks need to
+    // be inserted to ensure the stack doesn't overflow (and also make the stack a bit bigger :)).
 
     DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
     stack_init(&stack, stackmem, 4);
-    stack_push(&stack, ((DeclFrame){ .mod = 0, .n = source->decls[0].child_count }));
+    stack_push(&stack, ((DeclFrame){.mod = 0, .n = source->decls[0].child_count}));
 
     source->decl_idxs[0] = 0;
 
@@ -427,7 +500,7 @@ b32 compile(Compiler *compiler) {
         b32 already_exists;
         DeclarationIndex idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){ .parent = top->mod, .name = decl->name },
+          (DeclarationKey){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -438,7 +511,7 @@ b32 compile(Compiler *compiler) {
             Message_error(
               &compiler->msg_sink,
               (MessageLocation){
-                .kind = MessageLocation_ast_index, 
+                .kind = MessageLocation_ast_index,
                 .source_idx = source->idx,
                 .data.ast_index = decl->node,
               },
@@ -448,7 +521,7 @@ b32 compile(Compiler *compiler) {
           }
         }
 
-        stack_push(&stack, ((DeclFrame){ .mod = idx, .n = decl->child_count }));
+        stack_push(&stack, ((DeclFrame){.mod = idx, .n = decl->child_count}));
 
         source->decl_idxs[offset] = idx;
 
@@ -456,16 +529,17 @@ b32 compile(Compiler *compiler) {
           &compiler->decls,
           idx,
           (Declaration){
+            .idx = idx,
             .kind = Declaration_mod,
             .resolve_status = ResolveStatus_fully_resolved,
-            .data.mod = { .source = source, .tree_idx = offset },
+            .data.mod = {.source = source, .tree_idx = offset},
           }
         );
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
         DeclarationIndex idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){ .parent = top->mod, .name = decl->name },
+          (DeclarationKey){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -473,10 +547,10 @@ b32 compile(Compiler *compiler) {
           is_ok = False;
           Message_error(
             &compiler->msg_sink,
-            (MessageLocation){ 
-            .kind = MessageLocation_ast_index, 
-            .source_idx = source->idx,
-            .data.ast_index = decl->node,
+            (MessageLocation){
+              .kind = MessageLocation_ast_index,
+              .source_idx = source->idx,
+              .data.ast_index = decl->node,
             },
             string_lit("Declaration already exists.")
           );
@@ -487,39 +561,48 @@ b32 compile(Compiler *compiler) {
 
         source->decl_idxs[offset] = idx;
 
-        decls_set_extra(&compiler->decls, idx, (Declaration){
-          .kind = Declaration_decl,
-          .resolve_status = ResolveStatus_unresolved,
-          .data.decl = {
-            .source = source,
-            .tree_idx = offset,
-          },
-        });
+        decls_set_extra(
+          &compiler->decls,
+          idx,
+          (Declaration){
+            .idx = idx,
+            .kind = Declaration_decl,
+            .resolve_status = ResolveStatus_unresolved,
+            .data.decl = {
+              .source = source,
+              .tree_idx = offset,
+            },
+          }
+        );
       }
 
-next_iter:
+    next_iter:
       offset += 1;
     }
   }
 
-  Declaration **decls = arena_push_array(Declaration*, &compiler->scratch, compiler->user_decls.len);
+  Declaration **decls =
+    arena_push_array(Declaration *, &compiler->scratch, compiler->user_decls.len);
 
   {
     CodeGenContext context = {
-      .perm     = &compiler->arena,
-      .scratch  = &compiler->scratch,
-      .common   = &compiler->common,
+      .perm = &compiler->arena,
+      .scratch = &compiler->scratch,
+      .common = &compiler->common,
       .msg_sink = &compiler->msg_sink,
-      .strings  = &compiler->strings,
-      .decls    = &compiler->decls,
-      .values   = &compiler->values,
+      .strings = &compiler->strings,
+      .decls = &compiler->decls,
+      .values = &compiler->values,
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      Declaration *decl = decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
+      Declaration *decl =
+        decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
       decls[i] = decl;
       is_ok &= generate_code(&context, decl);
-      ir_chunk_print(stdout, &decl->data.decl.chunk, &compiler->types, &compiler->values);
+      ir_chunk_print(
+        stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
+      );
     }
   }
 
@@ -542,6 +625,7 @@ next_iter:
       .declaration_count = compiler->user_decls.len,
       .declarations = decls,
       .in = &interpreter,
+      .msg_sink = &compiler->msg_sink,
     };
 
     ResolveEntry *entries = arena_push_array(ResolveEntry, &compiler->scratch, MAX_RESOLVE_DEPTH);
@@ -555,17 +639,17 @@ next_iter:
   }
 
   for (u32 i = 0; i < compiler->user_decls.len; i++) {
-    DeclarationIndex idx  = user_decls_at_unchecked(&compiler->user_decls, i);
-    DeclarationKey   key  = decls_get(&compiler->decls, idx);
-    Declaration     *decl = decls_extra_get_ptr(&compiler->decls, idx);
-    String           name = strings_get(&compiler->strings, key.name);
+    DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
+    DeclarationKey key = decls_get(&compiler->decls, idx);
+    Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
+    String name = strings_get(&compiler->strings, key.name);
 
     ValueIndex val = decl->data.decl.val;
 
     printf("%.*s : ", Cast(int, name.len), name.str);
     type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
     printf(" = ");
-    value_print(stdout, &compiler->types, &compiler->values, val);
+    value_print(stdout, decl->data.decl.source, &compiler->types, &compiler->values, val);
     printf("\n");
   }
 

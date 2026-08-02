@@ -28,8 +28,10 @@ CallFrame *top_frame(RunState *state) {
   return stack_peek_ptr_unchecked(&state->call_stack);
 }
 
-void frame_push(RunState *state, Arena *arena, IrChunk *chunk) {
+void frame_push(RunState *state, Arena *arena, Declaration *decl) {
+  IrChunk *chunk = &decl->data.decl.chunk;
   CallFrame f = {
+    .decl_idx = decl->idx,
     .pc = 0,
     .chunk = chunk,
     .inst_map = arena_push_array(ValueIndex, arena, chunk->opcode_count),

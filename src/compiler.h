@@ -23,6 +23,7 @@ typedef struct {
     ValueIndex bool;
     ValueIndex never;
     ValueIndex i32;
+    ValueIndex i8;
   } val;
 } Common;
 
@@ -32,6 +33,7 @@ typedef struct {
 } DeclarationKey;
 
 typedef enum {
+  ResolveStatus_error,
   ResolveStatus_unresolved,
   ResolveStatus_resolving_type,
   ResolveStatus_type_resolved,
@@ -47,6 +49,8 @@ enum DeclarationKind {
 };
 
 struct Declaration {
+  DeclarationIndex idx;
+
   u8 kind;
   u8 resolve_status;
 

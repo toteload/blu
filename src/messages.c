@@ -1,13 +1,14 @@
 #include "messages.h"
 #include "source_file.h"
+#include "compiler.h"
 
 #include <stdio.h>
 
-#define SEGMENTLIST_NAME            MessageList
-#define SEGMENTLIST_TYPE            MessagePtr
+#define SEGMENTLIST_NAME MessageList
+#define SEGMENTLIST_TYPE MessagePtr
 #define SEGMENTLIST_FUNCTION_PREFIX msglist
-#define SEGMENTLIST_MIN_SIZE_LOG2   6
-#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_MIN_SIZE_LOG2 6
+#define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
@@ -37,7 +38,15 @@ u32 message_format_arg_count(String fmt) {
 }
 
 internal b32 location_kind_has_line_col(u8 kind) {
-  return kind == MessageLocation_token_index || kind == MessageLocation_ast_index || kind == MessageLocation_byte_offset;
+  switch (Cast(MessageLocationKind, kind)) {
+  case MessageLocation_ast_index:
+  case MessageLocation_token_index:
+  case MessageLocation_byte_offset:
+  case MessageLocation_unspecified:
+    return True;
+  case MessageLocation_ir_instruction:
+    return False;
+  }
 }
 
 typedef struct {
@@ -70,10 +79,11 @@ internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
   LineInfo info = tokens_find_line_info(&source->tokens, offset);
 
   u32 line = info.line;
-  u32 col  = offset - info.offset_start_of_line + 1;
+  u32 col = offset - info.offset_start_of_line + 1;
 
   // subtract 1 from the line length to exclude the newline
-  String textline = (String){ .str = source->text.str + info.offset_start_of_line, .len = info.line_len - 1 };
+  String textline =
+    (String){.str = source->text.str + info.offset_start_of_line, .len = info.line_len - 1};
 
   return (PositionInfo){
     .line = line,
@@ -85,12 +95,16 @@ internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
 
 void print_message(Message *message, Source *source, Declaration *decl) {
   // clang-format off
-  switch (message->severity) {
+  switch (Cast(MessageSeverity, message->severity)) {
   case Severity_Error:   printf("[error]"); break;
   case Severity_Warning: printf("[warn]");  break;
   case Severity_Info:    printf("[info]");  break;
   }
   // clang-format on
+
+  if (decl) {
+    source = decl->data.decl.source;
+  }
 
   String filename = source->filename;
   printf(" %.*s:", Cast(int, filename.len), filename.str);
@@ -111,6 +125,12 @@ void print_message(Message *message, Source *source, Declaration *decl) {
   if (info.line) {
     printf("%5u | %.*s\n", info.line, Cast(int, info.textline.len), info.textline.str);
     // Forgive me, Father, for I have sinned.
-    printf("      |%*c%.*s\n", info.col, ' ', Min(info.underline_len, 64), "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+    printf(
+      "      |%*c%.*s\n",
+      info.col,
+      ' ',
+      Min(info.underline_len, 64),
+      "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    );
   }
 }
