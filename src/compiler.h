@@ -6,6 +6,7 @@
 #include "string_interner.h"
 #include "value.h"
 #include "ir.h"
+#include "cli_options.h"
 
 typedef struct {
   struct {
@@ -106,6 +107,8 @@ typedef struct {
   Arena arena;
   Arena scratch;
 
+  CLIOptions *options;
+
   SourceList sources;
 
   MessageList msg_list;
@@ -120,7 +123,7 @@ typedef struct {
   DeclIdxList         user_decls;
 } Compiler;
 
-void compiler_init(Compiler *compiler);
+void compiler_init(Compiler *compiler, CLIOptions *options);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);

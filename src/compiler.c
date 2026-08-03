@@ -117,8 +117,10 @@ internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
   );
 }
 
-void compiler_init(Compiler *compiler) {
+void compiler_init(Compiler *compiler, CLIOptions *options) {
   zero_struct(Compiler, compiler);
+
+  compiler->options = options;
 
   arena_init(
     &compiler->arena,
@@ -643,9 +645,12 @@ b32 compile(Compiler *compiler) {
         decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
       user_decls[i] = decl;
       is_ok &= generate_code(&context, decl);
+
+      if (compiler->options->verbose) {
       ir_chunk_print(
         stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
       );
+      }
     }
   }
 

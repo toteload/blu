@@ -50,7 +50,7 @@ int main(int argc, char const *argv[]) {
   }
 
   Compiler compiler;
-  compiler_init(&compiler);
+  compiler_init(&compiler, &cli);
 
   compiler_add_sourcefile(&compiler, cli.source_filename);
 
