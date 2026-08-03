@@ -94,14 +94,51 @@ internal IrRef resolve(CallFrame *f, IrRef ref) {
   return f->inst_map[ref_to_instruction_index(ref)];
 }
 
-// This function returns a nil if the ref doesn't refer to a comptime value.
-internal ValueIndex try_ref_as_value(CallFrame *f, IrRef ref) {
+internal b32 expect_comptime_value_or_nil(Interpreter *in, CallFrame *f, IrRef ref, ValueIndex *out) {
   IrRef x = resolve(f, ref);
+
   if (ref_is_value_index(x)) {
-    return ref_to_value_index(x);
+    *out = ref_to_value_index(x);
+    return True;
   }
 
-  return 0;
+  Message_error(
+    in->msg_sink,
+    (MessageLocation){
+      .kind = MessageLocation_ir_instruction,
+      .decl_idx = f->decl_idx,
+      .data.offset = f->pc,
+    },
+    string_lit("Value must be comptime known")
+  );
+
+  return False;
+}
+
+internal b32 expect_comptime_value(Interpreter *in, CallFrame *f, IrRef ref, ValueIndex *out) {
+  ValueIndex idx;
+  b32 ok = expect_comptime_value_or_nil(in, f, ref, &idx);
+  if (!ok) {
+    return False;
+  }
+
+  if (idx == 0) {
+    Message_error(
+      in->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ir_instruction,
+        .decl_idx = f->decl_idx,
+        .data.offset = f->pc,
+      },
+      string_lit("Value must be comptime known")
+    );
+
+    return False;
+  }
+
+  *out = idx;
+
+  return True;
 }
 
 // ASSUME: `v` refers to a TypeIndex
@@ -126,6 +163,10 @@ internal ValueIndex val_from_type(Interpreter *in, TypeIndex t) {
     .data = data,
   };
   return res;
+}
+
+internal TypeIndex ref_typeof(IrRef ref) {
+  Todo();
 }
 
 internal u32 step(Interpreter *in, RunState *state) {
@@ -186,9 +227,14 @@ internal u32 step(Interpreter *in, RunState *state) {
       }
 
       Todo();
-    }
+    } else {
+      state->requested_resolution = False;
+      Assert(decl->kind == Declaration_decl);
 
-    Todo();
+      store_inst_value(f, pc, ir_ref_from_value_index(decl->data.decl.val));
+      f->pc += 1;
+      break;
+    }
   } break;
   case IR_as: {
     IrAs *as = chunk_extra(f->chunk, pc);
@@ -200,9 +246,10 @@ internal u32 step(Interpreter *in, RunState *state) {
     if (ref_is_value_index(ref)) {
       Value *v = values_get(in->values, ref_to_value_index(ref));
 
-      ValueIndex idx_dst_type = try_ref_as_value(f, as->type_to); 
-      if (!idx_dst_type) {
-        Panic();
+      ValueIndex idx_dst_type;
+      b32 ok = expect_comptime_value(in, f, as->type_to, &idx_dst_type); 
+      if (!ok) {
+        return Step_encountered_error;
       }
 
       TypeIndex type_dst = type_from_val(in, idx_dst_type);
@@ -282,11 +329,19 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_unify: {
     IrUnify *unify = chunk_extra(f->chunk, pc);
 
-    ValueIndex lhs = try_ref_as_value(f, unify->type_lhs);
-    Assert(lhs);
+    b32 ok = True;
 
-    ValueIndex rhs = try_ref_as_value(f, unify->type_rhs);
-    Assert(rhs);
+    ValueIndex lhs;
+    ok = expect_comptime_value_or_nil(in, f, unify->type_lhs, &lhs);
+    if (!ok) {
+      return Step_encountered_error;
+    }
+
+    ValueIndex rhs;
+    ok = expect_comptime_value_or_nil(in, f, unify->type_rhs, &rhs);
+    if (!ok) {
+      return Step_encountered_error;
+    }
 
     TypeIndex type_lhs = type_from_val(in, lhs);
     TypeIndex type_rhs = type_from_val(in, rhs);
@@ -302,8 +357,9 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_return_type: {
     IrRef ref_func = chunk_data(f->chunk, pc);
 
-    ValueIndex func = try_ref_as_value(f, ref_func);
-    Assert(func);
+    ValueIndex func;
+    b32 ok = expect_comptime_value(in, f, ref_func, &func);
+    Assert(ok);
 
     // TODO: make sure func is a type
 
@@ -367,7 +423,45 @@ internal u32 step(Interpreter *in, RunState *state) {
       store_inst_value(f, span.start, ir_ref_from_value_index(vidx));
     }
   } break;
-  default: Panic();
+  case IR_condbr: {
+    IrCondBr *condbr = chunk_extra(f->chunk, pc);
+    IrRef cond = resolve(f, condbr->cond);
+    if (ref_is_value_index(cond)) {
+      Value *v = values_get(in->values, ref_to_value_index(cond));
+      if (*Cast(u8*,v->data)) {
+        f->pc = condbr->then;
+      } else {
+        f->pc = condbr->otherwise;
+      }
+    } else {
+      IrBuilder *builder = get_builder(in);
+      InstructionIndex inst_condbr = inst_alloc(builder);
+      inst_set_opcode(builder, inst_condbr, IR_condbr);
+      IrCondBr *data_condbr = inst_push_data(builder, inst_condbr, IrCondBr);
+
+      Todo();
+    }
+  } break;
+  case IR_call: {
+    IrCall *call = chunk_extra(f->chunk, pc);
+    IrBuilder *builder = get_builder(in);
+
+    Assert(call->arg_count == 0);
+
+    InstructionIndex inst_call = inst_alloc(builder);
+    inst_set_opcode(builder, inst_call, IR_call);
+    IrCall *data_call = inst_push_data(builder, inst_call, IrCall);
+
+    IrRef func = resolve(f, call->func);
+
+    *data_call = (IrCall){
+      .func = func,
+      .arg_count = 0,
+    };
+
+    f->pc += 1;
+  } break;
+  default: Todo();
   }
 
   return Step_ok;

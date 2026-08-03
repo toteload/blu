@@ -146,6 +146,67 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     TokenIndex *name = ast_data(ast, idx_ast);
     res = ir_ref_from_instruction_index(inst_add_lookup_value(gen, *name, idx_ast));
   } break;
+  case Ast_block: {
+    AstBlock *block = ast_data(ast, idx_ast);
+    u32 count = block->count;
+    if (count == 0) {
+      Todo();
+    }
+
+    for (u32 i = 0; i < count-1; i++) {
+      gen_code(gen, block->items[i], 0);
+    }
+
+    res = gen_code(gen, block->items[count-1], type_destination);
+  } break;
+  case Ast_if_else: {
+    AstIfElse *if_else = ast_data(ast, idx_ast);
+
+    InstructionIndex block = inst_block_begin(builder);
+
+    IrRef cond = gen_code(gen, if_else->cond, ir_ref_from_value_index(gen->common->val.bool));
+
+    InstructionIndex condbr = inst_alloc(builder);
+    inst_set_opcode(builder, condbr, IR_condbr);
+
+    InstructionIndex block_then = inst_block_begin(builder);
+    {
+      IrRef value = gen_code(gen, if_else->then, type_destination);
+      InstructionIndex br = inst_alloc(builder);
+      inst_set_opcode(builder, br, IR_br);
+
+      IrBr *data = inst_push_data(builder, br, IrBr);
+      *data = (IrBr){
+        .block = block,
+        .value = value,
+      };
+    }
+    inst_block_end(builder, block_then);
+
+    InstructionIndex block_otherwise = inst_block_begin(builder);
+    if (if_else->otherwise) {
+      IrRef value = gen_code(gen, if_else->otherwise, type_destination);
+      InstructionIndex br = inst_alloc(builder);
+      inst_set_opcode(builder, br, IR_br);
+      IrBr *data = inst_push_data(builder, br, IrBr);
+      *data = (IrBr){
+        .block = block,
+        .value = value,
+      };
+    }
+    inst_block_end(builder, block_otherwise);
+
+    inst_block_end(builder, block);
+
+    IrCondBr *data = inst_push_data(builder, condbr, IrCondBr);
+    *data = (IrCondBr){
+      .cond = cond,
+      .then = block_then,
+      .otherwise = block_otherwise,
+    };
+
+    res = ir_ref_from_instruction_index(block);
+  } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
     IrRef ref_ret_type =
@@ -238,8 +299,14 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
       ref_decl_type = ir_ref_from_instruction_index(type);
     }
     IrRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
-
-    inst_block_end(builder, block, ref_decl_val);
+    InstructionIndex br = inst_alloc(builder);
+      inst_set_opcode(builder, br, IR_br);
+      IrBr *data = inst_push_data(builder, br, IrBr);
+      *data = (IrBr){
+        .block = block,
+        .value = ref_decl_val,
+      };
+    inst_block_end(builder, block);
 
     return ir_ref_from_instruction_index(block);
   } break;
@@ -261,8 +328,33 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     res = ref_literal;
   } break;
+  case Ast_call: {
+    AstCall *ast_call = ast_data(ast, idx_ast);
+
+    // TODO as a type destination you could at least set it to a function that must return a type
+    // of the current type destination. and you also know with how many arguments it is called.
+    // could that be useful in any way?
+    IrRef callee = gen_code(gen, ast_call->callee, 0);
+
+    for (u32 i = 0; i < ast_call->count; i++) {
+      Todo(); // :) haha you still have to implement this
+    }
+
+    InstructionIndex inst_call = inst_alloc(builder);
+    inst_set_opcode(builder, inst_call, IR_call);
+    inst_set_ast_source(builder, inst_call, idx_ast);
+
+    IrCall *call = inst_push_data(builder, inst_call, IrCall);
+    *call = (IrCall){
+      .func = callee,
+      .arg_count = ast_call->count,
+    };
+
+    Assert(ast_call->count == 0); // add the args to IR
+    res = ir_ref_from_instruction_index(inst_call);
+  } break;
   default:
-    Panic();
+    Todo();
   }
 
   if (type_destination) {
@@ -377,7 +469,15 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   IrRef res =
     ir_ref_from_instruction_index(inst_as(&gen.builder, ref_decl_type_of_val, ref_decl_val, ast_decl->value));
 
-  inst_block_end(&gen.builder, block, res);
+  InstructionIndex br = inst_alloc(&gen.builder);
+  inst_set_opcode(&gen.builder, br, IR_br);
+  IrBr *data = inst_push_data(&gen.builder, br, IrBr);
+  *data = (IrBr){
+    .block = block,
+    .value = res,
+  };
+
+  inst_block_end(&gen.builder, block);
 
   irbuilder_flatten(&gen.builder, context->perm, &decl->data.decl.chunk);
 

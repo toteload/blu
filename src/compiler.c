@@ -196,6 +196,32 @@ void compiler_init(Compiler *compiler) {
   compiler->common.val.i32 = add_type_value(compiler, compiler->common.type.i32);
   compiler->common.val.i8 = add_type_value(compiler, ti_i8);
 
+  {
+    Value *v;
+    compiler->common.val.true = values_alloc(&compiler->values, &v);
+    u8 *data = values_alloc_data(&compiler->values, 1, 1);
+    *data = 1;
+    *v = (Value){
+      .type = compiler->common.type.bool,
+      .data_size = 1,
+      .data = data,
+    };
+    add_primitive(compiler, string_lit("true"), compiler->common.val.true);
+  }
+
+  {
+    Value *v;
+    compiler->common.val.false = values_alloc(&compiler->values, &v);
+    u8 *data = values_alloc_data(&compiler->values, 1, 1);
+    *data = 0;
+    *v = (Value){
+      .type = compiler->common.type.bool,
+      .data_size = 1,
+      .data = data,
+    };
+    add_primitive(compiler, string_lit("false"), compiler->common.val.false);
+  }
+
   // DeclarationIndex 0 is reserved for the root
   decls_add(&compiler->decls, (DeclarationKey){.parent = 0, .name = 0});
 
@@ -621,6 +647,10 @@ b32 compile(Compiler *compiler) {
         stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
       );
     }
+  }
+
+  if (!is_ok) {
+    return False;
   }
 
   {

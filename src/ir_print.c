@@ -240,7 +240,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_alloc: {
       type_index_print(out, types, data);
     } break;
-    case IR_cond_br: {
+    case IR_condbr: {
       IrCondBr *cond_br = extra;
       fputs("cond=", out);
       ir_ref_print(out, cond_br->cond, source, types, values);
@@ -279,14 +279,16 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     } break;
     case IR_call: {
       IrCall *call = extra;
-      fprintf(out, "func=(TODO) args=[");
+      ir_ref_print(out, call->func, source, types, values);
+      if (call->arg_count) {
+        fputs(" ", out);
+      }
       for (u32 j = 0; j < call->arg_count; j++) {
         if (j != 0) {
           fputs(", ", out);
         }
         ir_ref_print(out, call->args[j], source, types, values);
       }
-      fputc(']', out);
     } break;
     case IR_declaration: {
       IrDeclaration *decl = extra;

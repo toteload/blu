@@ -57,7 +57,5 @@ int main(int argc, char const *argv[]) {
   ok = compile(&compiler);
   compiler_print_all_messages(&compiler);
 
-  printf("%s\n", (ok) ? "ok" : "error");
-
   return (ok) ? 0 : 1;
 }

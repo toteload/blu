@@ -397,11 +397,22 @@ internal b32 parse_block(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_type(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
   u8 tok;
   Try(peek(parser, &tok));
+
+  if (tok == Tok_brace_open) {
+    u8 ignored;
+    next(parser, &ignored);
+
+    Try(parse_type(parser, out));
+
+    Try(expect_token(parser, Tok_brace_close));
+
+    return True;
+  }
+
+  AstIndex   idx   = node_alloc(parser);
+  TokenIndex start = parser->at;
 
   switch (tok) {
   case Tok_bracket_open: {

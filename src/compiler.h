@@ -24,6 +24,9 @@ typedef struct {
     ValueIndex never;
     ValueIndex i32;
     ValueIndex i8;
+
+    ValueIndex true;
+    ValueIndex false;
   } val;
 } Common;
 

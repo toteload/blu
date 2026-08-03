@@ -1,9 +1,9 @@
 # Currently doing
 
+- [ ] Add if else expression to codegen
 - [ ] Finish declaration resolution / partial evaluation
   - [x] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
   - [~] Output runtime code for functions that are evaluated during resolution.
-
 
   What I am trying now is that each declaration generates a block of IR where the first part of the
   generated block contains "typechecking code" and the second part contains code for the actual value.
@@ -118,6 +118,7 @@ path is effectively dead until formatting is implemented — but it's live UB in
 ## Types
 
 - [ ] `struct` type
+- [ ] optional types. 
 - [ ] Integer range.
   - `a..b` exclusive range. `a..=b` inclusive range.
 - [ ] Refinement

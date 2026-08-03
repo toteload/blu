@@ -81,15 +81,7 @@ InstructionIndex inst_block_begin(IrBuilder *builder) {
   return block;
 }
 
-void inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val) {
-  InstructionIndex br = inst_alloc(builder);
-  inst_set_opcode(builder, br, IR_br);
-  IrBr *data_br = inst_push_data(builder, br, IrBr);
-  *data_br = (IrBr){
-    .block = block,
-    .value = val,
-  };
-
+void inst_block_end(IrBuilder *builder, InstructionIndex block) {
   u32 block_inst_count = inst_offset(builder, block);
   inst_set_data(builder, block, block_inst_count);
 }
