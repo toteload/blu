@@ -141,6 +141,9 @@ void compiler_init(Compiler *compiler) {
     .add_message = compiler_add_message,
   };
 
+  // Reserve 0 index to be nil value
+  sources_push(&compiler->sources, &compiler->arena);
+
   strings_init(
     &compiler->strings,
     &(InternerOptions){
@@ -177,21 +180,14 @@ void compiler_init(Compiler *compiler) {
     }
   );
 
-  compiler->common.type.comptime_int =
-    types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
+  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
   compiler->common.type.type = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
   compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
-  compiler->common.type.i32 = types_add(
-    &compiler->types,
-    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}
-  );
+  compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
 
-  TypeIndex ti_i8 = types_add(
-    &compiler->types,
-    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}
-  );
+  TypeIndex ti_i8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
 
   compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
@@ -223,7 +219,7 @@ void compiler_add_sourcefile(Compiler *compiler, String filename) {
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
-  for (u32 i = 0; i < compiler->sources.len; i++) {
+  for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
     source_print_all_messages(source);
   }
@@ -234,9 +230,11 @@ void compiler_print_all_messages(Compiler *compiler) {
     Source *source = Null;
     Declaration *decl = Null;
 
-    if (msg->location.kind == MessageLocation_ir_instruction) {
+    if (msg->location.decl_idx) {
       decl = decls_extra_get_ptr(&compiler->decls, msg->location.decl_idx);
-    } else if (msg->location.kind != MessageLocation_unspecified) {
+    }
+
+    if (msg->location.source_idx) {
       source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
     }
 
@@ -279,10 +277,17 @@ typedef struct {
 } ResolveEntry;
 
 typedef struct {
+  b32 ok;
+
   Arena *scratch;
   MessageSink *msg_sink;
-  u32 declaration_count;
-  Declaration **declarations;
+
+  // List of user defined declarations.
+  u32 user_declaration_count;
+  Declaration **user_declarations;
+
+  DeclarationInterner *decls;
+
   Interpreter *in;
   Stack(ResolveEntry) resolve_stack;
 } Resolver;
@@ -329,17 +334,6 @@ internal b32 resolve_entry(Resolver *resolver) {
   }
 
   if (err == Run_encountered_error) {
-    CallFrame *f = top_frame(&entry->state);
-    Message_error(
-      resolver->msg_sink,
-      (MessageLocation){
-        .kind = MessageLocation_ir_instruction,
-        .decl_idx = f->decl_idx,
-        .data.offset = f->pc,
-      },
-      string_lit("Encountered error in IR")
-    );
-
     return False;
   }
 
@@ -347,7 +341,7 @@ internal b32 resolve_entry(Resolver *resolver) {
     CallFrame *f = top_frame(&entry->state);
     DeclarationIndex idx = chunk_data(f->chunk, f->pc);
 
-    Declaration *decl_to_resolve = resolver->declarations[idx];
+    Declaration *decl_to_resolve = decls_extra_get_ptr(resolver->decls, idx);
 
     u8 min_required_resolve_status;
     switch (err) {
@@ -369,15 +363,24 @@ internal b32 resolve_entry(Resolver *resolver) {
   Unreachable();
 }
 
+internal void clear_resolve_stack_with_error(Resolver *resolver) {
+  resolver->ok = False;
+
+  while (!stack_is_empty(&resolver->resolve_stack)) {
+    ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
+    entry->decl->resolve_status = ResolveStatus_error;
+    stack_pop_unchecked(&resolver->resolve_stack);
+  }
+}
+
 b32 resolve_declarations(Resolver *resolver) {
-  b32 all_ok = True;
-  for (u32 i = 0; i < resolver->declaration_count; i++) {
+  for (u32 i = 0; i < resolver->user_declaration_count; i++) {
     {
-      Declaration *decl = resolver->declarations[i];
+      Declaration *decl = resolver->user_declarations[i];
 
       u8 resolve_status = decl->resolve_status;
 
-      if (resolve_status == ResolveStatus_fully_resolved) {
+      if (resolve_status == ResolveStatus_fully_resolved || resolve_status == ResolveStatus_error) {
         continue;
       }
 
@@ -396,32 +399,46 @@ b32 resolve_declarations(Resolver *resolver) {
       if (resolve_status >= entry->min_required_resolve_status) {
         stack_pop_unchecked(
           &resolver->resolve_stack
-        ); // free callstack of entry? yeah, sounds like a good idea
+        ); // TODO: free callstack of entry? yeah, sounds like a good idea
         continue;
       }
 
       if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_type) {
-        Panic();
+        Message_error(
+          resolver->msg_sink,
+          (MessageLocation){ 
+            .kind = MessageLocation_unspecified,
+            .decl_idx = entry->decl->idx,
+          },
+          string_lit("Encountered circular declaration")
+        );
+
+        clear_resolve_stack_with_error(resolver);
+        break;
       }
 
       if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_value) {
-        Panic();
+        Message_error(
+          resolver->msg_sink,
+          (MessageLocation){ 
+            .kind = MessageLocation_unspecified,
+            .decl_idx = entry->decl->idx,
+          },
+          string_lit("Encountered circular declaration")
+        );
+
+        clear_resolve_stack_with_error(resolver);
+        break;
       }
 
       b32 ok = resolve_entry(resolver);
       if (!ok) {
-        all_ok = False;
-
-        while (!stack_is_empty(&resolver->resolve_stack)) {
-          ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-          entry->decl->resolve_status = ResolveStatus_error;
-          stack_pop_unchecked(&resolver->resolve_stack);
-        }
+        clear_resolve_stack_with_error(resolver);
       }
     }
   }
 
-  return all_ok;
+  return resolver->ok;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -433,7 +450,7 @@ typedef struct {
 
 b32 compile(Compiler *compiler) {
   b32 is_ok = True;
-  for (u32 i = 0; i < compiler->sources.len; i++) {
+  for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
     b32 ok;
@@ -468,7 +485,7 @@ b32 compile(Compiler *compiler) {
   }
 
   // Add all source file declarations to the global declaration map
-  for (u32 i = 0; i < compiler->sources.len; i++) {
+  for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
 
     // At the moment it is not possible to nest modules, so this stack will never grow beyond 2 (1.
@@ -581,7 +598,7 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  Declaration **decls =
+  Declaration **user_decls =
     arena_push_array(Declaration *, &compiler->scratch, compiler->user_decls.len);
 
   {
@@ -598,7 +615,7 @@ b32 compile(Compiler *compiler) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
       Declaration *decl =
         decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
-      decls[i] = decl;
+      user_decls[i] = decl;
       is_ok &= generate_code(&context, decl);
       ir_chunk_print(
         stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
@@ -621,9 +638,11 @@ b32 compile(Compiler *compiler) {
     stack_init(&interpreter.builders, builders, MAX_BUILDERS);
 
     Resolver resolver = {
+      .ok = True,
       .scratch = &compiler->scratch,
-      .declaration_count = compiler->user_decls.len,
-      .declarations = decls,
+      .user_declaration_count = compiler->user_decls.len,
+      .user_declarations = user_decls,
+      .decls = &compiler->decls,
       .in = &interpreter,
       .msg_sink = &compiler->msg_sink,
     };

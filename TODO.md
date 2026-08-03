@@ -1,9 +1,5 @@
 # Currently doing
 
-- [ ] Add a way of returning errors from the resolving interpreter. These have to be communicated
-      to the user.
-- [ ] Add AST source to IrChunk.
-- [ ] Document if SourceIndex and DeclarationIndex are optional or not.
 - [ ] Finish declaration resolution / partial evaluation
   - [x] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
   - [~] Output runtime code for functions that are evaluated during resolution.
@@ -85,7 +81,7 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 ## Comptime
 
-- [ ] Update declaration syntax to allow optional omission of declaration type.
+- [x] Update declaration syntax to allow optional omission of declaration type.
 - [ ] Add `eval` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.

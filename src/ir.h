@@ -206,7 +206,7 @@ void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
 InstructionIndex inst_block_begin(IrBuilder *builder);
 void inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val);
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val);
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source);
 
 void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
 

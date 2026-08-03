@@ -210,6 +210,30 @@ internal u32 step(Interpreter *in, RunState *state) {
       ValueIndex val_coerced;
       u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
       if (err) {
+        if (err == CoerceResult_comptime_int_value_out_of_range) {
+          Message_error(
+            in->msg_sink,
+            (MessageLocation){
+              .kind = MessageLocation_ir_instruction,
+              .decl_idx = f->decl_idx,
+              .data.offset = f->pc,
+            },
+            string_lit("Value of comptime_int is out of range of destination type")
+          );
+        }
+
+        if (err == CoerceResult_invalid_coercion_types) {
+          Message_error(
+            in->msg_sink,
+            (MessageLocation){
+              .kind = MessageLocation_ir_instruction,
+              .decl_idx = f->decl_idx,
+              .data.offset = f->pc,
+            },
+            string_lit("Invalid type coercion")
+          );
+        }
+
         return Step_encountered_error;
       }
 

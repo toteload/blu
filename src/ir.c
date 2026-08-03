@@ -94,9 +94,10 @@ void inst_block_end(IrBuilder *builder, InstructionIndex block, IrRef val) {
   inst_set_data(builder, block, block_inst_count);
 }
 
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val) {
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source) {
   InstructionIndex idx = inst_alloc(builder);
   inst_set_opcode(builder, idx, IR_as);
+  inst_set_ast_source(builder, idx, source);
 
   IrAs *data = inst_push_data(builder, idx, IrAs);
   *data = (IrAs){

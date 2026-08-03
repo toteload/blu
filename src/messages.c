@@ -43,9 +43,8 @@ internal b32 location_kind_has_line_col(u8 kind) {
   case MessageLocation_token_index:
   case MessageLocation_byte_offset:
   case MessageLocation_unspecified:
-    return True;
   case MessageLocation_ir_instruction:
-    return False;
+    return True;
   }
 }
 
@@ -56,7 +55,7 @@ typedef struct {
   u32 underline_len;
 } PositionInfo;
 
-internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
+internal PositionInfo get_position_info(Source *source, Declaration *decl, MessageLocation loc) {
   u32 offset;
   u32 len = 0;
   switch (loc.kind) {
@@ -73,6 +72,40 @@ internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
     SpanU32 span_offset = source->tokens.spans[span_token.start];
     offset = span_offset.start;
     len = span_offset.end - span_offset.start;
+  } break;
+  case MessageLocation_ir_instruction: {
+    IrChunk *chunk = &decl->data.decl.chunk;
+    AstIndex ast_idx = chunk->ast_source[loc.data.offset];
+    if (ast_idx) {
+      SpanToken span_token = source->ast.spans[ast_idx];
+      SpanU32 span_offset = source->tokens.spans[span_token.start];
+      offset = span_offset.start;
+      len = span_offset.end - span_offset.start;
+    } else {
+      return (PositionInfo){
+        .line = 0,
+        .col = 0,
+        .textline = {0},
+        .underline_len = 0,
+      };
+    }
+  } break;
+  case MessageLocation_unspecified: {
+    if (decl) {
+      Source *s = decl->data.decl.source;
+      AstIndex ast_idx = s->decls[decl->data.decl.tree_idx].node;
+      SpanToken span_token = source->ast.spans[ast_idx];
+      SpanU32 span_offset = source->tokens.spans[span_token.start];
+      offset = span_offset.start;
+      len = span_offset.end - span_offset.start;
+    } else {
+      return (PositionInfo){
+        .line = 0,
+        .col = 0,
+        .textline = {0},
+        .underline_len = 0,
+      };
+    }
   } break;
   }
 
@@ -96,7 +129,7 @@ internal PositionInfo get_position_info(Source *source, MessageLocation loc) {
 void print_message(Message *message, Source *source, Declaration *decl) {
   // clang-format off
   switch (Cast(MessageSeverity, message->severity)) {
-  case Severity_Error:   printf("[error]"); break;
+  case Severity_Error:   printf("\033[1m[\033[31merror\033[39m]\033[22m"); break;
   case Severity_Warning: printf("[warn]");  break;
   case Severity_Info:    printf("[info]");  break;
   }
@@ -107,7 +140,7 @@ void print_message(Message *message, Source *source, Declaration *decl) {
   }
 
   String filename = source->filename;
-  printf(" %.*s:", Cast(int, filename.len), filename.str);
+  printf(" \033[1m%.*s:\033[22m", Cast(int, filename.len), filename.str);
 
   PositionInfo info = {
     .line = 0,
@@ -116,8 +149,8 @@ void print_message(Message *message, Source *source, Declaration *decl) {
     .underline_len = 0,
   };
   if (location_kind_has_line_col(message->location.kind)) {
-    info = get_position_info(source, message->location);
-    printf("%u:%u:", info.line, info.col);
+    info = get_position_info(source, decl, message->location);
+    printf("\033[1m%u:%u:\033[22m", info.line, info.col);
   }
 
   printf(" %.*s\n", Cast(int, message->format.len), message->format.str);
@@ -126,7 +159,7 @@ void print_message(Message *message, Source *source, Declaration *decl) {
     printf("%5u | %.*s\n", info.line, Cast(int, info.textline.len), info.textline.str);
     // Forgive me, Father, for I have sinned.
     printf(
-      "      |%*c%.*s\n",
+      "      |%*c\033[32m%.*s\033[39m\n",
       info.col,
       ' ',
       Min(info.underline_len, 64),

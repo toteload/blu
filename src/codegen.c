@@ -61,7 +61,7 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
 
 void codegen_deinit(CodeGen *gen) { arena_scope_end(gen->scratch, gen->scope_scratch); }
 
-internal InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name, AstIndex source) {
+internal InstructionIndex inst_add_lookup_value(CodeGen *gen, TokenIndex name, AstIndex source) {
   StringIndex str =
     strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, name));
 
@@ -83,6 +83,34 @@ internal InstructionIndex inst_add_lookup(CodeGen *gen, TokenIndex name, AstInde
 
   InstructionIndex lookup = inst_alloc(&gen->builder);
   inst_set_opcode(&gen->builder, lookup, IR_lookup_value);
+  inst_set_ast_source(&gen->builder, lookup, source);
+  inst_set_data(&gen->builder, lookup, decl);
+
+  return lookup;
+}
+
+internal InstructionIndex inst_add_lookup_value_typeof(CodeGen *gen, TokenIndex name, AstIndex source) {
+  StringIndex str =
+    strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, name));
+
+  DeclarationIndex decl;
+  b32 found = lookup_identifier(gen->decls, gen->mods, gen->mod_depth, str, &decl);
+  if (!found) {
+    Message_error(
+      gen->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_token_index,
+        .source_idx = gen->source->idx,
+        .data.token_index = name,
+      },
+      string_lit("Could not find identifier.")
+    );
+    gen->has_error = True;
+    decl = 0;
+  }
+
+  InstructionIndex lookup = inst_alloc(&gen->builder);
+  inst_set_opcode(&gen->builder, lookup, IR_lookup_typeof);
   inst_set_ast_source(&gen->builder, lookup, source);
   inst_set_data(&gen->builder, lookup, decl);
 
@@ -116,7 +144,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   switch (Cast(AstKind, kind)) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
-    res = ir_ref_from_instruction_index(inst_add_lookup(gen, *name, idx_ast));
+    res = ir_ref_from_instruction_index(inst_add_lookup_value(gen, *name, idx_ast));
   } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
@@ -238,18 +266,23 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   }
 
   if (type_destination) {
-    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res));
+    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   }
 
   return res;
 }
 
+// For some constructions a part of the declared type is allowed to live in the value.
+// This function is for adding type checking code for those constructs.
 IrRef gen_declaration_type_of_val_code(CodeGen *gen, AstIndex idx_ast, IrRef declared_type) {
   AstNodes *ast = &gen->source->ast;
   IrBuilder *builder = &gen->builder;
 
   u8 kind = ast->kinds[idx_ast];
   switch (Cast(AstKind, kind)) {
+  case Ast_identifier: {
+    return declared_type;
+  } break;
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
@@ -342,7 +375,7 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   IrRef ref_decl_val = gen_code(&gen, ast_decl->value, ref_decl_type_of_val);
 
   IrRef res =
-    ir_ref_from_instruction_index(inst_as(&gen.builder, ref_decl_type_of_val, ref_decl_val));
+    ir_ref_from_instruction_index(inst_as(&gen.builder, ref_decl_type_of_val, ref_decl_val, ast_decl->value));
 
   inst_block_end(&gen.builder, block, res);
 
