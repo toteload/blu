@@ -19,7 +19,7 @@ void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
   }
 
   Type *type = types_get(types, idx);
-  switch (Cast(enum TypeKind, type->kind)) {
+  switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int: {
     fputs("comptime_int", out);
   } break;
@@ -80,7 +80,7 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
 void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *values, ValueIndex idx) {
   Value *value = values_get(values, idx);
   Type  *type  = types_get(types, value->type);
-  switch (Cast(enum TypeKind, type->kind)) {
+  switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int: {
     fprintf(out, "%lld", Cast(long long, read_signed(64, value->data)));
   } break;
@@ -112,7 +112,7 @@ void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *val
 }
 
 internal void ir_ref_print(FILE *out, IrRef ref, Source *source, TypeInterner *types, ValueStore *values) {
-  if (ir_ref_is_nil(ref)) {
+  if (ref_is_nil(ref)) {
     fprintf(out, "_");
     return;
   }
@@ -125,7 +125,7 @@ internal void ir_ref_print(FILE *out, IrRef ref, Source *source, TypeInterner *t
 }
 
 internal char const* typekind_string(u8 kind) {
-  switch (Cast(enum TypeKind, kind)) {
+  switch (Cast(TypeKind, kind)) {
   case Type_comptime_int: return "comptime_int";
   case Type_integer:      return "integer";
   case Type_bool:         return "bool";
@@ -231,7 +231,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
 
     void *extra = ptr_offset(chunk->extra, data);
 
-    switch (Cast(enum IrOpcode, op)) {
+    switch (Cast(IrOpcode, op)) {
     case IR_func: {
       IrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);

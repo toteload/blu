@@ -122,7 +122,7 @@ internal u32 hash_type(void *context, Type *x) {
 }
 
 u32 type_intern_byte_size(Type *type) {
-  switch (Cast(enum TypeKind, type->kind)) {
+  switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int:
   case Type_integer:
   case Type_bool:
@@ -185,4 +185,15 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
 TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx) {
   Type *type = types_get(types, idx);
   return types_size_info(types, type);
+}
+
+b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
+  if (to == from) {
+    return True;
+  }
+
+  Type *type_to = types_get(types, to);
+  Type *type_from = types_get(types, from);
+
+  Todo();
 }

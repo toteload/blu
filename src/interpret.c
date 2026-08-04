@@ -141,6 +141,42 @@ internal b32 expect_comptime_value(Interpreter *in, CallFrame *f, IrRef ref, Val
   return True;
 }
 
+internal b32 expect_type_value(Interpreter *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
+  if (val == 0) {
+    Todo();
+    return False;
+  }
+
+  Value *v = values_get(in->values, val);
+
+  if (v->type != in->common->type.type) {
+    Message_error(
+      in->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ir_instruction,
+        .decl_idx = f->decl_idx,
+        .data.offset = f->pc,
+      },
+      string_lit("Expected a type, but got something else")
+    );
+
+    return False;
+  }
+
+  *out = *Cast(TypeIndex*, v->data);
+
+  return True;
+}
+
+internal b32 expect_type_value_or_nil(Interpreter *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
+  if (val == 0) {
+    *out = 0;
+    return True;
+  }
+
+  return expect_type_value(in, f, val, out);
+}
+
 // ASSUME: `v` refers to a TypeIndex
 internal TypeIndex type_from_val(Interpreter *in, ValueIndex v) {
   if (v == 0) {
@@ -165,7 +201,27 @@ internal ValueIndex val_from_type(Interpreter *in, TypeIndex t) {
   return res;
 }
 
-internal TypeIndex ref_typeof(IrRef ref) {
+internal TypeIndex ref_typeof(Interpreter *in, CallFrame *f, IrRef ref) {
+  IrRef r = resolve(f, ref);
+  if (ref_is_value_index(r) && r) {
+    Value *v = values_get(in->values, ref_to_value_index(r));
+    return v->type;
+  }
+
+  InstructionIndex inst = ref_to_instruction_index(ref);
+
+  IrOpcode op = f->chunk->opcodes[inst];
+  switch (Cast(IrOpcode, op)) {
+  case IR_call: {
+    IrCall *call = chunk_extra(f->chunk, inst);
+    TypeIndex func = ref_typeof(in, f, call->func);
+
+    Type *f = types_get(in->types, func);
+    return f->data.function.return_type;
+  } break;
+  default: Todo();
+  }
+
   Todo();
 }
 
@@ -175,7 +231,7 @@ internal u32 step(Interpreter *in, RunState *state) {
   InstructionIndex pc = f->pc;
   u8 op = chunk_opcode(f->chunk, pc);
 
-  switch (Cast(enum IrOpcode, op)) {
+  switch (Cast(IrOpcode, op)) {
   case IR_block: {
     u32 inst_count = chunk_data(f->chunk, pc);
     push_scope(f, inst_count);
@@ -240,19 +296,21 @@ internal u32 step(Interpreter *in, RunState *state) {
     IrAs *as = chunk_extra(f->chunk, pc);
     IrRef ref = resolve(f, as->val);
 
-    IrRef res;
+    ValueIndex idx_dst_type;
+    b32 ok = expect_comptime_value(in, f, as->type_to, &idx_dst_type); 
+    if (!ok) {
+      return Step_encountered_error;
+    }
+
+    TypeIndex type_dst;
+    ok = expect_type_value(in, f, idx_dst_type, &type_dst);
+    if (!ok) {
+      return Step_encountered_error;
+    }
 
     // If the value is comptime known, we try to do the coercion right away.
-    if (ref_is_value_index(ref)) {
+    if (ref_is_value_index(ref) && ref != 0) {
       Value *v = values_get(in->values, ref_to_value_index(ref));
-
-      ValueIndex idx_dst_type;
-      b32 ok = expect_comptime_value(in, f, as->type_to, &idx_dst_type); 
-      if (!ok) {
-        return Step_encountered_error;
-      }
-
-      TypeIndex type_dst = type_from_val(in, idx_dst_type);
 
       ValueIndex val_coerced;
       u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
@@ -284,14 +342,17 @@ internal u32 step(Interpreter *in, RunState *state) {
         return Step_encountered_error;
       }
 
-      res = ir_ref_from_value_index(val_coerced);
+      store_inst_value(f, pc, ir_ref_from_value_index(val_coerced));
     } else {
       // as->val is a non-comptime known value, so we can only check if the types are valid for coercion.
       // probably also insert some sort of widening cast that cannot fail
-      Todo();
-    }
 
-    store_inst_value(f, pc, res);
+      TypeIndex from = ref_typeof(in, f, as->val);
+
+      if (!is_type_coercible_to(in->types, type_dst, from)) {
+        Todo();
+      }
+    }
 
     f->pc = pc + 1;
   } break;
@@ -308,12 +369,15 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_type: {
     IrType *type = chunk_extra(f->chunk, pc);
     TypeIndex t;
-    switch (Cast(enum TypeKind, type->kind)) {
+    switch (Cast(TypeKind, type->kind)) {
     case Type_function: {
       Assert(type->arg_count >= 1);
 
       Assert(type->arg_count == 1); // For now don't support params
-      TypeIndex return_type = type_from_val(in, resolve(f, type->args[0]));
+
+      TypeIndex return_type;
+      b32 ok = expect_type_value_or_nil(in, f, resolve(f, type->args[0]), &return_type);
+      Assert(ok);
       t = types_add(in->types, &(Type){
         .kind = Type_function,
         .data.function = { .return_type = return_type, .param_count = 0 },
@@ -343,8 +407,11 @@ internal u32 step(Interpreter *in, RunState *state) {
       return Step_encountered_error;
     }
 
-    TypeIndex type_lhs = type_from_val(in, lhs);
-    TypeIndex type_rhs = type_from_val(in, rhs);
+    TypeIndex type_lhs;
+    ok = expect_type_value_or_nil(in, f, lhs, &type_lhs);
+
+    TypeIndex type_rhs;
+    ok = expect_type_value_or_nil(in, f, rhs, &type_rhs);
 
     TypeIndex type_unified;
     u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
@@ -361,10 +428,9 @@ internal u32 step(Interpreter *in, RunState *state) {
     b32 ok = expect_comptime_value(in, f, ref_func, &func);
     Assert(ok);
 
-    // TODO: make sure func is a type
-
-    TypeIndex idx = type_from_val(in, func);
-    Assert(idx);
+    TypeIndex idx;
+    ok = expect_type_value(in, f, func, &idx);
+    Assert(ok);
 
     Type *t = types_get(in->types, idx);
     ValueIndex v = val_from_type(in, t->data.function.return_type);
@@ -398,7 +464,7 @@ internal u32 step(Interpreter *in, RunState *state) {
       ValueFunc *data = values_alloc_data(in->values, sizeof(ValueFunc), Align_of(ValueFunc));
       *data = (ValueFunc){ .chunk = chunk };
 
-      u32 param_count = 0; // TODO set actual param count
+      u32 param_count = func->param_count;
       Type *func_type = arena_push_type_function(in->scratch, param_count);
       *func_type = (Type){
         .kind = Type_function,
@@ -407,6 +473,8 @@ internal u32 step(Interpreter *in, RunState *state) {
           .param_count = param_count,
         },
       };
+
+      //Todo(); // TODO set the actual return type and parameter types
 
       for (u32 i = 0; i < param_count; i++) {
         func_type->data.function.param_types[i] = 0;
@@ -426,7 +494,7 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_condbr: {
     IrCondBr *condbr = chunk_extra(f->chunk, pc);
     IrRef cond = resolve(f, condbr->cond);
-    if (ref_is_value_index(cond)) {
+    if (ref_is_valid_value_index(cond)) {
       Value *v = values_get(in->values, ref_to_value_index(cond));
       if (*Cast(u8*,v->data)) {
         f->pc = condbr->then;

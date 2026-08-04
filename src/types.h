@@ -3,7 +3,7 @@
 
 #include "blu.h"
 
-enum TypeKind {
+typedef enum {
   Type_comptime_int,
   Type_integer,
   Type_bool,
@@ -13,7 +13,7 @@ enum TypeKind {
   Type_slice,
   Type_array,
   Type_type,
-};
+} TypeKind;
 
 // How a comptime_int is actually stored. This will probably grow at some point.
 typedef i64 ComptimeInt;
@@ -80,5 +80,7 @@ u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
 TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);
+
+b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from);
 
 #endif // TYPES_H

@@ -101,7 +101,7 @@ InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, 
 }
 
 internal b32 opcode_references_extra(u8 op) {
-  switch (Cast(enum IrOpcode, op)) {
+  switch (Cast(IrOpcode, op)) {
 #define X(k,e,_1,_2) case k: return e;
 #include "x_ir.h"
 #undef X
@@ -109,7 +109,7 @@ internal b32 opcode_references_extra(u8 op) {
 }
 
 internal u32 flex_array_size(u8 op, void *payload) {
-  switch (Cast(enum IrOpcode, op)) {
+  switch (Cast(IrOpcode, op)) {
   case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);
   case IR_call: return Cast(IrCall*, payload)->arg_count * sizeof(IrRef);
   default:      return 0;
@@ -117,7 +117,7 @@ internal u32 flex_array_size(u8 op, void *payload) {
 }
 
 internal u32 extra_payload_size(u8 op, void *payload) {
-  switch (Cast(enum IrOpcode, op)) {
+  switch (Cast(IrOpcode, op)) {
 #define X(k,_1,d,_2) case k: return sizeof(d) + flex_array_size(op, payload);
 #include "x_ir.h"
 #undef X
@@ -125,7 +125,7 @@ internal u32 extra_payload_size(u8 op, void *payload) {
 }
 
 internal u32 extra_payload_align(u8 op) {
-  switch (Cast(enum IrOpcode, op)) {
+  switch (Cast(IrOpcode, op)) {
 #define X(k,_1,d,_2) case k: return Align_of(d);
 #include "x_ir.h"
 #undef X

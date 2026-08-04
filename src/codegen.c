@@ -117,21 +117,6 @@ internal InstructionIndex inst_add_lookup_value_typeof(CodeGen *gen, TokenIndex 
   return lookup;
 }
 
-// TODO: renmae this as it is not an instruction :)
-IrRef inst_add_const_type(CodeGen *gen, TypeIndex type) {
-  Value *v;
-  ValueIndex idx = values_alloc(gen->values, &v);
-  TypeIndex *data = values_alloc_data(gen->values, sizeof(TypeIndex), Align_of(TypeIndex));
-  *data = type;
-  *v = (Value){
-    .type = gen->common->type.type,
-    .data_size = sizeof(TypeIndex),
-    .data = data,
-  };
-
-  return ir_ref_from_value_index(idx);
-}
-
 IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   String text = gen->source->text;
   Tokens *tokens = &gen->source->tokens;

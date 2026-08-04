@@ -26,11 +26,15 @@ always_inline b32 ref_is_value_index(IrRef ref) {
   return (ref & Bitmask_ir_ref_is_instruction_index) == 0;
 }
 
+always_inline b32 ref_is_valid_value_index(IrRef ref) {
+  return ref_is_value_index(ref) && ref != 0;
+}
+
 always_inline b32 ref_is_instruction_index(IrRef ref) {
   return (ref & Bitmask_ir_ref_is_instruction_index) != 0;
 }
 
-always_inline b32 ir_ref_is_nil(IrRef ref) { return ref == 0; }
+always_inline b32 ref_is_nil(IrRef ref) { return ref == 0; }
 
 always_inline ValueIndex ref_to_value_index(IrRef ref) { return ref; }
 
@@ -46,7 +50,7 @@ always_inline IrRef ir_ref_from_value_index(ValueIndex idx) { return idx; }
 
 // -------------------------------------------------------------------------------------------------
 
-enum IrOpcode {
+typedef enum {
   IR_func,   // data references `IrFunc` in extra
   IR_param,  // data contains `IrRef`
   IR_alloc,  // data contains `TypeIndex`
@@ -73,7 +77,7 @@ enum IrOpcode {
 
   IR_return_type, // data contains `IrRef`
   IR_param_type,  // data references `IrParamType` in extra
-};
+} IrOpcode;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -109,6 +113,7 @@ typedef struct {
   IrRef val;
 } IrAs;
 
+// An IR_func instruction is followed by `param_count` IR_param instructions.
 typedef struct {
   u32 param_count;
   u32 instruction_count;

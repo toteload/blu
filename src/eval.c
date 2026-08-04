@@ -145,7 +145,16 @@ u32 eval_cast_int(
 internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
   Type *t = types_get(types, idx);
 
-  switch (t->kind) {
+  switch (Cast(TypeKind, t->kind)) {
+  case Type_integer:
+  case Type_bool:
+  case Type_comptime_int:
+  case Type_never:
+  case Type_nil:
+  case Type_type:
+    return True;
+  case Type_array: Todo();
+  case Type_slice: Todo();
   case Type_function: {
     if (t->data.function.return_type == 0) {
       return False;
@@ -157,7 +166,6 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
       }
     }
   } break;
-  default: Todo();
   }
 
   return True;
@@ -174,11 +182,19 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
   }
 
   if (a == 0) {
+    if (!is_type_complete(types, b)) {
+      return UnifyResult_type_is_incomplete;
+    }
+
     *unified = b;
     return UnifyResult_ok;
   }
 
   if (b == 0) {
+    if (!is_type_complete(types, a)) {
+      return UnifyResult_type_is_incomplete;
+    }
+
     *unified = a;
     return UnifyResult_ok;
   }

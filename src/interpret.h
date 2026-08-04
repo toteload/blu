@@ -18,13 +18,18 @@ typedef struct {
 typedef Stack(ScopeSpan) ScopeStack;
 
 typedef struct {
-  // This struct probably will also have to carry arguments for when function calls get added.
-  // And return value (maybe?)
-  DeclarationIndex decl_idx;
+  u32 start;
+  u32 end;
   InstructionIndex pc;
-  IrChunk *chunk;
+} EvalBlock;
+
+typedef struct {
+  DeclarationIndex decl_idx;
+  IrChunk chunk;
   ValueIndex *inst_map;
+
   ScopeStack scopes;
+
   ArenaSnapshot snapshot; // TODO remove this or actually do something with it
 } CallFrame;
 

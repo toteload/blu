@@ -41,6 +41,7 @@ b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 #define INTERNER_TYPE DeclarationKey
 #define INTERNER_INDEX_TYPE DeclarationIndex
 #define INTERNER_EXTRA_TYPE Declaration
+#define INTERNER_RESERVE_ZERO_INDEX
 #define INTERNER_FUNCTION_PREFIX decls
 #define INTERNER_HASH_FN hash_decl_key
 #define INTERNER_COMPARE_FN cmp_decl_key
@@ -223,9 +224,6 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     };
     add_primitive(compiler, string_lit("false"), compiler->common.val.false);
   }
-
-  // DeclarationIndex 0 is reserved for the root
-  decls_add(&compiler->decls, (DeclarationKey){.parent = 0, .name = 0});
 
   add_primitive(compiler, string_lit("type"), compiler->common.val.type);
   add_primitive(compiler, string_lit("nil"), compiler->common.val.nil);

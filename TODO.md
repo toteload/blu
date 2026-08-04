@@ -81,7 +81,6 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 ## Comptime
 
-- [x] Update declaration syntax to allow optional omission of declaration type.
 - [ ] Add `eval` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.
@@ -118,7 +117,9 @@ path is effectively dead until formatting is implemented — but it's live UB in
 ## Types
 
 - [ ] `struct` type
-- [ ] optional types. 
+- [ ] optional types.
+- [ ] Add `distinct` qualifier.
+- [ ] Aribtrary size integers
 - [ ] Integer range.
   - `a..b` exclusive range. `a..=b` inclusive range.
 - [ ] Refinement
