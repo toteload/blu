@@ -11,22 +11,24 @@
 #define MAX_BUILDERS 64 // Arbitrary number.
 
 typedef struct {
+  InstructionIndex residual_block;
+
+  // Keep track of brs to this block
+
   InstructionIndex start;
   InstructionIndex end;
+  InstructionIndex pc;
 } ScopeSpan;
 
 typedef Stack(ScopeSpan) ScopeStack;
 
 typedef struct {
-  u32 start;
-  u32 end;
-  InstructionIndex pc;
-} EvalBlock;
-
-typedef struct {
   DeclarationIndex decl_idx;
-  IrChunk chunk;
-  ValueIndex *inst_map;
+  IrChunk *chunk;
+
+  InstructionIndex pc;
+
+  IrRef *inst_map; // Refers to either a value or a residual instruction
 
   ScopeStack scopes;
 

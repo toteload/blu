@@ -233,14 +233,17 @@ internal u32 step(Interpreter *in, RunState *state) {
 
   switch (Cast(IrOpcode, op)) {
   case IR_block: {
-    u32 inst_count = chunk_data(f->chunk, pc);
-    push_scope(f, inst_count);
+    IrBuilder *builder = get_builder(in);
+    InstructionIndex inst = inst_alloc(builder);
+    inst_set_opcode(builder, inst, IR_nop);
+
+    store_inst_value(f, f->pc, ir_ref_from_instruction_index(inst));
+
     f->pc = pc + 1;
   } break;
   case IR_func: {
     IrFunc *func = chunk_extra(f->chunk, pc);
     u32 inst_count = func->instruction_count;
-    push_scope(f, inst_count);
 
     IrBuilder *builder = push_ir_builder(in);
     InstructionIndex inst_func = inst_alloc(builder);
@@ -309,7 +312,7 @@ internal u32 step(Interpreter *in, RunState *state) {
     }
 
     // If the value is comptime known, we try to do the coercion right away.
-    if (ref_is_value_index(ref) && ref != 0) {
+    if (ref_is_valid_value_index(ref)) {
       Value *v = values_get(in->values, ref_to_value_index(ref));
 
       ValueIndex val_coerced;
@@ -352,6 +355,10 @@ internal u32 step(Interpreter *in, RunState *state) {
       if (!is_type_coercible_to(in->types, type_dst, from)) {
         Todo();
       }
+
+      // TODO: check that no widening is necessary for this coercion
+
+      store_inst_value(f, pc, ref);
     }
 
     f->pc = pc + 1;
@@ -359,11 +366,14 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_br: {
     IrBr *br = chunk_extra(f->chunk, pc);
     IrRef val = resolve(f, br->value);
-    if (ref_is_value_index(val)) {
+    if (ref_is_valid_value_index(val)) {
       val = values_copy(in->values, ref_to_value_index(val));
+    } else {
+      IrBuilder *builder = get_builder(in);
+      InstructionIndex inst = inst_alloc(builder);
+      inst_set_opcode(builder, inst, IR_br);
     }
     store_inst_value(f, br->block, val);
-    pop_scopes_to(in, f, br->block);
     f->pc = br->block + chunk_data(f->chunk, br->block);
   } break;
   case IR_type: {
@@ -455,7 +465,6 @@ internal u32 step(Interpreter *in, RunState *state) {
 
       IrChunk chunk;
       irbuilder_flatten(builder, in->perm, &chunk);
-      pop_scopes_to(in, f, span.start);
 
       // TODO pop the builder
 
@@ -497,7 +506,7 @@ internal u32 step(Interpreter *in, RunState *state) {
     if (ref_is_valid_value_index(cond)) {
       Value *v = values_get(in->values, ref_to_value_index(cond));
       if (*Cast(u8*,v->data)) {
-        f->pc = condbr->then;
+        f->pc += 1;
       } else {
         f->pc = condbr->otherwise;
       }
@@ -526,6 +535,8 @@ internal u32 step(Interpreter *in, RunState *state) {
       .func = func,
       .arg_count = 0,
     };
+
+    store_inst_value(f, pc, ir_ref_from_instruction_index(inst_call));
 
     f->pc += 1;
   } break;

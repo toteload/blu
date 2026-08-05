@@ -86,6 +86,34 @@ void inst_block_end(IrBuilder *builder, InstructionIndex block) {
   inst_set_data(builder, block, block_inst_count);
 }
 
+void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref) {
+  InstructionIndex br = inst_alloc(builder);
+  inst_set_opcode(builder, br, IR_br);
+
+  IrBr *data = inst_push_data(builder, br, IrBr);
+  *data = (IrBr){
+    .block = block,
+    .value = ref,
+  };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+}
+
+void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref) {
+  InstructionIndex br = inst_alloc(builder);
+  inst_set_opcode(builder, br, IR_br);
+
+  IrBr *data = inst_push_data(builder, br, IrBr);
+  *data = (IrBr){
+    .block = target,
+    .value = ref,
+  };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+}
+
 InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source) {
   InstructionIndex idx = inst_alloc(builder);
   inst_set_opcode(builder, idx, IR_as);

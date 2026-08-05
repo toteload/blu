@@ -51,6 +51,8 @@ always_inline IrRef ir_ref_from_value_index(ValueIndex idx) { return idx; }
 // -------------------------------------------------------------------------------------------------
 
 typedef enum {
+  IR_nop,
+
   IR_func,   // data references `IrFunc` in extra
   IR_param,  // data contains `IrRef`
   IR_alloc,  // data contains `TypeIndex`
@@ -74,6 +76,7 @@ typedef enum {
   IR_unify, // data references `IrUnify` in extra
 
   IR_type, // data references `IrType` in extra
+  IR_typeof, // data contains `IrRef`
 
   IR_return_type, // data contains `IrRef`
   IR_param_type,  // data references `IrParamType` in extra
@@ -211,6 +214,8 @@ void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
 InstructionIndex inst_block_begin(IrBuilder *builder);
 void inst_block_end(IrBuilder *builder, InstructionIndex block);
+void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
+void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
 InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source);
 
 void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);

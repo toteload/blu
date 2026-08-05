@@ -232,6 +232,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     void *extra = ptr_offset(chunk->extra, data);
 
     switch (Cast(IrOpcode, op)) {
+    case IR_nop: break;
     case IR_func: {
       IrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
@@ -267,6 +268,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_param:
     case IR_ret:
     case IR_load:
+    case IR_typeof:
     case IR_return_type: {
       ir_ref_print(out, data, source, types, values);
     } break;

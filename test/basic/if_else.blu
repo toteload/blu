@@ -1,5 +1,5 @@
 mod main
 
-main: () i32 = || { if foo() { 0 } else { false } }
+main: () i32 = || if foo() { 0 } else { false }
 
-foo := ||: bool { true }
+foo := ||: bool true

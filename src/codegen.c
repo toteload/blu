@@ -149,46 +149,35 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     InstructionIndex block = inst_block_begin(builder);
 
-    IrRef cond = gen_code(gen, if_else->cond, ir_ref_from_value_index(gen->common->val.bool));
+    InstructionIndex cond_block = inst_block_begin(builder);
+    IrRef cond_val = gen_code(gen, if_else->cond, ir_ref_from_value_index(gen->common->val.bool));
+    inst_block_end_with_value(builder, cond_block, cond_val);
+    IrRef cond = ir_ref_from_instruction_index(cond_block);
 
     InstructionIndex condbr = inst_alloc(builder);
     inst_set_opcode(builder, condbr, IR_condbr);
 
-    InstructionIndex block_then = inst_block_begin(builder);
-    {
-      IrRef value = gen_code(gen, if_else->then, type_destination);
-      InstructionIndex br = inst_alloc(builder);
-      inst_set_opcode(builder, br, IR_br);
+    InstructionIndex then_block = inst_block_begin(builder);
+    IrRef then_val = gen_code(gen, if_else->then, type_destination);
+    inst_block_end_with_value_and_target(builder, then_block, block, then_val);
 
-      IrBr *data = inst_push_data(builder, br, IrBr);
-      *data = (IrBr){
-        .block = block,
-        .value = value,
-      };
-    }
-    inst_block_end(builder, block_then);
+    IrCondBr *data_condbr = inst_push_data(builder, condbr, IrCondBr);
 
-    InstructionIndex block_otherwise = inst_block_begin(builder);
     if (if_else->otherwise) {
-      IrRef value = gen_code(gen, if_else->otherwise, type_destination);
-      InstructionIndex br = inst_alloc(builder);
-      inst_set_opcode(builder, br, IR_br);
-      IrBr *data = inst_push_data(builder, br, IrBr);
-      *data = (IrBr){
-        .block = block,
-        .value = value,
+      InstructionIndex else_block = inst_block_begin(builder);
+      IrRef else_val = gen_code(gen, if_else->otherwise, type_destination);
+      inst_block_end_with_value_and_target(builder, else_block, block, else_val);
+
+      *data_condbr = (IrCondBr){
+        .cond = cond,
+        .then = then_block,
+        .otherwise = else_block,
       };
+    } else {
+      Todo();
     }
-    inst_block_end(builder, block_otherwise);
 
     inst_block_end(builder, block);
-
-    IrCondBr *data = inst_push_data(builder, condbr, IrCondBr);
-    *data = (IrCondBr){
-      .cond = cond,
-      .then = block_then,
-      .otherwise = block_otherwise,
-    };
 
     res = ir_ref_from_instruction_index(block);
   } break;
