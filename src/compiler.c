@@ -3,6 +3,7 @@
 #include "string_interner.h"
 #include "codegen.h"
 #include "interpret.h"
+#include "ir.h"
 
 #include <stdarg.h>
 
@@ -353,7 +354,9 @@ internal b32 resolve_entry(Resolver *resolver) {
       decl->resolve_status = ResolveStatus_fully_resolved;
 
       CallFrame *f = top_frame(&entry->state);
-      decl->data.decl.val = values_copy(resolver->in->values, f->inst_map[0]);
+      ResolvedRef ref = f->inst_map[0];
+      Assert(ref_is_some_value_index(ref));
+      decl->data.decl.val = values_copy(resolver->in->values, ref_to_value_index(ref));
     }
 
     return True;
@@ -365,7 +368,8 @@ internal b32 resolve_entry(Resolver *resolver) {
 
   if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
     CallFrame *f = top_frame(&entry->state);
-    DeclarationIndex idx = chunk_data(f->chunk, f->pc);
+    ScopeSpan *s = stack_peek_ptr(&f->scopes);
+    DeclarationIndex idx = chunk_data(f->chunk, s->pc);
 
     Declaration *decl_to_resolve = decls_extra_get_ptr(resolver->decls, idx);
 

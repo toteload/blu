@@ -248,6 +248,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
       fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
     } break;
     case IR_block:
+    case IR_eval_block:
     case IR_loop: {
       fprintf(out, "count=%u", data);
       stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
@@ -270,7 +271,7 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_load:
     case IR_typeof:
     case IR_return_type: {
-      ir_ref_print(out, data, source, types, values);
+      ir_ref_print(out, (IrRef){data}, source, types, values);
     } break;
     case IR_store: {
       IrStore *store = extra;

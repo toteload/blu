@@ -121,7 +121,7 @@ InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, 
 
   IrAs *data = inst_push_data(builder, idx, IrAs);
   *data = (IrAs){
-    .type_to   = type_destination,
+    .type_to = type_destination,
     .val = val,
   };
 

@@ -6,19 +6,27 @@
 
 // For simplicity the maximum depths are a fixed number. This will likely change.
 #define MAX_SCOPE_DEPTH 64
-#define MAX_CALL_DEPTH  128
+#define MAX_CALL_DEPTH 128
 
 #define MAX_BUILDERS 64 // Arbitrary number.
+#define MAX_BREAKS_AND_RETURNS 16
 
 typedef struct {
+  u8 block_opcode; // block, eval_block, func
   InstructionIndex residual_block;
-
-  // Keep track of brs to this block
 
   InstructionIndex start;
   InstructionIndex end;
   InstructionIndex pc;
+
+  struct {
+    u32 len;
+    ResolvedRef values[MAX_BREAKS_AND_RETURNS];
+    InstructionIndex sources[MAX_BREAKS_AND_RETURNS];
+  } breaks_and_returns;
 } ScopeSpan;
+
+void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source, ResolvedRef val);
 
 typedef Stack(ScopeSpan) ScopeStack;
 
@@ -26,9 +34,7 @@ typedef struct {
   DeclarationIndex decl_idx;
   IrChunk *chunk;
 
-  InstructionIndex pc;
-
-  IrRef *inst_map; // Refers to either a value or a residual instruction
+  ResolvedRef *inst_map;
 
   ScopeStack scopes;
 
@@ -43,9 +49,10 @@ typedef struct {
 } RunState;
 
 void runstate_init(RunState *state, Arena *arena);
-void frame_push(RunState *state, Arena *arena, Declaration* decl);
+CallFrame *frame_push(RunState *state, Arena *arena, Declaration* decl);
 void frame_pop(RunState *state, Arena *arena, ValueStore *values);
 CallFrame *top_frame(RunState *state);
+ScopeSpan *get_func_scope(CallFrame *frame);
 
 typedef struct {
   Arena               *perm;
