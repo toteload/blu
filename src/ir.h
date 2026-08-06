@@ -127,6 +127,7 @@ typedef struct {
 typedef struct {
   u32 param_count;
   u32 instruction_count;
+  IrRef return_type;
 } IrFunc;
 
 typedef struct {

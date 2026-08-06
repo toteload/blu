@@ -5,6 +5,8 @@
 // The interpreter's per-frame maps grow with the C allocator; cstd_allocator is defined in compiler.c.
 extern Allocator const cstd_allocator;
 
+internal TypeIndex ref_typeof(Interpreter *in, ResolvedRef ref);
+
 void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source, ResolvedRef val) {
   if (scope->breaks_and_returns.len == MAX_BREAKS_AND_RETURNS) {
     Todo();
@@ -50,32 +52,38 @@ ScopeSpan *get_func_scope(CallFrame *frame) {
   Panic();
 }
 
-internal b32 finalize_block(ScopeSpan *block) {
-  for (u32 i = 0; i < block->breaks_and_returns.len; i++) {
-    
+internal b32 finalize_block(Interpreter *in, ScopeSpan *block) {
+  TypeIndex type = ref_typeof(in, block->breaks_and_returns.values[0]);
+
+  for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
+    Todo();
   }
 
-  Todo();
   return True;
 }
 
-internal b32 finalize_function(CallFrame *f, ScopeSpan *func) {
+internal b32 finalize_function(Interpreter *in, CallFrame *f, ScopeSpan *func) {
   ScopeSpan *s = stack_peek_ptr(&f->scopes);
 
   while (s != func) {
-    b32 ok = finalize_block(s);
+    b32 ok = finalize_block(in, s);
     if (!ok) {
       return False;
     }
+
+    stack_pop(&f->scopes);
+    s = stack_peek_ptr(&f->scopes);
   }
 
-  TypeIndex return_types[MAX_BREAKS_AND_RETURNS] = {0};
+  TypeIndex return_type = ref_typeof(in, func->breaks_and_returns.values[0]);
 
-  for (u32 i = 0; i < func->breaks_and_returns.len; i++) {
-    
+  for (u32 i = 1; i < func->breaks_and_returns.len; i++) {
+    Todo();
   }
 
-  Todo();
+  stack_pop(&f->scopes);
+
+  return True;
 }
 
 CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
@@ -263,28 +271,13 @@ internal ValueIndex val_from_type(Interpreter *in, TypeIndex t) {
   return res;
 }
 
-internal TypeIndex ref_typeof(Interpreter *in, CallFrame *f, IrRef ref) {
-  ResolvedRef r = resolve(f, ref);
-  if (ref_is_some_value_index(r)) {
-    Value *v = values_get(in->values, ref_to_value_index(r));
+internal TypeIndex ref_typeof(Interpreter *in, ResolvedRef ref) {
+  if (ref_is_some_value_index(ref)) {
+    Value *v = values_get(in->values, ref_to_value_index(ref));
     return v->type;
   }
 
   Todo();
-
-  InstructionIndex inst = ref_to_instruction_index(ref);
-
-  IrOpcode op = f->chunk->opcodes[inst];
-  switch (Cast(IrOpcode, op)) {
-  case IR_call: {
-    IrCall *call = chunk_extra(f->chunk, inst);
-    TypeIndex func = ref_typeof(in, f, call->func);
-
-    Type *f = types_get(in->types, func);
-    return f->data.function.return_type;
-  } break;
-  default: Todo();
-  }
 }
 
 internal u32 step(Interpreter *in, RunState *state) {
@@ -427,7 +420,7 @@ internal u32 step(Interpreter *in, RunState *state) {
       // as->val is a non-comptime known value, so we can only check if the types are valid for coercion.
       // probably also insert some sort of widening cast that cannot fail
 
-      TypeIndex from = ref_typeof(in, f, as->val);
+      TypeIndex from = ref_typeof(in, as->val);
 
       if (!is_type_coercible_to(in->types, type_dst, from)) {
         Todo();
@@ -567,7 +560,7 @@ internal u32 step(Interpreter *in, RunState *state) {
     scope_add_break_or_return(func_scope, pc, val);
 
     if (pc + 1 == func_scope->end) {
-      b32 ok = finalize_function(f, func_scope);
+      b32 ok = finalize_function(in, f, func_scope);
       if (!ok) {
         Todo();
       }
