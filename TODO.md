@@ -100,9 +100,6 @@ path is effectively dead until formatting is implemented — but it's live UB in
 - [ ] Add assign of variables.
 
 
-## Code organization
-
-
 ## Control flow
 
 - [ ] `break`/`continue`
@@ -136,6 +133,8 @@ path is effectively dead until formatting is implemented — but it's live UB in
 - [ ] Add coercion of `[1]T`, `[1][1]T`, ... to `T`.
   - This has the benefit of having ASCII character literals for free by using the string literals.
     The type of `"A"` is `[1]u8`
+- [ ] Floating point type
+- [ ] Add flow typing
 
 - pointer to member of a struct. `PtrY := *{struct { x: i32, y: i32 }}.y` this type is only allowed to point to y member.
 
@@ -164,9 +163,5 @@ Maybe DO implement this in the language itself.
 
 ---
 
-- [ ] Floating point type
-
 - [ ] Bounds checking
 - [ ] Integer overflow checks
-
-- [ ] Pattern matching (?)

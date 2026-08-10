@@ -11,13 +11,21 @@
 #define MAX_BUILDERS 64 // Arbitrary number.
 #define MAX_BREAKS_AND_RETURNS 16
 
+typedef enum {
+  Scope_chunk,
+  Scope_block,
+  Scope_eval_block,
+  Scope_func,
+} ScopeKind;
+
 typedef struct {
-  u8 block_opcode; // block, eval_block, func
-  InstructionIndex residual_block;
+  u8 scope_kind;
 
   InstructionIndex start;
   InstructionIndex end;
   InstructionIndex pc;
+
+  InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
 
   struct {
     u32 len;
@@ -40,6 +48,8 @@ typedef struct {
 
   ArenaSnapshot snapshot; // TODO remove this or actually do something with it
 } CallFrame;
+
+ScopeSpan *push_scope(CallFrame *frame);
 
 typedef Stack(CallFrame) CallStack;
 
@@ -70,6 +80,7 @@ typedef struct {
 
 typedef enum {
   Step_ok,
+  Step_leave_scope,
   Step_encountered_error,
   Step_resolve_declaration_type,
   Step_resolve_declaration_value,
@@ -85,6 +96,6 @@ typedef enum {
   Run_resolve_declaration_value = Step_resolve_declaration_value,
 } RunResult;
 
-u32 run_until(Interpreter *in, RunState *state, u32 inst_end);
+u32 run_block(Interpreter *in, RunState *state);
 
 #endif // INTERPRET_H

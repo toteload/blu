@@ -1,4 +1,5 @@
 #include "types.h"
+#include "value.h"
 
 #define XXH_INLINE_ALL
 #include "xxhash.h"
@@ -173,7 +174,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   }
   case Type_function: {
     // A variable holding a function is stored as an 8-byte pointer to the actual code of the function.
-    return (TypeSizeInfo){ .size = 8, .align = 8, .stride = 8 };
+    return (TypeSizeInfo){ .size = sizeof(ValueFunc), .align = Align_of(ValueFunc), .stride = sizeof(ValueFunc) };
   }
   }
 

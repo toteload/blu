@@ -44,12 +44,16 @@ CallFrame *top_frame(RunState *state) {
 ScopeSpan *get_func_scope(CallFrame *frame) {
   for (u32 i = frame->scopes.len; i-- > 0;) {
     ScopeSpan *s = &frame->scopes.data[i];
-    if (s->block_opcode == IR_func) {
+    if (s->scope_kind == Scope_func) {
       return s;
     }
   }
 
   Panic();
+}
+
+ScopeSpan *push_scope(CallFrame *frame) {
+  return stack_push_ptr(&frame->scopes);
 }
 
 internal b32 finalize_block(Interpreter *in, ScopeSpan *block) {
@@ -81,8 +85,6 @@ internal b32 finalize_function(Interpreter *in, CallFrame *f, ScopeSpan *func) {
     Todo();
   }
 
-  stack_pop(&f->scopes);
-
   return True;
 }
 
@@ -99,13 +101,11 @@ CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
 
   stack_init(&f->scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
 
-  Assert(chunk->opcodes[0] == IR_eval_block);
-
   stack_push(&f->scopes, ((ScopeSpan){
-    .block_opcode = IR_eval_block,
+    .scope_kind = Scope_chunk,
     .start = 0,
     .end = f->chunk->opcode_count,
-    .pc = 1,
+    .pc = 0,
   }));
 
   return f;
@@ -198,7 +198,7 @@ internal b32 expect_comptime_value(Interpreter *in, CallFrame *f, IrRef ref, Val
         .decl_idx = f->decl_idx,
         .data.offset = s->pc,
       },
-      string_lit("Value must be comptime known")
+      string_lit("Value may not be omitted")
     );
 
     return False;
@@ -209,12 +209,7 @@ internal b32 expect_comptime_value(Interpreter *in, CallFrame *f, IrRef ref, Val
   return True;
 }
 
-internal b32 expect_type_value(Interpreter *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
-  if (val == 0) {
-    Todo();
-    return False;
-  }
-
+internal b32 _get_value_expect_type(Interpreter *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
   Value *v = values_get(in->values, val);
 
   ScopeSpan *s = stack_peek_ptr(&f->scopes);
@@ -238,13 +233,29 @@ internal b32 expect_type_value(Interpreter *in, CallFrame *f, ValueIndex val, Ty
   return True;
 }
 
-internal b32 expect_type_value_or_nil(Interpreter *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
+internal b32 expect_type_value(Interpreter *in, CallFrame *f, IrRef ref, TypeIndex *out) {
+  ValueIndex val;
+  b32 ok = expect_comptime_value(in, f, ref, &val);
+  if (!ok) {
+    return False;
+  }
+
+  return _get_value_expect_type(in, f, val, out);
+}
+
+internal b32 expect_type_value_or_nil(Interpreter *in, CallFrame *f, IrRef ref, TypeIndex *out) {
+  ValueIndex val;
+  b32 ok = expect_comptime_value_or_nil(in, f, ref, &val);
+  if (!ok) {
+    return False;
+  }
+
   if (val == 0) {
     *out = 0;
     return True;
   }
 
-  return expect_type_value(in, f, val, out);
+  return _get_value_expect_type(in, f, val, out);
 }
 
 // ASSUME: `v` refers to a TypeIndex
@@ -277,6 +288,22 @@ internal TypeIndex ref_typeof(Interpreter *in, ResolvedRef ref) {
     return v->type;
   }
 
+  InstructionIndex i = ref_to_instruction_index(ref);
+
+  IrBuilder *builder = get_builder(in);
+
+  u8 op = inst_opcode(builder, i);
+
+  switch (Cast(IrOpcode, op)) {
+  case IR_call: {
+    IrCall *call = inst_get_extra(builder, i);
+    TypeIndex func_type_idx = ref_typeof(in, call->func);
+    Type *func_type = types_get(in->types, func_type_idx);
+    return func_type->data.function.return_type;
+  } break;
+  default: Todo();
+  }
+
   Todo();
 }
 
@@ -289,20 +316,31 @@ internal u32 step(Interpreter *in, RunState *state) {
 
   switch (Cast(IrOpcode, op)) {
   case IR_eval_block: {
-    s->pc += 1;
+    Todo();
   } break;
   case IR_block: {
-    if (s->block_opcode == IR_eval_block) {
+    if (s->scope_kind == Scope_eval_block) {
       Todo();
     }
 
+    u32 inst_count = chunk_data(f->chunk, pc);
+
     IrBuilder *builder = get_builder(in);
     InstructionIndex inst = inst_alloc(builder);
-    inst_set_opcode(builder, inst, IR_nop);
+    inst_set_opcode(builder, inst, IR_block);
 
     store_inst_value(f, s->pc, resolved_ref_from_instruction_index(inst));
 
-    s->pc = pc + 1;
+    ScopeSpan *scope = push_scope(f);
+    *scope = (ScopeSpan){
+      .scope_kind = Scope_block,
+      .start = pc,
+      .end = pc + inst_count,
+      .pc = pc + 1,
+      .residual = inst,
+    };
+
+    s->pc += inst_count;
   } break;
   case IR_func: {
     IrFunc *func = chunk_extra(f->chunk, pc);
@@ -314,8 +352,20 @@ internal u32 step(Interpreter *in, RunState *state) {
     IrFunc *data_func = inst_push_data(builder, inst_func, IrFunc);
     data_func->param_count = func->param_count;
 
+    TypeIndex return_type;
+    b32 ok = expect_type_value(in, f, func->return_type, &return_type);
+    if (!ok) {
+      return Step_encountered_error;
+    }
+
+    data_func->return_type = ir_ref_from_value_index(val_from_type(in, return_type));
+
+    for (u32 i = 0; i < func->param_count; i++) {
+      Todo(); // set param types
+    }
+
     stack_push(&f->scopes, ((ScopeSpan){
-      .block_opcode = IR_func,
+      .scope_kind = Scope_func,
       .start = pc,
       .end   = pc + inst_count,
       .pc    = pc + 1,
@@ -369,14 +419,8 @@ internal u32 step(Interpreter *in, RunState *state) {
     IrAs *as = chunk_extra(f->chunk, pc);
     ResolvedRef ref = resolve(f, as->val);
 
-    ValueIndex idx_dst_type;
-    b32 ok = expect_comptime_value(in, f, as->type_to, &idx_dst_type); 
-    if (!ok) {
-      return Step_encountered_error;
-    }
-
     TypeIndex type_dst;
-    ok = expect_type_value(in, f, idx_dst_type, &type_dst);
+    b32 ok = expect_type_value(in, f, as->type_to, &type_dst);
     if (!ok) {
       return Step_encountered_error;
     }
@@ -420,7 +464,7 @@ internal u32 step(Interpreter *in, RunState *state) {
       // as->val is a non-comptime known value, so we can only check if the types are valid for coercion.
       // probably also insert some sort of widening cast that cannot fail
 
-      TypeIndex from = ref_typeof(in, as->val);
+      TypeIndex from = ref_typeof(in, resolve(f, as->val));
 
       if (!is_type_coercible_to(in->types, type_dst, from)) {
         Todo();
@@ -436,7 +480,7 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_br: {
     IrBr *br = chunk_extra(f->chunk, pc);
 
-    if (s->block_opcode == IR_eval_block) {
+    if (s->scope_kind == Scope_eval_block) {
       ValueIndex val;
       b32 ok = expect_comptime_value(in, f, br->value, &val);
       if (!ok) {
@@ -447,31 +491,40 @@ internal u32 step(Interpreter *in, RunState *state) {
       store_inst_value(f, br->block, resolved_ref_from_value_index(copy));
 
       stack_pop(&f->scopes);
-      break;
-    } else {
-      Todo();
+
+      return Step_leave_scope;
     }
 
-    //if (ref_is_valid_value_index(val)) {
-    //  IrRef copy = ir_ref_from_value_index(values_copy(in->values, ref_to_value_index(val)));
+    if (s->scope_kind == Scope_block) {
+      ResolvedRef ref = resolve(f, br->value);
+      if (ref_is_some_value_index(ref)) {
+        ref = resolved_ref_from_value_index(values_copy(in->values, ref_to_value_index(ref)));
+      }
 
-    //  ScopeSpan *scope = Null; // TODO
-    //  Todo();
+      IrBuilder *builder = get_builder(in);
+      InstructionIndex inst_br = inst_alloc(builder);
+      inst_set_opcode(builder, inst_br, IR_br);
+      IrBr *data_br = inst_push_data(builder, inst_br, IrBr);
+      *data_br = (IrBr){
+        .block = s->residual,
+        .value = ref,
+      };
 
-    //  //if (scope->flags & Scope_comptime_eval) {
-    //  //  Todo(); // what if the top scope is not the sscope you are breaking to?
-    //  //  store_inst_value(f, br->block, val);
-    //  //}
+      scope_add_break_or_return(s, pc, ref);
 
-    //  scope_add_break_or_return(scope, (ValueSource){ .value = copy, .source = pc });
-    //} else {
-    //  IrBuilder *builder = get_builder(in);
-    //  InstructionIndex inst = inst_alloc(builder);
-    //  inst_set_opcode(builder, inst, IR_br);
-    //}
+      if (s->end == pc + 1) {
+        b32 ok = finalize_block(in, s);
+        if (!ok) {
+          Todo();
+        }
 
+        stack_pop(&f->scopes);
+      }
 
-    //s->pc = br->block + chunk_data(f->chunk, br->block);
+      return Step_leave_scope;
+    }
+
+    Unreachable();
   } break;
   case IR_type: {
     IrType *type = chunk_extra(f->chunk, pc);
@@ -483,7 +536,7 @@ internal u32 step(Interpreter *in, RunState *state) {
       Assert(type->arg_count == 1); // For now don't support params
 
       TypeIndex return_type;
-      b32 ok = expect_type_value_or_nil(in, f, ref_to_value_index(resolve(f, type->args[0])), &return_type);
+      b32 ok = expect_type_value_or_nil(in, f, type->args[0], &return_type);
       Assert(ok);
       t = types_add(in->types, &(Type){
         .kind = Type_function,
@@ -502,23 +555,17 @@ internal u32 step(Interpreter *in, RunState *state) {
 
     b32 ok = True;
 
-    ValueIndex lhs;
-    ok = expect_comptime_value_or_nil(in, f, unify->type_lhs, &lhs);
-    if (!ok) {
-      return Step_encountered_error;
-    }
-
-    ValueIndex rhs;
-    ok = expect_comptime_value_or_nil(in, f, unify->type_rhs, &rhs);
-    if (!ok) {
-      return Step_encountered_error;
-    }
-
     TypeIndex type_lhs;
-    ok = expect_type_value_or_nil(in, f, lhs, &type_lhs);
+    ok = expect_type_value_or_nil(in, f, unify->type_lhs, &type_lhs);
+    if (!ok) {
+      return Step_encountered_error;
+    }
 
     TypeIndex type_rhs;
-    ok = expect_type_value_or_nil(in, f, rhs, &type_rhs);
+    ok = expect_type_value_or_nil(in, f, unify->type_rhs, &type_rhs);
+    if (!ok) {
+      return Step_encountered_error;
+    }
 
     TypeIndex type_unified;
     u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
@@ -531,12 +578,8 @@ internal u32 step(Interpreter *in, RunState *state) {
   case IR_return_type: {
     IrRef ref_func = (IrRef){ chunk_data(f->chunk, pc) };
 
-    ValueIndex func;
-    b32 ok = expect_comptime_value(in, f, ref_func, &func);
-    Assert(ok);
-
     TypeIndex idx;
-    ok = expect_type_value(in, f, func, &idx);
+    b32 ok = expect_type_value(in, f, ref_func, &idx);
     Assert(ok);
 
     Type *t = types_get(in->types, idx);
@@ -565,52 +608,48 @@ internal u32 step(Interpreter *in, RunState *state) {
         Todo();
       }
 
-      break;
-    }
+      IrFunc *ir_func = chunk_extra(f->chunk, func_scope->start);
 
-    Todo();
+      u32 param_count = ir_func->param_count;
 
-    ScopeSpan *span = stack_peek_ptr(&f->scopes);
-    if (s->pc == span->end) {
-      IrFunc *func = inst_get_extra(builder, 0);
-      func->instruction_count = inst_offset(builder, 0);
+      Type *type = arena_push_type_function(in->scratch, param_count);
+      type->kind = Type_function;
+      type->data.function.param_count = param_count;
 
-      IrChunk chunk;
-      irbuilder_flatten(builder, in->perm, &chunk);
-
-      // TODO pop the builder
-
-      Value *v;
-      ValueIndex vidx = values_alloc(in->values, &v);
-      ValueFunc *data = values_alloc_data(in->values, sizeof(ValueFunc), Align_of(ValueFunc));
-      *data = (ValueFunc){ .chunk = chunk };
-
-      u32 param_count = func->param_count;
-      Type *func_type = arena_push_type_function(in->scratch, param_count);
-      *func_type = (Type){
-        .kind = Type_function,
-        .data.function = {
-          .return_type = 0,
-          .param_count = param_count,
-        },
-      };
-
-      //Todo(); // TODO set the actual return type and parameter types
-
-      for (u32 i = 0; i < param_count; i++) {
-        func_type->data.function.param_types[i] = 0;
+      ok = expect_type_value(in, f, ir_func->return_type, &type->data.function.return_type);
+      if (!ok) {
+        Todo();
       }
 
-      TypeIndex t = types_add(in->types, func_type);
+      for (u32 i = 0; i < param_count; i++) {
+        Todo();
+      }
 
+      TypeIndex t = types_add(in->types, type);
+
+      ValueFunc *data = values_alloc_data_type(in->values, ValueFunc);
+      Value *v;
+      ValueIndex vidx = values_alloc(in->values, &v);
       *v = (Value){
         .type = t,
         .data = data,
         .data_size = sizeof(ValueFunc),
       };
 
-      store_inst_value(f, span->start, resolved_ref_from_value_index(vidx));
+      IrBuilder *builder = get_builder(in);
+
+      Cast(IrFunc*, inst_get_extra(builder, 0))->instruction_count = builder->kinds.len;
+
+      irbuilder_flatten(builder, in->perm, &data->chunk);
+
+      store_inst_value(f, func_scope->start, resolved_ref_from_value_index(vidx));
+
+      stack_pop(&f->scopes);
+
+      return Step_leave_scope;
     }
+
+    Todo();
   } break;
   case IR_condbr: {
     IrCondBr *condbr = chunk_extra(f->chunk, pc);
@@ -658,20 +697,29 @@ internal u32 step(Interpreter *in, RunState *state) {
   return Step_ok;
 }
 
-u32 run_until(Interpreter *in, RunState *state, u32 end) {
+u32 run_block(Interpreter *in, RunState *state) {
   CallFrame *base_frame = top_frame(state);
+  u32 target_scope_depth = base_frame->scopes.len - 1;
+
   while (True) {
     CallFrame *f = top_frame(state);
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
-
-    if (f == base_frame && s->pc == end) {
-      return Run_reached_end;
-    }
 
     u32 err = step(in, state);
-    if (err != Step_ok) {
-      return err;
+
+    if (!err) {
+      continue;
     }
+
+    if (err == Step_leave_scope) {
+      u32 scope_depth = f->scopes.len;
+      if (f == base_frame && scope_depth == target_scope_depth) {
+        return Run_reached_end;
+      }
+
+      continue;
+    }
+
+    return err;
   }
 
   Unreachable();

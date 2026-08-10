@@ -69,7 +69,6 @@ struct Declaration {
     struct {
       Source  *source;
       u32      tree_idx;
-      u32      typecheck_end;
       IrChunk  chunk;
       ValueIndex val; // will be set after the declaration has been fully resolved
     } decl;

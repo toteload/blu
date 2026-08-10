@@ -235,7 +235,8 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_nop: break;
     case IR_func: {
       IrFunc *func = extra;
-      fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
+      fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
+      ir_ref_print(out, func->return_type, source, types, values);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {

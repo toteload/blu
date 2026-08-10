@@ -28,6 +28,7 @@ struct ValueStore {
   Allocator  payload_allocator;
   ValueList  list;
 };
+
 typedef struct {
   IrChunk chunk;
 } ValueFunc;
@@ -46,5 +47,8 @@ void        values_dealloc_data(ValueStore *values, void *data, u32 size);
 void        values_dealloc(ValueStore *values, ValueIndex idx);
 Value      *values_get(ValueStore *values, ValueIndex idx);
 ValueIndex  values_copy(ValueStore *values, ValueIndex val);
+
+#define values_alloc_data_type(values, type) \
+  Cast(type*, values_alloc_data((values), sizeof(type), Align_of(type)))
 
 #endif // VALUE_H

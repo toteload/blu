@@ -96,7 +96,7 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
 internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
   Value *v;
   ValueIndex res = values_alloc(&compiler->values, &v);
-  TypeIndex *data = values_alloc_data(&compiler->values, sizeof(TypeIndex), Align_of(TypeIndex));
+  TypeIndex *data = values_alloc_data_type(&compiler->values, TypeIndex);
   *data = t;
   *v = (Value){
     .type = compiler->common.type.type,
@@ -334,18 +334,40 @@ push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolv
 internal b32 resolve_entry(Resolver *resolver) {
   ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
   Declaration *decl = entry->decl;
+  IrChunk *chunk = &decl->data.decl.chunk;
+
+  IrDeclaration *ir_decl = chunk_extra(chunk, 0);
+
   u8 resolve_status = decl->resolve_status;
 
   decl->resolve_status = (resolve_status + 1);
 
-  u32 inst_end;
+  CallFrame *frame = top_frame(&entry->state);
+  ScopeSpan *scope = push_scope(frame);
+
   if (resolve_status < ResolveStatus_type_resolved) {
-    inst_end = decl->data.decl.typecheck_end;
+    InstructionIndex block = ref_to_instruction_index(ir_decl->declared_type);
+    u32 count = chunk_data(chunk, block);
+
+    *scope = (ScopeSpan){
+      .scope_kind = Scope_eval_block,
+      .start = block,
+      .end = block + count,
+      .pc = block + 1,
+    };
   } else {
-    inst_end = decl->data.decl.chunk.opcode_count;
+    InstructionIndex block = ref_to_instruction_index(ir_decl->value);
+    u32 count = chunk_data(chunk, block);
+
+    *scope = (ScopeSpan){
+      .scope_kind = Scope_eval_block,
+      .start = block,
+      .end = block + count,
+      .pc = block + 1,
+    };
   }
 
-  u32 err = run_until(resolver->in, &entry->state, inst_end);
+  u32 err = run_block(resolver->in, &entry->state);
 
   if (err == Run_reached_end) {
     if (resolve_status < ResolveStatus_type_resolved) {
@@ -354,8 +376,10 @@ internal b32 resolve_entry(Resolver *resolver) {
       decl->resolve_status = ResolveStatus_fully_resolved;
 
       CallFrame *f = top_frame(&entry->state);
-      ResolvedRef ref = f->inst_map[0];
+
+      ResolvedRef ref = f->inst_map[ref_to_instruction_index(ir_decl->value)];
       Assert(ref_is_some_value_index(ref));
+
       decl->data.decl.val = values_copy(resolver->in->values, ref_to_value_index(ref));
     }
 

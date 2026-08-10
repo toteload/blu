@@ -52,6 +52,10 @@ void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode) {
   *opcodelist_ptr_at_unchecked(&builder->kinds, idx) = opcode;
 }
 
+u8 inst_opcode(IrBuilder *builder, InstructionIndex idx) {
+  return opcodelist_at_unchecked(&builder->kinds, idx);
+}
+
 void inst_set_ast_source(IrBuilder *builder, InstructionIndex idx, AstIndex source) {
   *astlist_ptr_at_unchecked(&builder->ast_source, idx) = source;
 }
@@ -78,6 +82,12 @@ u32 inst_offset(IrBuilder *builder, InstructionIndex start) {
 InstructionIndex inst_block_begin(IrBuilder *builder) {
   InstructionIndex block = inst_alloc(builder);
   inst_set_opcode(builder, block, IR_block);
+  return block;
+}
+
+InstructionIndex inst_eval_block_begin(IrBuilder *builder) {
+  InstructionIndex block = inst_alloc(builder);
+  inst_set_opcode(builder, block, IR_eval_block);
   return block;
 }
 

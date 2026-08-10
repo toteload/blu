@@ -255,6 +255,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     *data_func = (IrFunc){
       .param_count = func->count,
       .instruction_count = func_instruction_count,
+      .return_type = ir_ref_from_instruction_index(inst_return_type),
     };
 
     return ir_ref_from_instruction_index(inst_func);
@@ -359,10 +360,12 @@ IrRef gen_declaration_type_of_val_code(CodeGen *gen, AstIndex idx_ast, IrRef dec
   AstNodes *ast = &gen->source->ast;
   IrBuilder *builder = &gen->builder;
 
+  IrRef res;
+
   u8 kind = ast->kinds[idx_ast];
   switch (Cast(AstKind, kind)) {
   case Ast_identifier: {
-    return declared_type;
+    res = declared_type;
   } break;
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
@@ -407,15 +410,13 @@ IrRef gen_declaration_type_of_val_code(CodeGen *gen, AstIndex idx_ast, IrRef dec
       .type_rhs = ir_ref_from_instruction_index(inst_type),
     };
 
-    return ir_ref_from_instruction_index(inst_unify);
+    res = ir_ref_from_instruction_index(inst_unify);
   } break;
   default:
     Todo();
   }
 
-  Todo();
-
-  return (IrRef){0};
+  return res;
 }
 
 b32 generate_code(CodeGenContext *context, Declaration *decl) {
@@ -438,37 +439,45 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
   IrBuilder *builder = &gen.builder;
 
-  InstructionIndex block = inst_alloc(builder);
-  inst_set_opcode(builder, block, IR_eval_block);
-  inst_set_ast_source(builder, block, ast_idx_decl);
+  InstructionIndex ir_decl = inst_alloc(builder);
+  inst_set_opcode(builder, ir_decl, IR_declaration);
+  inst_set_ast_source(builder, ir_decl, ast_idx_decl);
+  IrDeclaration *data_decl = inst_push_data(builder, ir_decl, IrDeclaration);
 
-  IrRef ref_decl_type = {0};
-  if (ast_decl->type) {
-    IrRef ref_type = ir_ref_from_value_index(gen.common->val.type);
-    ref_decl_type = gen_code(&gen, ast_decl->type, ref_type);
+  IrRef decl_type;
+  {
+    InstructionIndex block_decl_type = inst_eval_block_begin(builder);
+
+    IrRef ref_decl_type = {0};
+    if (ast_decl->type) {
+      IrRef ref_type = ir_ref_from_value_index(gen.common->val.type);
+      ref_decl_type = gen_code(&gen, ast_decl->type, ref_type);
+    }
+
+    IrRef ref_decl_type_of_val =
+      gen_declaration_type_of_val_code(&gen, ast_decl->value, ref_decl_type);
+
+    inst_block_end_with_value(builder, block_decl_type, ref_decl_type_of_val);
+
+    decl_type = ir_ref_from_instruction_index(block_decl_type);
   }
 
-  IrRef ref_decl_type_of_val =
-    gen_declaration_type_of_val_code(&gen, ast_decl->value, ref_decl_type);
+  IrRef decl_val;
+  {
+    InstructionIndex block = inst_eval_block_begin(builder);
 
-  u32 typecheck_end = inst_offset(builder, block);
+    IrRef ref_decl_val = gen_code(&gen, ast_decl->value, decl_type);
+    InstructionIndex val_coerced = inst_as(builder, decl_type, ref_decl_val, ast_decl->value);
 
-  decl->data.decl.typecheck_end = typecheck_end;
+    inst_block_end_with_value(builder, block, ir_ref_from_instruction_index(val_coerced));
+    
+    decl_val = ir_ref_from_instruction_index(block);
+  }
 
-  IrRef ref_decl_val = gen_code(&gen, ast_decl->value, ref_decl_type_of_val);
-
-  IrRef res =
-    ir_ref_from_instruction_index(inst_as(builder, ref_decl_type_of_val, ref_decl_val, ast_decl->value));
-
-  InstructionIndex br = inst_alloc(builder);
-  inst_set_opcode(builder, br, IR_br);
-  IrBr *data = inst_push_data(builder, br, IrBr);
-  *data = (IrBr){
-    .block = block,
-    .value = res,
+  *data_decl = (IrDeclaration){
+    .declared_type = decl_type,
+    .value = decl_val,
   };
-
-  inst_block_end(builder, block);
 
   irbuilder_flatten(builder, context->perm, &decl->data.decl.chunk);
 

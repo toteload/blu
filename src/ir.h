@@ -215,15 +215,19 @@ typedef struct {
 
 InstructionIndex inst_alloc(IrBuilder *builder);
 void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
+u8 inst_opcode(IrBuilder *builder, InstructionIndex idx);
 void inst_set_ast_source(IrBuilder *builder, InstructionIndex idx, AstIndex source);
 void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
 void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
+
 InstructionIndex inst_block_begin(IrBuilder *builder);
+InstructionIndex inst_eval_block_begin(IrBuilder *builder);
 void inst_block_end(IrBuilder *builder, InstructionIndex block);
 void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
 void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
+
 InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source);
 
 void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
