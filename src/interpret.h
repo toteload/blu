@@ -18,8 +18,13 @@ typedef enum {
   Scope_func,
 } ScopeKind;
 
+typedef enum {
+  Scope_condbr_has_evaluated_branches = 1 << 0,
+} ScopeFlags;
+
 typedef struct {
   u8 scope_kind;
+  u8 flags;
 
   InstructionIndex start;
   InstructionIndex end;
@@ -29,12 +34,11 @@ typedef struct {
 
   struct {
     u32 len;
-    ResolvedRef values[MAX_BREAKS_AND_RETURNS];
     InstructionIndex sources[MAX_BREAKS_AND_RETURNS];
   } breaks_and_returns;
 } ScopeSpan;
 
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source, ResolvedRef val);
+void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
 
 typedef Stack(ScopeSpan) ScopeStack;
 
@@ -43,6 +47,7 @@ typedef struct {
   IrChunk *chunk;
 
   ResolvedRef *inst_map;
+  TypeIndex *inst_types;
 
   ScopeStack scopes;
 

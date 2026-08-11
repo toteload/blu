@@ -115,6 +115,7 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 - [ ] `struct` type
 - [ ] optional types.
+  - Analyze the type which is made optional for niche values.
 - [ ] Add `distinct` qualifier.
 - [ ] Aribtrary size integers
 - [ ] Integer range.

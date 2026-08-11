@@ -7,15 +7,13 @@ extern Allocator const cstd_allocator;
 
 internal TypeIndex ref_typeof(Interpreter *in, ResolvedRef ref);
 
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source, ResolvedRef val) {
+void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source) {
   if (scope->breaks_and_returns.len == MAX_BREAKS_AND_RETURNS) {
     Todo();
   }
 
   u32 i = scope->breaks_and_returns.len++;
-
   scope->breaks_and_returns.sources[i] = source;
-  scope->breaks_and_returns.values[i] = val;
 }
 
 internal IrBuilder *push_ir_builder(Interpreter *in) {
@@ -56,8 +54,8 @@ ScopeSpan *push_scope(CallFrame *frame) {
   return stack_push_ptr(&frame->scopes);
 }
 
-internal b32 finalize_block(Interpreter *in, ScopeSpan *block) {
-  TypeIndex type = ref_typeof(in, block->breaks_and_returns.values[0]);
+internal b32 finalize_block(CallFrame *f, ScopeSpan *block) {
+  TypeIndex type = f->inst_types[block->breaks_and_returns.sources[0]];
 
   for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
     Todo();
@@ -70,7 +68,7 @@ internal b32 finalize_function(Interpreter *in, CallFrame *f, ScopeSpan *func) {
   ScopeSpan *s = stack_peek_ptr(&f->scopes);
 
   while (s != func) {
-    b32 ok = finalize_block(in, s);
+    b32 ok = finalize_block(f, s);
     if (!ok) {
       return False;
     }
@@ -79,7 +77,7 @@ internal b32 finalize_function(Interpreter *in, CallFrame *f, ScopeSpan *func) {
     s = stack_peek_ptr(&f->scopes);
   }
 
-  TypeIndex return_type = ref_typeof(in, func->breaks_and_returns.values[0]);
+  TypeIndex return_type = f->inst_types[func->breaks_and_returns.sources[0]];
 
   for (u32 i = 1; i < func->breaks_and_returns.len; i++) {
     Todo();
@@ -95,9 +93,13 @@ CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
   *f = (CallFrame){
     .decl_idx = decl->idx,
     .chunk = chunk,
-    .inst_map = arena_push_array(ValueIndex, arena, chunk->opcode_count),
+    .inst_map = arena_push_array(ResolvedRef, arena, chunk->opcode_count),
+    .inst_types = arena_push_array(TypeIndex, arena, chunk->opcode_count),
     .snapshot = arena_scope_begin(arena),
   };
+
+  memset(f->inst_map, 0, chunk->opcode_count * sizeof(ResolvedRef));
+  memset(f->inst_types, 0, chunk->opcode_count * sizeof(TypeIndex));
 
   stack_init(&f->scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
 
@@ -301,6 +303,9 @@ internal TypeIndex ref_typeof(Interpreter *in, ResolvedRef ref) {
     Type *func_type = types_get(in->types, func_type_idx);
     return func_type->data.function.return_type;
   } break;
+  case IR_block: {
+    Todo();
+  } break;
   default: Todo();
   }
 
@@ -490,16 +495,25 @@ internal u32 step(Interpreter *in, RunState *state) {
       ValueIndex copy = values_copy(in->values, val);
       store_inst_value(f, br->block, resolved_ref_from_value_index(copy));
 
+      f->inst_types[br->block] = type_from_val(in, val);
+
       stack_pop(&f->scopes);
 
       return Step_leave_scope;
     }
 
     if (s->scope_kind == Scope_block) {
+      TypeIndex type_br;
       ResolvedRef ref = resolve(f, br->value);
       if (ref_is_some_value_index(ref)) {
-        ref = resolved_ref_from_value_index(values_copy(in->values, ref_to_value_index(ref)));
+        ValueIndex val = values_copy(in->values, ref_to_value_index(ref));
+        ref = resolved_ref_from_value_index(val);
+        type_br = type_from_val(in, val);
+      } else {
+        type_br = f->inst_types[ref_to_instruction_index(br->value)];
       }
+
+      f->inst_types[pc] = type_br;
 
       IrBuilder *builder = get_builder(in);
       InstructionIndex inst_br = inst_alloc(builder);
@@ -510,13 +524,15 @@ internal u32 step(Interpreter *in, RunState *state) {
         .value = ref,
       };
 
-      scope_add_break_or_return(s, pc, ref);
+      scope_add_break_or_return(s, pc);
 
       if (s->end == pc + 1) {
-        b32 ok = finalize_block(in, s);
+        b32 ok = finalize_block(f, s);
         if (!ok) {
           Todo();
         }
+
+        f->inst_types[br->block] = type_br;
 
         stack_pop(&f->scopes);
       }
@@ -591,16 +607,24 @@ internal u32 step(Interpreter *in, RunState *state) {
     IrBuilder *builder = get_builder(in);
     InstructionIndex inst = inst_alloc(builder);
     inst_set_opcode(builder, inst, IR_ret);
-    ResolvedRef val = resolve(f, (IrRef){ chunk_data(f->chunk, pc) });
+    IrRef ref_val = (IrRef){ chunk_data(f->chunk, pc) };
+    ResolvedRef val = resolve(f, ref_val);
 
+    TypeIndex type_ret;
     if (ref_is_some_value_index(val)) {
-      val = resolved_ref_from_value_index(values_copy(in->values, ref_to_value_index(val)));
+      ValueIndex vidx = values_copy(in->values, ref_to_value_index(val));
+      val = resolved_ref_from_value_index(vidx);
+      type_ret = type_from_val(in, vidx);
+    } else {
+      type_ret = f->inst_types[ref_to_instruction_index(ref_val)];
     }
+
+    f->inst_types[pc] = type_ret;
 
     inst_set_data(builder, inst, ref_to_u32(val));
 
     ScopeSpan *func_scope = get_func_scope(f);
-    scope_add_break_or_return(func_scope, pc, val);
+    scope_add_break_or_return(func_scope, pc);
 
     if (pc + 1 == func_scope->end) {
       b32 ok = finalize_function(in, f, func_scope);
@@ -663,11 +687,49 @@ internal u32 step(Interpreter *in, RunState *state) {
       }
     } else {
       IrBuilder *builder = get_builder(in);
+
+      if (s->flags & Scope_condbr_has_evaluated_branches) {
+        InstructionIndex inst_condbr = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(pc)));
+        IrCondBr *data_condbr = inst_push_data(builder, inst_condbr, IrCondBr);
+        *data_condbr = (IrCondBr){
+          .cond = cond,
+          .then = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->then))),
+          .otherwise = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->otherwise))),
+        };
+        s->pc += 1;
+        break;
+      }
+
+      s->flags |= Scope_condbr_has_evaluated_branches;
+
       InstructionIndex inst_condbr = inst_alloc(builder);
       inst_set_opcode(builder, inst_condbr, IR_condbr);
-      IrCondBr *data_condbr = inst_push_data(builder, inst_condbr, IrCondBr);
 
-      Todo();
+      store_inst_value(f, pc, resolved_ref_from_instruction_index(inst_condbr));
+
+      {
+        u32 inst_count = chunk_data(f->chunk, condbr->otherwise);
+        InstructionIndex start = condbr->otherwise;
+        ScopeSpan *scope = push_scope(f);
+        *scope = (ScopeSpan){
+          .scope_kind = Scope_block,
+          .start = start,
+          .end = start + inst_count,
+          .pc = start + 1,
+        };
+      }
+
+      {
+        u32 inst_count = chunk_data(f->chunk, condbr->then);
+        InstructionIndex start = condbr->then;
+        ScopeSpan *scope = push_scope(f);
+        *scope = (ScopeSpan){
+          .scope_kind = Scope_block,
+          .start = start,
+          .end = start + inst_count,
+          .pc = start + 1,
+        };
+      }
     }
   } break;
   case IR_call: {
