@@ -38,9 +38,10 @@ typedef struct {
   } breaks_and_returns;
 } ScopeSpan;
 
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
-
 typedef Stack(ScopeSpan) ScopeStack;
+
+ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block);
+void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
 
 typedef struct {
   DeclarationIndex decl_idx;

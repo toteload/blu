@@ -342,29 +342,31 @@ internal b32 resolve_entry(Resolver *resolver) {
 
   decl->resolve_status = (resolve_status + 1);
 
-  CallFrame *frame = top_frame(&entry->state);
-  ScopeSpan *scope = push_scope(frame);
+  if (!entry->state.requested_resolution) {
+    CallFrame *frame = top_frame(&entry->state);
+    ScopeSpan *scope = push_scope(frame);
 
-  if (resolve_status < ResolveStatus_type_resolved) {
-    InstructionIndex block = ref_to_instruction_index(ir_decl->declared_type);
-    u32 count = chunk_data(chunk, block);
+    if (resolve_status < ResolveStatus_type_resolved) {
+      InstructionIndex block = ref_to_instruction_index(ir_decl->declared_type);
+      u32 count = chunk_data(chunk, block);
 
-    *scope = (ScopeSpan){
-      .scope_kind = Scope_eval_block,
-      .start = block,
-      .end = block + count,
-      .pc = block + 1,
-    };
-  } else {
-    InstructionIndex block = ref_to_instruction_index(ir_decl->value);
-    u32 count = chunk_data(chunk, block);
+      *scope = (ScopeSpan){
+        .scope_kind = Scope_eval_block,
+        .start = block,
+        .end = block + count,
+        .pc = block + 1,
+      };
+    } else {
+      InstructionIndex block = ref_to_instruction_index(ir_decl->value);
+      u32 count = chunk_data(chunk, block);
 
-    *scope = (ScopeSpan){
-      .scope_kind = Scope_eval_block,
-      .start = block,
-      .end = block + count,
-      .pc = block + 1,
-    };
+      *scope = (ScopeSpan){
+        .scope_kind = Scope_eval_block,
+        .start = block,
+        .end = block + count,
+        .pc = block + 1,
+      };
+    }
   }
 
   u32 err = run_block(resolver->in, &entry->state);
