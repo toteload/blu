@@ -63,7 +63,7 @@ enum TokenKind {
 
   Tok_identifier,
 
-  Tok_builtin_print,
+  Tok_builtin_debug,
 
   Tok_line_comment,
   Tok_newline,

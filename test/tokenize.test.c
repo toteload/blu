@@ -107,7 +107,7 @@ void test_keywords_and_identifiers(TestResult *test, TokenizeContext *context) {
     Tok_keyword_and, Tok_keyword_or, Tok_keyword_defer, Tok_keyword_const,
     Tok_keyword_cast, Tok_keyword_bitcast, Tok_keyword_as, Tok_keyword_mod,
     Tok_keyword_no_cache, Tok_keyword_inline);
-  Assert_kinds("#print",  Tok_builtin_print);
+  Assert_kinds("#debug",  Tok_builtin_debug);
   Assert_kinds("returns", Tok_identifier);   // keyword is a prefix, not a full match
 }
 

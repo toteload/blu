@@ -1,34 +1,6 @@
 # Currently doing
 
-- [ ] Add if else expression to codegen
-- [ ] Finish declaration resolution / partial evaluation
-  - [x] Add IrBuilder stack to interpreter such that different functions can be build at the same time.
-  - [~] Output runtime code for functions that are evaluated during resolution.
-
-  What I am trying now is that each declaration generates a block of IR where the first part of the
-  generated block contains "typechecking code" and the second part contains code for the actual value.
-
-  Each declaration gets push onto a stack with a resolve status and a callframe.
-  Then while the stack has items, the top item gets popped off and we try to run the associated code.
-  First the typechecking code and then the code that produces a value.
-  These two steps have separate statusses.
-
-  The typechecking code starts with code coming from the declared type followed by code of the value
-  up to a leaf node in the value expression. Then we try to unify the declared type with the type of
-  the encountered leaf expression. When running this code it is possible that other declarations are
-  referenced. If this happens, execution is paused and saved, and we push the referenced declaration
-  onto the stack. This declaration then gets popped off the stack and we try to resolve it. And so
-  on. If in the typechecking code of declaration "a" "a" is referenced again you have a recursive
-  type problem.
-
-  In some cases it is good enough if only the type of a declaration has been resolved
-  and not yet the value. For example, a recursive call or a type that contains a pointer to
-  itself. In the second case it must be through a pointer (an indirection) try to contain
-  itself directly would be illegal.
-
-- [ ] Interpret runtime IR to execute the program!
-- [ ] Find a more natural(?) way of organizing the headers. the lsp gets confused about the current
-      header structure. I am also not completely happy with it.
+- [ ] Add the `#debug` builtin. `#debug` prints the value it is called with and returns the same value.
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
@@ -81,7 +53,7 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 ## Comptime
 
-- [ ] Add `eval` keyword to evaluate expressions at compile time.
+- [ ] Add `eval` keyword to evaluate expressions at compile time. (or just use `comptime` as the name)
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations. (Maybe not a qualifier, just use `eval`)
   - This means that the declaration only exists at compile time.
@@ -150,6 +122,8 @@ path is effectively dead until formatting is implemented — but it's live UB in
 - [ ] Add tests to check that integer overflows are caught at runtime.
 - [ ] Add tests to check that out of range integer casts are caught at runtime.
 - [ ] Properly free values that are no longer used in the interpreter.
+- [ ] Find a more natural(?) way of organizing the headers. the lsp gets confused about the current
+      header structure. I am also not completely happy with it.
 
 
 ## Errors

@@ -34,7 +34,7 @@ typedef enum {
 #define Ast_kind_max (Ast_as + 1)
 
 enum BuiltinKind {
-  Builtin_print,
+  Builtin_debug,
 };
 
 enum BinaryOpKind {

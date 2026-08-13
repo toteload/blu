@@ -344,15 +344,15 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_builtin_print(Parser *parser, AstIndex *out) {
+internal b32 parse_builtin_debug(Parser *parser, AstIndex *out) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  Try(expect_token(parser, Tok_builtin_print));
+  Try(expect_token(parser, Tok_builtin_debug));
 
   AstBuiltinTmp *builtin = node_push_data(parser, AstBuiltinTmp, idx);
   zero_struct(AstBuiltinTmp, builtin);
-  builtin->base.kind = Builtin_print;
+  builtin->base.kind = Builtin_debug;
 
   Try(expect_token(parser, Tok_paren_open));
   Try(parse_comma_separated_items_until(parser, &builtin->args, parse_expression, Tok_paren_close));
@@ -784,7 +784,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   case Tok_literal_int:      Try(parse_literal_int(parser, &base));    break;
   case Tok_literal_string:   Try(parse_literal_string(parser, &base)); break;
   case Tok_bar:              Try(parse_function(parser, &base));       break;
-  case Tok_builtin_print:    Try(parse_builtin_print(parser, &base));  break;
+  case Tok_builtin_debug:    Try(parse_builtin_debug(parser, &base));  break;
   case Tok_keyword_const:    Try(parse_const(parser, &base));          break;
   case Tok_keyword_cast:     Try(parse_cast(parser, &base));           break;
   case Tok_keyword_as:       Try(parse_as(parser, &base));             break;

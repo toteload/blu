@@ -246,7 +246,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     }
 
     if (c == '#') {
-      Return_if_match("#print", Tok_builtin_print);
+      Return_if_match("#debug", Tok_builtin_debug);
 
       Message_error(
         tokenizer->msg_sink,
@@ -416,7 +416,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "or",           "defer",
   "const",        "cast",
   "bitcast", "as", "mod", "no_cache", "inline",
-  "identifier",   "#print",
+  "identifier",   "#debug",
   "line-comment", "newline",
 };
 
