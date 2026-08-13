@@ -123,13 +123,12 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
   AstNodes *ast = &gen->source->ast;
   IrBuilder *builder = &gen->builder;
 
-  IrRef res = {0};
-
   u8 kind = ast->kinds[idx_ast];
   switch (Cast(AstKind, kind)) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
-    res = ir_ref_from_instruction_index(inst_add_lookup_value(gen, *name, idx_ast));
+    IrRef res = ir_ref_from_instruction_index(inst_add_lookup_value(gen, *name, idx_ast));
+    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   } break;
   case Ast_block: {
     AstBlock *block = ast_data(ast, idx_ast);
@@ -142,7 +141,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
       gen_code(gen, block->items[i], (IrRef){0});
     }
 
-    res = gen_code(gen, block->items[count-1], type_destination);
+    return gen_code(gen, block->items[count-1], type_destination);
   } break;
   case Ast_if_else: {
     AstIfElse *if_else = ast_data(ast, idx_ast);
@@ -179,7 +178,7 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     inst_block_end(builder, block);
 
-    res = ir_ref_from_instruction_index(block);
+    return ir_ref_from_instruction_index(block);
   } break;
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
@@ -211,7 +210,8 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     data_type->args[0] = ref_ret_type;
 
-    res = ir_ref_from_instruction_index(inst_type);
+    IrRef res = ir_ref_from_instruction_index(inst_type);
+    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   } break;
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
@@ -300,7 +300,8 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
 
     IrRef ref_literal = ir_ref_from_value_index(idx);
 
-    res = ref_literal;
+    IrRef res = ref_literal;
+    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   } break;
   case Ast_call: {
     AstCall *ast_call = ast_data(ast, idx_ast);
@@ -340,18 +341,16 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
       .arg_count = ast_call->count,
     };
 
-    Assert(ast_call->count == 0); // add the args to IR
-    res = ir_ref_from_instruction_index(inst_call);
+    Assert(ast_call->count == 0); // TODO: add the args to IR
+
+    IrRef res = ir_ref_from_instruction_index(inst_call);
+    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   } break;
   default:
     Todo();
   }
 
-  if (!ref_is_nil(type_destination)) {
-    return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
-  }
-
-  return res;
+  Unreachable();
 }
 
 // For some constructions a part of the declared type is allowed to live in the value.
@@ -467,9 +466,8 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
     InstructionIndex block = inst_eval_block_begin(builder);
 
     IrRef ref_decl_val = gen_code(&gen, ast_decl->value, decl_type);
-    InstructionIndex val_coerced = inst_as(builder, decl_type, ref_decl_val, ast_decl->value);
 
-    inst_block_end_with_value(builder, block, ir_ref_from_instruction_index(val_coerced));
+    inst_block_end_with_value(builder, block, ref_decl_val);
     
     decl_val = ir_ref_from_instruction_index(block);
   }

@@ -32,6 +32,10 @@ internal IrBuilder *push_ir_builder(Interpreter *in) {
   return builder;
 }
 
+internal void pop_ir_builder(Interpreter *in) {
+  stack_pop(&in->builders);
+}
+
 internal IrBuilder *get_builder(Interpreter *in) {
   return stack_peek_ptr(&in->builders);
 }
@@ -64,7 +68,9 @@ ScopeSpan *push_scope(CallFrame *frame) {
   return stack_push_ptr(&frame->scopes);
 }
 
-internal b32 finalize_block(CallFrame *f, ScopeSpan *block) {
+internal b32 end_residual_block(IrBuilder *builder, CallFrame *f, ScopeSpan *block) {
+  inst_block_end(builder, block->residual);
+
   if (block->breaks_and_returns.len <= 1) {
     return True;
   }
@@ -72,23 +78,32 @@ internal b32 finalize_block(CallFrame *f, ScopeSpan *block) {
   TypeIndex type = f->inst_types[block->breaks_and_returns.sources[0]];
 
   for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
-    Todo();
+    TypeIndex t = f->inst_types[block->breaks_and_returns.sources[i]];
+    if (t != type) {
+      Todo();
+    }
   }
 
   return True;
 }
 
 internal b32 finalize_function(Interpreter *in, CallFrame *f, ScopeSpan *func) {
-  ScopeSpan *s = stack_peek_ptr(&f->scopes);
+  IrBuilder *builder = get_builder(in);
 
-  while (s != func) {
-    b32 ok = finalize_block(f, s);
-    if (!ok) {
-      return False;
+  while (True) {
+    ScopeSpan *s = stack_peek_ptr(&f->scopes);
+    if (s == func) {
+      break;
+    }
+
+    if (s->scope_kind == Scope_block) {
+      b32 ok = end_residual_block(builder, f, s);
+      if (!ok) {
+        return False;
+      }
     }
 
     stack_pop(&f->scopes);
-    s = stack_peek_ptr(&f->scopes);
   }
 
   Assert(func->breaks_and_returns.len > 0);
@@ -165,22 +180,6 @@ internal void pop_scopes_to(Interpreter *in, CallFrame *f, InstructionIndex idx)
   Unreachable();
 }
 
-internal void pop_finished_scopes(Interpreter *in, CallFrame *f, InstructionIndex end) {
-  ScopeSpan last;
-
-  while (True) {
-    ScopeSpan *span = stack_peek_ptr(&f->scopes);
-
-    if (span->end > end) {
-      break;
-    }
-
-    last = stack_pop(&f->scopes);
-  }
-
-  dealloc_scope_values(in, f, last);
-}
-
 // A value-index ref is already a comptime value; an instruction-index ref is the result recorded
 // for that instruction in the current frame.
 // The returned IrRef can be either a value or an instruction index that maps to a residual instruction.
@@ -190,6 +189,52 @@ internal ResolvedRef resolve(CallFrame *f, IrRef ref) {
   }
 
   return f->inst_map[ref_to_instruction_index(ref)];
+}
+
+internal InstructionIndex expect_residual_at_instruction_index(CallFrame *f, InstructionIndex inst) {
+  ResolvedRef res = f->inst_map[inst];
+
+  Assert(ref_is_instruction_index(res));
+
+  return ref_to_instruction_index(res);
+}
+
+internal void pop_finished_scopes(Interpreter *in, CallFrame *f, InstructionIndex end) {
+  IrBuilder *builder = get_builder(in);
+  ScopeSpan last;
+
+  while (True) {
+    ScopeSpan *span = stack_peek_ptr(&f->scopes);
+
+    if (span->end > end) {
+      break;
+    }
+
+    if (span->residual) {
+      b32 ok = end_residual_block(builder, f, span);
+      if (!ok) {
+        Todo();
+      }
+    }
+
+    if (span->condbr) {
+      IrCondBr *condbr = chunk_extra(f->chunk, span->condbr);
+
+      InstructionIndex residual_condbr = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(span->condbr)));
+
+      IrBuilder *builder = get_builder(in);
+      IrCondBr *data = inst_push_data(builder, residual_condbr, IrCondBr);
+      *data = (IrCondBr){
+        .cond = resolve(f, condbr->cond),
+        .then = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->then))),
+        .otherwise = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->otherwise))),
+      };
+    }
+
+    last = stack_pop(&f->scopes);
+  }
+
+  dealloc_scope_values(in, f, last);
 }
 
 internal b32 expect_comptime_value_or_nil(Interpreter *in, CallFrame *f, IrRef ref, ValueIndex *out) {
@@ -294,9 +339,7 @@ internal b32 expect_type_value_or_nil(Interpreter *in, CallFrame *f, IrRef ref, 
 
 // ASSUME: `v` refers to a TypeIndex
 internal TypeIndex type_from_val(Interpreter *in, ValueIndex v) {
-  if (v == 0) {
-    return 0;
-  }
+  Assert(v);
 
   Value *val = values_get(in->values, v);
   TypeIndex *t = val->data;
@@ -329,25 +372,6 @@ internal TypeIndex ref_typeof(Interpreter *in, CallFrame *f, IrRef ref) {
   Assert(type);
 
   return type;
-
-  //IrBuilder *builder = get_builder(in);
-
-  //u8 op = inst_opcode(builder, i);
-
-  //switch (Cast(IrOpcode, op)) {
-  //case IR_call: {
-  //  IrCall *call = inst_get_extra(builder, i);
-  //  TypeIndex func_type_idx = ref_typeof(in, call->func);
-  //  Type *func_type = types_get(in->types, func_type_idx);
-  //  return func_type->data.function.return_type;
-  //} break;
-  //case IR_block: {
-  //  Todo();
-  //} break;
-  //default: Todo();
-  //}
-
-  //Todo();
 }
 
 internal u32 step(Interpreter *in, RunState *state) {
@@ -453,7 +477,8 @@ internal u32 step(Interpreter *in, RunState *state) {
       state->requested_resolution = False;
       Assert(decl->kind == Declaration_decl);
 
-      store_inst_value(f, pc, resolved_ref_from_value_index(decl->data.decl.val));
+      ValueIndex copy = values_copy(in->values, decl->data.decl.val);
+      store_inst_value(f, pc, resolved_ref_from_value_index(copy));
       s->pc += 1;
       break;
     }
@@ -548,7 +573,8 @@ internal u32 step(Interpreter *in, RunState *state) {
       if (ref_is_some_value_index(ref)) {
         ValueIndex val = values_copy(in->values, ref_to_value_index(ref));
         ref = resolved_ref_from_value_index(val);
-        type_br = type_from_val(in, val);
+        Value *v = values_get(in->values, val);
+        type_br = v->type;
       } else {
         type_br = f->inst_types[ref_to_instruction_index(br->value)];
       }
@@ -560,7 +586,7 @@ internal u32 step(Interpreter *in, RunState *state) {
       inst_set_opcode(builder, inst_br, IR_br);
       IrBr *data_br = inst_push_data(builder, inst_br, IrBr);
       *data_br = (IrBr){
-        .block = s->residual,
+        .block = expect_residual_at_instruction_index(f, br->block),
         .value = ref,
       };
 
@@ -569,12 +595,7 @@ internal u32 step(Interpreter *in, RunState *state) {
 
       Assert(s->end == pc + 1); // br may only appear at the end of a block
 
-      b32 ok = finalize_block(f, s);
-      if (!ok) {
-        Todo();
-      }
-
-      f->inst_types[br->block] = type_br;
+      f->inst_types[pc] = type_br;
 
       pop_finished_scopes(in, f, pc + 1);
 
@@ -707,6 +728,8 @@ internal u32 step(Interpreter *in, RunState *state) {
 
       irbuilder_flatten(builder, in->perm, &data->chunk);
 
+      pop_ir_builder(in);
+
       store_inst_value(f, func_scope->start, resolved_ref_from_value_index(vidx));
 
       stack_pop(&f->scopes);
@@ -729,48 +752,13 @@ internal u32 step(Interpreter *in, RunState *state) {
     } else {
       IrBuilder *builder = get_builder(in);
 
-      if (s->flags & Scope_condbr_has_evaluated_branches) {
-        InstructionIndex inst_condbr = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(pc)));
-        IrCondBr *data_condbr = inst_push_data(builder, inst_condbr, IrCondBr);
-        *data_condbr = (IrCondBr){
-          .cond = cond,
-          .then = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->then))),
-          .otherwise = ref_to_instruction_index(resolve(f, ir_ref_from_instruction_index(condbr->otherwise))),
-        };
-        s->pc += 1;
-        break;
-      }
-
-      s->flags |= Scope_condbr_has_evaluated_branches;
-
       InstructionIndex inst_condbr = inst_alloc(builder);
       inst_set_opcode(builder, inst_condbr, IR_condbr);
 
       store_inst_value(f, pc, resolved_ref_from_instruction_index(inst_condbr));
 
-      {
-        u32 inst_count = chunk_data(f->chunk, condbr->otherwise);
-        InstructionIndex start = condbr->otherwise;
-        ScopeSpan *scope = push_scope(f);
-        *scope = (ScopeSpan){
-          .scope_kind = Scope_block,
-          .start = start,
-          .end = start + inst_count,
-          .pc = start + 1,
-        };
-      }
-
-      {
-        u32 inst_count = chunk_data(f->chunk, condbr->then);
-        InstructionIndex start = condbr->then;
-        ScopeSpan *scope = push_scope(f);
-        *scope = (ScopeSpan){
-          .scope_kind = Scope_block,
-          .start = start,
-          .end = start + inst_count,
-          .pc = start + 1,
-        };
-      }
+      s->condbr = pc;
+      s->pc += 1;
     }
   } break;
   case IR_call: {
@@ -784,6 +772,9 @@ internal u32 step(Interpreter *in, RunState *state) {
     IrCall *data_call = inst_push_data(builder, inst_call, IrCall);
 
     ResolvedRef func = resolve(f, call->func);
+    if (ref_is_some_value_index(func)) {
+      func = resolved_ref_from_value_index(values_copy(in->values, ref_to_value_index(func)));
+    }
 
     *data_call = (IrCall){
       .func = func,
@@ -808,9 +799,8 @@ internal u32 step(Interpreter *in, RunState *state) {
   return Step_ok;
 }
 
-u32 run_block(Interpreter *in, RunState *state) {
-  CallFrame *base_frame = top_frame(state);
-  u32 target_scope_depth = base_frame->scopes.len - 1;
+u32 run_toplevel_block(Interpreter *in, RunState *state) {
+  CallFrame *base_frame = state->call_stack.data;
 
   while (True) {
     CallFrame *f = top_frame(state);
@@ -823,8 +813,8 @@ u32 run_block(Interpreter *in, RunState *state) {
 
     if (err == Step_leave_scope) {
       u32 scope_depth = f->scopes.len;
-      if (f == base_frame && scope_depth == target_scope_depth) {
-        return Run_reached_end;
+      if (f == base_frame && scope_depth == 1) {
+        return Run_ok;
       }
 
       continue;

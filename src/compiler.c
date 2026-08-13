@@ -369,9 +369,9 @@ internal b32 resolve_entry(Resolver *resolver) {
     }
   }
 
-  u32 err = run_block(resolver->in, &entry->state);
+  u32 err = run_toplevel_block(resolver->in, &entry->state);
 
-  if (err == Run_reached_end) {
+  if (err == Run_ok) {
     if (resolve_status < ResolveStatus_type_resolved) {
       decl->resolve_status = ResolveStatus_type_resolved;
     } else {

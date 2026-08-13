@@ -18,19 +18,15 @@ typedef enum {
   Scope_func,
 } ScopeKind;
 
-typedef enum {
-  Scope_condbr_has_evaluated_branches = 1 << 0,
-} ScopeFlags;
-
 typedef struct {
   u8 scope_kind;
-  u8 flags;
 
   InstructionIndex start;
   InstructionIndex end;
   InstructionIndex pc;
 
   InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
+  InstructionIndex condbr;
 
   struct {
     u32 len;
@@ -86,14 +82,14 @@ typedef struct {
 
 typedef enum {
   Step_ok,
-  Step_leave_scope,
   Step_encountered_error,
   Step_resolve_declaration_type,
   Step_resolve_declaration_value,
+  Step_leave_scope,
 } StepResult;
 
 typedef enum {
-  Run_reached_end,
+  Run_ok,
   Run_encountered_error = Step_encountered_error,
 
   // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
@@ -102,6 +98,6 @@ typedef enum {
   Run_resolve_declaration_value = Step_resolve_declaration_value,
 } RunResult;
 
-u32 run_block(Interpreter *in, RunState *state);
+u32 run_toplevel_block(Interpreter *in, RunState *state);
 
 #endif // INTERPRET_H

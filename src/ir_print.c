@@ -283,7 +283,9 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     } break;
     case IR_call: {
       IrCall *call = extra;
-      ir_ref_print(out, call->func, source, types, values);
+      fprintf(out, "$%u", call->func);
+      //fputs(" <TODO>", out);
+      //ir_ref_print(out, call->func, source, types, values);
       if (call->arg_count) {
         fputs(" ", out);
       }
