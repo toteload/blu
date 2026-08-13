@@ -337,13 +337,11 @@ internal b32 expect_type_value_or_nil(Interpreter *in, CallFrame *f, IrRef ref, 
   return _get_value_expect_type(in, f, val, out);
 }
 
-// ASSUME: `v` refers to a TypeIndex
-internal TypeIndex type_from_val(Interpreter *in, ValueIndex v) {
+internal TypeIndex type_of_val(Interpreter *in, ValueIndex v) {
   Assert(v);
 
   Value *val = values_get(in->values, v);
-  TypeIndex *t = val->data;
-  return *t;
+  return val->type;
 }
 
 internal ValueIndex val_from_type(Interpreter *in, TypeIndex t) {
@@ -552,15 +550,19 @@ internal u32 step(Interpreter *in, RunState *state) {
 
     if (s->scope_kind == Scope_eval_block) {
       ValueIndex val;
-      b32 ok = expect_comptime_value(in, f, br->value, &val);
+      b32 ok = expect_comptime_value_or_nil(in, f, br->value, &val);
       if (!ok) {
         Todo();
       }
 
-      ValueIndex copy = values_copy(in->values, val);
-      store_inst_value(f, br->block, resolved_ref_from_value_index(copy));
+      if (val) {
+        f->inst_types[br->block] = type_of_val(in, val);
+        val = values_copy(in->values, val);
+      } else {
+        f->inst_types[br->block] = 0;
+      }
 
-      f->inst_types[br->block] = type_from_val(in, val);
+      store_inst_value(f, br->block, resolved_ref_from_value_index(val));
 
       pop_scopes_to(in, f, br->block);
 
@@ -676,7 +678,7 @@ internal u32 step(Interpreter *in, RunState *state) {
     if (ref_is_some_value_index(val)) {
       ValueIndex vidx = values_copy(in->values, ref_to_value_index(val));
       val = resolved_ref_from_value_index(vidx);
-      type_ret = type_from_val(in, vidx);
+      type_ret = type_of_val(in, vidx);
     } else {
       type_ret = f->inst_types[ref_to_instruction_index(ref_val)];
     }

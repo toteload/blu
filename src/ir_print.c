@@ -1,4 +1,5 @@
 #include <string.h>
+#include <inttypes.h>
 
 #include "blu.h"
 #include "types.h"
@@ -86,9 +87,9 @@ void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *val
   } break;
   case Type_integer: {
     if (type->data.integer.signedness == Signed) {
-      fprintf(out, "%lld", Cast(long long, read_signed(type->data.integer.bitwidth, value->data)));
+      fprintf(out, "%" PRId64, Cast(i64, read_signed(type->data.integer.bitwidth, value->data)));
     } else {
-      fprintf(out, "%llu", Cast(unsigned long long, read_unsigned(type->data.integer.bitwidth, value->data)));
+      fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(type->data.integer.bitwidth, value->data)));
     }
   } break;
   case Type_bool: {

@@ -83,7 +83,7 @@ path is effectively dead until formatting is implemented — but it's live UB in
 
 - [ ] Add `eval` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
-- [ ] Add `comptime` qualifier to declarations.
+- [ ] Add `comptime` qualifier to declarations. (Maybe not a qualifier, just use `eval`)
   - This means that the declaration only exists at compile time.
     All uses of the declaration are replaced with its value.
 

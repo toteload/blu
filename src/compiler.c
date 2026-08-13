@@ -3,6 +3,7 @@
 #include "string_interner.h"
 #include "codegen.h"
 #include "interpret.h"
+#include "interpreter.h"
 #include "ir.h"
 
 #include <stdarg.h>
@@ -675,9 +676,9 @@ b32 compile(Compiler *compiler) {
       is_ok &= generate_code(&context, decl);
 
       if (compiler->options->verbose) {
-      ir_chunk_print(
-        stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
-      );
+        ir_chunk_print(
+          stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
+        );
       }
     }
   }
@@ -720,19 +721,53 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  for (u32 i = 0; i < compiler->user_decls.len; i++) {
-    DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
-    DeclarationKey key = decls_get(&compiler->decls, idx);
-    Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
-    String name = strings_get(&compiler->strings, key.name);
+  if (compiler->options->verbose) {
+    for (u32 i = 0; i < compiler->user_decls.len; i++) {
+      DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
+      DeclarationKey key = decls_get(&compiler->decls, idx);
+      Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
+      String name = strings_get(&compiler->strings, key.name);
 
-    ValueIndex val = decl->data.decl.val;
+      ValueIndex val = decl->data.decl.val;
 
-    printf("%.*s : ", Cast(int, name.len), name.str);
-    type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
-    printf(" = ");
-    value_print(stdout, decl->data.decl.source, &compiler->types, &compiler->values, val);
-    printf("\n");
+      printf("%.*s : ", Cast(int, name.len), name.str);
+      type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
+      printf(" = ");
+      value_print(stdout, decl->data.decl.source, &compiler->types, &compiler->values, val);
+      printf("\n");
+    }
+  }
+
+  // Find 'main' and call it, output the return value.
+
+  {
+    DeclarationIndex mod_main;
+    b32 ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){0}, 1, strings_add(&compiler->strings, string_lit("main")), &mod_main);
+    Assert(ok);
+
+    DeclarationIndex fn_main;
+    ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main,0}, 2, strings_add(&compiler->strings, string_lit("main")), &fn_main);
+    Assert(ok);
+
+    Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
+
+    Value *v = values_get(&compiler->values, decl_main->data.decl.val);
+    IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
+
+    Interpreter2 in = {
+      .scratch = &compiler->scratch,
+      .msg_sink = &compiler->msg_sink,
+      .values = &compiler->values,
+    };
+
+    stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
+
+    ValueIndex res;
+    u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &res);
+    Assert(!err);
+
+    value_print(stdout, Null, &compiler->types, &compiler->values, res);
+    fputs("\n", stdout);
   }
 
   return is_ok;
