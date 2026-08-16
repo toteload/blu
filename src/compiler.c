@@ -8,6 +8,31 @@
 
 #include <stdarg.h>
 
+internal void write_tokens(Tokens *tokens, String source) {
+  for (u32 i = 0; i < tokens->tok_count; i++) {
+    u8      kind = tokens->kinds[i];
+    SpanU32 span = tokens->spans[i];
+
+    char const *s = Cast(char const*, source.str + span.start);
+    int len = Cast(int, span.end - span.start);
+
+    char const *kind_string = token_kind_string(kind);
+
+    printf("%5u:%5u - %s - \"%.*s\"\n", span.start, span.end, kind_string, len, s);
+  }
+}
+
+internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
+  Unused(tokens, source);
+
+  for (u32 i = 1; i < nodes->count; i++) {
+    u8 kind = nodes->kinds[i];
+    String kind_string = ast_kind_string(kind);
+
+    printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
+  }
+}
+
 #define SEGMENTLIST_NAME SourceList
 #define SEGMENTLIST_TYPE Source
 #define SEGMENTLIST_FUNCTION_PREFIX sources
@@ -537,6 +562,20 @@ b32 compile(Compiler *compiler) {
     source->status = SourceStatus_parsed;
   }
 
+  if (compiler->options->print_tokens) {
+    for (u32 i = 1; i < compiler->sources.len; i++) {
+      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+      write_tokens(&source->tokens, source->text);
+    }
+  }
+
+  if (compiler->options->print_ast) {
+    for (u32 i = 1; i < compiler->sources.len; i++) {
+      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
+      write_nodes(&source->ast, &source->tokens, source->text);
+    }
+  }
+
   if (!is_ok) {
     return False;
   }
@@ -675,7 +714,7 @@ b32 compile(Compiler *compiler) {
       user_decls[i] = decl;
       is_ok &= generate_code(&context, decl);
 
-      if (compiler->options->verbose) {
+      if (compiler->options->print_decl_ir) {
         ir_chunk_print(
           stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
         );
@@ -721,7 +760,7 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  if (compiler->options->verbose) {
+  if (compiler->options->print_residual) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
       DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
       DeclarationKey key = decls_get(&compiler->decls, idx);
@@ -738,37 +777,39 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  // Find 'main' and call it, output the return value.
-
-  {
-    DeclarationIndex mod_main;
-    b32 ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){0}, 1, strings_add(&compiler->strings, string_lit("main")), &mod_main);
-    Assert(ok);
-
-    DeclarationIndex fn_main;
-    ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main,0}, 2, strings_add(&compiler->strings, string_lit("main")), &fn_main);
-    Assert(ok);
-
-    Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
-
-    Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-    IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
-
-    Interpreter2 in = {
-      .scratch = &compiler->scratch,
-      .msg_sink = &compiler->msg_sink,
-      .values = &compiler->values,
-    };
-
-    stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
-
-    ValueIndex res;
-    u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &res);
-    Assert(!err);
-
-    value_print(stdout, Null, &compiler->types, &compiler->values, res);
-    fputs("\n", stdout);
-  }
-
   return is_ok;
+}
+
+b32 run_main(Compiler *compiler) {
+  DeclarationIndex mod_main;
+  b32 ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){0}, 1, strings_add(&compiler->strings, string_lit("main")), &mod_main);
+  Assert(ok);
+
+  DeclarationIndex fn_main;
+  ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main,0}, 2, strings_add(&compiler->strings, string_lit("main")), &fn_main);
+  Assert(ok);
+
+  Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
+
+  // TODO: make sure main has the correct type
+
+  Value *v = values_get(&compiler->values, decl_main->data.decl.val);
+  IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
+
+  Interpreter2 in = {
+    .scratch = &compiler->scratch,
+    .msg_sink = &compiler->msg_sink,
+    .values = &compiler->values,
+  };
+
+  stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
+
+  ValueIndex res;
+  u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &res);
+  Assert(!err);
+
+  value_print(stdout, Null, &compiler->types, &compiler->values, res);
+  fputs("\n", stdout);
+
+  return True;
 }

@@ -4,7 +4,11 @@
 #include "toteload.h"
 
 typedef struct {
-  b32 verbose;
+  b8 verbose;
+  b8 print_tokens;
+  b8 print_ast;
+  b8 print_decl_ir;
+  b8 print_residual;
   String source_filename;
 } CLIOptions;
 

@@ -132,5 +132,6 @@ b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u
 void compiler_print_all_messages(Compiler *compiler);
 
 b32 compile(Compiler *compiler);
+b32 run_main(Compiler *compiler);
 
 #endif // COMPILER_H
