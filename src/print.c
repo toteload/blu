@@ -344,7 +344,7 @@ void print_tokens(Tokens *tokens, String source) {
 
     char const *kind_string = token_kind_string(kind);
 
-    printf("%5u:%5u - %s - \"%.*s\"\n", span.start, span.end, kind_string, len, s);
+    printf("%5u | %5u:%5u - %s - \"%.*s\"\n", i, span.start, span.end, kind_string, len, s);
   }
 }
 

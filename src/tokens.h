@@ -4,7 +4,7 @@
 #include "toteload.h"
 #include "messages.h"
 
-enum TokenKind {
+typedef enum {
   Tok_colon,
   Tok_semicolon,
   Tok_comma,
@@ -17,7 +17,12 @@ enum TokenKind {
   Tok_star,
   Tok_slash,
   Tok_percent,
+
+  Tok_minus_equals,
   Tok_plus_equals,
+  Tok_star_equals,
+  Tok_percent_equals,
+
   Tok_exclamation,
   Tok_ampersand,
   Tok_bar,
@@ -45,6 +50,7 @@ enum TokenKind {
   Tok_keyword_if,
   Tok_keyword_else,
   Tok_keyword_for,
+  Tok_keyword_while,
   Tok_keyword_do,
   Tok_keyword_break,
   Tok_keyword_continue,
@@ -62,6 +68,7 @@ enum TokenKind {
   Tok_keyword_inline,
 
   Tok_identifier,
+  Tok_label,
 
   Tok_builtin_debug,
 
@@ -69,7 +76,7 @@ enum TokenKind {
   Tok_newline,
 
   Tok_kind_max,
-};
+} TokenKind;
 
 typedef struct {
   u32 start;

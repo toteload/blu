@@ -97,16 +97,13 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   switch (c) {
   case ',': Return_token(Tok_comma);
   case '.': Return_token(Tok_dot);
-  case ':': Return_token(Tok_colon);
   case '{': Return_token(Tok_brace_open);
   case '}': Return_token(Tok_brace_close);
   case '(': Return_token(Tok_paren_open);
   case ')': Return_token(Tok_paren_close);
   case '[': Return_token(Tok_bracket_open);
   case ']': Return_token(Tok_bracket_close);
-  case '*': Return_token(Tok_star);
   case '/': Return_token(Tok_slash);
-  case '%': Return_token(Tok_percent);
   case '&': Return_token(Tok_ampersand);
   case '|': Return_token(Tok_bar);
   case '^': Return_token(Tok_caret);
@@ -120,10 +117,36 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_token(Tok_line_comment);
   }
 
+  if (c == ':') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_colon);
+    }
+
+    if (is_identifier_start(*tokenizer->at)) {
+      tokenizer->at += 1;
+      while (!is_at_end(tokenizer) && is_identifier_rest(*tokenizer->at)) {
+        tokenizer->at += 1;
+      }
+
+      Return_token(Tok_label);
+    }
+
+    Return_token(Tok_colon);
+  }
+
   if (c == '-') {
-    if (!is_at_end(tokenizer) && *tokenizer->at == '>') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_minus);
+    }
+
+    if (*tokenizer->at == '>') {
       tokenizer->at += 1;
       Return_token(Tok_arrow);
+    }
+
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
+      Return_token(Tok_minus_equals);
     }
 
     Return_token(Tok_minus);
@@ -153,6 +176,32 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     }
 
     Return_token(Tok_plus);
+  }
+
+  if (c == '*') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_star);
+    }
+
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
+      Return_token(Tok_star_equals);
+    }
+
+    Return_token(Tok_star);
+  }
+
+  if (c == '%') {
+    if (is_at_end(tokenizer)) {
+      Return_token(Tok_percent);
+    }
+
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
+      Return_token(Tok_percent_equals);
+    }
+
+    Return_token(Tok_percent);
   }
 
   if (c == '<') {
@@ -265,6 +314,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("if",       Tok_keyword_if);
     Return_if_match("else",     Tok_keyword_else);
     Return_if_match("for",      Tok_keyword_for);
+    Return_if_match("while",    Tok_keyword_while);
     Return_if_match("do",       Tok_keyword_do);
     Return_if_match("break",    Tok_keyword_break);
     Return_if_match("continue", Tok_keyword_continue);
@@ -408,7 +458,8 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "equals",       "minus",
   "plus",         "star",
   "slash",        "percent",
-  "plus_equals",  "exclamation",
+  "-=",
+  "plus_equals", "*=", "%=",  "exclamation",
   "ampersand",    "bar",
   "caret",        "tilde",
   "left-shift",   "right-shift",
@@ -420,13 +471,13 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "paren-open",   "paren-close",
   "bracket-open", "bracket-close",
   "if",           "else",
-  "for",          "do",
+  "for",          "while", "do",
   "break",        "continue",
   "return",       "and",
   "or",           "defer",
   "const",        "cast",
   "bitcast", "as", "mod", "no_cache", "inline",
-  "identifier",   "#debug",
+  "identifier",   "label", "#debug",
   "line-comment", "newline",
 };
 

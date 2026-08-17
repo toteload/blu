@@ -17,6 +17,7 @@ typedef enum {
   Ast_literal_int,
   Ast_literal_string,
   Ast_identifier,
+  Ast_label,
   Ast_call,
   Ast_index,
   Ast_unary_op,
@@ -25,13 +26,17 @@ typedef enum {
   Ast_param,
   Ast_if_else,
   Ast_for,
+  Ast_while,
   Ast_defer,
   Ast_const,
   Ast_cast,
   Ast_as,
+  Ast_break,
+
+  // Make sure to update Ast_kind_max when you update this enum!
 } AstKind;
 
-#define Ast_kind_max (Ast_as + 1)
+#define Ast_kind_max (Ast_break + 1)
 
 typedef enum {
   Builtin_debug,
@@ -62,13 +67,17 @@ enum BinaryOpKind {
   Logical_and,
   Logical_or,
 
-  BinaryOpKind_max,
+  BinaryOpKind_count,
 };
 
 enum AssignKind {
   Assign_normal,
+  Assign_sub,
+  Assign_add,
+  Assign_mul,
+  Assign_mod,
 
-  AssignKind_max,
+  AssignKind_count,
 };
 
 enum UnaryOpKind {
@@ -122,6 +131,7 @@ typedef struct {
 } AstModSection;
 
 typedef struct {
+  AstIndex label;
   u32 count;
   AstIndex items[];
 } AstBlock;
@@ -150,10 +160,17 @@ typedef struct {
 } AstIfElse;
 
 typedef struct {
+  AstIndex label;
   AstIndex iterable;
   AstIndex iterator;
   AstIndex body;
 } AstFor;
+
+typedef struct {
+  AstIndex label;
+  AstIndex cond;
+  AstIndex body;
+} AstWhile;
 
 typedef struct {
   u8 op_kind;
@@ -205,6 +222,11 @@ typedef struct {
   AstIndex type_dst;
   AstIndex value;
 } AstAs;
+
+typedef struct {
+  AstIndex label;
+  AstIndex value;
+} AstBreak;
 
 typedef union {
   AstSource          source;

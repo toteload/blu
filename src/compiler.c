@@ -530,6 +530,10 @@ b32 compile(Compiler *compiler) {
       continue;
     }
 
+    if (compiler->options->print_tokens) {
+      print_tokens(&source->tokens, source->text);
+    }
+
     ok = source_parse(source, &compiler->scratch);
     if (!ok) {
       is_ok = False;
@@ -540,13 +544,6 @@ b32 compile(Compiler *compiler) {
     source_index_declarations(source, &compiler->strings);
 
     source->status = SourceStatus_parsed;
-  }
-
-  if (compiler->options->print_tokens) {
-    for (u32 i = 1; i < compiler->sources.len; i++) {
-      Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-      print_tokens(&source->tokens, source->text);
-    }
   }
 
   if (compiler->options->print_ast) {

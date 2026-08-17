@@ -3,15 +3,18 @@ mod main
 main := || {
   text := "TODO"
 
-  count := 0
+  count  := 0
   pcount := 0
-  dial := 50
+  dial   := 50
 
   i := 0
-  while i < #len(text) {
-    sign := if text[i] == "L" then -1 else 1
+  while i < text {
+    sign := if text[i] == "L" { -1 } else 1
+
     i += 1
+
     n := text[i] - "0"
+
     i += 1
 
     while text[i] >= "0" and text[i] <= "9" {
@@ -44,15 +47,15 @@ main := || {
       }
     }
 
-    while i < #len(text) {
+    :scan while i < text {
       if text[i] == "L" or text[i] == "R" {
-        break
+        break :scan
       }
 
       i += 1
     }
   }
 
-  #debug count
-  #debug pcount
+  #debug(count)
+  #debug(pcount)
 }
