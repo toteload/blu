@@ -1,9 +1,5 @@
 # Currently doing
 
-- [x] Add the `#debug` builtin. `#debug` prints the value it is called with and returns the same value.
-- [ ] Update the source information binding in the IR to include the SourceIndex. An instruction may be inlined from a function from a different source.
-      Another benefit of this is that the IR now holds the data to which Source it belongs (a connection that does not currently exist).
-
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
   Just all the ones that match and if they have overlap it's an error?

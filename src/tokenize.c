@@ -295,8 +295,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   return TokResult_error;
 }
 
-LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
-  // OPTIMIZE: A binary search is probably faster for bigger files.
+LineInfo tokens_find_line_info(String text, Tokens *tokens, u32 byte_offset) {
+  // OPTIMIZE: A binary search is probably faster for big enough files and a better default.
   u32 len = tokens->line_count;
   for (u32 i = 1; i < len; i++) {
     u32 offset = tokens->lines[i];
@@ -310,7 +310,19 @@ LineInfo tokens_find_line_info(Tokens *tokens, u32 byte_offset) {
     }
   }
 
-  return (LineInfo){0};
+  u32 offset = text.len;
+  for (u32 i = byte_offset; i < text.len; i++) {
+    if (text.str[i] == '\n') {
+      offset = i;
+      break;
+    }
+  }
+
+  return (LineInfo){
+    .line = len,
+    .offset_start_of_line = tokens->lines[len-1],
+    .line_len = offset - tokens->lines[len-1],
+  };
 }
 
 u8 tokens_kind(Tokens *tokens, TokenIndex idx) {
@@ -359,8 +371,6 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
     kindlist_append(&kindlist, context->scratch, kind);
     spanlist_append(&spanlist, context->scratch, span);
   }
-
-  lines_append(&linelist, context->scratch, text.len);
 
   u32 tok_count  = kindlist.len;
   u32 line_count = linelist.len;

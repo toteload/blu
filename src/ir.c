@@ -36,14 +36,14 @@ void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
 #define SEGMENTLIST_TYPE AST_SOURCE_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 AST_SOURCE_LIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT AST_SOURCE_LIST_SEGMENT_COUNT
-#define SEGMENTLIST_FUNCTION_PREFIX astlist
+#define SEGMENTLIST_FUNCTION_PREFIX sourcelist
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
 InstructionIndex inst_alloc(IrBuilder *builder) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, 0);
-  astlist_append(&builder->ast_source, builder->scratch, 0);
+  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ 0, 0 });
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;
 }
@@ -56,8 +56,8 @@ u8 inst_opcode(IrBuilder *builder, InstructionIndex idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
 }
 
-void inst_set_ast_source(IrBuilder *builder, InstructionIndex idx, AstIndex source) {
-  *astlist_ptr_at_unchecked(&builder->ast_source, idx) = source;
+void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx) {
+  *sourcelist_ptr_at_unchecked(&builder->ast_source, idx) = (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx };
 }
 
 void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data) {
@@ -124,10 +124,10 @@ void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex b
   inst_set_data(builder, block, block_inst_count);
 }
 
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source) {
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex ast_idx) {
   InstructionIndex idx = inst_alloc(builder);
   inst_set_opcode(builder, idx, IR_as);
-  inst_set_ast_source(builder, idx, source);
+  inst_set_source(builder, idx, source_idx, ast_idx);
 
   IrAs *data = inst_push_data(builder, idx, IrAs);
   *data = (IrAs){
@@ -181,11 +181,11 @@ void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk) {
   u32 count = Cast(u32, builder->kinds.len);
 
   u8  *opcodes = arena_push_array(u8,  arena, count);
-  AstIndex *ast_source = arena_push_array(AstIndex, arena, count);
+  AstAndSourceIndex *sources = arena_push_array(AstAndSourceIndex, arena, count);
   u32 *data    = arena_push_array(u32, arena, count);
 
   opcodelist_copy_to_array(&builder->kinds, opcodes);
-  astlist_copy_to_array(&builder->ast_source, ast_source);
+  sourcelist_copy_to_array(&builder->ast_source, sources);
 
   void *extra = arena->at;
 
@@ -207,7 +207,7 @@ void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk) {
   *chunk = (IrChunk){
     .opcode_count = count,
     .opcodes      = opcodes,
-    .ast_source   = ast_source,
+    .sources   = sources,
     .data         = data,
     .extra        = extra,
   };

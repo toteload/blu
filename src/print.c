@@ -5,7 +5,9 @@
 #include "types.h"
 #include "value.h"
 #include "ir.h"
+#include "compiler.h"
 #include "source_file.h"
+#include "print.h"
 
 static char const *ir_opcode_names[] = {
 #define X(k, e, d, name) [k] = name,
@@ -78,9 +80,9 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
   return res;
 }
 
-void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx) {
-  Value *value = values_get(values, idx);
-  Type  *type  = types_get(types, value->type);
+void value_print(FILE *out, Compiler *compiler, ValueIndex idx) {
+  Value *value = values_get(&compiler->values, idx);
+  Type  *type  = types_get(&compiler->types, value->type);
   switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int: {
     fprintf(out, "%lld", Cast(long long, read_signed(64, value->data)));
@@ -96,11 +98,12 @@ void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex 
     fputs((*Cast(u8 *, value->data)) ? "true" : "false", out);
   } break;
   case Type_type: {
-    type_index_print(out, types, *Cast(TypeIndex *, value->data));
+    type_index_print(out, &compiler->types, *Cast(TypeIndex *, value->data));
   } break;
   case Type_function: {
     ValueFunc *func = value->data;
-    fprintf(out, "<function>");
+    fputs("\n", out);
+    ir_chunk_print(out, compiler, &func->chunk);
   } break;
   case Type_nil:
   case Type_never:
@@ -111,14 +114,14 @@ void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex 
   }
 }
 
-internal void ir_ref_print(FILE *out, IrRef ref, Source *source, TypeInterner *types, ValueStore *values) {
+internal void ir_ref_print(FILE *out, Compiler *compiler, IrRef ref) {
   if (ref_is_nil(ref)) {
     fprintf(out, "_");
     return;
   }
 
   if (ref_is_value_index(ref)) {
-    value_print(out, types, values, ref_to_value_index(ref));
+    value_print(out, compiler, ref_to_value_index(ref));
   } else {
     fprintf(out, "%%%u", ref_to_instruction_index(ref));
   }
@@ -145,59 +148,7 @@ typedef struct {
   u32 at;
 } BlockPrint;
 
-typedef struct {
-  u32    line;
-  u32    col;
-  String text;
-} AstSourceInfo;
-
-internal b32 is_whitespace(u8 c) {
-  return (c == ' ') || (c == '\t') || (c == '\r') || (c == '\n');
-}
-
-internal void ast_index_source_info(Source *source, AstIndex idx, AstSourceInfo *out) {
-  if (!source || idx == 0 || idx >= source->ast.count) {
-    *out = (AstSourceInfo){
-      .line = 0,
-      .col = 0,
-      .text = string_lit("?"),
-    };
-    return;
-  }
-
-  SpanToken span = source->ast.spans[idx];
-
-  u32 start = source->tokens.spans[span.start].start;
-  u32 end   = source->tokens.spans[span.end - 1].end;
-
-  while (end > start && is_whitespace(source->text.str[end - 1])) {
-    end -= 1;
-  }
-
-  LineInfo info = tokens_find_line_info(&source->tokens, start);
-
-  *out = (AstSourceInfo){
-    .line = info.line,
-    .col  = start - info.offset_start_of_line + 1,
-    .text = {.str = source->text.str + start, .len = end - start},
-  };
-}
-
-internal void ast_source_text_print(FILE *out, String text) {
-  usize max = 56;
-  usize len = Min(text.len, max);
-
-  for (usize i = 0; i < len; i++) {
-    u8 c = text.str[i];
-    fputc(is_whitespace(c) ? ' ' : c, out);
-  }
-
-  if (text.len > max) {
-    fputs("...", out);
-  }
-}
-
-void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *types, ValueStore *values) {
+void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
   BlockPrint buf[64];
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
@@ -234,21 +185,21 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     switch (Cast(IrOpcode, op)) {
     case IR_nop: break;
     case IR_builtin_debug: {
-      ir_ref_print(out, (IrRef){data}, source, types, values);
+      ir_ref_print(out, compiler, (IrRef){data});
     } break;
     case IR_func: {
       IrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
-      ir_ref_print(out, func->return_type, source, types, values);
+      ir_ref_print(out, compiler, func->return_type);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {
-      type_index_print(out, types, data);
+      type_index_print(out, &compiler->types, data);
     } break;
     case IR_condbr: {
       IrCondBr *cond_br = extra;
       fputs("cond=", out);
-      ir_ref_print(out, cond_br->cond, source, types, values);
+      ir_ref_print(out, compiler, cond_br->cond);
       fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
     } break;
     case IR_block:
@@ -260,14 +211,14 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_br: {
       IrBr *br = extra;
       fprintf(out, "block=%%%u ", br->block);
-      ir_ref_print(out, br->value, source, types, values);
+      ir_ref_print(out, compiler, br->value);
     } break;
     case IR_repeat: {
       fprintf(out, "%%%u", data);
     } break;
     case IR_param_type: {
       IrParamType *p = extra;
-      ir_ref_print(out, p->function, source, types, values);
+      ir_ref_print(out, compiler, p->function);
       fprintf(out, " %u", p->param_index);
     } break;
     case IR_param:
@@ -275,20 +226,18 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     case IR_load:
     case IR_typeof:
     case IR_return_type: {
-      ir_ref_print(out, (IrRef){data}, source, types, values);
+      ir_ref_print(out, compiler, (IrRef){data});
     } break;
     case IR_store: {
       IrStore *store = extra;
       fputs("dst=", out);
-      ir_ref_print(out, store->dst, source, types, values);
+      ir_ref_print(out, compiler, store->dst);
       fputs(" value=", out);
-      ir_ref_print(out, store->value, source, types, values);
+      ir_ref_print(out, compiler, store->value);
     } break;
     case IR_call: {
       IrCall *call = extra;
-      fprintf(out, "$%u", call->func);
-      //fputs(" <TODO>", out);
-      //ir_ref_print(out, call->func, source, types, values);
+      fprintf(out, "$%u", ref_to_u32(call->func));
       if (call->arg_count) {
         fputs(" ", out);
       }
@@ -296,15 +245,15 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
         if (j != 0) {
           fputs(", ", out);
         }
-        ir_ref_print(out, call->args[j], source, types, values);
+        ir_ref_print(out, compiler, call->args[j]);
       }
     } break;
     case IR_declaration: {
       IrDeclaration *decl = extra;
       fputs("type=", out);
-      ir_ref_print(out, decl->declared_type, source, types, values);
+      ir_ref_print(out, compiler, decl->declared_type);
       fputs(" value=", out);
-      ir_ref_print(out, decl->value, source, types, values);
+      ir_ref_print(out, compiler, decl->value);
     } break;
     case IR_lookup_typeof:
     case IR_lookup_value: {
@@ -312,15 +261,15 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
     } break;
     case IR_as: {
       IrAs *as = extra;
-      ir_ref_print(out, as->type_to, source, types, values);
+      ir_ref_print(out, compiler, as->type_to);
       fputs(" ", out);
-      ir_ref_print(out, as->val, source, types, values);
+      ir_ref_print(out, compiler, as->val);
     } break;
     case IR_unify: {
       IrUnify *unify = extra;
-      ir_ref_print(out, unify->type_lhs, source, types, values);
+      ir_ref_print(out, compiler, unify->type_lhs);
       fputs(" ", out);
-      ir_ref_print(out, unify->type_rhs, source, types, values);
+      ir_ref_print(out, compiler, unify->type_rhs);
     } break;
     case IR_type: {
       IrType *type = extra;
@@ -334,31 +283,78 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
             if (j != 1) {
               fputs(", ", out);
             }
-            ir_ref_print(out, type->args[j], source, types, values);
+            ir_ref_print(out, compiler, type->args[j]);
           }
         }
         fputs(") ", out);
-        ir_ref_print(out, type->args[type->arg_count-1], source, types, values);
+        ir_ref_print(out, compiler, type->args[type->arg_count-1]);
       } else {
         for (u32 j = 0; j < type->arg_count; j++) {
           if (j != 0) {
             fputs(", ", out);
           }
-          ir_ref_print(out, type->args[j], source, types, values);
+          ir_ref_print(out, compiler, type->args[j]);
         }
       }
     } break;
     }
 
-    b32 has_ast_info = !is_null(chunk->ast_source);
-    AstSourceInfo ast_info;
-    ast_index_source_info(source, chunk->ast_source[i], &ast_info);
+    fputs(" ; ", out);
+    if (chunk->sources[i].source_idx != 0 && chunk->sources[i].ast_idx != 0) {
+      AstIndex ast_idx = chunk->sources[i].ast_idx;
+      Source *source = compiler_get_source(compiler, chunk->sources[i].source_idx);
 
-    if (has_ast_info) {
-      fputs(" ; ", out);
-      ast_source_text_print(out, ast_info.text);
+      SpanToken span = source->ast.spans[ast_idx];
+
+      u32 start = source->tokens.spans[span.start].start;
+      u32 end   = source->tokens.spans[span.end - 1].end;
+
+      u8 const *s = source->text.str + start;
+
+      b32 has_newline = False;
+      u32 len = Min(end-start, 40);
+      for (u32 j = 0; j < len; j++) {
+        if (s[j] == '\n') {
+          fputs("...", out);
+          has_newline = True;
+          break;
+        }
+
+        fputc(s[j], out);
+      }
+
+      if (!has_newline && (end-start) > 40) {
+        fputs("...", out);
+      }
+
+      fputs("\n", out);
+    } else {
+      fputs("_\n", out);
     }
+  }
+}
 
-    fputc('\n', out);
+void print_tokens(Tokens *tokens, String source) {
+  for (u32 i = 0; i < tokens->tok_count; i++) {
+    u8      kind = tokens->kinds[i];
+    SpanU32 span = tokens->spans[i];
+
+    char const *s = Cast(char const*, source.str + span.start);
+    int len = Cast(int, span.end - span.start);
+
+    char const *kind_string = token_kind_string(kind);
+
+    printf("%5u:%5u - %s - \"%.*s\"\n", span.start, span.end, kind_string, len, s);
+  }
+}
+
+void print_ast_nodes(AstNodes *nodes, Tokens *tokens, String source) {
+  Unused(tokens, source);
+
+  for (u32 i = 1; i < nodes->count; i++) {
+    u8 kind = nodes->kinds[i];
+    String kind_string = ast_kind_string(kind);
+
+    printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
   }
 }

@@ -157,10 +157,15 @@ typedef struct {
 // -------------------------------------------------------------------------------------------------
 
 typedef struct {
+  SourceIndex source_idx;
+  AstIndex    ast_idx;
+} AstAndSourceIndex;
+
+typedef struct {
   u32 opcode_count;
   u8 *opcodes;
   u32 *data;
-  AstIndex *ast_source;
+  AstAndSourceIndex *sources;
   void *extra;
 } IrChunk;
 
@@ -200,7 +205,7 @@ typedef union {
 #define AST_SOURCE_LIST_MIN_SIZE_LOG2 8
 #define AST_SOURCE_LIST_SEGMENT_COUNT 24
 #define AST_SOURCE_LIST_NAME AstSourceList
-#define AST_SOURCE_LIST_TYPE AstIndex
+#define AST_SOURCE_LIST_TYPE AstAndSourceIndex
 #define SEGMENTLIST_NAME AST_SOURCE_LIST_NAME
 #define SEGMENTLIST_TYPE AST_SOURCE_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 AST_SOURCE_LIST_MIN_SIZE_LOG2
@@ -218,7 +223,7 @@ typedef struct {
 InstructionIndex inst_alloc(IrBuilder *builder);
 void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
 u8 inst_opcode(IrBuilder *builder, InstructionIndex idx);
-void inst_set_ast_source(IrBuilder *builder, InstructionIndex idx, AstIndex source);
+void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
 void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
 void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
@@ -230,17 +235,11 @@ void inst_block_end(IrBuilder *builder, InstructionIndex block);
 void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
 void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
 
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, AstIndex source);
+InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex source);
 
 void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
 
 #define inst_push_data(builder, idx, type)                                                         \
   inst_push_data_raw(builder, idx, sizeof(type), Align_of(type))
-
-// -------------------------------------------------------------------------------------------------
-
-void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *types, ValueStore *values);
-void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx);
-void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx);
 
 #endif // IR_H

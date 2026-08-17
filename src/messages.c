@@ -62,6 +62,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   switch (loc.kind) {
   case MessageLocation_byte_offset: {
     offset = loc.data.offset;
+    len = 1;
   } break;
   case MessageLocation_token_index: {
     SpanU32 span_offset = source->tokens.spans[loc.data.token_index];
@@ -76,7 +77,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   } break;
   case MessageLocation_ir_instruction: {
     IrChunk *chunk = &decl->data.decl.chunk;
-    AstIndex ast_idx = chunk->ast_source[loc.data.offset];
+    AstIndex ast_idx = chunk->sources[loc.data.offset].ast_idx;
     if (ast_idx) {
       SpanToken span_token = source->ast.spans[ast_idx];
       SpanU32 span_offset = source->tokens.spans[span_token.start];
@@ -110,7 +111,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   } break;
   }
 
-  LineInfo info = tokens_find_line_info(&source->tokens, offset);
+  LineInfo info = tokens_find_line_info(source->text, &source->tokens, offset);
 
   u32 line = info.line;
   u32 col = offset - info.offset_start_of_line + 1;

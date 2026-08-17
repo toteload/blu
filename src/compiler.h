@@ -126,6 +126,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
+Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 

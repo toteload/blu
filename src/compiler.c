@@ -2,36 +2,12 @@
 #include "source_file.h"
 #include "string_interner.h"
 #include "codegen.h"
+#include "specialize.h"
 #include "interpret.h"
-#include "interpreter.h"
 #include "ir.h"
+#include "print.h"
 
 #include <stdarg.h>
-
-internal void write_tokens(Tokens *tokens, String source) {
-  for (u32 i = 0; i < tokens->tok_count; i++) {
-    u8      kind = tokens->kinds[i];
-    SpanU32 span = tokens->spans[i];
-
-    char const *s = Cast(char const*, source.str + span.start);
-    int len = Cast(int, span.end - span.start);
-
-    char const *kind_string = token_kind_string(kind);
-
-    printf("%5u:%5u - %s - \"%.*s\"\n", span.start, span.end, kind_string, len, s);
-  }
-}
-
-internal void write_nodes(AstNodes *nodes, Tokens *tokens, String source) {
-  Unused(tokens, source);
-
-  for (u32 i = 1; i < nodes->count; i++) {
-    u8 kind = nodes->kinds[i];
-    String kind_string = ast_kind_string(kind);
-
-    printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
-  }
-}
 
 #define SEGMENTLIST_NAME SourceList
 #define SEGMENTLIST_TYPE Source
@@ -271,6 +247,10 @@ void compiler_add_sourcefile(Compiler *compiler, String filename) {
   source_file_init(source, idx, filename);
 }
 
+Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
+  return sources_ptr_at_unchecked(&compiler->sources, source_idx);
+}
+
 void compiler_print_all_messages(Compiler *compiler) {
   for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
@@ -341,7 +321,7 @@ typedef struct {
 
   DeclarationInterner *decls;
 
-  Interpreter *in;
+  Specializer *in;
   Stack(ResolveEntry) resolve_stack;
 } Resolver;
 
@@ -565,14 +545,14 @@ b32 compile(Compiler *compiler) {
   if (compiler->options->print_tokens) {
     for (u32 i = 1; i < compiler->sources.len; i++) {
       Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-      write_tokens(&source->tokens, source->text);
+      print_tokens(&source->tokens, source->text);
     }
   }
 
   if (compiler->options->print_ast) {
     for (u32 i = 1; i < compiler->sources.len; i++) {
       Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-      write_nodes(&source->ast, &source->tokens, source->text);
+      print_ast_nodes(&source->ast, &source->tokens, source->text);
     }
   }
 
@@ -716,7 +696,7 @@ b32 compile(Compiler *compiler) {
 
       if (compiler->options->print_decl_ir) {
         ir_chunk_print(
-          stdout, &decl->data.decl.chunk, decl->data.decl.source, &compiler->types, &compiler->values
+          stdout, compiler, &decl->data.decl.chunk
         );
       }
     }
@@ -727,7 +707,7 @@ b32 compile(Compiler *compiler) {
   }
 
   {
-    Interpreter interpreter = {
+    Specializer specializer = {
       .perm = &compiler->arena,
       .scratch = &compiler->scratch,
       .msg_sink = &compiler->msg_sink,
@@ -738,7 +718,7 @@ b32 compile(Compiler *compiler) {
     };
 
     IrBuilder *builders = arena_push_array(IrBuilder, &compiler->scratch, MAX_BUILDERS);
-    stack_init(&interpreter.builders, builders, MAX_BUILDERS);
+    stack_init(&specializer.builders, builders, MAX_BUILDERS);
 
     Resolver resolver = {
       .ok = True,
@@ -746,7 +726,7 @@ b32 compile(Compiler *compiler) {
       .user_declaration_count = compiler->user_decls.len,
       .user_declarations = user_decls,
       .decls = &compiler->decls,
-      .in = &interpreter,
+      .in = &specializer,
       .msg_sink = &compiler->msg_sink,
     };
 
@@ -772,7 +752,7 @@ b32 compile(Compiler *compiler) {
       printf("%.*s : ", Cast(int, name.len), name.str);
       type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
       printf(" = ");
-      value_print(stdout, &compiler->types, &compiler->values, val);
+      value_print(stdout, compiler, val);
       printf("\n");
     }
   }
@@ -811,11 +791,10 @@ b32 run_main(Compiler *compiler) {
   Value *v = values_get(&compiler->values, decl_main->data.decl.val);
   IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
 
-  Interpreter2 in = {
+  Interpreter in = {
     .scratch = &compiler->scratch,
     .msg_sink = &compiler->msg_sink,
-    .types = &compiler->types,
-    .values = &compiler->values,
+    .compiler = compiler,
   };
 
   stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);

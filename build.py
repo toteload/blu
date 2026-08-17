@@ -115,10 +115,10 @@ def create_build_ninja():
         'compiler.c',
         'cli_options.c',
         'codegen.c',
+        'specialize.c',
         'interpret.c',
-        'interpreter.c',
         'ir.c',
-        'ir_print.c',
+        'print.c',
     ]
 
     outputs = []
