@@ -776,12 +776,14 @@ internal b32 parse_break(Parser *parser, AstIndex *out) {
   Try(expect_token(parser, Tok_keyword_break));
 
   AstBreak *data = node_push_data(parser, AstBreak, idx);
-
-  Try(parse_label(parser, &data->label));
-
-  data->value = 0;
+  *data = (AstBreak){ 0 };
 
   u8 tok;
+  Try(peek(parser, &tok));
+  if (tok == Tok_label) {
+    Try(parse_label(parser, &data->label));
+  }
+
   Try(peek(parser, &tok));
   if (tok != Tok_brace_close) {
     Try(parse_expression(parser, &data->value));
@@ -851,19 +853,19 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   AstIndex base;
   switch (tok) {
     // clang-format off
-  case Tok_keyword_for:      Try(parse_for(parser, 0, &base));         break;
-  case Tok_keyword_while:    Try(parse_while(parser, 0, &base));       break;
-  case Tok_keyword_defer:    Try(parse_defer(parser, &base));          break;
-  case Tok_keyword_if:       Try(parse_if_else(parser, &base));        break;
-  case Tok_literal_int:      Try(parse_literal_int(parser, &base));    break;
-  case Tok_literal_string:   Try(parse_literal_string(parser, &base)); break;
-  case Tok_bar:              Try(parse_function(parser, &base));       break;
-  case Tok_builtin_debug:    Try(parse_builtin_debug(parser, &base));  break;
-  case Tok_keyword_const:    Try(parse_const(parser, &base));          break;
-  case Tok_keyword_cast:     Try(parse_cast(parser, &base));           break;
-  case Tok_keyword_as:       Try(parse_as(parser, &base));             break;
-  case Tok_keyword_break:    Try(parse_break(parser, &base));          break;
-  case Tok_brace_open:       Try(parse_block(parser, &base));          break;
+  case Tok_keyword_for:    Try(parse_for(parser, 0, &base));         break;
+  case Tok_keyword_while:  Try(parse_while(parser, 0, &base));       break;
+  case Tok_keyword_defer:  Try(parse_defer(parser, &base));          break;
+  case Tok_keyword_if:     Try(parse_if_else(parser, &base));        break;
+  case Tok_literal_int:    Try(parse_literal_int(parser, &base));    break;
+  case Tok_literal_string: Try(parse_literal_string(parser, &base)); break;
+  case Tok_bar:            Try(parse_function(parser, &base));       break;
+  case Tok_builtin_debug:  Try(parse_builtin_debug(parser, &base));  break;
+  case Tok_keyword_const:  Try(parse_const(parser, &base));          break;
+  case Tok_keyword_cast:   Try(parse_cast(parser, &base));           break;
+  case Tok_keyword_as:     Try(parse_as(parser, &base));             break;
+  case Tok_keyword_break:  Try(parse_break(parser, &base));          break;
+  case Tok_brace_open:     Try(parse_block(parser, &base));          break;
     // clang-format on
 
   case Tok_label: { 

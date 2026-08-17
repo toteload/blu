@@ -9,7 +9,7 @@ main := || {
 
   i := 0
   while i < text {
-    sign := if text[i] == "L" { -1 } else 1
+    sign := if text[i] == "L" { -1 } else { 1 }
 
     i += 1
 
@@ -47,9 +47,9 @@ main := || {
       }
     }
 
-    :scan while i < text {
+    while i < text {
       if text[i] == "L" or text[i] == "R" {
-        break :scan
+        break
       }
 
       i += 1
