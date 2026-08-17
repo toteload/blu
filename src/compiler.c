@@ -772,7 +772,7 @@ b32 compile(Compiler *compiler) {
       printf("%.*s : ", Cast(int, name.len), name.str);
       type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
       printf(" = ");
-      value_print(stdout, decl->data.decl.source, &compiler->types, &compiler->values, val);
+      value_print(stdout, &compiler->types, &compiler->values, val);
       printf("\n");
     }
   }
@@ -783,11 +783,26 @@ b32 compile(Compiler *compiler) {
 b32 run_main(Compiler *compiler) {
   DeclarationIndex mod_main;
   b32 ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){0}, 1, strings_add(&compiler->strings, string_lit("main")), &mod_main);
-  Assert(ok);
+  if (!ok) {
+    Message_error(
+      &compiler->msg_sink,
+      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      string_lit("Module 'main' not found")
+    );
+
+    return False;
+  }
 
   DeclarationIndex fn_main;
-  ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main,0}, 2, strings_add(&compiler->strings, string_lit("main")), &fn_main);
-  Assert(ok);
+  ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main}, 1, strings_add(&compiler->strings, string_lit("main")), &fn_main);
+  if (!ok) {
+    Message_error(
+      &compiler->msg_sink,
+      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      string_lit("Declaration 'main' not found in module 'main'")
+    );
+    return False;
+  }
 
   Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
 
@@ -799,6 +814,7 @@ b32 run_main(Compiler *compiler) {
   Interpreter2 in = {
     .scratch = &compiler->scratch,
     .msg_sink = &compiler->msg_sink,
+    .types = &compiler->types,
     .values = &compiler->values,
   };
 
@@ -807,9 +823,6 @@ b32 run_main(Compiler *compiler) {
   ValueIndex res;
   u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &res);
   Assert(!err);
-
-  value_print(stdout, Null, &compiler->types, &compiler->values, res);
-  fputs("\n", stdout);
 
   return True;
 }

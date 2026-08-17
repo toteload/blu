@@ -78,7 +78,7 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
   return res;
 }
 
-void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *values, ValueIndex idx) {
+void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx) {
   Value *value = values_get(values, idx);
   Type  *type  = types_get(types, value->type);
   switch (Cast(TypeKind, type->kind)) {
@@ -100,8 +100,7 @@ void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *val
   } break;
   case Type_function: {
     ValueFunc *func = value->data;
-    fputs("\n", out);
-    ir_chunk_print(out, &func->chunk, source, types, values);
+    fprintf(out, "<function>");
   } break;
   case Type_nil:
   case Type_never:
@@ -119,7 +118,7 @@ internal void ir_ref_print(FILE *out, IrRef ref, Source *source, TypeInterner *t
   }
 
   if (ref_is_value_index(ref)) {
-    value_print(out, source, types, values, ref_to_value_index(ref));
+    value_print(out, types, values, ref_to_value_index(ref));
   } else {
     fprintf(out, "%%%u", ref_to_instruction_index(ref));
   }
@@ -234,6 +233,9 @@ void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *typ
 
     switch (Cast(IrOpcode, op)) {
     case IR_nop: break;
+    case IR_builtin_debug: {
+      ir_ref_print(out, (IrRef){data}, source, types, values);
+    } break;
     case IR_func: {
       IrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);

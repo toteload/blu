@@ -355,7 +355,8 @@ internal b32 parse_builtin_debug(Parser *parser, AstIndex *out) {
   builtin->base.kind = Builtin_debug;
 
   Try(expect_token(parser, Tok_paren_open));
-  Try(parse_comma_separated_items_until(parser, &builtin->args, parse_expression, Tok_paren_close));
+  AstIndex *e = list_push(&builtin->args, parser->scratch);
+  Try(parse_expression(parser, e));
   Try(expect_token(parser, Tok_paren_close));
 
   *node_kind(parser, idx) = Ast_builtin;

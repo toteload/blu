@@ -795,6 +795,24 @@ internal u32 step(Interpreter *in, RunState *state) {
 
     s->pc += 1;
   } break;
+  case IR_builtin_debug: {
+    IrRef ref = (IrRef){ chunk_data(f->chunk, pc) };
+    ResolvedRef val = resolve(f, ref);
+
+    if (ref_is_some_value_index(val)) {
+      ValueIndex vidx = values_copy(in->values, ref_to_value_index(val));
+      val = resolved_ref_from_value_index(vidx);
+    }
+
+    IrBuilder *builder = get_builder(in);
+    InstructionIndex inst = inst_alloc(builder);
+    inst_set_opcode(builder, inst, IR_builtin_debug);
+    inst_set_data(builder, inst, ref_to_u32(val));
+
+    store_inst_value(f, pc, resolved_ref_from_instruction_index(inst));
+
+    s->pc += 1;
+  } break;
   default: Todo();
   }
 

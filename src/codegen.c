@@ -346,6 +346,21 @@ IrRef gen_code(CodeGen *gen, AstIndex idx_ast, IrRef type_destination) {
     IrRef res = ir_ref_from_instruction_index(inst_call);
     return ir_ref_from_instruction_index(inst_as(&gen->builder, type_destination, res, idx_ast));
   } break;
+  case Ast_builtin: {
+    AstBuiltin *builtin = ast_data(ast, idx_ast);
+    switch (Cast(BuiltinKind, builtin->kind)) {
+    case Builtin_debug: {
+      AstIndex e = builtin->args[0];
+      IrRef val = gen_code(gen, e, type_destination);
+
+      InstructionIndex inst_debug = inst_alloc(builder);
+      inst_set_opcode(builder, inst_debug, IR_builtin_debug);
+      inst_set_data(builder, inst_debug, ref_to_u32(val));
+
+      return ir_ref_from_instruction_index(inst_debug);
+    } break;
+    }
+  } break;
   default:
     Todo();
   }

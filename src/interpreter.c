@@ -127,6 +127,13 @@ internal u32 step(Interpreter2 *in) {
     frame_pop(in);
     return Step_return;
   } break;
+  case IR_builtin_debug: {
+    ValueIndex val = resolve(in, f, (IrRef){ chunk_data(f->chunk, pc) });
+    value_print(stdout, in->types, in->values, val);
+    fprintf(stdout, "\n");
+    f->inst_values[pc] = val;
+    f->pc += 1;
+  } break;
   default: Todo();
   }
 

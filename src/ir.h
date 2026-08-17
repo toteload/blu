@@ -75,6 +75,8 @@ typedef enum {
   IR_store,  // data references `IrStore` in extra
   IR_call,   // data references `IrCall` in extra
 
+  IR_builtin_debug, // data contains `IrRef`
+
   IR_declaration,   // data references `IrDeclaration` in extra
   IR_lookup_typeof, // data contains `DeclarationIndex`
   IR_lookup_value,  // data contains `DeclarationIndex`
@@ -239,6 +241,6 @@ void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
 
 void ir_chunk_print(FILE *out, IrChunk *chunk, Source *source, TypeInterner *types, ValueStore *values);
 void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx);
-void value_print(FILE *out, Source *source, TypeInterner *types, ValueStore *values, ValueIndex idx);
+void value_print(FILE *out, TypeInterner *types, ValueStore *values, ValueIndex idx);
 
 #endif // IR_H

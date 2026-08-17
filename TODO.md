@@ -1,6 +1,8 @@
 # Currently doing
 
-- [ ] Add the `#debug` builtin. `#debug` prints the value it is called with and returns the same value.
+- [x] Add the `#debug` builtin. `#debug` prints the value it is called with and returns the same value.
+- [ ] Update the source information binding in the IR to include the SourceIndex. An instruction may be inlined from a function from a different source.
+      Another benefit of this is that the IR now holds the data to which Source it belongs (a connection that does not currently exist).
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
@@ -66,8 +68,6 @@ path is effectively dead until formatting is implemented — but it's live UB in
   - Includes coercion of sequence literals to typed slices.
   - Includes indexing of slices.
   - Includes coercion of array to slice.
-- [ ] `test\basic\print.blu`
-  - Add `#print` as a builtin function. This builtin is not meant to stay, but can be used during development for debugging and getting some output.
 - [ ] `test\basic\defer.blu`
 - [ ] Add assign of variables.
 

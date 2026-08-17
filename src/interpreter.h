@@ -25,6 +25,7 @@ typedef Stack(CallFrame2) CallStack2;
 
 typedef struct {
   Arena *scratch;
+  TypeInterner *types;
   MessageSink *msg_sink;
   ValueStore *values;
   CallStack2 call_stack;

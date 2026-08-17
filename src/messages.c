@@ -42,9 +42,10 @@ internal b32 location_kind_has_line_col(u8 kind) {
   case MessageLocation_ast_index:
   case MessageLocation_token_index:
   case MessageLocation_byte_offset:
-  case MessageLocation_unspecified:
   case MessageLocation_ir_instruction:
     return True;
+  case MessageLocation_unspecified:
+    return False;
   }
 }
 
@@ -139,8 +140,10 @@ void print_message(Message *message, Source *source, Declaration *decl) {
     source = decl->data.decl.source;
   }
 
-  String filename = source->filename;
-  printf(" \033[1m%.*s:\033[22m", Cast(int, filename.len), filename.str);
+  if (source) {
+    String filename = source->filename;
+    printf(" \033[1m%.*s:\033[22m", Cast(int, filename.len), filename.str);
+  }
 
   PositionInfo info = {
     .line = 0,

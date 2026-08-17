@@ -3,6 +3,7 @@
 #endif
 
 X(IR_nop,           False, u32,           "nop")
+X(IR_builtin_debug, False, u32,           "#debug")
 X(IR_func,          True,  IrFunc,        "func")
 X(IR_param,         False, u32,           "param")
 X(IR_alloc,         False, u32,           "alloc")
