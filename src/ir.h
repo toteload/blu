@@ -61,7 +61,7 @@ typedef enum {
 
   IR_func,   // data references `IrFunc` in extra
   IR_param,  // data contains `IrRef`
-  IR_alloc,  // data contains `TypeIndex`
+  IR_alloc,  // data contains `IrRef`
   IR_condbr, // data references `IrCondBr` in extra
   IR_block,  // data contains instruction count of block
   IR_eval_block, // data contains instruction count of block
@@ -87,6 +87,7 @@ typedef enum {
   IR_type, // data references `IrType` in extra
   IR_typeof, // data contains `IrRef`
 
+  IR_base_type, // data contains `IrRef`
   IR_return_type, // data contains `IrRef`
   IR_param_type,  // data references `IrParamType` in extra
 } IrOpcode;
@@ -229,11 +230,14 @@ void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
 
+InstructionIndex inst_loop_begin(IrBuilder *builder);
 InstructionIndex inst_block_begin(IrBuilder *builder);
 InstructionIndex inst_eval_block_begin(IrBuilder *builder);
 void inst_block_end(IrBuilder *builder, InstructionIndex block);
 void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
+void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
 void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
+void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
 
 InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex source);
 

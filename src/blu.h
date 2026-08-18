@@ -24,4 +24,9 @@ typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;
 typedef struct Declaration Declaration;
 
+// `out` must point to enough memory for the decoded string.
+// The caller may assume that the amount of memory needed for the decoded string is equal to or less
+// than the size of `literal`.
+u32 decode_string_literal(String literal, u8 *out, u32 *len);
+
 #endif // BLU_H

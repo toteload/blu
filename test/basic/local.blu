@@ -1,0 +1,7 @@
+mod main
+
+main := ||: i32 {
+  a: i32 = 1
+  a = 0
+  #debug(a)
+}

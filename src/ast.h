@@ -204,9 +204,9 @@ typedef struct {
 } AstDefer;
 
 typedef struct {
-  u8 assign_kind;
-  AstIndex  lhs;
-  AstIndex  value;
+  u8 kind;
+  AstIndex lhs;
+  AstIndex value;
 } AstAssign;
 
 typedef struct {

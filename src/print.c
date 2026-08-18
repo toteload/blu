@@ -53,6 +53,10 @@ void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
     fputs("[]", out);
     type_index_print(out, types, type->data.slice.base_type);
   } break;
+  case Type_pointer: {
+    fputs("*", out);
+    type_index_print(out, types, type->data.pointer.base_type);
+  } break;
   case Type_array: {
     fprintf(out, "[%llu]", Cast(unsigned long long, type->data.array.size));
     type_index_print(out, types, type->data.array.base_type);
@@ -105,6 +109,7 @@ void value_print(FILE *out, Compiler *compiler, ValueIndex idx) {
     fputs("\n", out);
     ir_chunk_print(out, compiler, &func->chunk);
   } break;
+  case Type_pointer: Todo();
   case Type_nil:
   case Type_never:
   case Type_slice:
@@ -138,6 +143,7 @@ internal char const* typekind_string(u8 kind) {
   case Type_slice:        return "slice";
   case Type_array:        return "array";
   case Type_type:         return "type";
+  case Type_pointer:      return "pointer";
   }
 
   return "<invalid>";
@@ -194,7 +200,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
     case IR_alloc: {
-      type_index_print(out, &compiler->types, data);
+      ir_ref_print(out, compiler, (IrRef){data});
     } break;
     case IR_condbr: {
       IrCondBr *cond_br = extra;
@@ -225,6 +231,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
     case IR_ret:
     case IR_load:
     case IR_typeof:
+    case IR_base_type:
     case IR_return_type: {
       ir_ref_print(out, compiler, (IrRef){data});
     } break;
@@ -315,7 +322,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       u32 len = Min(end-start, 40);
       for (u32 j = 0; j < len; j++) {
         if (s[j] == '\n') {
-          fputs("...", out);
+          fputs(" ...", out);
           has_newline = True;
           break;
         }
@@ -324,7 +331,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       }
 
       if (!has_newline && (end-start) > 40) {
-        fputs("...", out);
+        fputs(" ...", out);
       }
 
       fputs("\n", out);

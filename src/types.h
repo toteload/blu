@@ -13,6 +13,7 @@ typedef enum {
   Type_slice,
   Type_array,
   Type_type,
+  Type_pointer,
 } TypeKind;
 
 // How a comptime_int is actually stored. This will probably grow at some point.
@@ -50,6 +51,10 @@ typedef struct {
 } TypeFunction;
 
 typedef struct {
+  TypeIndex base_type;
+} TypePointer;
+
+typedef struct {
   u8 kind;
 
 #pragma clang diagnostic push
@@ -59,6 +64,7 @@ typedef struct {
     TypeSlice    slice;
     TypeArray    array;
     TypeFunction function;
+    TypePointer  pointer;
   } data;
 #pragma clang diagnostic pop
 } Type;
@@ -76,6 +82,8 @@ typedef Type *TypePtr;
 #define arena_push_type_function(arena,param_count) arena_push(arena, sizeof(Type) + (param_count) *sizeof(TypeIndex), Align_of(Type))
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.
+// This is NOT the runtime size. For example, if you pass an array type to this funcion it will
+// return a constant size, since all you need to store for an array is the base type and its size.
 u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);

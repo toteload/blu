@@ -3,12 +3,12 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-u32 str_hash(void *context, String s) { 
+internal u32 str_hash(void *context, String s) { 
   Unused(context);
   return XXH32(s.str, s.len, 0);
 }
 
-b32 str_eq(void *context, String a, String b) {
+internal b32 str_eq(void *context, String a, String b) {
   Unused(context);
   return string_eq(a, b);
 }

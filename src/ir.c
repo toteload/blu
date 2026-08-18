@@ -79,6 +79,12 @@ u32 inst_offset(IrBuilder *builder, InstructionIndex start) {
   return at - start;
 }
 
+InstructionIndex inst_loop_begin(IrBuilder *builder) {
+  InstructionIndex block = inst_alloc(builder);
+  inst_set_opcode(builder, block, IR_loop);
+  return block;
+}
+
 InstructionIndex inst_block_begin(IrBuilder *builder) {
   InstructionIndex block = inst_alloc(builder);
   inst_set_opcode(builder, block, IR_block);
@@ -110,6 +116,20 @@ void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef
   inst_set_data(builder, block, block_inst_count);
 }
 
+void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
+  InstructionIndex br = inst_alloc(builder);
+  inst_set_opcode(builder, br, IR_br);
+
+  IrBr *data = inst_push_data(builder, br, IrBr);
+  *data = (IrBr){
+    .block = target,
+    .value = 0,
+  };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+}
+
 void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref) {
   InstructionIndex br = inst_alloc(builder);
   inst_set_opcode(builder, br, IR_br);
@@ -119,6 +139,15 @@ void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex b
     .block = target,
     .value = ref,
   };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+}
+
+void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
+  InstructionIndex repeat = inst_alloc(builder);
+  inst_set_opcode(builder, repeat, IR_repeat);
+  inst_set_data(builder, repeat, target);
 
   u32 block_inst_count = inst_offset(builder, block);
   inst_set_data(builder, block, block_inst_count);

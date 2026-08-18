@@ -15,6 +15,7 @@ typedef struct {
     TypeIndex nil;
     TypeIndex bool;
     TypeIndex never;
+    TypeIndex u8;
     TypeIndex i32;
   } type;
 

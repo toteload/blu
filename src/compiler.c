@@ -30,12 +30,12 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-u32 hash_decl_key(void *context, DeclarationKey key) {
+internal u32 hash_decl_key(void *context, DeclarationKey key) {
   Unused(context);
   return XXH32(&key, sizeof(DeclarationKey), 0);
 }
 
-b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
+internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
   Unused(context);
   return a.parent == b.parent && a.name == b.name;
 }
@@ -191,9 +191,10 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
   compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
+  compiler->common.type.u8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
   compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
 
-  TypeIndex ti_i8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
+  TypeIndex ti_i8 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
 
   compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
@@ -678,17 +679,20 @@ b32 compile(Compiler *compiler) {
     CodeGenContext context = {
       .perm = &compiler->arena,
       .scratch = &compiler->scratch,
+      .gpa = cstd_allocator,
       .common = &compiler->common,
       .msg_sink = &compiler->msg_sink,
       .strings = &compiler->strings,
       .decls = &compiler->decls,
       .values = &compiler->values,
+      .types = &compiler->types,
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
       Declaration *decl =
         decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
       user_decls[i] = decl;
+
       is_ok &= generate_code(&context, decl);
 
       if (compiler->options->print_decl_ir) {

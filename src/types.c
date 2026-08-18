@@ -131,6 +131,7 @@ u32 type_intern_byte_size(Type *type) {
   case Type_never:
   case Type_type:
   case Type_slice:
+  case Type_pointer:
   case Type_array:
     return sizeof(Type);
   case Type_function:

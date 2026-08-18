@@ -155,6 +155,7 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
     return True;
   case Type_array: Todo();
   case Type_slice: Todo();
+  case Type_pointer: Todo();
   case Type_function: {
     if (t->data.function.return_type == 0) {
       return False;

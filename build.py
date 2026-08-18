@@ -119,6 +119,7 @@ def create_build_ninja():
         'interpret.c',
         'ir.c',
         'print.c',
+        'util.c',
     ]
 
     outputs = []

@@ -1096,9 +1096,9 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
     if (op >= BinaryOpKind_count) {
       AstAssign *assign = node_push_data(parser, AstAssign, ast_index);
 
-      assign->assign_kind = op - BinaryOpKind_count;
-      assign->lhs         = lhs;
-      assign->value       = rhs;
+      assign->kind  = op - BinaryOpKind_count;
+      assign->lhs   = lhs;
+      assign->value = rhs;
 
       *node_kind(parser, ast_index) = Ast_assign;
       *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
