@@ -1,13 +1,13 @@
 mod main
 
-main := || {
-  text := "TODO"
+main: = || {
+  text: = "TODO"
 
-  count  := 0
-  pcount := 0
-  dial   := 50
+  count: i32 = 0
+  pcount: i32 = 0
+  dial: i32 = 50
 
-  i := 0
+  i: i32= 0
   while i < text {
     sign := if text[i] == "L" { -1 } else { 1 }
 

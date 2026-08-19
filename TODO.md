@@ -1,10 +1,13 @@
 # Currently doing
 
 - [ ] Get `samples/aoc_2025_day_01.blu` to compile and run and get the right answer :)
+  - [ ] IR_load needs to be updated to also take a type arg.
+  - [ ] Introduce a split in the IR: IR for the specializer and IR for the interpreter.
   - [ ] Side quest: finish the stubs in the message printing for {tokenkind} etc.
-  - [ ] There is something weird going on with parsing the if/else on line 12. `sign := if text[i] == "L" { -1 } else 1`
   - [ ] Add `.len()` method to slices and arrays.
     - [ ] Needs compound identifiers (is compound the word here?).
+
+- [ ] Reuse deallocated values! And add generation check.
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?

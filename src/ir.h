@@ -81,6 +81,8 @@ typedef enum {
   IR_lookup_typeof, // data contains `DeclarationIndex`
   IR_lookup_value,  // data contains `DeclarationIndex`
 
+  IR_comptime_alloc, // data contains `IrRef`
+
   IR_as,    // data references `IrAs` in extra
   IR_unify, // data references `IrUnify` in extra
 
@@ -222,11 +224,14 @@ typedef struct {
 } IrBuilder;
 
 InstructionIndex inst_alloc(IrBuilder *builder);
+
 void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
-u8 inst_opcode(IrBuilder *builder, InstructionIndex idx);
 void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
 void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
 void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
+
+u8 inst_get_opcode(IrBuilder *builder, InstructionIndex idx);
+u32 inst_get_data(IrBuilder *builder, InstructionIndex idx);
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
 

@@ -122,8 +122,6 @@ void codegen_deinit(CodeGen *gen) {
 }
 
 internal InstructionIndex lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
-  IrBuilder *builder = &gen->builder;
-
   InstructionIndex *inst = locals_find(&gen->locals, str); 
   if (inst) {
     return *inst;

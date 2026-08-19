@@ -199,3 +199,7 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
 
   Todo();
 }
+
+TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
+  return types_add(types, &(Type){ .kind = Type_pointer, .data.pointer = { .base_type = base_type } });
+}

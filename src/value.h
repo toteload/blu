@@ -23,15 +23,22 @@ typedef struct {
   void  *data;
 } ValueSlice;
 
+typedef struct {
+  IrChunk chunk;
+} ValueFunc;
+
+typedef struct {
+  ValueIndex val;
+  u32 offset;
+} ValuePointer;
+
+// -----------------------------------------------------------------------------
+
 struct ValueStore {
   Arena     *arena;
   Allocator  payload_allocator;
   ValueList  list;
 };
-
-typedef struct {
-  IrChunk chunk;
-} ValueFunc;
 
 typedef struct {
   Arena     *arena;

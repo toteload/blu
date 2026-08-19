@@ -259,7 +259,7 @@ internal b32 expect_comptime_value_or_nil(Specializer *in, CallFrame *f, IrRef r
   return False;
 }
 
-internal b32 expect_comptime_value(Specializer *in, CallFrame *f, IrRef ref, ValueIndex *out) {
+internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, IrRef ref, ValueIndex *out) {
   ValueIndex idx;
   b32 ok = expect_comptime_value_or_nil(in, f, ref, &idx);
   if (!ok) {
@@ -311,9 +311,9 @@ internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex va
   return True;
 }
 
-internal b32 expect_type_value(Specializer *in, CallFrame *f, IrRef ref, TypeIndex *out) {
+internal b32 expect_some_type_value(Specializer *in, CallFrame *f, IrRef ref, TypeIndex *out) {
   ValueIndex val;
-  b32 ok = expect_comptime_value(in, f, ref, &val);
+  b32 ok = expect_some_comptime_value(in, f, ref, &val);
   if (!ok) {
     return False;
   }
@@ -393,7 +393,7 @@ internal u32 step(Specializer *in, RunState *state) {
     InstructionIndex inst = inst_alloc(builder);
     inst_set_opcode(builder, inst, IR_block);
 
-    store_inst_value(f, s->pc, resolved_ref_from_instruction_index(inst));
+    store_inst_value(f, pc, resolved_ref_from_instruction_index(inst));
 
     ScopeSpan *scope = push_scope(f);
     *scope = (ScopeSpan){
@@ -417,7 +417,7 @@ internal u32 step(Specializer *in, RunState *state) {
     data_func->param_count = func->param_count;
 
     TypeIndex return_type;
-    b32 ok = expect_type_value(in, f, func->return_type, &return_type);
+    b32 ok = expect_some_type_value(in, f, func->return_type, &return_type);
     if (!ok) {
       return Step_encountered_error;
     }
@@ -456,36 +456,54 @@ internal u32 step(Specializer *in, RunState *state) {
     DeclarationIndex decl_idx = chunk_data(f->chunk, pc);
     Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
 
-    if (decl->kind == Declaration_primitive) {
-      ValueIndex copy = values_copy(in->values, decl->data.primitive);
-      store_inst_value(f, pc, resolved_ref_from_value_index(copy));
-      s->pc = pc + 1;
-      break;
+    if (decl->kind == Declaration_mod) {
+      Todo();
     }
 
-    if (!state->requested_resolution) {
-      if (decl->kind == Declaration_decl) {
-        state->requested_resolution = True;
-        return Step_resolve_declaration_value;
-      }
+    if (!state->requested_resolution && decl->kind == Declaration_decl) {
+      state->requested_resolution = True;
+      return Step_resolve_declaration_value;
+    }
 
-      Todo();
+    ValueIndex val;
+    if (decl->kind == Declaration_primitive) {
+      val = decl->data.primitive;
     } else {
       state->requested_resolution = False;
-      Assert(decl->kind == Declaration_decl);
-
-      ValueIndex copy = values_copy(in->values, decl->data.decl.val);
-      store_inst_value(f, pc, resolved_ref_from_value_index(copy));
-      s->pc += 1;
-      break;
+      val = decl->data.decl.val;
     }
+
+    TypeIndex type;
+    {
+      Value *v = values_get(in->values, val);
+      type = types_add_pointer(in->types, v->type);
+    }
+
+    Value *v;
+    ValueIndex ptr = values_alloc(in->values, &v);
+    ValuePointer *data = values_alloc_data_type(in->values, ValuePointer);
+
+    *data = (ValuePointer){
+      .val = val,
+      .offset = 0,
+    };
+
+    *v = (Value){
+      .type = type,
+      .data = data,
+      .data_size = sizeof(ValuePointer),
+    };
+
+    store_inst_value(f, pc, resolved_ref_from_value_index(ptr));
+
+    s->pc += 1;
   } break;
   case IR_as: {
     IrAs *as = chunk_extra(f->chunk, pc);
     ResolvedRef ref = resolve(f, as->val);
 
     TypeIndex type_dst;
-    b32 ok = expect_type_value(in, f, as->type_to, &type_dst);
+    b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
     if (!ok) {
       return Step_encountered_error;
     }
@@ -660,7 +678,7 @@ internal u32 step(Specializer *in, RunState *state) {
     IrRef ref_func = (IrRef){ chunk_data(f->chunk, pc) };
 
     TypeIndex idx;
-    b32 ok = expect_type_value(in, f, ref_func, &idx);
+    b32 ok = expect_some_type_value(in, f, ref_func, &idx);
     Assert(ok);
 
     Type *t = types_get(in->types, idx);
@@ -705,7 +723,7 @@ internal u32 step(Specializer *in, RunState *state) {
       type->kind = Type_function;
       type->data.function.param_count = param_count;
 
-      ok = expect_type_value(in, f, ir_func->return_type, &type->data.function.return_type);
+      ok = expect_some_type_value(in, f, ir_func->return_type, &type->data.function.return_type);
       if (!ok) {
         Todo();
       }
@@ -821,6 +839,167 @@ internal u32 step(Specializer *in, RunState *state) {
     inst_set_data(builder, inst, ref_to_u32(val));
 
     store_inst_value(f, pc, resolved_ref_from_instruction_index(inst));
+
+    s->pc += 1;
+  } break;
+  case IR_load: {
+    IrRef ref = (IrRef){ chunk_data(f->chunk, pc) };
+    ResolvedRef val = resolve(f, ref);
+
+    // TODO make sure it is a pionter
+
+    if (ref_is_some_value_index(val)) {
+      Value *v = values_get(in->values, ref_to_value_index(val));
+      ValuePointer *p = v->data;
+      Assert(p->offset == 0);
+      
+      ValueIndex x = values_copy(in->values, p->val);
+
+      store_inst_value(f, pc, resolved_ref_from_value_index(x));
+    } else {
+      IrBuilder *builder = get_builder(in);
+      InstructionIndex inst = inst_alloc(builder);
+      inst_set_opcode(builder, inst, IR_load);
+      inst_set_data(builder, inst, ref_to_u32(val));
+
+      store_inst_value(f, pc, resolved_ref_from_instruction_index(inst));
+
+      TypeIndex type_idx = ref_typeof(in, f, ref);
+      Type *t = types_get(in->types, type_idx);
+      Assert(t->kind == Type_pointer);
+
+      f->inst_types[pc] = t->data.pointer.base_type;
+    }
+
+    s->pc += 1;
+  } break;
+  case IR_store: {
+    IrStore *store = chunk_extra(f->chunk, pc);
+
+    ResolvedRef dst = resolve(f, store->dst);
+
+    if (ref_is_some_value_index(dst)) {
+      Todo();
+    } else {
+      IrBuilder *builder = get_builder(in);
+      InstructionIndex inst = inst_alloc(builder);
+      inst_set_opcode(builder, inst, IR_store);
+      IrStore *store_data = inst_push_data(builder, inst, IrStore);
+      store_data->dst = dst;
+
+      ResolvedRef val = resolve(f, store->value);
+
+      if (ref_is_some_value_index(val)) {
+        store_data->value = resolved_ref_from_value_index(values_copy(in->values, ref_to_value_index(val)));
+      } else {
+        Todo();
+      }
+    }
+
+    s->pc += 1;
+  } break;
+  case IR_alloc: {
+    TypeIndex type;
+    b32 ok = expect_some_type_value(in, f, (IrRef){ chunk_data(f->chunk, pc) }, &type);
+    Assert(ok);
+
+    IrBuilder *builder = get_builder(in);
+    InstructionIndex inst = inst_alloc(builder);
+    inst_set_opcode(builder, inst, IR_alloc);
+
+    ValueIndex type_val = val_from_type(in, type);
+    inst_set_data(builder, inst, type_val);
+
+    store_inst_value(f, pc, resolved_ref_from_instruction_index(inst));
+
+    TypeIndex ptr_type = types_add_pointer(in->types, type);
+    f->inst_types[pc] = ptr_type;
+
+    s->pc += 1;
+  } break;
+  case IR_comptime_alloc: {
+    TypeIndex type;
+    b32 ok = expect_some_type_value(in, f, (IrRef){ chunk_data(f->chunk, pc) }, &type);
+    Assert(ok);
+
+    ValueIndex idx_alloc;
+    {
+      Value *v;
+      idx_alloc = values_alloc(in->values, &v);
+      TypeSizeInfo size_info = types_size_info_by_index(in->types, type);
+      void *data = values_alloc_data(in->values, size_info.size, size_info.align);
+      *v = (Value){
+        .type = type,
+        .data = data,
+        .data_size = size_info.size,
+      };
+    }
+
+    ValueIndex idx_p;
+    {
+      Value *v;
+      idx_p = values_alloc(in->values, &v);
+      ValuePointer *data = values_alloc_data_type(in->values, ValuePointer);
+      *data = (ValuePointer){
+        .val = idx_alloc,
+        .offset = 0,
+      };
+      *v = (Value){
+        .type = types_add_pointer(in->types, type),
+        .data = data,
+        .data_size = sizeof(ValuePointer),
+      };
+    }
+
+    store_inst_value(f, pc, resolved_ref_from_value_index(idx_p));
+
+    s->pc += 1;
+  } break;
+  case IR_base_type: {
+    IrRef ref = (IrRef){ chunk_data(f->chunk, pc) };
+    TypeIndex type;
+    b32 ok = expect_some_type_value(in, f, ref, &type); 
+    Assert(ok);
+
+    Type *t = types_get(in->types, type);
+
+    TypeIndex base_type;
+    switch (t->kind) {
+    case Type_pointer: base_type = t->data.pointer.base_type; break;
+    default: Todo();
+    }
+    
+    ValueIndex v = val_from_type(in, base_type);
+
+    store_inst_value(f, pc, resolved_ref_from_value_index(v));
+
+    s->pc += 1;
+  } break;
+  case IR_typeof: {
+    IrBuilder *builder = get_builder(in);
+
+    IrRef ref = (IrRef){ chunk_data(f->chunk, pc) };
+    ResolvedRef val = resolve(f, ref);
+
+    if (ref_is_some_value_index(val)) {
+      Todo();
+    } else {
+      InstructionIndex res_idx = ref_to_instruction_index(val);
+      u8 res_op = inst_get_opcode(builder, res_idx);
+
+      switch (Cast(IrOpcode, res_op)) {
+      case IR_alloc: {
+        IrRef type_ref = (IrRef){ inst_get_data(builder, res_idx) };
+        Assert(ref_is_some_value_index(type_ref));
+        Value *v = values_get(in->values, ref_to_value_index(type_ref));
+        TypeIndex t = *Cast(TypeIndex*, v->data);
+        TypeIndex ptr_type = types_add_pointer(in->types, t);
+        ValueIndex vtype = val_from_type(in, ptr_type);
+        store_inst_value(f, pc, resolved_ref_from_value_index(vtype));
+      } break;
+      default: Todo();
+      }
+    }
 
     s->pc += 1;
   } break;

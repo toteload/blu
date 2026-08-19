@@ -79,6 +79,8 @@ typedef Type *TypePtr;
 #define INTERNER_OUTPUT_DECLARATIONS
 #include "interner.h"
 
+TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type);
+
 #define arena_push_type_function(arena,param_count) arena_push(arena, sizeof(Type) + (param_count) *sizeof(TypeIndex), Align_of(Type))
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.

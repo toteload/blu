@@ -6,6 +6,22 @@
 #include "messages.h"
 #include "compiler.h"
 
+typedef enum {
+  IOP_func,
+  IOP_param,
+  IOP_alloc,
+  IOP_load,
+  IOP_store,
+  IOP_block,
+  IOP_loop,
+  IOP_condbr,
+  IOP_br,
+  IOP_repeat,
+  IOP_ret,
+  IOP_call,
+  IOP_builtin_debug,
+} IOpcode;
+
 typedef struct {
   InstructionIndex start;
   InstructionIndex end;

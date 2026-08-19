@@ -52,8 +52,12 @@ void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode) {
   *opcodelist_ptr_at_unchecked(&builder->kinds, idx) = opcode;
 }
 
-u8 inst_opcode(IrBuilder *builder, InstructionIndex idx) {
+u8 inst_get_opcode(IrBuilder *builder, InstructionIndex idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
+}
+
+u32 inst_get_data(IrBuilder *builder, InstructionIndex idx) {
+  return datalist_at_unchecked(&builder->data, idx).data;
 }
 
 void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx) {
@@ -123,7 +127,7 @@ void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, Inst
   IrBr *data = inst_push_data(builder, br, IrBr);
   *data = (IrBr){
     .block = target,
-    .value = 0,
+    .value = { 0 },
   };
 
   u32 block_inst_count = inst_offset(builder, block);

@@ -190,17 +190,11 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
 
     switch (Cast(IrOpcode, op)) {
     case IR_nop: break;
-    case IR_builtin_debug: {
-      ir_ref_print(out, compiler, (IrRef){data});
-    } break;
     case IR_func: {
       IrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
       ir_ref_print(out, compiler, func->return_type);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
-    } break;
-    case IR_alloc: {
-      ir_ref_print(out, compiler, (IrRef){data});
     } break;
     case IR_condbr: {
       IrCondBr *cond_br = extra;
@@ -228,10 +222,13 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       fprintf(out, " %u", p->param_index);
     } break;
     case IR_param:
+    case IR_builtin_debug:
     case IR_ret:
     case IR_load:
     case IR_typeof:
     case IR_base_type:
+    case IR_alloc:
+    case IR_comptime_alloc:
     case IR_return_type: {
       ir_ref_print(out, compiler, (IrRef){data});
     } break;
@@ -306,7 +303,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
     } break;
     }
 
-    fputs(" ; ", out);
+    fputs(" \033[34m; ", out);
     if (chunk->sources[i].source_idx != 0 && chunk->sources[i].ast_idx != 0) {
       AstIndex ast_idx = chunk->sources[i].ast_idx;
       Source *source = compiler_get_source(compiler, chunk->sources[i].source_idx);
@@ -333,11 +330,10 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       if (!has_newline && (end-start) > 40) {
         fputs(" ...", out);
       }
-
-      fputs("\n", out);
     } else {
-      fputs("_\n", out);
+      fputs("_", out);
     }
+    fputs("\033[39m\n", out);
   }
 }
 

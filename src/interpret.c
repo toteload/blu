@@ -5,21 +5,13 @@
 #define MAX_SCOPE_DEPTH 64
 
 internal ValueIndex resolve(Interpreter *in, CallFrame2 *f, IrRef ref) {
-  ValueIndex val = 0;
-
-  if (ref_is_some_value_index(ref)) {
-    val = ref_to_value_index(ref);
+  if (ref_is_value_index(ref)) {
+    return ref_to_value_index(ref);
+  } else {
+    return f->inst_values[ref_to_instruction_index(ref)];
   }
 
-  if (ref_is_instruction_index(ref)) {
-    val = f->inst_values[ref_to_instruction_index(ref)];
-  }
-
-  if (val) {
-    return values_copy(&in->compiler->values, val);
-  }
-
-  return 0;
+  Unreachable();
 }
 
 internal CallFrame2 *frame_push(Interpreter *in, IrChunk *chunk, ValueIndex *ret) {
@@ -97,7 +89,7 @@ internal u32 step(Interpreter *in) {
   } break;
   case IR_br: {
     IrBr *br = chunk_extra(f->chunk, pc);
-    f->inst_values[br->block] = resolve(in, f, br->value);
+    f->inst_values[br->block] = values_copy(&in->compiler->values, resolve(in, f, br->value));
     scopes_pop_to(in, f, br->block);
     u32 inst_count = chunk_data(f->chunk, br->block);
     f->pc = br->block + inst_count;
@@ -118,7 +110,7 @@ internal u32 step(Interpreter *in) {
     CallFrame2 *g = frame_push(in, chunk, &f->inst_values[pc]);
 
     for (u32 i = 0; i < call->arg_count; i++) {
-      g->inst_values[i+1] = resolve(in, f, call->args[i]);
+      g->inst_values[i+1] = values_copy(&in->compiler->values, resolve(in, f, call->args[i]));
     }
 
     f->pc += 1;
@@ -133,6 +125,59 @@ internal u32 step(Interpreter *in) {
     value_print(stdout, in->compiler, val);
     fprintf(stdout, "\n");
     f->inst_values[pc] = val;
+    f->pc += 1;
+  } break;
+  case IR_alloc: {
+    Value *vt = values_get(&in->compiler->values, ref_to_value_index((IrRef){ chunk_data(f->chunk, pc) }));
+    TypeIndex type = *Cast(TypeIndex*, vt->data);
+
+    TypeSizeInfo size_info = types_size_info_by_index(&in->compiler->types, type);
+
+    ValueIndex val;
+    {
+      Value* v;
+      val = values_alloc(&in->compiler->values, &v);
+      void *data = values_alloc_data(&in->compiler->values, size_info.size, size_info.align);
+      *v = (Value){
+        .type = type,
+        .data = data,
+        .data_size = size_info.size,
+      };
+    }
+
+    ValueIndex p;
+    {
+      Value* v;
+      p = values_alloc(&in->compiler->values, &v);
+      ValuePointer *data = values_alloc_data_type(&in->compiler->values, ValuePointer);
+      *data = (ValuePointer){
+        .val = val,
+        .offset = 0,
+      };
+      *v = (Value){
+        .type = types_add_pointer(&in->compiler->types, type),
+        .data = data,
+        .data_size = sizeof(ValuePointer),
+      };
+    }
+
+    f->inst_values[pc] = p;
+    f->pc += 1;
+  } break;
+  case IR_store: {
+    IrStore *store = chunk_extra(f->chunk, pc);
+    Value *p = values_get(&in->compiler->values, resolve(in, f, store->dst));
+    Value *dst = values_get(&in->compiler->values, Cast(ValuePointer*, p->data)->val);
+    Value *val = values_get(&in->compiler->values, resolve(in, f, store->value));
+    memcpy(dst->data, val->data, val->data_size);
+    f->pc += 1;
+  } break;
+  case IR_load: {
+    IrRef ref = (IrRef){ chunk_data(f->chunk, pc) };
+    Value *vp = values_get(&in->compiler->values, resolve(in, f, ref));
+    ValuePointer *p = vp->data;
+    ValueIndex v = values_copy(&in->compiler->values, p->val);
+    f->inst_values[pc] = v;
     f->pc += 1;
   } break;
   default: Todo();
