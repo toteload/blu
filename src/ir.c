@@ -40,9 +40,9 @@ void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-InstructionIndex inst_alloc(IrBuilder *builder) {
+InstructionIndex inst_alloc(IrBuilder *builder, u8 op) {
   InstructionIndex idx = builder->kinds.len;
-  opcodelist_append(&builder->kinds, builder->scratch, 0);
+  opcodelist_append(&builder->kinds, builder->scratch, op);
   sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ 0, 0 });
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;
@@ -104,6 +104,20 @@ InstructionIndex inst_eval_block_begin(IrBuilder *builder) {
 void inst_block_end(IrBuilder *builder, InstructionIndex block) {
   u32 block_inst_count = inst_offset(builder, block);
   inst_set_data(builder, block, block_inst_count);
+}
+
+void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref) {
+  InstructionIndex br = inst_alloc(builder, SIR_br);
+
+  SBr *data = inst_push_data(builder, br, SBr);
+  *data = (SBr){
+    .block = target,
+    .value = ref,
+  };
+
+  u32 block_inst_count = inst_offset(builder, block);
+  inst_set_data(builder, block, block_inst_count);
+
 }
 
 void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref) {

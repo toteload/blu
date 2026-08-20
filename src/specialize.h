@@ -4,33 +4,6 @@
 #include "blu.h"
 #include "compiler.h"
 
-typedef enum {
-  SOP_func,
-  SOP_param,
-  SOP_alloc,
-  SOP_load,
-  SOP_store,
-  SOP_block,
-  SOP_loop,
-  SOP_condbr,
-  SOP_br,
-  SOP_repeat,
-  SOP_ret,
-  SOP_call,
-  SOP_builtin_debug,
-  SOP_eval_block,
-  SOP_lookup_value,
-  SOP_lookup_typeof,
-  SOP_comptime_alloc,
-  SOP_as,
-  SOP_unify,
-  SOP_type,
-  SOP_typeof,
-  SOP_base_type,
-  SOP_return_type,
-  SOP_param_type,
-} SOpcode;
-
 // For simplicity the maximum depths are a fixed number. This will likely change.
 #define MAX_SCOPE_DEPTH 64
 #define MAX_CALL_DEPTH 128

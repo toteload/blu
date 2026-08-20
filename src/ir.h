@@ -6,9 +6,162 @@
 #include "blu.h"
 #include "types.h"
 
-enum IrResult {
-  IrResult_ok,
-};
+// Specializer IR
+// -------------------------------------------------------------------------------------------------
+
+#define REF_NAME SRef
+#define REF_FUNCTION_PREFIX sref
+#include "ref.h"
+
+typedef enum {
+  SIR_func,           // references SFunc
+  SIR_param,          // contains SRef to a type
+  SIR_alloc,          // contains SRef to a type
+  SIR_load,
+  SIR_store,          // references SStore
+  SIR_block,          // contains instruction count of block
+  SIR_loop,           // contains instruction count of block
+  SIR_condbr,         // references SCondbr
+  SIR_br,             // references SBr
+  SIR_repeat,         // contains InstructionIndex of loop block to repeat
+  SIR_ret,            // contains SRef to value to return
+  SIR_call,           // references SCall
+  SIR_builtin_debug,
+  SIR_eval_block,     // contains instruction count of block
+  SIR_lookup_decl_value,   // contains DeclarationIndex
+  SIR_lookup_decl_type,  // contains DeclarationIndex
+  SIR_comptime_alloc, // contains SRef to a type
+  SIR_as,             // references SAs
+  SIR_unify,          // references SUnify
+  SIR_type,           // references SType
+  SIR_typeof,         // contains SRef
+  SIR_base_type,      // contains SRef
+  SIR_return_type,    // contains SRef
+  SIR_param_type,     // references SParamType
+} SOpcode;
+
+// A SOP_func instruction is followed by `param_count` SOP_param instructions.
+typedef struct {
+  u32 param_count;
+  u32 instruction_count;
+  SRef return_type;
+} SFunc;
+
+typedef struct {
+  SRef dst;
+  SRef value;
+} SStore;
+
+typedef struct {
+  SRef cond;
+  InstructionIndex then;
+  InstructionIndex otherwise;
+} SCondBr;
+
+typedef struct {
+  InstructionIndex block;
+  SRef value;
+} SBr;
+
+typedef struct {
+  SRef func;
+  u32 arg_count;
+  SRef args[];
+} SCall;
+
+// Unify must result in a valid type otherwise it is considered an error.
+// Unification of the following two function types results in error:
+// (i32, ?) bool + (i32, ?) ? = error | the second parameter type is unknown
+typedef struct {
+  SRef type_lhs;
+  SRef type_rhs;
+} SUnify;
+
+typedef struct {
+  SRef type_to;
+  SRef val;
+} SAs;
+
+typedef struct {
+  u8 kind; // TypeKind
+  u32 arg_count;
+  SRef args[];
+} SType;
+
+typedef struct {
+  SRef function;
+  u32 param_index;
+} SParamType;
+
+// -------------------------------------------------------------------------------------------------
+
+// Interpreter IR
+// -------------------------------------------------------------------------------------------------
+
+#define REF_NAME IRef
+#define REF_FUNCTION_PREFIX iref
+#include "ref.h"
+
+typedef enum {
+  IIR_func, // references `IFunc`
+  IIR_param, // contains `TypeIndex`
+  IIR_alloc, // contains `TypeIndex`
+  IIR_load, // references `ILoad`
+  IIR_store, // references `IStore`
+  IIR_block, // references `IBlock`
+  IIR_loop, // contains instruction count
+  IIR_condbr, // references `ICondbr`
+  IIR_br, // references `IBr`
+  IIR_repeat, // contains `InstructionIndex` for the loop
+  IIR_ret, // references `IRet`
+  IIR_call, // references `ICall`
+  IIR_builtin_debug, 
+} IOpcode;
+
+typedef struct {
+  u32 instruction_count;
+  TypeIndex return_type;
+} IFunc;
+
+typedef struct {
+  TypeIndex type;
+  IRef ptr;
+} ILoad;
+
+typedef struct {
+  TypeIndex type;
+  IRef value;
+  IRef ptr;
+} IStore;
+
+typedef struct {
+  u32 instruction_count;
+  TypeIndex type;
+} IBlock;
+
+typedef struct {
+  IRef cond;
+  InstructionIndex then;
+  InstructionIndex otherwise;
+} ICondbr;
+
+typedef struct {
+  TypeIndex type;
+  IRef value;
+  InstructionIndex block;
+} IBr;
+
+typedef struct {
+  TypeIndex type;
+  IRef value;
+} IRet;
+
+typedef struct {
+  TypeIndex func_type;
+  IRef func_ptr;
+  u32 arg_count;
+  IRef args[];
+} ICall;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -234,6 +387,8 @@ u8 inst_get_opcode(IrBuilder *builder, InstructionIndex idx);
 u32 inst_get_data(IrBuilder *builder, InstructionIndex idx);
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
+
+void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, SRef ref);
 
 InstructionIndex inst_loop_begin(IrBuilder *builder);
 InstructionIndex inst_block_begin(IrBuilder *builder);
