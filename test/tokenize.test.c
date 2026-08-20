@@ -56,10 +56,10 @@ void test_empty_input(TestResult *test, TokenizeContext *context) {
     Tokens toks;                                                                \
     b32 ok = tokenize(context, string_lit(src), &toks);                         \
     Test_assert(ok);                                                            \
-    Test_assert_eq(toks.tok_count, Count_of(expected));                         \
     for (u32 i = 0; i < Count_of(expected); i++) {                             \
       Test_assert_eq(toks.kinds[i], expected[i]);                               \
     }                                                                           \
+    Test_assert_eq(toks.tok_count, Count_of(expected)); \
   } while (0)
 
 void test_single_char_tokens(TestResult *test, TokenizeContext *context) {
@@ -161,6 +161,11 @@ void test_no_whitespace(TestResult *test, TokenizeContext *context) {
     Tok_identifier, Tok_colon, Tok_identifier, Tok_equals, Tok_literal_int);
 }
 
+void test_with_labels(TestResult *test, TokenizeContext *context) {
+  Assert_kinds("x:i32=42::x:x::x",
+    Tok_identifier, Tok_colon, Tok_identifier, Tok_equals, Tok_literal_int, Tok_label, Tok_colon, Tok_identifier, Tok_label);
+}
+
 void test_operator_munch_boundaries(TestResult *test, TokenizeContext *context) {
   Assert_kinds("===", Tok_cmp_eq,      Tok_equals);
   Assert_kinds("+==", Tok_plus_equals, Tok_equals);
@@ -206,6 +211,7 @@ void register_tokenizer_tests(TestRunner *runner) {
     Test(test_operator_munch_boundaries),
     Test(test_number_then_identifier),
     Test(test_string_span),
+    Test(test_with_labels),
   };
 
   for (u32 i = 0; i < Count_of(tests); i++) {

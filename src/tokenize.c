@@ -122,16 +122,42 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
       Return_token(Tok_colon);
     }
 
-    if (is_identifier_start(*tokenizer->at)) {
-      tokenizer->at += 1;
-      while (!is_at_end(tokenizer) && is_identifier_rest(*tokenizer->at)) {
-        tokenizer->at += 1;
-      }
-
-      Return_token(Tok_label);
+    if (*tokenizer->at != ':') {
+      Return_token(Tok_colon);
     }
 
-    Return_token(Tok_colon);
+    tokenizer->at += 1;
+    if (is_at_end(tokenizer)) {
+      Message_error(
+        tokenizer->msg_sink,
+        (MessageLocation){ 
+          .kind = MessageLocation_byte_offset,
+          .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
+        },
+        string_lit("End of source encountered while parsing label")
+      );
+      return TokResult_error;
+    }
+
+    if (!is_identifier_start(*tokenizer->at)) {
+      Message_error(
+        tokenizer->msg_sink,
+        (MessageLocation){ 
+          .kind = MessageLocation_byte_offset,
+          .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
+        },
+        string_lit("Expected name while parsing label")
+      );
+      return TokResult_error;
+    }
+
+    tokenizer->at += 1;
+
+    while (!is_at_end(tokenizer) && is_identifier_rest(*tokenizer->at)) {
+      tokenizer->at += 1;
+    }
+
+    Return_token(Tok_label);
   }
 
   if (c == '-') {
