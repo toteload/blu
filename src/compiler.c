@@ -343,8 +343,6 @@ internal b32 resolve_entry(Resolver *resolver) {
   Declaration *decl = entry->decl;
   IrChunk *chunk = &decl->data.decl.chunk;
 
-  IrDeclaration *ir_decl = chunk_extra(chunk, 0);
-
   u8 resolve_status = decl->resolve_status;
 
   decl->resolve_status = (resolve_status + 1);
@@ -354,7 +352,7 @@ internal b32 resolve_entry(Resolver *resolver) {
     ScopeSpan *scope = push_scope(frame);
 
     if (resolve_status < ResolveStatus_type_resolved) {
-      InstructionIndex block = ref_to_instruction_index(ir_decl->declared_type);
+      InstructionIndex block = decl->data.decl.block_type;
       u32 count = chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
@@ -364,7 +362,7 @@ internal b32 resolve_entry(Resolver *resolver) {
         .pc = block + 1,
       };
     } else {
-      InstructionIndex block = ref_to_instruction_index(ir_decl->value);
+      InstructionIndex block = decl->data.decl.block_val;
       u32 count = chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
@@ -381,15 +379,21 @@ internal b32 resolve_entry(Resolver *resolver) {
   if (err == Run_ok) {
     if (resolve_status < ResolveStatus_type_resolved) {
       decl->resolve_status = ResolveStatus_type_resolved;
+      CallFrame *f = top_frame(&entry->state);
+
+      TypeIndex type = f->inst_types[decl->data.decl.block_type];
+      Assert(type != 0);
+
+      decl->data.decl.type = type;
     } else {
       decl->resolve_status = ResolveStatus_fully_resolved;
 
       CallFrame *f = top_frame(&entry->state);
 
-      ResolvedRef ref = f->inst_map[ref_to_instruction_index(ir_decl->value)];
-      Assert(ref_is_some_value_index(ref));
+      IRef ref = f->inst_map[decl->data.decl.block_val];
+      Assert(iref_is_some_value(ref));
 
-      decl->data.decl.val = values_copy(resolver->in->values, ref_to_value_index(ref));
+      decl->data.decl.val = values_copy(resolver->in->values, iref_to_value(ref));
     }
 
     return True;

@@ -184,7 +184,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       }
     }
 
-    fprintf(out, "%4u | %*s%s ", i, depth * 2, "", ir_opcode_names[op]);
+    fprintf(out, "%4u | \033[1m%*s%s\033[22m ", i, depth * 2, "", ir_opcode_names[op]);
 
     void *extra = ptr_offset(chunk->extra, data);
 
@@ -303,7 +303,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
     } break;
     }
 
-    fputs(" \033[34m; ", out);
+    fputs(" ; ", out);
     if (chunk->sources[i].source_idx != 0 && chunk->sources[i].ast_idx != 0) {
       AstIndex ast_idx = chunk->sources[i].ast_idx;
       Source *source = compiler_get_source(compiler, chunk->sources[i].source_idx);
@@ -333,7 +333,7 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
     } else {
       fputs("_", out);
     }
-    fputs("\033[39m\n", out);
+    fputs("\n", out);
   }
 }
 

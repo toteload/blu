@@ -41,9 +41,9 @@ void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
 
 typedef struct {
   DeclarationIndex decl_idx;
-  IrChunk *chunk;
+  SChunk *chunk;
 
-  ResolvedRef *inst_map;
+  IRef *inst_map;
   TypeIndex *inst_types;
 
   ScopeStack scopes;
@@ -77,7 +77,7 @@ typedef struct {
   ValueStore          *values;
   Common              *common;
 
-  Stack(IrBuilder)     builders;
+  Stack(IIrBuilder)     builders;
 } Specializer;
 
 typedef enum {

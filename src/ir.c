@@ -40,7 +40,7 @@ void *chunk_extra(IrChunk *chunk, InstructionIndex idx) {
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-InstructionIndex inst_alloc(IrBuilder *builder, u8 op) {
+InstructionIndex irbuilder_add(IrBuilder *builder, u8 op) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ 0, 0 });
@@ -83,6 +83,7 @@ u32 inst_offset(IrBuilder *builder, InstructionIndex start) {
   return at - start;
 }
 
+#if 0
 InstructionIndex inst_loop_begin(IrBuilder *builder) {
   InstructionIndex block = inst_alloc(builder);
   inst_set_opcode(builder, block, IR_loop);
@@ -105,9 +106,10 @@ void inst_block_end(IrBuilder *builder, InstructionIndex block) {
   u32 block_inst_count = inst_offset(builder, block);
   inst_set_data(builder, block, block_inst_count);
 }
+#endif
 
 void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref) {
-  InstructionIndex br = inst_alloc(builder, SIR_br);
+  InstructionIndex br = irbuilder_add(builder, SIR_br);
 
   SBr *data = inst_push_data(builder, br, SBr);
   *data = (SBr){
@@ -117,105 +119,104 @@ void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, In
 
   u32 block_inst_count = inst_offset(builder, block);
   inst_set_data(builder, block, block_inst_count);
-
 }
 
-void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref) {
-  InstructionIndex br = inst_alloc(builder);
-  inst_set_opcode(builder, br, IR_br);
+//void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref) {
+//  InstructionIndex br = inst_alloc(builder);
+//  inst_set_opcode(builder, br, IR_br);
+//
+//  IrBr *data = inst_push_data(builder, br, IrBr);
+//  *data = (IrBr){
+//    .block = block,
+//    .value = ref,
+//  };
+//
+//  u32 block_inst_count = inst_offset(builder, block);
+//  inst_set_data(builder, block, block_inst_count);
+//}
+//
+//void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
+//  InstructionIndex br = inst_alloc(builder);
+//  inst_set_opcode(builder, br, IR_br);
+//
+//  IrBr *data = inst_push_data(builder, br, IrBr);
+//  *data = (IrBr){
+//    .block = target,
+//    .value = { 0 },
+//  };
+//
+//  u32 block_inst_count = inst_offset(builder, block);
+//  inst_set_data(builder, block, block_inst_count);
+//}
+//
+//void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref) {
+//  InstructionIndex br = inst_alloc(builder);
+//  inst_set_opcode(builder, br, IR_br);
+//
+//  IrBr *data = inst_push_data(builder, br, IrBr);
+//  *data = (IrBr){
+//    .block = target,
+//    .value = ref,
+//  };
+//
+//  u32 block_inst_count = inst_offset(builder, block);
+//  inst_set_data(builder, block, block_inst_count);
+//}
+//
+//void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
+//  InstructionIndex repeat = inst_alloc(builder);
+//  inst_set_opcode(builder, repeat, IR_repeat);
+//  inst_set_data(builder, repeat, target);
+//
+//  u32 block_inst_count = inst_offset(builder, block);
+//  inst_set_data(builder, block, block_inst_count);
+//}
+//
+//InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex ast_idx) {
+//  InstructionIndex idx = inst_alloc(builder);
+//  inst_set_opcode(builder, idx, IR_as);
+//  inst_set_source(builder, idx, source_idx, ast_idx);
+//
+//  IrAs *data = inst_push_data(builder, idx, IrAs);
+//  *data = (IrAs){
+//    .type_to = type_destination,
+//    .val = val,
+//  };
+//
+//  return idx;
+//}
 
-  IrBr *data = inst_push_data(builder, br, IrBr);
-  *data = (IrBr){
-    .block = block,
-    .value = ref,
-  };
-
-  u32 block_inst_count = inst_offset(builder, block);
-  inst_set_data(builder, block, block_inst_count);
-}
-
-void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
-  InstructionIndex br = inst_alloc(builder);
-  inst_set_opcode(builder, br, IR_br);
-
-  IrBr *data = inst_push_data(builder, br, IrBr);
-  *data = (IrBr){
-    .block = target,
-    .value = { 0 },
-  };
-
-  u32 block_inst_count = inst_offset(builder, block);
-  inst_set_data(builder, block, block_inst_count);
-}
-
-void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref) {
-  InstructionIndex br = inst_alloc(builder);
-  inst_set_opcode(builder, br, IR_br);
-
-  IrBr *data = inst_push_data(builder, br, IrBr);
-  *data = (IrBr){
-    .block = target,
-    .value = ref,
-  };
-
-  u32 block_inst_count = inst_offset(builder, block);
-  inst_set_data(builder, block, block_inst_count);
-}
-
-void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target) {
-  InstructionIndex repeat = inst_alloc(builder);
-  inst_set_opcode(builder, repeat, IR_repeat);
-  inst_set_data(builder, repeat, target);
-
-  u32 block_inst_count = inst_offset(builder, block);
-  inst_set_data(builder, block, block_inst_count);
-}
-
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex ast_idx) {
-  InstructionIndex idx = inst_alloc(builder);
-  inst_set_opcode(builder, idx, IR_as);
-  inst_set_source(builder, idx, source_idx, ast_idx);
-
-  IrAs *data = inst_push_data(builder, idx, IrAs);
-  *data = (IrAs){
-    .type_to = type_destination,
-    .val = val,
-  };
-
-  return idx;
-}
-
-internal b32 opcode_references_extra(u8 op) {
-  switch (Cast(IrOpcode, op)) {
-#define X(k,e,_1,_2) case k: return e;
-#include "x_ir.h"
-#undef X
-  }
-}
-
-internal u32 flex_array_size(u8 op, void *payload) {
-  switch (Cast(IrOpcode, op)) {
-  case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);
-  case IR_call: return Cast(IrCall*, payload)->arg_count * sizeof(IrRef);
-  default:      return 0;
-  }
-}
-
-internal u32 extra_payload_size(u8 op, void *payload) {
-  switch (Cast(IrOpcode, op)) {
-#define X(k,_1,d,_2) case k: return sizeof(d) + flex_array_size(op, payload);
-#include "x_ir.h"
-#undef X
-  }
-}
-
-internal u32 extra_payload_align(u8 op) {
-  switch (Cast(IrOpcode, op)) {
-#define X(k,_1,d,_2) case k: return Align_of(d);
-#include "x_ir.h"
-#undef X
-  }
-}
+//internal b32 opcode_references_extra(u8 op) {
+//  switch (Cast(IrOpcode, op)) {
+//#define X(k,e,_1,_2) case k: return e;
+//#include "x_ir.h"
+//#undef X
+//  }
+//}
+//
+//internal u32 flex_array_size(u8 op, void *payload) {
+//  switch (Cast(IrOpcode, op)) {
+//  case IR_type: return Cast(IrType*, payload)->arg_count * sizeof(IrRef);
+//  case IR_call: return Cast(IrCall*, payload)->arg_count * sizeof(IrRef);
+//  default:      return 0;
+//  }
+//}
+//
+//internal u32 extra_payload_size(u8 op, void *payload) {
+//  switch (Cast(IrOpcode, op)) {
+//#define X(k,_1,d,_2) case k: return sizeof(d) + flex_array_size(op, payload);
+//#include "x_ir.h"
+//#undef X
+//  }
+//}
+//
+//internal u32 extra_payload_align(u8 op) {
+//  switch (Cast(IrOpcode, op)) {
+//#define X(k,_1,d,_2) case k: return Align_of(d);
+//#include "x_ir.h"
+//#undef X
+//  }
+//}
 
 internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionIndex i, u32 size, u32 align) {
   void *p = arena_push(arena, size, align);

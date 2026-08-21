@@ -1,10 +1,12 @@
 #ifndef IR_H
 #define IR_H
 
-#include <stdio.h>
-
 #include "blu.h"
-#include "types.h"
+
+typedef struct {
+  SourceIndex source_idx;
+  AstIndex    ast_idx;
+} AstAndSourceIndex;
 
 // Specializer IR
 // -------------------------------------------------------------------------------------------------
@@ -26,7 +28,7 @@ typedef enum {
   SIR_repeat,         // contains InstructionIndex of loop block to repeat
   SIR_ret,            // contains SRef to value to return
   SIR_call,           // references SCall
-  SIR_builtin_debug,
+  SIR_builtin_debug, // contains SRef
   SIR_eval_block,     // contains instruction count of block
   SIR_lookup_decl_value,   // contains DeclarationIndex
   SIR_lookup_decl_type,  // contains DeclarationIndex
@@ -56,7 +58,7 @@ typedef struct {
   SRef cond;
   InstructionIndex then;
   InstructionIndex otherwise;
-} SCondBr;
+} SCondbr;
 
 typedef struct {
   InstructionIndex block;
@@ -93,7 +95,25 @@ typedef struct {
   u32 param_index;
 } SParamType;
 
-// -------------------------------------------------------------------------------------------------
+typedef struct {
+  u32 opcode_count;
+  u8 *opcodes;
+  u32 *data;
+  AstAndSourceIndex *sources;
+  void *extra;
+} SChunk;
+
+always_inline u8 schunk_op(SChunk *chunk, InstructionIndex idx) {
+  return chunk->opcodes[idx];
+}
+
+always_inline u32 schunk_data(SChunk *chunk, InstructionIndex idx) {
+  return chunk->data[idx];
+}
+
+always_inline void *schunk_extra(SChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
 
 // Interpreter IR
 // -------------------------------------------------------------------------------------------------
@@ -103,41 +123,25 @@ typedef struct {
 #include "ref.h"
 
 typedef enum {
-  IIR_func, // references `IFunc`
-  IIR_param, // contains `TypeIndex`
-  IIR_alloc, // contains `TypeIndex`
-  IIR_load, // references `ILoad`
+  IIR_func, // contains instruction_count
+  IIR_param, // data unused
+  IIR_alloc, // data unused
+  IIR_load, // contains IRef
   IIR_store, // references `IStore`
-  IIR_block, // references `IBlock`
+  IIR_block, // contains instruction_count
   IIR_loop, // contains instruction count
   IIR_condbr, // references `ICondbr`
-  IIR_br, // references `IBr`
+  IIR_br, // contains IRef
   IIR_repeat, // contains `InstructionIndex` for the loop
-  IIR_ret, // references `IRet`
+  IIR_ret, // contains Iref
   IIR_call, // references `ICall`
-  IIR_builtin_debug, 
+  IIR_builtin_debug, // contains IRef
 } IOpcode;
 
 typedef struct {
-  u32 instruction_count;
-  TypeIndex return_type;
-} IFunc;
-
-typedef struct {
-  TypeIndex type;
   IRef ptr;
-} ILoad;
-
-typedef struct {
-  TypeIndex type;
   IRef value;
-  IRef ptr;
 } IStore;
-
-typedef struct {
-  u32 instruction_count;
-  TypeIndex type;
-} IBlock;
 
 typedef struct {
   IRef cond;
@@ -146,18 +150,11 @@ typedef struct {
 } ICondbr;
 
 typedef struct {
-  TypeIndex type;
   IRef value;
   InstructionIndex block;
 } IBr;
 
 typedef struct {
-  TypeIndex type;
-  IRef value;
-} IRet;
-
-typedef struct {
-  TypeIndex func_type;
   IRef func_ptr;
   u32 arg_count;
   IRef args[];
@@ -165,6 +162,34 @@ typedef struct {
 
 // -------------------------------------------------------------------------------------------------
 
+typedef struct {
+  u32 opcode_count;
+  u8 *opcodes;
+  u32 *data;
+  TypeIndex *types;
+  AstAndSourceIndex *sources;
+  void *extra;
+} IChunk;
+
+always_inline u8 ichunk_op(IChunk *chunk, InstructionIndex idx) {
+  return chunk->opcodes[idx];
+}
+
+always_inline TypeIndex ichunk_type(IChunk *chunk, InstructionIndex idx) {
+  return chunk->types[idx];
+}
+
+always_inline u32 ichunk_data(IChunk *chunk, InstructionIndex idx) {
+  return chunk->data[idx];
+}
+
+always_inline void *ichunk_extra(IChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
+
+// -------------------------------------------------------------------------------------------------
+
+#if 0
 typedef struct { u32 x; } Ref;
 
 // The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
@@ -309,13 +334,9 @@ typedef struct {
   u32 arg_count;
   IrRef args[];
 } IrCall;
+#endif
 
 // -------------------------------------------------------------------------------------------------
-
-typedef struct {
-  SourceIndex source_idx;
-  AstIndex    ast_idx;
-} AstAndSourceIndex;
 
 typedef struct {
   u32 opcode_count;
@@ -339,6 +360,17 @@ void *chunk_extra(IrChunk *chunk, InstructionIndex idx);
 #define SEGMENTLIST_TYPE OPCODE_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 OPCODE_LIST_MIN_SIZE_LOG_2
 #define SEGMENTLIST_SEGMENT_COUNT OPCODE_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+#define TYPE_LIST_MIN_SIZE_LOG_2 8
+#define TYPE_LIST_SEGMENT_COUNT 24
+#define TYPE_LIST_NAME TypeList
+#define TYPE_LIST_TYPE TypeIndex
+#define SEGMENTLIST_NAME TYPE_LIST_NAME
+#define SEGMENTLIST_TYPE TYPE_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 TYPE_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT TYPE_LIST_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
@@ -372,11 +404,23 @@ typedef union {
 typedef struct {
   Arena *scratch;
   OpcodeList kinds;
+  TypeList types;
+  AstSourceList ast_source;
+  InstDataList data;
+} IIrBuilder;
+
+typedef struct {
+  Arena *scratch;
+  OpcodeList kinds;
   AstSourceList ast_source;
   InstDataList data;
 } IrBuilder;
 
-InstructionIndex inst_alloc(IrBuilder *builder);
+InstructionIndex irbuilder_add(IrBuilder *builder, u8 op);
+InstructionIndex irbuilder_add_sir_as(IrBuilder *builder, SRef type_destination, SRef val);
+void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
+
+//InstructionIndex inst_alloc(IrBuilder *builder);
 
 void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
 void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
@@ -388,18 +432,16 @@ u32 inst_get_data(IrBuilder *builder, InstructionIndex idx);
 void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
 u32 inst_offset(IrBuilder *builder, InstructionIndex start);
 
-void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, SRef ref);
-
-InstructionIndex inst_loop_begin(IrBuilder *builder);
-InstructionIndex inst_block_begin(IrBuilder *builder);
-InstructionIndex inst_eval_block_begin(IrBuilder *builder);
-void inst_block_end(IrBuilder *builder, InstructionIndex block);
-void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
-void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
-void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
-void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
-
-InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex source);
+//InstructionIndex inst_loop_begin(IrBuilder *builder);
+//InstructionIndex inst_block_begin(IrBuilder *builder);
+//InstructionIndex inst_eval_block_begin(IrBuilder *builder);
+//void inst_block_end(IrBuilder *builder, InstructionIndex block);
+//void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
+//void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
+//void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
+//void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
+//
+//InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex source);
 
 void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
 

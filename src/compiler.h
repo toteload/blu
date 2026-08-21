@@ -70,7 +70,13 @@ struct Declaration {
     struct {
       Source  *source;
       u32      tree_idx;
-      IrChunk  chunk;
+
+      SChunk  chunk;
+
+      InstructionIndex block_type;
+      TypeIndex type; // will be set after the type of the declaration has been resolved
+
+      InstructionIndex block_val;
       ValueIndex val; // will be set after the declaration has been fully resolved
     } decl;
   } data;

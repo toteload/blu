@@ -1,0 +1,28 @@
+#ifndef X
+#error "X macro must be defined"
+#endif
+
+X(SIR_func,              "func",              True,  SFunc)
+X(SIR_param,             "param",             False, u32)
+X(SIR_alloc,             "alloc",             False, u32)
+X(SIR_load,              "load",              False, u32)
+X(SIR_store,             "store",             True,  SStore)
+X(SIR_block,             "block",             False, u32)
+X(SIR_loop,              "loop",              False, u32)
+X(SIR_condbr,            "condbr",            True,  SCondbr)
+X(SIR_br,                "br",                True,  SBr)
+X(SIR_repeat,            "repeat",            False, u32)
+X(SIR_ret,               "ret",               False, u32)
+X(SIR_call,              "call",              True,  SCall)
+X(SIR_builtin_debug,     "#debug",            False, u32)
+X(SIR_eval_block,        "eval_block",        False, u32)
+X(SIR_lookup_decl_value, "lookup_decl_value", False, u32)
+X(SIR_lookup_decl_type,  "lookup_decl_type",  False, u32)
+X(SIR_comptime_alloc,    "comptime_alloc",    False, u32)
+X(SIR_as,                "as",                True,  SAs)
+X(SIR_unify,             "unify",             True,  SUnify)
+X(SIR_type,              "type",              True,  SType)
+X(SIR_typeof,            "typeof",            False, u32)
+X(SIR_base_type,         "base_type",         False, u32)
+X(SIR_return_type,       "return_type",       False, u32)
+X(SIR_param_type,        "param_type",        True,  SParamType)

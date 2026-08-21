@@ -9,16 +9,16 @@
 typedef struct {
   InstructionIndex start;
   InstructionIndex end;
+  ArenaSnapshot snapshot;
 } ScopeSpan2;
 
 typedef Stack(ScopeSpan2) ScopeStack2;
 
 typedef struct {
-  ValueIndex *ret;
-  IrChunk *chunk;
-  ValueIndex *inst_values;
+  void *ret;
+  IChunk *chunk;
+  void **inst_values;
   ScopeStack2 scope_stack;
-  ArenaSnapshot snapshot;
   InstructionIndex pc;
 } CallFrame2;
 
@@ -31,6 +31,6 @@ typedef struct {
   CallStack2 call_stack;
 } Interpreter;
 
-u32 interpreter_call(Interpreter* in, IrChunk *chunk, ValueIndex *args, u32 arg_count, ValueIndex *out);
+u32 interpreter_call(Interpreter* in, IChunk *chunk, ValueIndex *args, u32 arg_count, void *out);
 
 #endif // INTERPRET_H
