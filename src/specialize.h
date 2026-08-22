@@ -26,7 +26,7 @@ typedef struct {
   InstructionIndex pc;
 
   InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
-  InstructionIndex condbr;
+  InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
 
   struct {
     u32 len;
@@ -41,7 +41,7 @@ void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
 
 typedef struct {
   DeclarationIndex decl_idx;
-  SChunk *chunk;
+  SIrChunk *chunk;
 
   IRef *inst_map;
   TypeIndex *inst_types;

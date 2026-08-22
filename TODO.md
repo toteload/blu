@@ -1,8 +1,8 @@
 # Currently doing
 
 - [ ] Get `samples/aoc_2025_day_01.blu` to compile and run and get the right answer :)
-  - [ ] IR_load needs to be updated to also take a type arg.
-  - [ ] Introduce a split in the IR: IR for the specializer and IR for the interpreter.
+  - [x] IR_load needs to be updated to also take a type arg.
+  - [x] Introduce a split in the IR: IR for the specializer and IR for the interpreter.
   - [ ] Side quest: finish the stubs in the message printing for {tokenkind} etc.
   - [ ] Add `.len()` method to slices and arrays.
     - [ ] Needs compound identifiers (is compound the word here?).

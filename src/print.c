@@ -9,13 +9,7 @@
 #include "source_file.h"
 #include "print.h"
 
-static char const *ir_opcode_names[] = {
-#define X(k, e, d, name) [k] = name,
-#include "x_ir.h"
-#undef X
-};
-
-void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
+void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
   if (idx == 0) {
     fputc('?', out);
     return;
@@ -38,10 +32,10 @@ void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
       if (i != 0) {
         fputs(", ", out);
       }
-      type_index_print(out, types, type->data.function.param_types[i]);
+      print_type(out, types, type->data.function.param_types[i]);
     }
     fputs(") ", out);
-    type_index_print(out, types, type->data.function.return_type);
+    print_type(out, types, type->data.function.return_type);
   } break;
   case Type_nil: {
     fputs("nil", out);
@@ -51,15 +45,15 @@ void type_index_print(FILE *out, TypeInterner *types, TypeIndex idx) {
   } break;
   case Type_slice: {
     fputs("[]", out);
-    type_index_print(out, types, type->data.slice.base_type);
+    print_type(out, types, type->data.slice.base_type);
   } break;
   case Type_pointer: {
     fputs("*", out);
-    type_index_print(out, types, type->data.pointer.base_type);
+    print_type(out, types, type->data.pointer.base_type);
   } break;
   case Type_array: {
     fprintf(out, "[%llu]", Cast(unsigned long long, type->data.array.size));
-    type_index_print(out, types, type->data.array.base_type);
+    print_type(out, types, type->data.array.base_type);
   } break;
   case Type_type: {
     fputs("type", out);
@@ -84,51 +78,71 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
   return res;
 }
 
-void value_print(FILE *out, Compiler *compiler, ValueIndex idx) {
-  Value *value = values_get(&compiler->values, idx);
-  Type  *type  = types_get(&compiler->types, value->type);
-  switch (Cast(TypeKind, type->kind)) {
+void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, void *data) {
+  print_type(out, &compiler->types, type);
+  fputs(" ", out);
+  Type *t = types_get(&compiler->types, type);
+  switch (Cast(TypeKind, t->kind)) {
   case Type_comptime_int: {
-    fprintf(out, "%lld", Cast(long long, read_signed(64, value->data)));
+    fprintf(out, "%lld", Cast(long long, read_signed(64, data)));
   } break;
   case Type_integer: {
-    if (type->data.integer.signedness == Signed) {
-      fprintf(out, "%" PRId64, Cast(i64, read_signed(type->data.integer.bitwidth, value->data)));
+    if (t->data.integer.signedness == Signed) {
+      fprintf(out, "%" PRId64, Cast(i64, read_signed(t->data.integer.bitwidth, data)));
     } else {
-      fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(type->data.integer.bitwidth, value->data)));
+      fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(t->data.integer.bitwidth, data)));
     }
   } break;
   case Type_bool: {
-    fputs((*Cast(u8 *, value->data)) ? "true" : "false", out);
+    fputs((*Cast(u8 *, data)) ? "true" : "false", out);
   } break;
   case Type_type: {
-    type_index_print(out, &compiler->types, *Cast(TypeIndex *, value->data));
+    print_type(out, &compiler->types, *Cast(TypeIndex *, data));
   } break;
   case Type_function: {
-    ValueFunc *func = value->data;
-    fputs("\n", out);
-    ir_chunk_print(out, compiler, &func->chunk);
+    if (flags & PrintFlag_expand_function) {
+      ValueFunc *func = data;
+      fprintf(out, "0x%p\n", data);
+      print_iir_chunk(out, compiler, &func->chunk);
+    } else {
+      fprintf(out, "0x%p", data);
+    }
   } break;
-  case Type_pointer: Todo();
+  case Type_pointer:
   case Type_nil:
   case Type_never:
   case Type_slice:
   case Type_array: {
-    fprintf(out, "$%u", idx);
+    fprintf(out, "0x%p", data);
   } break;
   }
 }
 
-internal void ir_ref_print(FILE *out, Compiler *compiler, IrRef ref) {
-  if (ref_is_nil(ref)) {
+internal void print_sref(FILE *out, Compiler *compiler, SRef ref) {
+  if (sref_is_nil(ref)) {
     fprintf(out, "_");
     return;
   }
 
-  if (ref_is_value_index(ref)) {
-    value_print(out, compiler, ref_to_value_index(ref));
+  if (sref_is_value(ref)) {
+    Value *value = values_get(&compiler->values, sref_to_value(ref));
+    print_value_raw(out, compiler, 0, value->type, value->data);
   } else {
-    fprintf(out, "%%%u", ref_to_instruction_index(ref));
+    fprintf(out, "%%%u", sref_to_instruction(ref));
+  }
+}
+
+internal void print_iref(FILE *out, Compiler *compiler, IRef ref) {
+  if (iref_is_nil(ref)) {
+    fprintf(out, "_");
+    return;
+  }
+
+  if (iref_is_value(ref)) {
+    Value *value = values_get(&compiler->values, iref_to_value(ref));
+    print_value_raw(out, compiler, 0, value->type, value->data);
+  } else {
+    fprintf(out, "%%%u", iref_to_instruction(ref));
   }
 }
 
@@ -149,19 +163,62 @@ internal char const* typekind_string(u8 kind) {
   return "<invalid>";
 }
 
+internal void print_inst_source(FILE *out, Compiler *compiler, AstAndSourceIndex src) {
+  fputs(" ; ", out);
+
+  if (src.source_idx == 0 || src.ast_idx == 0) {
+    fputs("_\n", out);
+    return;
+  }
+
+  Source *source = compiler_get_source(compiler, src.source_idx);
+
+  SpanToken span = source->ast.spans[src.ast_idx];
+
+  u32 start = source->tokens.spans[span.start].start;
+  u32 end   = source->tokens.spans[span.end - 1].end;
+
+  u8 const *s = source->text.str + start;
+
+  b32 has_newline = False;
+  u32 len = Min(end-start, 40);
+  for (u32 j = 0; j < len; j++) {
+    if (s[j] == '\n') {
+      fputs(" ...", out);
+      has_newline = True;
+      break;
+    }
+
+    fputc(s[j], out);
+  }
+
+  if (!has_newline && (end-start) > 40) {
+    fputs(" ...", out);
+  }
+
+  fputs("\n", out);
+}
+
+static char const *sir_opcode_names[] = {
+#define X(k, name, a, b) [k] = name,
+#include "x_sir.h"
+#undef X
+};
+
 typedef struct {
   u32 count;
   u32 at;
 } BlockPrint;
 
-void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
+void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
   BlockPrint buf[64];
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
 
   for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
-    u8  op   = chunk->opcodes[i];
-    u32 data = chunk->data[i];
+    SIrOpcode  op   = sir_chunk_op(chunk, i);
+
+    u32 data = sir_chunk_data(chunk, i);
 
     u32 depth = blocks.len;
 
@@ -184,64 +241,71 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
       }
     }
 
-    fprintf(out, "%4u | \033[1m%*s%s\033[22m ", i, depth * 2, "", ir_opcode_names[op]);
+    fprintf(out, "%4u | \033[1m%*s%s\033[22m ", i, depth * 2, "", sir_opcode_names[op]);
 
-    void *extra = ptr_offset(chunk->extra, data);
+    void *extra = sir_chunk_extra(chunk, i);
 
-    switch (Cast(IrOpcode, op)) {
-    case IR_nop: break;
-    case IR_func: {
-      IrFunc *func = extra;
+    switch (op) {
+    case SIR_func: {
+      SIrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
-      ir_ref_print(out, compiler, func->return_type);
+      print_sref(out, compiler, func->return_type);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
-    case IR_condbr: {
-      IrCondBr *cond_br = extra;
+
+    case SIR_condbr: {
+      SIrCondbr *cond_br = extra;
       fputs("cond=", out);
-      ir_ref_print(out, compiler, cond_br->cond);
+      print_sref(out, compiler, cond_br->cond);
       fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
     } break;
-    case IR_block:
-    case IR_eval_block:
-    case IR_loop: {
+
+    case SIR_block:
+    case SIR_eval_block:
+    case SIR_loop: {
       fprintf(out, "count=%u", data);
       stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
     } break;
-    case IR_br: {
-      IrBr *br = extra;
+
+    case SIR_br: {
+      SIrBr *br = extra;
       fprintf(out, "block=%%%u ", br->block);
-      ir_ref_print(out, compiler, br->value);
+      print_sref(out, compiler, br->value);
     } break;
-    case IR_repeat: {
+
+    case SIR_repeat: {
       fprintf(out, "%%%u", data);
     } break;
-    case IR_param_type: {
-      IrParamType *p = extra;
-      ir_ref_print(out, compiler, p->function);
+
+    case SIR_param_type: {
+      SIrParamType *p = extra;
+      print_sref(out, compiler, p->function);
       fprintf(out, " %u", p->param_index);
     } break;
-    case IR_param:
-    case IR_builtin_debug:
-    case IR_ret:
-    case IR_load:
-    case IR_typeof:
-    case IR_base_type:
-    case IR_alloc:
-    case IR_comptime_alloc:
-    case IR_return_type: {
-      ir_ref_print(out, compiler, (IrRef){data});
+
+    case SIR_param:
+    case SIR_builtin_debug:
+    case SIR_ret:
+    case SIR_load:
+    case SIR_typeof:
+    case SIR_base_type:
+    case SIR_alloc:
+    case SIR_comptime_alloc:
+    case SIR_return_type: {
+      print_sref(out, compiler, (SRef){data});
     } break;
-    case IR_store: {
-      IrStore *store = extra;
+
+    case SIR_store: {
+      SIrStore *store = extra;
       fputs("dst=", out);
-      ir_ref_print(out, compiler, store->dst);
+      print_sref(out, compiler, store->dst);
       fputs(" value=", out);
-      ir_ref_print(out, compiler, store->value);
+      print_sref(out, compiler, store->value);
     } break;
-    case IR_call: {
-      IrCall *call = extra;
-      fprintf(out, "$%u", ref_to_u32(call->func));
+
+    case SIR_call: {
+      SIrCall *call = extra;
+      print_sref(out, compiler, call->func);
       if (call->arg_count) {
         fputs(" ", out);
       }
@@ -249,34 +313,31 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
         if (j != 0) {
           fputs(", ", out);
         }
-        ir_ref_print(out, compiler, call->args[j]);
+        print_sref(out, compiler, call->args[j]);
       }
     } break;
-    case IR_declaration: {
-      IrDeclaration *decl = extra;
-      fputs("type=", out);
-      ir_ref_print(out, compiler, decl->declared_type);
-      fputs(" value=", out);
-      ir_ref_print(out, compiler, decl->value);
-    } break;
-    case IR_lookup_typeof:
-    case IR_lookup_value: {
+
+    case SIR_lookup_decl_type:
+    case SIR_lookup_decl_value: {
       fprintf(out, "decl=%u", data);
     } break;
-    case IR_as: {
-      IrAs *as = extra;
-      ir_ref_print(out, compiler, as->type_to);
+
+    case SIR_as: {
+      SIrAs *as = extra;
+      print_sref(out, compiler, as->type_to);
       fputs(" ", out);
-      ir_ref_print(out, compiler, as->val);
+      print_sref(out, compiler, as->val);
     } break;
-    case IR_unify: {
-      IrUnify *unify = extra;
-      ir_ref_print(out, compiler, unify->type_lhs);
+
+    case SIR_unify: {
+      SIrUnify *unify = extra;
+      print_sref(out, compiler, unify->type_lhs);
       fputs(" ", out);
-      ir_ref_print(out, compiler, unify->type_rhs);
+      print_sref(out, compiler, unify->type_rhs);
     } break;
-    case IR_type: {
-      IrType *type = extra;
+
+    case SIR_type: {
+      SIrType *type = extra;
       fprintf(out, "%s ", typekind_string(type->kind));
       if (type->kind == Type_function) {
         Assert(type->arg_count > 0);
@@ -287,53 +348,128 @@ void ir_chunk_print(FILE *out, Compiler *compiler, IrChunk *chunk) {
             if (j != 1) {
               fputs(", ", out);
             }
-            ir_ref_print(out, compiler, type->args[j]);
+            print_sref(out, compiler, type->args[j]);
           }
         }
         fputs(") ", out);
-        ir_ref_print(out, compiler, type->args[type->arg_count-1]);
+        print_sref(out, compiler, type->args[type->arg_count-1]);
       } else {
         for (u32 j = 0; j < type->arg_count; j++) {
           if (j != 0) {
             fputs(", ", out);
           }
-          ir_ref_print(out, compiler, type->args[j]);
+          print_sref(out, compiler, type->args[j]);
         }
       }
     } break;
     }
 
-    fputs(" ; ", out);
-    if (chunk->sources[i].source_idx != 0 && chunk->sources[i].ast_idx != 0) {
-      AstIndex ast_idx = chunk->sources[i].ast_idx;
-      Source *source = compiler_get_source(compiler, chunk->sources[i].source_idx);
+    print_inst_source(out, compiler, chunk->sources[i]);
+  }
+}
 
-      SpanToken span = source->ast.spans[ast_idx];
+static char const *iir_opcode_names[] = {
+#define X(k, name, a, b) [k] = name,
+#include "x_iir.h"
+#undef X
+};
 
-      u32 start = source->tokens.spans[span.start].start;
-      u32 end   = source->tokens.spans[span.end - 1].end;
+void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
+  BlockPrint buf[64];
+  Stack(BlockPrint) blocks;
+  stack_init(&blocks, buf, 64);
 
-      u8 const *s = source->text.str + start;
+  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
+    IIrOpcode op = iir_chunk_op(chunk, i);
 
-      b32 has_newline = False;
-      u32 len = Min(end-start, 40);
-      for (u32 j = 0; j < len; j++) {
-        if (s[j] == '\n') {
-          fputs(" ...", out);
-          has_newline = True;
-          break;
-        }
+    u32 data = iir_chunk_data(chunk, i);
 
-        fputc(s[j], out);
-      }
+    u32 depth = blocks.len;
 
-      if (!has_newline && (end-start) > 40) {
-        fputs(" ...", out);
-      }
-    } else {
-      fputs("_", out);
+    if (!stack_is_empty(&blocks)) {
+      BlockPrint *b = stack_peek_ptr_unchecked(&blocks);
+      b->at += 1;
     }
-    fputs("\n", out);
+
+    while (!stack_is_empty(&blocks)) {
+      BlockPrint *b = stack_peek_ptr_unchecked(&blocks);
+      if (b->at < b->count) {
+        break;
+      }
+
+      u32 count = b->count;
+      stack_pop_unchecked(&blocks);
+
+      if (!stack_is_empty(&blocks)) {
+        stack_peek_ptr_unchecked(&blocks)->at += count;
+      }
+    }
+
+    fprintf(out, "%4u | \033[1m%*s%s\033[22m", i, depth * 2, "", iir_opcode_names[op]);
+
+    switch (op) {
+    case IIR_func:
+    case IIR_block:
+    case IIR_loop: {
+      fprintf(out, " count=%u", data);
+      stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
+    } break;
+
+    case IIR_param:
+    case IIR_alloc: break;
+
+    case IIR_load:
+    case IIR_ret:
+    case IIR_builtin_debug: {
+      fputs(" ", out);
+      print_iref(out, compiler, (IRef){data});
+    } break;
+
+    case IIR_store: {
+      IIrStore *store = iir_chunk_extra(chunk, i);
+      fputs(" ptr=", out);
+      print_iref(out, compiler, store->ptr);
+      fputs(" value=", out);
+      print_iref(out, compiler, store->value);
+    } break;
+
+    case IIR_condbr: {
+      IIrCondbr *condbr = iir_chunk_extra(chunk, i);
+      fputs(" cond=", out);
+      print_iref(out, compiler, condbr->cond);
+      fprintf(out, " then=%%%u otherwise=%%%u", condbr->then, condbr->otherwise);
+    } break;
+
+    case IIR_br: {
+      IIrBr *br = iir_chunk_extra(chunk, i);
+      fprintf(out, " block=%%%u ", br->block);
+      print_iref(out, compiler, br->value);
+    } break;
+
+    case IIR_repeat: {
+      fprintf(out, " %%%u", data);
+    } break;
+
+    case IIR_call: {
+      IIrCall *call = iir_chunk_extra(chunk, i);
+      fputs(" ", out);
+      print_iref(out, compiler, call->func_ptr);
+      if (call->arg_count) {
+        fputs(" ", out);
+      }
+      for (u32 j = 0; j < call->arg_count; j++) {
+        if (j != 0) {
+          fputs(", ", out);
+        }
+        print_iref(out, compiler, call->args[j]);
+      }
+    } break;
+    }
+
+    fputs(" : ", out);
+    print_type(out, &compiler->types, iir_chunk_type(chunk, i));
+
+    print_inst_source(out, compiler, chunk->sources[i]);
   }
 }
 

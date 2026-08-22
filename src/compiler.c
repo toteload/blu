@@ -186,15 +186,25 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     }
   );
 
-  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
+  compiler->common.type.comptime_int =
+    types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
   compiler->common.type.type = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
   compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
-  compiler->common.type.u8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
-  compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
+  compiler->common.type.u8 = types_add(
+    &compiler->types,
+    &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}
+  );
+  compiler->common.type.i32 = types_add(
+    &compiler->types,
+    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}
+  );
 
-  TypeIndex ti_i8 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
+  TypeIndex ti_i8 = types_add(
+    &compiler->types,
+    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}
+  );
 
   compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
@@ -341,7 +351,7 @@ push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolv
 internal b32 resolve_entry(Resolver *resolver) {
   ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
   Declaration *decl = entry->decl;
-  IrChunk *chunk = &decl->data.decl.chunk;
+  SIrChunk *chunk = &decl->data.decl.chunk;
 
   u8 resolve_status = decl->resolve_status;
 
@@ -353,7 +363,7 @@ internal b32 resolve_entry(Resolver *resolver) {
 
     if (resolve_status < ResolveStatus_type_resolved) {
       InstructionIndex block = decl->data.decl.block_type;
-      u32 count = chunk_data(chunk, block);
+      u32 count = sir_chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
         .scope_kind = Scope_eval_block,
@@ -363,7 +373,7 @@ internal b32 resolve_entry(Resolver *resolver) {
       };
     } else {
       InstructionIndex block = decl->data.decl.block_val;
-      u32 count = chunk_data(chunk, block);
+      u32 count = sir_chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
         .scope_kind = Scope_eval_block,
@@ -406,7 +416,7 @@ internal b32 resolve_entry(Resolver *resolver) {
   if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
     CallFrame *f = top_frame(&entry->state);
     ScopeSpan *s = stack_peek_ptr(&f->scopes);
-    DeclarationIndex idx = chunk_data(f->chunk, s->pc);
+    DeclarationIndex idx = sir_chunk_data(f->chunk, s->pc);
 
     Declaration *decl_to_resolve = decls_extra_get_ptr(resolver->decls, idx);
 
@@ -473,7 +483,7 @@ b32 resolve_declarations(Resolver *resolver) {
       if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_type) {
         Message_error(
           resolver->msg_sink,
-          (MessageLocation){ 
+          (MessageLocation){
             .kind = MessageLocation_unspecified,
             .decl_idx = entry->decl->idx,
           },
@@ -487,7 +497,7 @@ b32 resolve_declarations(Resolver *resolver) {
       if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_value) {
         Message_error(
           resolver->msg_sink,
-          (MessageLocation){ 
+          (MessageLocation){
             .kind = MessageLocation_unspecified,
             .decl_idx = entry->decl->idx,
           },
@@ -700,9 +710,7 @@ b32 compile(Compiler *compiler) {
       is_ok &= generate_code(&context, decl);
 
       if (compiler->options->print_decl_ir) {
-        ir_chunk_print(
-          stdout, compiler, &decl->data.decl.chunk
-        );
+        print_sir_chunk(stdout, compiler, &decl->data.decl.chunk);
       }
     }
   }
@@ -722,7 +730,7 @@ b32 compile(Compiler *compiler) {
       .common = &compiler->common,
     };
 
-    IrBuilder *builders = arena_push_array(IrBuilder, &compiler->scratch, MAX_BUILDERS);
+    IIrBuilder *builders = arena_push_array(IIrBuilder, &compiler->scratch, MAX_BUILDERS);
     stack_init(&specializer.builders, builders, MAX_BUILDERS);
 
     Resolver resolver = {
@@ -755,9 +763,12 @@ b32 compile(Compiler *compiler) {
       ValueIndex val = decl->data.decl.val;
 
       printf("%.*s : ", Cast(int, name.len), name.str);
-      type_index_print(stdout, &compiler->types, values_get(&compiler->values, val)->type);
+      print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
       printf(" = ");
-      value_print(stdout, compiler, val);
+      {
+        Value *v = values_get(&compiler->values, val);
+        print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
+      }
       printf("\n");
     }
   }
@@ -767,11 +778,19 @@ b32 compile(Compiler *compiler) {
 
 b32 run_main(Compiler *compiler) {
   DeclarationIndex mod_main;
-  b32 ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){0}, 1, strings_add(&compiler->strings, string_lit("main")), &mod_main);
+  b32 ok = lookup_identifier(
+    &compiler->decls,
+    (DeclarationIndex[]){0},
+    1,
+    strings_add(&compiler->strings, string_lit("main")),
+    &mod_main
+  );
   if (!ok) {
     Message_error(
       &compiler->msg_sink,
-      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      (MessageLocation){
+        .kind = MessageLocation_unspecified,
+      },
       string_lit("Module 'main' not found")
     );
 
@@ -779,11 +798,19 @@ b32 run_main(Compiler *compiler) {
   }
 
   DeclarationIndex fn_main;
-  ok = lookup_identifier(&compiler->decls, (DeclarationIndex[]){mod_main}, 1, strings_add(&compiler->strings, string_lit("main")), &fn_main);
+  ok = lookup_identifier(
+    &compiler->decls,
+    (DeclarationIndex[]){mod_main},
+    1,
+    strings_add(&compiler->strings, string_lit("main")),
+    &fn_main
+  );
   if (!ok) {
     Message_error(
       &compiler->msg_sink,
-      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      (MessageLocation){
+        .kind = MessageLocation_unspecified,
+      },
       string_lit("Declaration 'main' not found in module 'main'")
     );
     return False;
@@ -794,7 +821,7 @@ b32 run_main(Compiler *compiler) {
   // TODO: make sure main has the correct type
 
   Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-  IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
+  IIrChunk *chunk = &Cast(ValueFunc *, v->data)->chunk;
 
   Interpreter in = {
     .scratch = &compiler->scratch,
@@ -804,8 +831,8 @@ b32 run_main(Compiler *compiler) {
 
   stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
-  ValueIndex res;
-  u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &res);
+  u8 buf[16];
+  u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
   Assert(!err);
 
   return True;

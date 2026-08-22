@@ -76,7 +76,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
     len = span_offset.end - span_offset.start;
   } break;
   case MessageLocation_ir_instruction: {
-    IrChunk *chunk = &decl->data.decl.chunk;
+    SIrChunk *chunk = &decl->data.decl.chunk;
     AstIndex ast_idx = chunk->sources[loc.data.offset].ast_idx;
     if (ast_idx) {
       SpanToken span_token = source->ast.spans[ast_idx];

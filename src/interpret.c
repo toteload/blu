@@ -13,7 +13,7 @@ internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
   }
 }
 
-internal CallFrame2 *frame_push(Interpreter *in, IChunk *chunk, void *ret) {
+internal CallFrame2 *frame_push(Interpreter *in, IIrChunk *chunk, void *ret) {
   CallFrame2 *f = stack_push_ptr(&in->call_stack);
 
   u32 count = chunk->opcode_count;
@@ -26,7 +26,7 @@ internal CallFrame2 *frame_push(Interpreter *in, IChunk *chunk, void *ret) {
   stack_push(&f->scope_stack, ((ScopeSpan2){ .start = 0, .end = count, .snapshot = arena_scope_begin(in->scratch) }));
 
   for (u32 i = 1; i < count; i++) {
-    if (ichunk_op(chunk, i) != IIR_param) {
+    if (iir_chunk_op(chunk, i) != IIR_param) {
       f->pc = i;
       break;
     }
@@ -65,11 +65,11 @@ typedef enum {
 internal u32 step(Interpreter *in) {
   CallFrame2 *f = stack_peek_ptr(&in->call_stack);
   InstructionIndex pc = f->pc;
-  IOpcode op = f->chunk->opcodes[pc];
+  IIrOpcode op = f->chunk->opcodes[pc];
 
   void *local;
   TypeSizeInfo size_info;
-  TypeIndex type = ichunk_type(f->chunk, pc);
+  TypeIndex type = iir_chunk_type(f->chunk, pc);
   if (type) {
     size_info = types_size_info_by_index(&in->compiler->types, type);
     local = arena_push(in->scratch, size_info.size, size_info.align);
@@ -78,22 +78,22 @@ internal u32 step(Interpreter *in) {
 
   switch (op) {
   case IIR_block: {
-    u32 inst_count = ichunk_data(f->chunk, pc);
-    stack_push(&f->scope_stack, ((ScopeSpan2){ .start = pc, .end = pc + inst_count }));
+    u32 inst_count = iir_chunk_data(f->chunk, pc);
+    stack_push(&f->scope_stack, ((ScopeSpan2){ .start = pc, .end = pc + inst_count, .snapshot = arena_scope_begin(in->scratch) }));
     f->pc += 1;
   } break;
 
   case IIR_br: {
-    IBr *br = ichunk_extra(f->chunk, pc);
+    IIrBr *br = iir_chunk_extra(f->chunk, pc);
     void *src = resolve(in, f, br->value);
     memcpy(f->inst_values[br->block], src, size_info.size);
     scopes_pop_to(in, f, br->block);
-    u32 inst_count = ichunk_data(f->chunk, br->block);
+    u32 inst_count = iir_chunk_data(f->chunk, br->block);
     f->pc = br->block + inst_count;
   } break;
 
   case IIR_condbr: {
-    ICondbr *condbr = ichunk_extra(f->chunk, pc);
+    IIrCondbr *condbr = iir_chunk_extra(f->chunk, pc);
     u8* v = resolve(in, f, condbr->cond);
     if (*v) {
       f->pc = condbr->then;
@@ -103,12 +103,16 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_call: {
-    ICall *call = ichunk_extra(f->chunk, pc);
-    void *p = resolve(in, f, call->func_ptr);
-    Todo(); // p points to where the function pointer is stored (what is a fucntion pointer?)
+    IIrCall *call = iir_chunk_extra(f->chunk, pc);
+    ValueFunc *func = resolve(in, f, call->func_ptr);
 
-    //IrChunk *chunk = &Cast(ValueFunc*, v->data)->chunk;
-    //CallFrame2 *g = frame_push(in, chunk, &f->inst_values[pc]);
+    IIrChunk *chunk = &func->chunk;
+
+    CallFrame2 *g = frame_push(in, chunk, &f->inst_values[pc]);
+
+    for (u32 i = 0; i < call->arg_count; i++) {
+      Todo();
+    }
 
     //for (u32 i = 0; i < call->arg_count; i++) {
     //  g->inst_values[i+1] = values_copy(&in->compiler->values, resolve(in, f, call->args[i]));
@@ -118,20 +122,16 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_ret: {
-    void *src = resolve(in, f, (IRef){ichunk_data(f->chunk, pc)});
+    void *src = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
     memcpy(f->ret, src, size_info.size);
     frame_pop(in);
     return Step_return;
   } break;
 
   case IIR_builtin_debug: {
-    u32 size;
-    void *p = resolve(in, f, (IRef){ichunk_data(f->chunk, pc)});
-    Todo();
-
-    //value_print(stdout, in->compiler, val);
-    //fprintf(stdout, "\n");
-    //f->inst_values[pc] = val;
+    void *p = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
+    memcpy(f->inst_values[pc], p, size_info.size);
+    print_value_raw(stdout, in->compiler, 0, type, p);
     f->pc += 1;
   } break;
 
@@ -144,7 +144,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_store: {
-    IStore *store = ichunk_extra(f->chunk, pc);
+    IIrStore *store = iir_chunk_extra(f->chunk, pc);
     void **p = resolve(in, f, store->ptr);
     void *val = resolve(in, f, store->value);
     memcpy(*p, val, size_info.size);
@@ -152,9 +152,9 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_load: {
-    IRef ref = (IRef){ ichunk_data(f->chunk, pc) };
+    IRef ref = (IRef){ iir_chunk_data(f->chunk, pc) };
     void **p = resolve(in, f, ref);
-    memcpy(&f->inst_values[pc], *p, size_info.size);
+    memcpy(f->inst_values[pc], *p, size_info.size);
     f->pc += 1;
   } break;
 
@@ -164,7 +164,7 @@ internal u32 step(Interpreter *in) {
   return Step_ok;
 }
 
-u32 interpreter_call(Interpreter* in, IChunk *chunk, ValueIndex *args, u32 arg_count, void *out) {
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out) {
   // TODO: make sure that the args match the signature of the function
   CallFrame2 *f = frame_push(in, chunk, out);
 

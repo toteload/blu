@@ -8,350 +8,6 @@ typedef struct {
   AstIndex    ast_idx;
 } AstAndSourceIndex;
 
-// Specializer IR
-// -------------------------------------------------------------------------------------------------
-
-#define REF_NAME SRef
-#define REF_FUNCTION_PREFIX sref
-#include "ref.h"
-
-typedef enum {
-  SIR_func,           // references SFunc
-  SIR_param,          // contains SRef to a type
-  SIR_alloc,          // contains SRef to a type
-  SIR_load,
-  SIR_store,          // references SStore
-  SIR_block,          // contains instruction count of block
-  SIR_loop,           // contains instruction count of block
-  SIR_condbr,         // references SCondbr
-  SIR_br,             // references SBr
-  SIR_repeat,         // contains InstructionIndex of loop block to repeat
-  SIR_ret,            // contains SRef to value to return
-  SIR_call,           // references SCall
-  SIR_builtin_debug, // contains SRef
-  SIR_eval_block,     // contains instruction count of block
-  SIR_lookup_decl_value,   // contains DeclarationIndex
-  SIR_lookup_decl_type,  // contains DeclarationIndex
-  SIR_comptime_alloc, // contains SRef to a type
-  SIR_as,             // references SAs
-  SIR_unify,          // references SUnify
-  SIR_type,           // references SType
-  SIR_typeof,         // contains SRef
-  SIR_base_type,      // contains SRef
-  SIR_return_type,    // contains SRef
-  SIR_param_type,     // references SParamType
-} SOpcode;
-
-// A SOP_func instruction is followed by `param_count` SOP_param instructions.
-typedef struct {
-  u32 param_count;
-  u32 instruction_count;
-  SRef return_type;
-} SFunc;
-
-typedef struct {
-  SRef dst;
-  SRef value;
-} SStore;
-
-typedef struct {
-  SRef cond;
-  InstructionIndex then;
-  InstructionIndex otherwise;
-} SCondbr;
-
-typedef struct {
-  InstructionIndex block;
-  SRef value;
-} SBr;
-
-typedef struct {
-  SRef func;
-  u32 arg_count;
-  SRef args[];
-} SCall;
-
-// Unify must result in a valid type otherwise it is considered an error.
-// Unification of the following two function types results in error:
-// (i32, ?) bool + (i32, ?) ? = error | the second parameter type is unknown
-typedef struct {
-  SRef type_lhs;
-  SRef type_rhs;
-} SUnify;
-
-typedef struct {
-  SRef type_to;
-  SRef val;
-} SAs;
-
-typedef struct {
-  u8 kind; // TypeKind
-  u32 arg_count;
-  SRef args[];
-} SType;
-
-typedef struct {
-  SRef function;
-  u32 param_index;
-} SParamType;
-
-typedef struct {
-  u32 opcode_count;
-  u8 *opcodes;
-  u32 *data;
-  AstAndSourceIndex *sources;
-  void *extra;
-} SChunk;
-
-always_inline u8 schunk_op(SChunk *chunk, InstructionIndex idx) {
-  return chunk->opcodes[idx];
-}
-
-always_inline u32 schunk_data(SChunk *chunk, InstructionIndex idx) {
-  return chunk->data[idx];
-}
-
-always_inline void *schunk_extra(SChunk *chunk, InstructionIndex idx) {
-  return ptr_offset(chunk->extra, chunk->data[idx]);
-}
-
-// Interpreter IR
-// -------------------------------------------------------------------------------------------------
-
-#define REF_NAME IRef
-#define REF_FUNCTION_PREFIX iref
-#include "ref.h"
-
-typedef enum {
-  IIR_func, // contains instruction_count
-  IIR_param, // data unused
-  IIR_alloc, // data unused
-  IIR_load, // contains IRef
-  IIR_store, // references `IStore`
-  IIR_block, // contains instruction_count
-  IIR_loop, // contains instruction count
-  IIR_condbr, // references `ICondbr`
-  IIR_br, // contains IRef
-  IIR_repeat, // contains `InstructionIndex` for the loop
-  IIR_ret, // contains Iref
-  IIR_call, // references `ICall`
-  IIR_builtin_debug, // contains IRef
-} IOpcode;
-
-typedef struct {
-  IRef ptr;
-  IRef value;
-} IStore;
-
-typedef struct {
-  IRef cond;
-  InstructionIndex then;
-  InstructionIndex otherwise;
-} ICondbr;
-
-typedef struct {
-  IRef value;
-  InstructionIndex block;
-} IBr;
-
-typedef struct {
-  IRef func_ptr;
-  u32 arg_count;
-  IRef args[];
-} ICall;
-
-// -------------------------------------------------------------------------------------------------
-
-typedef struct {
-  u32 opcode_count;
-  u8 *opcodes;
-  u32 *data;
-  TypeIndex *types;
-  AstAndSourceIndex *sources;
-  void *extra;
-} IChunk;
-
-always_inline u8 ichunk_op(IChunk *chunk, InstructionIndex idx) {
-  return chunk->opcodes[idx];
-}
-
-always_inline TypeIndex ichunk_type(IChunk *chunk, InstructionIndex idx) {
-  return chunk->types[idx];
-}
-
-always_inline u32 ichunk_data(IChunk *chunk, InstructionIndex idx) {
-  return chunk->data[idx];
-}
-
-always_inline void *ichunk_extra(IChunk *chunk, InstructionIndex idx) {
-  return ptr_offset(chunk->extra, chunk->data[idx]);
-}
-
-// -------------------------------------------------------------------------------------------------
-
-#if 0
-typedef struct { u32 x; } Ref;
-
-// The MSB of the `IrRef` encodes if it is an `InstructionIndex` or a `ValueIndex`.
-// If the MSB is 1, then the `IrRef` is a `InstructionIndex`.
-// The reasoning behind this is that `InstructionIndex` is treated as an offset and is non-optional.
-// `ValueIndex` is optional and a value of 0 means nil.
-// `IrRef` is also optional, so making the optional `IrRef` value map to the optional `ValueIndex`
-// value seems wise.
-typedef Ref IrRef;
-
-// Same as `IrRef` except the `InstructionIndex` variant of a `ResolvedRef` refers to the instruction
-// index of the residual instructions not an instruction index in the comptime IR.
-typedef Ref ResolvedRef;
-
-#define BITMASK_REF_IS_INSTRUCTION_INDEX (Cast(u32, 1) << 31)
-
-always_inline b32 ref_is_value_index(Ref r) { return (r.x & BITMASK_REF_IS_INSTRUCTION_INDEX) == 0; }
-always_inline b32 ref_is_some_value_index(Ref r) { return r.x != 0 && ref_is_value_index(r); }
-always_inline b32 ref_is_instruction_index(Ref r) { return (r.x & BITMASK_REF_IS_INSTRUCTION_INDEX) != 0; }
-always_inline b32 ref_is_nil(Ref r) { return r.x == 0; }
-always_inline ValueIndex ref_to_value_index(Ref r) { return r.x; }
-always_inline ValueIndex ref_to_instruction_index(Ref r) { return r.x & ~BITMASK_REF_IS_INSTRUCTION_INDEX; }
-always_inline u32 ref_from_instruction_index(InstructionIndex idx) { return idx | BITMASK_REF_IS_INSTRUCTION_INDEX; }
-always_inline u32 ref_from_value_index(ValueIndex idx) { return idx; }
-always_inline u32 ref_to_u32(Ref r) { return r.x; }
-
-always_inline ResolvedRef resolved_ref_from_instruction_index(InstructionIndex idx) {
-  return (ResolvedRef){ ref_from_instruction_index(idx) };
-}
-
-always_inline ResolvedRef resolved_ref_from_value_index(ValueIndex idx) {
-  return (ResolvedRef){ ref_from_value_index(idx) };
-}
-
-always_inline IrRef ir_ref_from_instruction_index(InstructionIndex idx) {
-  return (IrRef){ ref_from_instruction_index(idx) };
-}
-
-always_inline IrRef ir_ref_from_value_index(ValueIndex idx) {
-  return (IrRef){ ref_from_value_index(idx) };
-}
-
-// -------------------------------------------------------------------------------------------------
-
-typedef enum {
-  IR_nop,
-
-  IR_func,   // data references `IrFunc` in extra
-  IR_param,  // data contains `IrRef`
-  IR_alloc,  // data contains `IrRef`
-  IR_condbr, // data references `IrCondBr` in extra
-  IR_block,  // data contains instruction count of block
-  IR_eval_block, // data contains instruction count of block
-  IR_loop,   // data contains instruction count of block
-
-  // br is allowed to br arbitrarily high.
-  IR_br,     // data references `IrBr` in extra
-  IR_ret,    // data contains `IrRef`
-  IR_repeat, // data contains `InstructionIndex`
-  IR_load,   // data contains `IrRef`
-  IR_store,  // data references `IrStore` in extra
-  IR_call,   // data references `IrCall` in extra
-
-  IR_builtin_debug, // data contains `IrRef`
-
-  IR_declaration,   // data references `IrDeclaration` in extra
-  IR_lookup_typeof, // data contains `DeclarationIndex`
-  IR_lookup_value,  // data contains `DeclarationIndex`
-
-  IR_comptime_alloc, // data contains `IrRef`
-
-  IR_as,    // data references `IrAs` in extra
-  IR_unify, // data references `IrUnify` in extra
-
-  IR_type, // data references `IrType` in extra
-  IR_typeof, // data contains `IrRef`
-
-  IR_base_type, // data contains `IrRef`
-  IR_return_type, // data contains `IrRef`
-  IR_param_type,  // data references `IrParamType` in extra
-} IrOpcode;
-
-// -------------------------------------------------------------------------------------------------
-
-typedef struct {
-  IrRef function;
-  u32 param_index;
-} IrParamType;
-
-typedef struct {
-  u8 kind; // TypeKind
-  u32 arg_count;
-  IrRef args[];
-} IrType;
-
-// You can put the value directly after the declaration instruction by convention.
-// `data` can then hold an optional ref to the optional declared type.
-// This way you don't need this IrDeclaration.
-typedef struct {
-  IrRef declared_type;
-  IrRef value;
-} IrDeclaration;
-
-// Unify must result in a valid type otherwise it is considered an error.
-// Unification of the following two function types results in error:
-// (i32, ?) bool + (i32, ?) ? = error | the second parameter type is unknown
-typedef struct {
-  IrRef type_lhs;
-  IrRef type_rhs;
-} IrUnify;
-
-typedef struct {
-  IrRef type_to;
-  IrRef val;
-} IrAs;
-
-// An IR_func instruction is followed by `param_count` IR_param instructions.
-typedef struct {
-  u32 param_count;
-  u32 instruction_count;
-  IrRef return_type;
-} IrFunc;
-
-typedef struct {
-  InstructionIndex block;
-  IrRef value;
-} IrBr;
-
-typedef struct {
-  IrRef cond;
-  InstructionIndex then;
-  InstructionIndex otherwise;
-} IrCondBr;
-
-typedef struct {
-  IrRef dst;
-  IrRef value;
-} IrStore;
-
-typedef struct {
-  IrRef func;
-  u32 arg_count;
-  IrRef args[];
-} IrCall;
-#endif
-
-// -------------------------------------------------------------------------------------------------
-
-typedef struct {
-  u32 opcode_count;
-  u8 *opcodes;
-  u32 *data;
-  AstAndSourceIndex *sources;
-  void *extra;
-} IrChunk;
-
-u8 chunk_opcode(IrChunk *chunk, InstructionIndex idx);
-u32 chunk_data(IrChunk *chunk, InstructionIndex idx);
-void *chunk_extra(IrChunk *chunk, InstructionIndex idx);
-
-// -------------------------------------------------------------------------------------------------
-
 #define OPCODE_LIST_MIN_SIZE_LOG_2 8
 #define OPCODE_LIST_SEGMENT_COUNT 24
 #define OPCODE_LIST_NAME OpcodeList
@@ -401,6 +57,218 @@ typedef union {
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+// Specializer IR
+// -------------------------------------------------------------------------------------------------
+
+#define REF_NAME SRef
+#define REF_FUNCTION_PREFIX sref
+#include "ref.h"
+
+typedef enum {
+  SIR_func,           // references SFunc
+  SIR_param,          // contains SRef to a type
+  SIR_alloc,          // contains SRef to a type
+  SIR_load,
+  SIR_store,          // references SStore
+  SIR_block,          // contains instruction count of block
+  SIR_loop,           // contains instruction count of block
+  SIR_condbr,         // references SCondbr
+  SIR_br,             // references SBr
+  SIR_repeat,         // contains InstructionIndex of loop block to repeat
+  SIR_ret,            // contains SRef to value to return
+  SIR_call,           // references SCall
+  SIR_builtin_debug, // contains SRef
+  SIR_eval_block,     // contains instruction count of block
+  SIR_lookup_decl_value,   // contains DeclarationIndex
+  SIR_lookup_decl_type,  // contains DeclarationIndex
+  SIR_comptime_alloc, // contains SRef to a type
+  SIR_as,             // references SAs
+  SIR_unify,          // references SUnify
+  SIR_type,           // references SType
+  SIR_typeof,         // contains SRef
+  SIR_base_type,      // contains SRef
+  SIR_return_type,    // contains SRef
+  SIR_param_type,     // references SParamType
+} SIrOpcode;
+
+// A SOP_func instruction is followed by `param_count` SOP_param instructions.
+typedef struct {
+  u32 param_count;
+  u32 instruction_count;
+  SRef return_type;
+} SIrFunc;
+
+typedef struct {
+  SRef dst;
+  SRef value;
+} SIrStore;
+
+typedef struct {
+  SRef cond;
+  InstructionIndex then;
+  InstructionIndex otherwise;
+} SIrCondbr;
+
+typedef struct {
+  InstructionIndex block;
+  SRef value;
+} SIrBr;
+
+typedef struct {
+  SRef func;
+  u32 arg_count;
+  SRef args[];
+} SIrCall;
+
+// Unify must result in a valid type otherwise it is considered an error.
+// Unification of the following two function types results in error:
+// (i32, ?) bool + (i32, ?) ? = error | the second parameter type is unknown
+typedef struct {
+  SRef type_lhs;
+  SRef type_rhs;
+} SIrUnify;
+
+typedef struct {
+  SRef type_to;
+  SRef val;
+} SIrAs;
+
+typedef struct {
+  u8 kind; // TypeKind
+  u32 arg_count;
+  SRef args[];
+} SIrType;
+
+typedef struct {
+  SRef function;
+  u32 param_index;
+} SIrParamType;
+
+// Specializer IR Chunk
+// -------------------------------------------------------------------------------------------------
+
+typedef struct {
+  u32 opcode_count;
+  u8 *opcodes;
+  u32 *data;
+  AstAndSourceIndex *sources;
+  void *extra;
+} SIrChunk;
+
+always_inline u8 sir_chunk_op(SIrChunk *chunk, InstructionIndex idx) {
+  return chunk->opcodes[idx];
+}
+
+always_inline u32 sir_chunk_data(SIrChunk *chunk, InstructionIndex idx) {
+  return chunk->data[idx];
+}
+
+always_inline void *sir_chunk_extra(SIrChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
+
+// Specializer IR Builder
+// -------------------------------------------------------------------------------------------------
+
+typedef struct {
+  Arena *scratch;
+  OpcodeList kinds;
+  AstSourceList ast_source;
+  InstDataList data;
+} SIrBuilder;
+
+InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op);
+InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val);
+
+void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
+
+#define sir_builder_push_data(builder, idx, type)                                                  \
+  sir_builder_push_data_raw(builder, idx, sizeof(type), Align_of(type))
+
+void sir_builder_set_source(SIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
+void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data);
+
+void sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
+
+u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex idx);
+void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk);
+
+// Interpreter IR
+// -------------------------------------------------------------------------------------------------
+
+#define REF_NAME IRef
+#define REF_FUNCTION_PREFIX iref
+#include "ref.h"
+
+typedef enum {
+  IIR_func, // contains instruction_count
+  IIR_param, // data unused
+  IIR_alloc, // data unused
+  IIR_load, // contains IRef
+  IIR_store, // references `IStore`
+  IIR_block, // contains instruction_count
+  IIR_loop, // contains instruction count
+  IIR_condbr, // references `ICondbr`
+  IIR_br, // contains IRef
+  IIR_repeat, // contains `InstructionIndex` for the loop
+  IIR_ret, // contains Iref
+  IIR_call, // references `ICall`
+  IIR_builtin_debug, // contains IRef
+} IIrOpcode;
+
+typedef struct {
+  IRef ptr;
+  IRef value;
+} IIrStore;
+
+typedef struct {
+  IRef cond;
+  InstructionIndex then;
+  InstructionIndex otherwise;
+} IIrCondbr;
+
+typedef struct {
+  IRef value;
+  InstructionIndex block;
+} IIrBr;
+
+typedef struct {
+  IRef func_ptr;
+  u32 arg_count;
+  IRef args[];
+} IIrCall;
+
+// Interpreter IR Chunk
+// -------------------------------------------------------------------------------------------------
+
+typedef struct {
+  u32 opcode_count;
+  u8 *opcodes;
+  u32 *data;
+  TypeIndex *types;
+  AstAndSourceIndex *sources;
+  void *extra;
+} IIrChunk;
+
+always_inline u8 iir_chunk_op(IIrChunk *chunk, InstructionIndex idx) {
+  return chunk->opcodes[idx];
+}
+
+always_inline TypeIndex iir_chunk_type(IIrChunk *chunk, InstructionIndex idx) {
+  return chunk->types[idx];
+}
+
+always_inline u32 iir_chunk_data(IIrChunk *chunk, InstructionIndex idx) {
+  return chunk->data[idx];
+}
+
+always_inline void *iir_chunk_extra(IIrChunk *chunk, InstructionIndex idx) {
+  return ptr_offset(chunk->extra, chunk->data[idx]);
+}
+
+// Interpreter IR Builder
+// -------------------------------------------------------------------------------------------------
+
 typedef struct {
   Arena *scratch;
   OpcodeList kinds;
@@ -409,43 +277,24 @@ typedef struct {
   InstDataList data;
 } IIrBuilder;
 
-typedef struct {
-  Arena *scratch;
-  OpcodeList kinds;
-  AstSourceList ast_source;
-  InstDataList data;
-} IrBuilder;
+InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op);
+InstructionIndex iir_builder_add_as(IIrBuilder *builder, SRef type_destination, SRef val);
+void iir_builder_end_block_with(IIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
 
-InstructionIndex irbuilder_add(IrBuilder *builder, u8 op);
-InstructionIndex irbuilder_add_sir_as(IrBuilder *builder, SRef type_destination, SRef val);
-void irbuilder_end_sir_block_with(IrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
+void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
 
-//InstructionIndex inst_alloc(IrBuilder *builder);
+#define iir_builder_push_data(builder, idx, type)                                                  \
+  iir_builder_push_data_raw(builder, idx, sizeof(type), Align_of(type))
 
-void inst_set_opcode(IrBuilder *builder, InstructionIndex idx, u8 opcode);
-void inst_set_source(IrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
-void inst_set_data(IrBuilder *builder, InstructionIndex idx, u32 data);
-void *inst_push_data_raw(IrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
+void iir_builder_set_source(IIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
+void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data);
+void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeIndex type);
 
-u8 inst_get_opcode(IrBuilder *builder, InstructionIndex idx);
-u32 inst_get_data(IrBuilder *builder, InstructionIndex idx);
-void *inst_get_extra(IrBuilder *builder, InstructionIndex idx);
-u32 inst_offset(IrBuilder *builder, InstructionIndex start);
+u8 iir_builder_get_opcode(IIrBuilder *builder, InstructionIndex idx);
+u32 iir_builder_get_data(IIrBuilder *builder, InstructionIndex idx);
+TypeIndex iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx);
 
-//InstructionIndex inst_loop_begin(IrBuilder *builder);
-//InstructionIndex inst_block_begin(IrBuilder *builder);
-//InstructionIndex inst_eval_block_begin(IrBuilder *builder);
-//void inst_block_end(IrBuilder *builder, InstructionIndex block);
-//void inst_block_end_with_value(IrBuilder *builder, InstructionIndex block, IrRef ref);
-//void inst_block_end_with_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
-//void inst_block_end_with_value_and_target(IrBuilder *builder, InstructionIndex block, InstructionIndex target, IrRef ref);
-//void inst_block_end_repeat(IrBuilder *builder, InstructionIndex block, InstructionIndex target);
-//
-//InstructionIndex inst_as(IrBuilder *builder, IrRef type_destination, IrRef val, SourceIndex source_idx, AstIndex source);
-
-void irbuilder_flatten(IrBuilder *builder, Arena *arena, IrChunk *chunk);
-
-#define inst_push_data(builder, idx, type)                                                         \
-  inst_push_data_raw(builder, idx, sizeof(type), Align_of(type))
+u32 iir_builder_offset(IIrBuilder *builder, InstructionIndex idx);
+void iir_builder_flatten(IIrBuilder *builder, Arena *arena, IIrChunk *chunk);
 
 #endif // IR_H

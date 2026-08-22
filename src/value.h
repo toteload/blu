@@ -11,20 +11,13 @@ typedef struct {
   void      *data;
 } Value;
 
-#define SEGMENTLIST_NAME          ValueList
-#define SEGMENTLIST_TYPE          Value
-#define SEGMENTLIST_MIN_SIZE_LOG2 6
-#define SEGMENTLIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
 typedef struct {
   usize  len;
   void  *data;
 } ValueSlice;
 
 typedef struct {
-  IrChunk chunk;
+  IIrChunk chunk;
 } ValueFunc;
 
 typedef struct {
@@ -33,6 +26,13 @@ typedef struct {
 } ValuePointer;
 
 // -----------------------------------------------------------------------------
+
+#define SEGMENTLIST_NAME          ValueList
+#define SEGMENTLIST_TYPE          Value
+#define SEGMENTLIST_MIN_SIZE_LOG2 6
+#define SEGMENTLIST_SEGMENT_COUNT 24
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
 
 struct ValueStore {
   Arena     *arena;

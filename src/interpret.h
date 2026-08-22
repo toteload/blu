@@ -16,7 +16,7 @@ typedef Stack(ScopeSpan2) ScopeStack2;
 
 typedef struct {
   void *ret;
-  IChunk *chunk;
+  IIrChunk *chunk;
   void **inst_values;
   ScopeStack2 scope_stack;
   InstructionIndex pc;
@@ -31,6 +31,6 @@ typedef struct {
   CallStack2 call_stack;
 } Interpreter;
 
-u32 interpreter_call(Interpreter* in, IChunk *chunk, ValueIndex *args, u32 arg_count, void *out);
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out);
 
 #endif // INTERPRET_H

@@ -11,7 +11,7 @@ join = os.path.join
 is_macos = platform.system() == 'Darwin'
 is_windows = platform.system() == 'Windows'
 
-USE_SANITIZERS = True
+USE_SANITIZERS = False
 
 def exe(name):
     if is_windows:

@@ -71,7 +71,7 @@ struct Declaration {
       Source  *source;
       u32      tree_idx;
 
-      SChunk  chunk;
+      SIrChunk  chunk;
 
       InstructionIndex block_type;
       TypeIndex type; // will be set after the type of the declaration has been resolved
