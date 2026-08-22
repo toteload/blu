@@ -1,19 +1,19 @@
 mod main
 
 main: = || {
-  text: = "TODO"
+  text: []u8 = "TODO"
 
   count: i32 = 0
   pcount: i32 = 0
   dial: i32 = 50
 
-  i: i32= 0
+  i: i32 = 0
   while i < text {
-    sign := if text[i] == "L" { -1 } else { 1 }
+    sign: i32 = if text[i] == "L" do -1 else 1
 
     i += 1
 
-    n := text[i] - "0"
+    n: i32 = text[i] - "0"
 
     i += 1
 
@@ -27,7 +27,7 @@ main: = || {
 
     n %= 100
 
-    was_on_zero := dial == 0
+    was_on_zero: bool = dial == 0
     dial += sign * n
 
     if dial < 0 {

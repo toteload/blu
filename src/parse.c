@@ -679,7 +679,13 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
 
   Try(parse_expression(parser, &if_else->cond));
 
-  Try(parse_block(parser, &if_else->then));
+  b32 has_do = consume_if_match(parser, Tok_keyword_do);
+
+  if (has_do) {
+    Try(parse_expression(parser, &if_else->then));
+  } else {
+    Try(parse_block(parser, &if_else->then));
+  }
 
   u8 tok;
   Try(peek(parser, &tok));
@@ -697,7 +703,11 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   u8 ignored;
   next(parser, &ignored);
 
-  Try(parse_block(parser, &if_else->otherwise));
+  if (has_do) {
+    Try(parse_expression(parser, &if_else->otherwise));
+  } else {
+    Try(parse_block(parser, &if_else->otherwise));
+  }
 
   *node_kind(parser, idx) = Ast_if_else;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };

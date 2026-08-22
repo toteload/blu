@@ -765,10 +765,8 @@ b32 compile(Compiler *compiler) {
       printf("%.*s : ", Cast(int, name.len), name.str);
       print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
       printf(" = ");
-      {
-        Value *v = values_get(&compiler->values, val);
-        print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
-      }
+      Value *v = values_get(&compiler->values, val);
+      print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
       printf("\n");
     }
   }
