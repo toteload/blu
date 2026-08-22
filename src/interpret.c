@@ -132,6 +132,7 @@ internal u32 step(Interpreter *in) {
     void *p = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
     memcpy(f->inst_values[pc], p, size_info.size);
     print_value_raw(stdout, in->compiler, 0, type, p);
+    fputs("\n", stdout);
     f->pc += 1;
   } break;
 

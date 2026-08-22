@@ -690,6 +690,18 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   u8 tok;
   Try(peek(parser, &tok));
   if (tok != Tok_keyword_else) {
+    if (has_do) {
+      Message_error(
+        parser->msg_sink,
+        (MessageLocation){ 
+          .kind = MessageLocation_token_index,
+          .data.token_index = parser->at,
+        },
+        string_lit("'if' expression has 'do' but no 'else'.")
+      );
+      return False;
+    }
+
     if_else->otherwise = (AstIndex){0};
 
     *node_kind(parser, idx) = Ast_if_else;

@@ -482,7 +482,16 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   } break;
   case Ast_source: { Todo(); } break;
   case Ast_mod_section: { Todo(); } break;
-  case Ast_type_slice: { Todo(); } break;
+  case Ast_type_slice: {
+    AstTypeSlice *slice = ast_data(ast, idx_ast);
+    SRef base_type = gen_code(gen, slice->base, sref_from_value(gen->common->val.type));
+    InstructionIndex inst = sir_builder_add(builder, SIR_type);
+    SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + sizeof(SRef), Align_of(SIrType));
+    data->kind = Type_slice;
+    data->arg_count = 1;
+    data->args[0] = base_type;
+    return sref_from_instruction(inst);
+  } break;
   case Ast_type_array: { Todo(); } break;
   case Ast_assign: { 
     AstAssign *assign = ast_data(ast, idx_ast);
