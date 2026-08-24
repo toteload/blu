@@ -703,8 +703,9 @@ internal u32 step(Specializer *in, RunState *state) {
           .data.function = {.return_type = return_type, .param_count = 0},
         }
       );
-
     } break;
+
+    case Type_slice: { Todo(); } break;
 
     default:
       Panic(); Unreachable();
@@ -1262,8 +1263,21 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  default:
-    Todo();
+  case SIR_param: { Panic(); }
+  case SIR_loop: { Todo(); } break;
+  case SIR_repeat: { Todo(); } break;
+  case SIR_and: { Todo(); } break;
+  case SIR_or: { Todo(); } break;
+  case SIR_cmp_eq: { Todo(); } break;
+  case SIR_cmp_ne: { Todo(); } break;
+  case SIR_cmp_gt: { Todo(); } break;
+  case SIR_cmp_ge: { Todo(); } break;
+  case SIR_cmp_lt: { Todo(); } break;
+  case SIR_cmp_le: { Todo(); } break;
+  case SIR_index: { Todo(); } break;
+  case SIR_negate: { Todo(); } break;
+  case SIR_not: { Todo(); } break;
+  case SIR_param_type: { Todo(); } break;
   }
 
   return Step_ok;

@@ -460,7 +460,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_literal_int: {
     TokenIndex *tok = ast_data(ast, idx_ast);
-    i64 value = parse_i64(token_string(tokens, text, *tok));
+    u64 value = parse_u64(token_string(tokens, text, *tok));
 
     Value *v;
     ValueIndex idx = values_alloc(gen->values, &v);

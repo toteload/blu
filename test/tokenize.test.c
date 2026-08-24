@@ -74,7 +74,6 @@ void test_single_char_tokens(TestResult *test, TokenizeContext *context) {
 }
 
 void test_multichar_operators(TestResult *test, TokenizeContext *context) {
-  Assert_kinds("->",  Tok_arrow);
   Assert_kinds("==",  Tok_cmp_eq);
   Assert_kinds("=",   Tok_equals);
   Assert_kinds("+=",  Tok_plus_equals);
@@ -170,7 +169,6 @@ void test_operator_munch_boundaries(TestResult *test, TokenizeContext *context) 
   Assert_kinds("===", Tok_cmp_eq,      Tok_equals);
   Assert_kinds("+==", Tok_plus_equals, Tok_equals);
   Assert_kinds("!==", Tok_cmp_ne,      Tok_equals);
-  Assert_kinds("->>", Tok_arrow,       Tok_cmp_gt);
   Assert_kinds("<<<", Tok_left_shift,  Tok_cmp_lt);
 }
 

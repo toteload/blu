@@ -165,11 +165,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
       Return_token(Tok_minus);
     }
 
-    if (*tokenizer->at == '>') {
-      tokenizer->at += 1;
-      Return_token(Tok_arrow);
-    }
-
     if (*tokenizer->at == '=') {
       tokenizer->at += 1;
       Return_token(Tok_minus_equals);

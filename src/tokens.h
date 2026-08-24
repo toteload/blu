@@ -9,7 +9,6 @@ typedef enum {
   Tok_semicolon,
   Tok_comma,
   Tok_dot,
-  Tok_arrow,
 
   Tok_equals,
   Tok_minus,
