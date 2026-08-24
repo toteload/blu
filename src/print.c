@@ -260,6 +260,31 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
     } break;
 
+    case SIR_index:
+    case SIR_and:
+    case SIR_or:
+    case SIR_mul:
+    case SIR_div:
+    case SIR_mod:
+    case SIR_sub:
+    case SIR_add:
+    case SIR_cmp_eq:
+    case SIR_cmp_ne:
+    case SIR_cmp_gt:
+    case SIR_cmp_ge:
+    case SIR_cmp_lt:
+    case SIR_cmp_le: {
+      SIrBinary *binary = extra;
+      print_sref(out, compiler, binary->lhs);
+      fputs(", ", out);
+      print_sref(out, compiler, binary->rhs);
+    } break;
+
+    case SIR_negate:
+    case SIR_not: {
+      print_sref(out, compiler, (SRef){data});
+    } break;
+
     case SIR_block:
     case SIR_eval_block:
     case SIR_loop: {

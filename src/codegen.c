@@ -179,6 +179,82 @@ SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   return (SRef){0};
 }
 
+internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef type_destination, SRef *lhs_type_destination, SRef *rhs_type_destination) {
+  SRef lhs;
+  SRef rhs;
+
+  switch (op) {
+  case Logical_or:
+  case Logical_and: {
+    lhs = sref_from_value(gen->common->val.bool);
+    rhs = sref_from_value(gen->common->val.bool);
+  } break;
+
+  case Cmp_equal:
+  case Cmp_not_equal:
+  case Cmp_greater_than:
+  case Cmp_greater_equal:
+  case Cmp_less_than:
+  case Cmp_less_equal: {
+    lhs = (SRef){0};
+    rhs = (SRef){0};
+  } break;
+
+  case Bit_shift_left:
+  case Bit_shift_right: {
+    Todo();
+  } break;
+
+  case Mul:
+  case Div:
+  case Mod:
+  case Sub:
+  case Add:
+  case Bit_and:
+  case Bit_or:
+  case Bit_xor: {
+    lhs = type_destination;
+    rhs = type_destination;
+  } break;
+
+  case BinaryOpKind_count: Unreachable();
+  }
+
+  *lhs_type_destination = lhs;
+  *rhs_type_destination = rhs;
+}
+
+internal SRef gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKind op, SRef lhs, SRef rhs) {
+  // clang-format on
+  u8 sir_op;
+  switch (op) {
+  case Logical_and: sir_op = SIR_and; break;
+  case Logical_or: sir_op = SIR_or; break;
+  case Mul: sir_op = SIR_mul; break;
+  case Div: sir_op = SIR_div; break;
+  case Mod: sir_op = SIR_mod; break;
+  case Sub: sir_op = SIR_sub; break;
+  case Add: sir_op = SIR_add; break;
+  case Cmp_equal:     sir_op = SIR_cmp_eq; break;
+  case Cmp_not_equal: sir_op = SIR_cmp_ne; break;
+  case Cmp_greater_than: sir_op = SIR_cmp_gt; break;
+  case Cmp_greater_equal: sir_op = SIR_cmp_ge; break;
+  case Cmp_less_than: sir_op = SIR_cmp_lt; break;
+  case Cmp_less_equal: sir_op = SIR_cmp_le; break;
+  default: Todo();
+  }
+  // clang-format off
+
+  InstructionIndex inst = sir_builder_add(builder, sir_op);
+  SIrBinary *data = sir_builder_push_data(builder, inst, SIrBinary);
+  *data = (SIrBinary){
+    .lhs = lhs,
+    .rhs = rhs,
+  };
+
+  return sref_from_instruction(inst);
+}
+
 SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   String text = gen->source->text;
   Tokens *tokens = &gen->source->tokens;
@@ -205,6 +281,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_source(builder, i, source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
+
   case Ast_block: {
     AstBlock *block = ast_data(ast, idx_ast);
     u32 count = block->count;
@@ -237,6 +314,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     return sref_from_instruction(inst_block);
   } break;
+
   case Ast_if_else: {
     AstIfElse *if_else = ast_data(ast, idx_ast);
 
@@ -255,24 +333,26 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     SIrCondbr *data_condbr = sir_builder_push_data(builder, condbr, SIrCondbr);
 
-    if (if_else->otherwise) {
-      InstructionIndex else_block = sir_builder_add(builder, SIR_block);
-      SRef else_val = gen_code(gen, if_else->otherwise, type_destination);
-      sir_builder_end_block_with(builder, else_block, block, else_val);
+    InstructionIndex else_block = sir_builder_add(builder, SIR_block);
+    SRef else_val = (SRef){0};
 
-      *data_condbr = (SIrCondbr){
-        .cond = cond,
-        .then = then_block,
-        .otherwise = else_block,
-      };
-    } else {
-      Todo();
+    if (if_else->otherwise) {
+      else_val = gen_code(gen, if_else->otherwise, type_destination);
     }
+
+    sir_builder_end_block_with(builder, else_block, block, else_val);
+
+    *data_condbr = (SIrCondbr){
+      .cond = cond,
+      .then = then_block,
+      .otherwise = else_block,
+    };
 
     sir_builder_set_data(builder, block, sir_builder_offset(builder, block));
 
     return sref_from_instruction(block);
   } break;
+
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
    SRef ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
@@ -304,6 +384,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_source(builder, i, source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
+
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
@@ -346,6 +427,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     return sref_from_instruction(inst_func);
   } break;
+
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
 
@@ -374,6 +456,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     return sref_from_value(gen->common->val.nil);
   } break;
+
   case Ast_literal_int: {
     TokenIndex *tok = ast_data(ast, idx_ast);
     i64 value = parse_i64(token_string(tokens, text, *tok));
@@ -392,6 +475,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_source(builder, i, source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
+
   case Ast_call: {
     AstCall *ast_call = ast_data(ast, idx_ast);
 
@@ -434,6 +518,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_source(builder, i, source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
+
   case Ast_builtin: {
     AstBuiltin *builtin = ast_data(ast, idx_ast);
     switch (Cast(BuiltinKind, builtin->kind)) {
@@ -448,6 +533,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     } break;
     }
   } break;
+
   case Ast_literal_string: {
     TokenIndex *name = ast_data(ast, idx_ast);
     
@@ -480,8 +566,11 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_source(builder, i, source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
+
   case Ast_source: { Todo(); } break;
+
   case Ast_mod_section: { Todo(); } break;
+
   case Ast_type_slice: {
     AstTypeSlice *slice = ast_data(ast, idx_ast);
     SRef base_type = gen_code(gen, slice->base, sref_from_value(gen->common->val.type));
@@ -492,11 +581,11 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     data->args[0] = base_type;
     return sref_from_instruction(inst);
   } break;
+
   case Ast_type_array: { Todo(); } break;
+
   case Ast_assign: { 
     AstAssign *assign = ast_data(ast, idx_ast);
-
-    Assert(assign->kind == Assign_normal);
 
     SRef lhs_ptr = gen_code_for_ptr(gen, assign->lhs, (SRef){0});
 
@@ -506,7 +595,26 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex inst_basetype = sir_builder_add(builder, SIR_base_type);
     sir_builder_set_data(builder, inst_basetype, sref_to_u32(sref_from_instruction(inst_typeof_lhs)));
 
-    SRef value = gen_code(gen, assign->value, sref_from_instruction(inst_basetype));
+    SRef value;
+    AssignKind kind = assign->kind;
+    if (kind != Assign_normal) {
+      BinaryOpKind binop = compound_assign_kind_to_binary_op_kind(kind);
+
+      SRef lhs_type_destination, rhs_type_destination;
+      binary_op_type_destinations(gen, binop, type_destination, &lhs_type_destination, &rhs_type_destination);
+
+      InstructionIndex lhs = sir_builder_add(builder, SIR_load);
+      sir_builder_set_data(builder, lhs, sref_to_u32(lhs_ptr));
+
+      InstructionIndex i = sir_builder_add_as(&gen->builder, lhs_type_destination, sref_from_instruction(lhs));
+      sir_builder_set_source(builder, i, source_idx, idx_ast);
+
+      SRef rhs = gen_code(gen, assign->value, rhs_type_destination);
+
+      value = gen_code_for_binary_op(&gen->builder, binop, sref_from_instruction(lhs), rhs);
+    } else {
+      value = gen_code(gen, assign->value, sref_from_instruction(inst_basetype));
+    }
 
     InstructionIndex inst_store = sir_builder_add(builder, SIR_store);
     SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
@@ -517,14 +625,65 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     
     return sref_from_instruction(inst_store);
   } break;
+
   case Ast_label: { Todo(); } break;
-  case Ast_index: { Todo(); } break;
+
+  case Ast_index: {
+    AstIndexData *index = ast_data(ast, idx_ast);
+    SRef indexable = gen_code(gen, index->indexable, type_destination);
+    SRef index_at = gen_code(gen, index->index_at, (SRef){0});
+
+    // TODO check that the indexable is actually indexable
+
+    InstructionIndex inst = sir_builder_add(builder, SIR_index);
+    SIrBinary *data = sir_builder_push_data(builder, inst, SIrBinary);
+    *data = (SIrBinary){
+      .lhs = indexable,
+      .rhs = index_at,
+    };
+
+    InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst));
+    sir_builder_set_source(builder, i, source_idx, idx_ast);
+    return sref_from_instruction(i);
+  } break;
+
   case Ast_unary_op: {
-    Todo();
+    AstUnaryOp *unary = ast_data(ast, idx_ast);
+    UnaryOpKind op = unary->op_kind;
+
+    SRef e = gen_code(gen, unary->value, type_destination);
+
+    u8 sir_op;
+    switch (op) {
+    case Negate: sir_op = SIR_negate; break;
+    case Not: sir_op = SIR_not; break;
+    default: Unreachable();
+    }
+
+    InstructionIndex inst = sir_builder_add(builder, sir_op);
+    sir_builder_set_data(builder, inst, sref_to_u32(e));
+
+    InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst));
+    sir_builder_set_source(builder, i, source_idx, idx_ast);
+    return sref_from_instruction(i);
   } break;
+
   case Ast_binary_op: {
-    Todo();
+    AstBinaryOp *binary = ast_data(ast, idx_ast);
+
+    SRef lhs_type_destination, rhs_type_destination;
+    binary_op_type_destinations(gen, binary->op_kind, type_destination, &lhs_type_destination, &rhs_type_destination);
+
+    SRef lhs = gen_code(gen, binary->lhs, lhs_type_destination);
+    SRef rhs = gen_code(gen, binary->rhs, rhs_type_destination);
+
+    SRef x = gen_code_for_binary_op(&gen->builder, binary->op_kind, lhs, rhs);
+
+    InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, x);
+    sir_builder_set_source(builder, i, source_idx, idx_ast);
+    return sref_from_instruction(i);
   } break;
+
   case Ast_param: { Todo(); } break;
   case Ast_for: { Todo(); } break;
   case Ast_while: { 
@@ -562,7 +721,16 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_const: { Todo(); } break;
   case Ast_cast: { Todo(); } break;
   case Ast_as: { Todo(); } break;
-  case Ast_break: { Todo(); } break;
+
+  case Ast_break: {
+    AstBreak *b = ast_data(ast, idx_ast);
+
+    if (b->label) {
+      TodoMsg("implement break to label");
+    }
+
+    TodoMsg("implement break");
+  } break;
   }
 
   Unreachable();

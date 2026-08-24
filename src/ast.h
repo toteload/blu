@@ -42,7 +42,7 @@ typedef enum {
   Builtin_debug,
 } BuiltinKind;
 
-enum BinaryOpKind {
+typedef enum {
   Mul,
   Div,
   Mod,
@@ -68,24 +68,34 @@ enum BinaryOpKind {
   Logical_or,
 
   BinaryOpKind_count,
-};
+} BinaryOpKind;
 
-enum AssignKind {
+typedef enum {
   Assign_normal,
+  Assign_mul,
+  Assign_div,
+  Assign_mod,
   Assign_sub,
   Assign_add,
-  Assign_mul,
-  Assign_mod,
 
   AssignKind_count,
-};
+} AssignKind;
 
-enum UnaryOpKind {
+always_inline BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind assign_kind) {
+  switch (assign_kind) {
+  case Assign_normal:
+  case AssignKind_count:
+    Panic();
+  default: return assign_kind - 1;
+  }
+}
+
+typedef enum {
   Negate,
   Not,
 
   UnaryOpKind_max,
-};
+} UnaryOpKind;
 
 enum AttributeFlag {
   Attribute_comptime = 1 << 0,

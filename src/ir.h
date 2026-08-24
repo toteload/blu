@@ -65,30 +65,46 @@ typedef union {
 #include "ref.h"
 
 typedef enum {
-  SIR_func,           // references SFunc
+  SIR_func,           // references SIrFunc
   SIR_param,          // contains SRef to a type
   SIR_alloc,          // contains SRef to a type
   SIR_load,
-  SIR_store,          // references SStore
+  SIR_store,          // references SIrStore
   SIR_block,          // contains instruction count of block
   SIR_loop,           // contains instruction count of block
-  SIR_condbr,         // references SCondbr
-  SIR_br,             // references SBr
+  SIR_condbr,         // references SIrCondbr
+  SIR_br,             // references SIrBr
   SIR_repeat,         // contains InstructionIndex of loop block to repeat
   SIR_ret,            // contains SRef to value to return
-  SIR_call,           // references SCall
-  SIR_builtin_debug, // contains SRef
+  SIR_call,           // references SIrCall
+  SIR_and,
+  SIR_or,
+  SIR_mul,
+  SIR_div,
+  SIR_mod,
+  SIR_sub,
+  SIR_add,
+  SIR_cmp_eq,         // references SIrBinary
+  SIR_cmp_ne,         // references SIrBinary
+  SIR_cmp_gt,         // references SIrBinary
+  SIR_cmp_ge,         // references SIrBinary
+  SIR_cmp_lt,         // references SIrBinary
+  SIR_cmp_le,         // references SIrBinary
+  SIR_index,
+  SIR_negate,         // contains SRef
+  SIR_not,            // contains SRef
+  SIR_builtin_debug,  // contains SRef
   SIR_eval_block,     // contains instruction count of block
   SIR_lookup_decl_value,   // contains DeclarationIndex
   SIR_lookup_decl_type,  // contains DeclarationIndex
   SIR_comptime_alloc, // contains SRef to a type
-  SIR_as,             // references SAs
-  SIR_unify,          // references SUnify
-  SIR_type,           // references SType
+  SIR_as,             // references SIrAs
+  SIR_unify,          // references SIrUnify
+  SIR_type,           // references SIrType
   SIR_typeof,         // contains SRef
   SIR_base_type,      // contains SRef
   SIR_return_type,    // contains SRef
-  SIR_param_type,     // references SParamType
+  SIR_param_type,     // references SIrParamType
 } SIrOpcode;
 
 // A SOP_func instruction is followed by `param_count` SOP_param instructions.
@@ -143,6 +159,11 @@ typedef struct {
   SRef function;
   u32 param_index;
 } SIrParamType;
+
+typedef struct {
+  SRef lhs;
+  SRef rhs;
+} SIrBinary;
 
 // Specializer IR Chunk
 // -------------------------------------------------------------------------------------------------
