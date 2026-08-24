@@ -31,4 +31,6 @@ enum CoerceResult {
 
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res);
 
+void eval_int_add(TypeInteger int_type, void *lhs, void *rhs, void *res);
+
 #endif // EVAL_H

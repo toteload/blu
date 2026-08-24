@@ -26,6 +26,7 @@ typedef struct {
     ValueIndex never;
     ValueIndex i32;
     ValueIndex i8;
+    ValueIndex u8;
 
     ValueIndex true;
     ValueIndex false;
@@ -46,12 +47,12 @@ typedef enum {
   ResolveStatus_fully_resolved,
 } ResolveStatus;
 
-enum DeclarationKind {
+typedef enum {
   Declaration_root,
   Declaration_primitive,
   Declaration_mod,
   Declaration_decl,
-};
+} DeclarationKind;
 
 struct Declaration {
   DeclarationIndex idx;

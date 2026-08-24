@@ -44,12 +44,13 @@ internal b32 cmp_string_index(void *context, StringIndex a, StringIndex b) {
 
 typedef enum {
   ScopeEntry_local,
-  ScopeEntry_block,
+  ScopeEntry_block_or_loop,
 } ScopeEntryKind;
 
 typedef struct {
   u8 kind;
   StringIndex name;
+  InstructionIndex inst; // valid when kind == ScopeEntry_block_or_loop
 } ScopeEntry;
 
 typedef struct {
@@ -291,7 +292,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block);
 
-    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
+    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block_or_loop });
 
     for (u32 i = 0; i < count-1; i++) {
       gen_code(gen, block->items[i], (SRef){0});
@@ -304,7 +305,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     while (True) {
       ScopeEntry entry = stack_pop(&gen->scope_stack);
 
-      if (entry.kind == ScopeEntry_block) {
+      if (entry.kind == ScopeEntry_block_or_loop) {
         break;
       }
 
@@ -700,11 +701,30 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex exit_block = sir_builder_add(builder, SIR_block);
     sir_builder_end_block_with(builder, exit_block, loop, (SRef){0});
 
+    StringIndex loop_label = 0;
+    if (ast_while->label) {
+      TokenIndex *label_tok = ast_data(ast, ast_while->label);
+      loop_label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
+    }
+
     InstructionIndex body_block = sir_builder_add(builder, SIR_block);
+
+    stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_block_or_loop, .name = loop_label, .inst = loop }));
+    if (loop_label) {
+      locals_insert(&gen->locals, loop_label, loop);
+    }
+
     SRef body = gen_code(gen, ast_while->body, (SRef){0});
+
+    ScopeEntry loop_entry = stack_pop(&gen->scope_stack);
+    Assert(loop_entry.kind == ScopeEntry_block_or_loop);
+    if (loop_entry.name) {
+      b32 found = locals_remove(&gen->locals, loop_entry.name);
+      Assert(found);
+    }
     Unused(body);
 
-    InstructionIndex repeat = sir_builder_add(builder, SIR_repeat); 
+    InstructionIndex repeat = sir_builder_add(builder, SIR_repeat);
     sir_builder_set_data(builder, repeat, sref_to_u32(sref_from_instruction(loop)));
 
     sir_builder_set_data(builder, loop, sir_builder_offset(builder, loop));
@@ -725,11 +745,66 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_break: {
     AstBreak *b = ast_data(ast, idx_ast);
 
+    InstructionIndex target;
+
     if (b->label) {
-      TodoMsg("implement break to label");
+      TokenIndex *label_tok = ast_data(ast, b->label);
+      StringIndex label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
+
+      InstructionIndex *found = locals_find(&gen->locals, label);
+      if (!found) {
+        Message_error(
+          gen->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ast_index,
+            .source_idx = source_idx,
+            .data.ast_index = idx_ast,
+          },
+          string_lit("Could not find enclosing loop with this label.")
+        );
+        gen->has_error = True;
+        return sref_from_value(gen->common->val.nil);
+      }
+
+      target = *found;
+    } else {
+      b32 found = False;
+
+      for (u32 i = gen->scope_stack.len; i > 0; i--) {
+        ScopeEntry *entry = &gen->scope_stack.data[i - 1];
+        if (entry->kind == ScopeEntry_block_or_loop) {
+          target = entry->inst;
+          found = True;
+          break;
+        }
+      }
+
+      if (!found) {
+        Message_error(
+          gen->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ast_index,
+            .source_idx = source_idx,
+            .data.ast_index = idx_ast,
+          },
+          string_lit("'break' used outside of a loop.")
+        );
+        gen->has_error = True;
+        return sref_from_value(gen->common->val.nil);
+      }
     }
 
-    TodoMsg("implement break");
+    SRef value = b->value ? gen_code(gen, b->value, (SRef){0}) : (SRef){0};
+
+    InstructionIndex br = sir_builder_add(builder, SIR_br);
+    SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
+    *data = (SIrBr){
+      .block = target,
+      .value = value,
+    };
+    sir_builder_set_source(builder, br, source_idx, idx_ast);
+
+    return sref_from_instruction(br);
   } break;
   }
 
@@ -838,7 +913,10 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   {
     InstructionIndex block = sir_builder_add(builder, SIR_eval_block);
 
-    SRef ref_decl_val = gen_code(&gen, ast_decl->value, sref_from_instruction(block_decl_type));
+    InstructionIndex decl_type = sir_builder_add(builder, SIR_lookup_decl_type);
+    sir_builder_set_data(builder, decl_type, decl->idx);
+
+    SRef ref_decl_val = gen_code(&gen, ast_decl->value, sref_from_instruction(decl_type));
 
     sir_builder_end_block_with(builder, block, block, ref_decl_val);
     

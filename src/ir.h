@@ -234,6 +234,7 @@ typedef enum {
   IIR_repeat, // contains `InstructionIndex` for the loop
   IIR_ret, // contains Iref
   IIR_call, // references `ICall`
+  IIR_int_add,
   IIR_builtin_debug, // contains IRef
 } IIrOpcode;
 
@@ -258,6 +259,11 @@ typedef struct {
   u32 arg_count;
   IRef args[];
 } IIrCall;
+
+typedef struct {
+  IRef lhs;
+  IRef rhs;
+} IIrBinary;
 
 // Interpreter IR Chunk
 // -------------------------------------------------------------------------------------------------

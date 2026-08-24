@@ -64,10 +64,10 @@ void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
 internal i64 read_signed(u16 bitwidth, void *data) {
   i64 res = 0;
   switch (bitwidth) {
-  case  8: { i8  x; memcpy(&x, data, 1); res = x; } break;
-  case 16: { i16 x; memcpy(&x, data, 2); res = x; } break;
-  case 32: { i32 x; memcpy(&x, data, 4); res = x; } break;
-  case 64: { i64 x; memcpy(&x, data, 8); res = x; } break;
+  case  8: { i8  x = *Cast(i8*,data);  res = x; } break;
+  case 16: { i16 x = *Cast(i16*,data); res = x; } break;
+  case 32: { i32 x = *Cast(i32*,data); res = x; } break;
+  case 64: { i64 x = *Cast(i64*,data); res = x; } break;
   }
   return res;
 }
@@ -448,6 +448,14 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_builtin_debug: {
       fputs(" ", out);
       print_iref(out, compiler, (IRef){data});
+    } break;
+
+    case IIR_int_add: {
+      IIrBinary *bin = iir_chunk_extra(chunk, i);
+      fputs(" ", out);
+      print_iref(out, compiler, bin->lhs);
+      fputs(", ", out);
+      print_iref(out, compiler, bin->rhs);
     } break;
 
     case IIR_store: {

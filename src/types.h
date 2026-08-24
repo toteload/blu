@@ -93,4 +93,7 @@ TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);
 
 b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from);
 
+// An add is always between two values of the same type.
+b32 check_can_type_add(Type *t);
+
 #endif // TYPES_H

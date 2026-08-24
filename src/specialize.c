@@ -39,6 +39,27 @@ internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx,
   f->inst_map[idx] = val;
 }
 
+internal always_inline void store_inst_type(CallFrame *f, InstructionIndex idx, TypeIndex type) {
+  f->inst_types[idx] = type;
+}
+
+internal IRef copy_if_value(Specializer *sp, IRef ref) {
+  if (iref_is_instruction(ref) || iref_is_nil(ref)) {
+    return ref;
+  } else {
+    return iref_from_value(values_copy(sp->values, iref_to_value(ref)));
+  }
+}
+
+internal always_inline TypeIndex get_sref_type(Specializer *spec, CallFrame *f, SRef ref) {
+  if (sref_is_some_value(ref)) {
+    Value *v = values_get(spec->values, sref_to_value(ref));
+    return v->type;
+  }
+
+  return f->inst_types[sref_to_instruction(ref)];
+}
+
 void runstate_init(RunState *state, Arena *arena) {
   state->requested_resolution = False;
   stack_init(
@@ -273,9 +294,8 @@ internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref,
     return False;
   }
 
-  ScopeSpan *s = stack_peek_ptr(&f->scopes);
-
   if (idx == 0) {
+    ScopeSpan *s = stack_peek_ptr(&f->scopes);
     Message_error(
       in->msg_sink,
       (MessageLocation){
@@ -297,9 +317,9 @@ internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref,
 internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
   Value *v = values_get(in->values, val);
 
-  ScopeSpan *s = stack_peek_ptr(&f->scopes);
 
   if (v->type != in->common->type.type) {
+    ScopeSpan *s = stack_peek_ptr(&f->scopes);
     Message_error(
       in->msg_sink,
       (MessageLocation){
@@ -325,7 +345,19 @@ internal b32 expect_some_type_value(Specializer *in, CallFrame *f, SRef ref, Typ
     return False;
   }
 
-  return _get_value_expect_type(in, f, val, out);
+  TypeIndex t;
+  ok = _get_value_expect_type(in, f, val, &t);
+  if (!ok) {
+    return False;
+  }
+
+  if (!t) {
+    Todo();
+  }
+
+  *out = t;
+
+  return True;
 }
 
 internal b32 expect_type_value_or_nil(Specializer *in, CallFrame *f, SRef ref, TypeIndex *out) {
@@ -459,7 +491,23 @@ internal u32 step(Specializer *in, RunState *state) {
       Todo();
     }
 
-    Todo();
+    TypeIndex type;
+    switch (Cast(DeclarationKind, decl->kind)) {
+    case Declaration_primitive: { Todo(); } break;
+    case Declaration_decl: {
+      state->requested_resolution = False;
+      type = decl->data.decl.type;
+    } break;
+    case Declaration_mod:
+    case Declaration_root:
+      Panic();
+    }
+
+    ValueIndex v = val_from_type(in, type);
+
+    store_inst_value(f, pc, iref_from_value(v));
+
+    s->pc += 1;
   } break;
 
   case SIR_lookup_decl_value: {
@@ -566,11 +614,10 @@ internal u32 step(Specializer *in, RunState *state) {
         Todo();
       }
 
-      f->inst_types[pc] = type_dst;
-
       // TODO: check that no widening is necessary for this coercion
 
       store_inst_value(f, pc, ref);
+      store_inst_type(f, pc, type_dst);
     }
 
     s->pc = pc + 1;
@@ -604,9 +651,7 @@ internal u32 step(Specializer *in, RunState *state) {
       TypeIndex type_br;
       IRef ref = resolve(f, br->value);
       if (iref_is_some_value(ref)) {
-        ValueIndex val = values_copy(in->values, iref_to_value(ref));
-        ref = iref_from_value(val);
-        Value *v = values_get(in->values, val);
+        Value *v = values_get(in->values, iref_to_value(ref));
         type_br = v->type;
       } else {
         type_br = f->inst_types[sref_to_instruction(br->value)];
@@ -619,7 +664,7 @@ internal u32 step(Specializer *in, RunState *state) {
       IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
       *data_br = (IIrBr){
         .block = expect_residual_at_instruction_index(f, br->block),
-        .value = ref,
+        .value = copy_if_value(in, ref),
       };
 
       ScopeSpan *block = find_scope(f->scopes.data, f->scopes.len, br->block);
@@ -858,15 +903,10 @@ internal u32 step(Specializer *in, RunState *state) {
 
     IRef val = resolve(f, ref);
 
-    if (iref_is_some_value(val)) {
-      ValueIndex vidx = values_copy(in->values, iref_to_value(val));
-      val = iref_from_value(vidx);
-    }
-
     IIrBuilder *builder = get_builder(in);
     InstructionIndex inst = iir_builder_add(builder, IIR_builtin_debug);
     iir_builder_set_type(builder, inst, type);
-    iir_builder_set_data(builder, inst, iref_to_u32(val));
+    iir_builder_set_data(builder, inst, iref_to_u32(copy_if_value(in, val)));
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -887,6 +927,12 @@ internal u32 step(Specializer *in, RunState *state) {
       ValueIndex x = values_copy(in->values, p->val);
 
       store_inst_value(f, pc, iref_from_value(x));
+
+      TypeIndex type_idx = type_of_val(in, iref_to_value(val));
+      Type *t = types_get(in->types, type_idx);
+      Assert(t->kind == Type_pointer);
+
+      f->inst_types[pc] = t->data.pointer.base_type;
     } else {
       IIrBuilder *builder = get_builder(in);
       InstructionIndex inst = iir_builder_add(builder, IIR_load);
@@ -917,15 +963,17 @@ internal u32 step(Specializer *in, RunState *state) {
       IIrBuilder *builder = get_builder(in);
       InstructionIndex inst = iir_builder_add(builder, IIR_store);
       IIrStore *data = iir_builder_push_data(builder, inst, IIrStore);
-      data->ptr = dst;
 
       IRef val = resolve(f, store->value);
 
+      *data = (IIrStore){
+        .ptr = dst,
+        .value = copy_if_value(in, val),
+      };
+
       if (iref_is_some_value(val)) {
-        data->value = iref_from_value(values_copy(in->values, iref_to_value(val)));
         iir_builder_set_type(builder, inst, type_of_val(in, iref_to_value(val)));
       } else {
-        data->value = val;
         iir_builder_set_type(builder, inst, iir_builder_get_type(builder, iref_to_instruction(val)));
       }
     }
@@ -1040,6 +1088,64 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     s->pc += 1;
+  } break;
+
+  case SIR_mul: {
+    Todo();
+  } break;
+
+  case SIR_div: {
+    Todo();
+  } break;
+
+  case SIR_mod: {
+    Todo();
+  } break;
+
+  case SIR_add: {
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
+    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+
+    if (type_lhs != type_rhs || type_lhs == 0) {
+      Todo();
+    }
+
+    Type *t = types_get(in->types, type_lhs);
+
+    b32 ok = check_can_type_add(t);
+    if (!ok) {
+      Todo();
+    }
+
+    store_inst_type(f, pc, type_lhs);
+
+    IRef lhs = resolve(f, bin->lhs);
+    IRef rhs = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      Todo();
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_add);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, lhs),
+      .rhs = copy_if_value(in, rhs),
+    };
+
+    iir_builder_set_type(builder, inst, type_lhs);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
+  } break;
+
+  case SIR_sub: {
+    Todo();
   } break;
 
   default:

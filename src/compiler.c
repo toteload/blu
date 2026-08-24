@@ -186,25 +186,17 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     }
   );
 
-  compiler->common.type.comptime_int =
-    types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
+  // clang-format off
+
+  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
   compiler->common.type.type = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
   compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
-  compiler->common.type.u8 = types_add(
-    &compiler->types,
-    &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}
-  );
-  compiler->common.type.i32 = types_add(
-    &compiler->types,
-    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}
-  );
+  compiler->common.type.u8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
+  compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
 
-  TypeIndex ti_i8 = types_add(
-    &compiler->types,
-    &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}
-  );
+  TypeIndex ti_i8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
 
   compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
@@ -212,6 +204,9 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   compiler->common.val.never = add_type_value(compiler, compiler->common.type.never);
   compiler->common.val.i32 = add_type_value(compiler, compiler->common.type.i32);
   compiler->common.val.i8 = add_type_value(compiler, ti_i8);
+  compiler->common.val.u8 = add_type_value(compiler, compiler->common.type.u8);
+
+  // clang-format on
 
   {
     Value *v;
@@ -245,6 +240,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   add_primitive(compiler, string_lit("never"), compiler->common.val.never);
   add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
   add_primitive(compiler, string_lit("i8"), compiler->common.val.i8);
+  add_primitive(compiler, string_lit("u8"), compiler->common.val.u8);
 }
 
 void compiler_deinit(Compiler *compiler) {
@@ -391,7 +387,14 @@ internal b32 resolve_entry(Resolver *resolver) {
       decl->resolve_status = ResolveStatus_type_resolved;
       CallFrame *f = top_frame(&entry->state);
 
-      TypeIndex type = f->inst_types[decl->data.decl.block_type];
+      IRef ref = f->inst_map[decl->data.decl.block_type];
+      Assert(iref_is_some_value(ref));
+
+      Value *v = values_get(resolver->in->values, iref_to_value(ref));
+      Assert(v->type == resolver->in->common->type.type);
+
+      TypeIndex type = *Cast(TypeIndex*,v->data);
+
       Assert(type != 0);
 
       decl->data.decl.type = type;

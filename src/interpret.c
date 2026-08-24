@@ -1,5 +1,6 @@
 #include "interpret.h"
 #include "value.h"
+#include "eval.h"
 #include "print.h"
 
 #define MAX_SCOPE_DEPTH 64
@@ -156,6 +157,17 @@ internal u32 step(Interpreter *in) {
     IRef ref = (IRef){ iir_chunk_data(f->chunk, pc) };
     void **p = resolve(in, f, ref);
     memcpy(f->inst_values[pc], *p, size_info.size);
+    f->pc += 1;
+  } break;
+
+  case IIR_int_add: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, type);
+    eval_int_add(t->data.integer, lhs, rhs, local);
+
     f->pc += 1;
   } break;
 

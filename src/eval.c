@@ -343,3 +343,27 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
 
   return CoerceResult_invalid_coercion_types;
 }
+
+void eval_int_add(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  Assert(int_type.bitwidth % 8 == 0);
+
+  if (int_type.signedness == Signed) {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { *Cast(i8*,res)  = *Cast(i8*,lhs)  + *Cast(i8*,rhs);  } break;
+    case 16: { *Cast(i16*,res) = *Cast(i16*,lhs) + *Cast(i16*,rhs); } break;
+    case 32: { *Cast(i32*,res) = *Cast(i32*,lhs) + *Cast(i32*,rhs); } break;
+    case 64: { *Cast(i64*,res) = *Cast(i64*,lhs) + *Cast(i64*,rhs); } break;
+    }
+    // clang-format on
+  } else {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { *Cast(u8*,res)  = *Cast(u8*,lhs)  + *Cast(u8*,rhs);  } break;
+    case 16: { *Cast(u16*,res) = *Cast(u16*,lhs) + *Cast(u16*,rhs); } break;
+    case 32: { *Cast(u32*,res) = *Cast(u32*,lhs) + *Cast(u32*,rhs); } break;
+    case 64: { *Cast(u64*,res) = *Cast(u64*,lhs) + *Cast(u64*,rhs); } break;
+    }
+    // clang-format on
+  }
+}

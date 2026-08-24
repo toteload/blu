@@ -197,9 +197,21 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
   Type *type_to = types_get(types, to);
   Type *type_from = types_get(types, from);
 
+  if (type_from->kind == Type_comptime_int && type_to->kind == Type_integer) {
+    return True;
+  }
+
   Todo();
 }
 
 TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
   return types_add(types, &(Type){ .kind = Type_pointer, .data.pointer = { .base_type = base_type } });
+}
+
+b32 check_can_type_add(Type *t) {
+  if (t->kind == Type_comptime_int || t->kind == Type_integer) {
+    return True;
+  }
+
+  return False;
 }
