@@ -1,6 +1,6 @@
 mod main
 
-main: = || {
+main: = ||: i32 {
   text: []u8 = "TODO"
 
   count: i32 = 0

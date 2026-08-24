@@ -235,6 +235,9 @@ typedef enum {
   IIR_ret, // contains Iref
   IIR_call, // references `ICall`
   IIR_int_add,
+  IIR_int_sub,
+  IIR_int_mul,
+  IIR_int_div,
   IIR_builtin_debug, // contains IRef
 } IIrOpcode;
 

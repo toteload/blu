@@ -8,8 +8,8 @@ u32 decode_string_literal(String literal, u8 *out, u32 *len) {
     }
   }
 
-  memcpy(out, literal.str, literal.len);
-  *len = literal.len;
+  memcpy(out+1, literal.str+1, literal.len-2);
+  *len = literal.len-2;
 
   return 0;
 }

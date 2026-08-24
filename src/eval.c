@@ -344,26 +344,120 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   return CoerceResult_invalid_coercion_types;
 }
 
-void eval_int_add(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+b32 eval_int_add(TypeInteger int_type, void *lhs, void *rhs, void *res) {
   Assert(int_type.bitwidth % 8 == 0);
+
+  b32 overflow;
 
   if (int_type.signedness == Signed) {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { *Cast(i8*,res)  = *Cast(i8*,lhs)  + *Cast(i8*,rhs);  } break;
-    case 16: { *Cast(i16*,res) = *Cast(i16*,lhs) + *Cast(i16*,rhs); } break;
-    case 32: { *Cast(i32*,res) = *Cast(i32*,lhs) + *Cast(i32*,rhs); } break;
-    case 64: { *Cast(i64*,res) = *Cast(i64*,lhs) + *Cast(i64*,rhs); } break;
+    case 8:  { overflow = __builtin_add_overflow(*Cast(i8*,lhs),  *Cast(i8*,rhs),  Cast(i8*,res));  } break;
+    case 16: { overflow = __builtin_add_overflow(*Cast(i16*,lhs), *Cast(i16*,rhs), Cast(i16*,res)); } break;
+    case 32: { overflow = __builtin_add_overflow(*Cast(i32*,lhs), *Cast(i32*,rhs), Cast(i32*,res)); } break;
+    case 64: { overflow = __builtin_add_overflow(*Cast(i64*,lhs), *Cast(i64*,rhs), Cast(i64*,res)); } break;
+    default: Unreachable();
     }
     // clang-format on
   } else {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { *Cast(u8*,res)  = *Cast(u8*,lhs)  + *Cast(u8*,rhs);  } break;
-    case 16: { *Cast(u16*,res) = *Cast(u16*,lhs) + *Cast(u16*,rhs); } break;
-    case 32: { *Cast(u32*,res) = *Cast(u32*,lhs) + *Cast(u32*,rhs); } break;
-    case 64: { *Cast(u64*,res) = *Cast(u64*,lhs) + *Cast(u64*,rhs); } break;
+    case 8:  { overflow = __builtin_add_overflow(*Cast(u8*,lhs),  *Cast(u8*,rhs),  Cast(u8*,res));  } break;
+    case 16: { overflow = __builtin_add_overflow(*Cast(u16*,lhs), *Cast(u16*,rhs), Cast(u16*,res)); } break;
+    case 32: { overflow = __builtin_add_overflow(*Cast(u32*,lhs), *Cast(u32*,rhs), Cast(u32*,res)); } break;
+    case 64: { overflow = __builtin_add_overflow(*Cast(u64*,lhs), *Cast(u64*,rhs), Cast(u64*,res)); } break;
+    default: Unreachable();
     }
     // clang-format on
   }
+
+  return !overflow;
+}
+
+b32 eval_int_sub(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  Assert(int_type.bitwidth % 8 == 0);
+
+  b32 overflow;
+
+  if (int_type.signedness == Signed) {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { overflow = __builtin_sub_overflow(*Cast(i8*,lhs),  *Cast(i8*,rhs),  Cast(i8*,res));  } break;
+    case 16: { overflow = __builtin_sub_overflow(*Cast(i16*,lhs), *Cast(i16*,rhs), Cast(i16*,res)); } break;
+    case 32: { overflow = __builtin_sub_overflow(*Cast(i32*,lhs), *Cast(i32*,rhs), Cast(i32*,res)); } break;
+    case 64: { overflow = __builtin_sub_overflow(*Cast(i64*,lhs), *Cast(i64*,rhs), Cast(i64*,res)); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  } else {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { overflow = __builtin_sub_overflow(*Cast(u8*,lhs),  *Cast(u8*,rhs),  Cast(u8*,res));  } break;
+    case 16: { overflow = __builtin_sub_overflow(*Cast(u16*,lhs), *Cast(u16*,rhs), Cast(u16*,res)); } break;
+    case 32: { overflow = __builtin_sub_overflow(*Cast(u32*,lhs), *Cast(u32*,rhs), Cast(u32*,res)); } break;
+    case 64: { overflow = __builtin_sub_overflow(*Cast(u64*,lhs), *Cast(u64*,rhs), Cast(u64*,res)); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  }
+
+  return !overflow;
+}
+
+b32 eval_int_mul(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  Assert(int_type.bitwidth % 8 == 0);
+
+  b32 overflow;
+
+  if (int_type.signedness == Signed) {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { overflow = __builtin_mul_overflow(*Cast(i8*,lhs),  *Cast(i8*,rhs),  Cast(i8*,res));  } break;
+    case 16: { overflow = __builtin_mul_overflow(*Cast(i16*,lhs), *Cast(i16*,rhs), Cast(i16*,res)); } break;
+    case 32: { overflow = __builtin_mul_overflow(*Cast(i32*,lhs), *Cast(i32*,rhs), Cast(i32*,res)); } break;
+    case 64: { overflow = __builtin_mul_overflow(*Cast(i64*,lhs), *Cast(i64*,rhs), Cast(i64*,res)); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  } else {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { overflow = __builtin_mul_overflow(*Cast(u8*,lhs),  *Cast(u8*,rhs),  Cast(u8*,res));  } break;
+    case 16: { overflow = __builtin_mul_overflow(*Cast(u16*,lhs), *Cast(u16*,rhs), Cast(u16*,res)); } break;
+    case 32: { overflow = __builtin_mul_overflow(*Cast(u32*,lhs), *Cast(u32*,rhs), Cast(u32*,res)); } break;
+    case 64: { overflow = __builtin_mul_overflow(*Cast(u64*,lhs), *Cast(u64*,rhs), Cast(u64*,res)); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  }
+
+  return !overflow;
+}
+
+b32 eval_int_div(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  Assert(int_type.bitwidth % 8 == 0);
+
+  if (int_type.signedness == Signed) {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { if (*Cast(i8*,rhs)  == 0 || (*Cast(i8*,rhs)  == -1 && *Cast(i8*,lhs)  == INT8_MIN))  return False; *Cast(i8*,res)  = *Cast(i8*,lhs)  / *Cast(i8*,rhs);  } break;
+    case 16: { if (*Cast(i16*,rhs) == 0 || (*Cast(i16*,rhs) == -1 && *Cast(i16*,lhs) == INT16_MIN)) return False; *Cast(i16*,res) = *Cast(i16*,lhs) / *Cast(i16*,rhs); } break;
+    case 32: { if (*Cast(i32*,rhs) == 0 || (*Cast(i32*,rhs) == -1 && *Cast(i32*,lhs) == INT32_MIN)) return False; *Cast(i32*,res) = *Cast(i32*,lhs) / *Cast(i32*,rhs); } break;
+    case 64: { if (*Cast(i64*,rhs) == 0 || (*Cast(i64*,rhs) == -1 && *Cast(i64*,lhs) == INT64_MIN)) return False; *Cast(i64*,res) = *Cast(i64*,lhs) / *Cast(i64*,rhs); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  } else {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { if (*Cast(u8*,rhs)  == 0) return False; *Cast(u8*,res)  = *Cast(u8*,lhs)  / *Cast(u8*,rhs);  } break;
+    case 16: { if (*Cast(u16*,rhs) == 0) return False; *Cast(u16*,res) = *Cast(u16*,lhs) / *Cast(u16*,rhs); } break;
+    case 32: { if (*Cast(u32*,rhs) == 0) return False; *Cast(u32*,res) = *Cast(u32*,lhs) / *Cast(u32*,rhs); } break;
+    case 64: { if (*Cast(u64*,rhs) == 0) return False; *Cast(u64*,res) = *Cast(u64*,lhs) / *Cast(u64*,rhs); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  }
+
+  return True;
 }

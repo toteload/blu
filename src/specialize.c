@@ -689,7 +689,7 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex t;
     switch (Cast(TypeKind, type->kind)) {
     case Type_function: {
-      Assert(type->arg_count >= 1);
+      Assert(type->arg_count != 0);
 
       Assert(type->arg_count == 1); // For now don't support params
 
@@ -1091,11 +1091,87 @@ internal u32 step(Specializer *in, RunState *state) {
   } break;
 
   case SIR_mul: {
-    Todo();
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
+    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+
+    if (type_lhs != type_rhs || type_lhs == 0) {
+      Todo();
+    }
+
+    Type *t = types_get(in->types, type_lhs);
+
+    b32 ok = check_can_type_add(t);
+    if (!ok) {
+      Todo();
+    }
+
+    store_inst_type(f, pc, type_lhs);
+
+    IRef lhs = resolve(f, bin->lhs);
+    IRef rhs = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      Todo();
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_mul);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, lhs),
+      .rhs = copy_if_value(in, rhs),
+    };
+
+    iir_builder_set_type(builder, inst, type_lhs);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
   } break;
 
   case SIR_div: {
-    Todo();
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
+    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+
+    if (type_lhs != type_rhs || type_lhs == 0) {
+      Todo();
+    }
+
+    Type *t = types_get(in->types, type_lhs);
+
+    b32 ok = check_can_type_add(t);
+    if (!ok) {
+      Todo();
+    }
+
+    store_inst_type(f, pc, type_lhs);
+
+    IRef lhs = resolve(f, bin->lhs);
+    IRef rhs = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      Todo();
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_div);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, lhs),
+      .rhs = copy_if_value(in, rhs),
+    };
+
+    iir_builder_set_type(builder, inst, type_lhs);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
   } break;
 
   case SIR_mod: {
@@ -1145,7 +1221,45 @@ internal u32 step(Specializer *in, RunState *state) {
   } break;
 
   case SIR_sub: {
-    Todo();
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
+    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+
+    if (type_lhs != type_rhs || type_lhs == 0) {
+      Todo();
+    }
+
+    Type *t = types_get(in->types, type_lhs);
+
+    b32 ok = check_can_type_add(t);
+    if (!ok) {
+      Todo();
+    }
+
+    store_inst_type(f, pc, type_lhs);
+
+    IRef lhs = resolve(f, bin->lhs);
+    IRef rhs = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      Todo();
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, lhs),
+      .rhs = copy_if_value(in, rhs),
+    };
+
+    iir_builder_set_type(builder, inst, type_lhs);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
   } break;
 
   default:

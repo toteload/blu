@@ -450,7 +450,10 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       print_iref(out, compiler, (IRef){data});
     } break;
 
-    case IIR_int_add: {
+    case IIR_int_add:
+    case IIR_int_sub:
+    case IIR_int_mul:
+    case IIR_int_div: {
       IIrBinary *bin = iir_chunk_extra(chunk, i);
       fputs(" ", out);
       print_iref(out, compiler, bin->lhs);

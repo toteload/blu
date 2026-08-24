@@ -166,7 +166,52 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, type);
-    eval_int_add(t->data.integer, lhs, rhs, local);
+    b32 ok = eval_int_add(t->data.integer, lhs, rhs, local);
+    if (!ok) {
+      Todo();
+    }
+
+    f->pc += 1;
+  } break;
+
+  case IIR_int_sub: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, type);
+    b32 ok = eval_int_sub(t->data.integer, lhs, rhs, local);
+    if (!ok) {
+      Todo();
+    }
+
+    f->pc += 1;
+  } break;
+
+  case IIR_int_mul: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, type);
+    b32 ok = eval_int_mul(t->data.integer, lhs, rhs, local);
+    if (!ok) {
+      Todo();
+    }
+
+    f->pc += 1;
+  } break;
+
+  case IIR_int_div: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, type);
+    b32 ok = eval_int_div(t->data.integer, lhs, rhs, local);
+    if (!ok) {
+      Todo();
+    }
 
     f->pc += 1;
   } break;
