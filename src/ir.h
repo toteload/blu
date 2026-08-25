@@ -209,7 +209,7 @@ void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 s
 void sir_builder_set_source(SIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
 void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data);
 
-void sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex idx);
 void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk);

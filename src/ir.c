@@ -71,7 +71,7 @@ void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
-void sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref) {
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref) {
   InstructionIndex br = sir_builder_add(builder, SIR_br);
 
   SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
@@ -82,6 +82,8 @@ void sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, Ins
 
   u32 block_inst_count = sir_builder_offset(builder, block);
   sir_builder_set_data(builder, block, block_inst_count);
+
+  return br;
 }
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex start) {
