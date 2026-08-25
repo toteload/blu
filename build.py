@@ -28,12 +28,14 @@ def add_test_suite(out):
         'test.c',
         'tokenize.test.c',
         'parse.test.c',
+        'messages.test.c',
     ]
 
     outputs = []
     outputs.append(outd('toteload.c.o'))
     outputs.append(outd('tokenize.c.o'))
     outputs.append(outd('parse.c.o'))
+    outputs.append(outd('messages.c.o'))
 
     for f in inputs:
         fout = outd(f'{f}.o')

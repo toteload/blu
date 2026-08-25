@@ -203,7 +203,7 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
         .kind = MessageLocation_byte_offset,
         .data.offset = parser->tokens->lines[parser->tokens->line_count-1],
       },
-      string_lit("Expected a token, but encountered end of source.")
+      string_lit("Expected a token but encountered end of source")
     );
     return False;
   }
@@ -212,7 +212,7 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
     Message_error(
       parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at - 1 },
-      string_lit("Expected token {tok}, but got token {tok}."), expected_token_kind, tok
+      string_lit("Expected token '%tokenkind' but got token '%tokenkind'"), expected_token_kind, tok
     );
     return False;
   }
@@ -239,7 +239,7 @@ internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
         .kind = MessageLocation_byte_offset,
         .data.offset = parser->tokens->lines[parser->tokens->line_count-1],
       },
-      string_lit("Expected a token but got end of source.")
+      string_lit("Expected a token but got end of source")
     );
     return False;
   }
@@ -474,7 +474,7 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     Message_error(
       parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
-      string_lit("Unexpected token {tok} encountered in type expression."), tok
+      string_lit("Unexpected token '%tokenkind' encountered in type expression"), tok
     );
     return False;
   }
@@ -698,7 +698,7 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
           .kind = MessageLocation_token_index,
           .data.token_index = parser->at,
         },
-        string_lit("'if' expression has 'do' but no 'else'.")
+        string_lit("'if' expression has 'do' but no 'else'")
       );
       return False;
     }
@@ -868,7 +868,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
         .kind = MessageLocation_byte_offset,
         .data.offset = parser->tokens->lines[parser->tokens->line_count-1],
       },
-      string_lit("Unexpected end of source, while trying to parse base expression.")
+      string_lit("Encountered unexpected end of source while trying to parse base expression")
     );
     return False;
   }
@@ -915,7 +915,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
       Message_error(
         parser->msg_sink,
         (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
-        string_lit("Unexpected token {tok} encountered after '.' in expression."), tok
+        string_lit("Unexpected token '%tokenkind' encountered after '.' in expression"), tok
       );
       return False;
     }
@@ -966,7 +966,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     Message_error(
       parser->msg_sink,
       (MessageLocation){ .kind = MessageLocation_token_index, .data.token_index = parser->at },
-      string_lit("Unexpected token {tok} encountered at start of expression."), tok
+      string_lit("Unexpected token '%tokenkind' encountered at start of expression"), tok
     );
     return False;
   }

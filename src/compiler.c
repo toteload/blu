@@ -85,11 +85,7 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
 
   va_list vl;
   va_start(vl, format);
-
-  for (u32 i = 0; i < arg_count; i++) {
-    msg->args[i] = va_arg(vl, MessageArg);
-  }
-
+  message_collect_args(format, vl, msg->args, arg_count);
   va_end(vl);
 
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
@@ -261,7 +257,7 @@ Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
 void compiler_print_all_messages(Compiler *compiler) {
   for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-    source_print_all_messages(source);
+    source_print_all_messages(source, &compiler->scratch);
   }
 
   u32 count = compiler->msg_list.len;
@@ -278,7 +274,7 @@ void compiler_print_all_messages(Compiler *compiler) {
       source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
     }
 
-    print_message(msg, source, decl);
+    print_message(&compiler->scratch, msg, source, decl);
   }
 }
 

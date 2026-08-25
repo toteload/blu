@@ -17,11 +17,7 @@ internal void source_add_message(void *user, u8 severity, MessageLocation locati
 
   va_list vl;
   va_start(vl, format);
-
-  for (u32 i = 0; i < arg_count; i++) {
-    msg->args[i] = va_arg(vl, MessageArg);
-  }
-
+  message_collect_args(format, vl, msg->args, arg_count);
   va_end(vl);
 
   msglist_append(&source->msg_list, &source->arena, msg);
@@ -109,7 +105,7 @@ b32 source_read_file(Source *source) {
     Message_error(
       &source->msg_sink,
       (MessageLocation){ .kind = MessageLocation_unspecified },
-      string_lit("Could not open/read file {str}."), source->filename
+      string_lit("Could not open/read file %string."), source->filename
     );
     return False;
   }
@@ -206,10 +202,10 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   source->decl_idxs      = arena_push_array(DeclarationIndex, &source->arena, count);
 }
 
-void source_print_all_messages(Source *source) {
+void source_print_all_messages(Source *source, Arena *scratch) {
   u32 count = source->msg_list.len;
   for (u32 i = 0; i < count; i++) {
     Message *msg = msglist_at_unchecked(&source->msg_list, i);
-    print_message(msg, source, Null);
+    print_message(scratch, msg, source, Null);
   }
 }

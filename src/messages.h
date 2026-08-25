@@ -3,6 +3,8 @@
 
 #include "blu.h"
 
+#include <stdarg.h>
+
 typedef enum {
   Severity_Error,
   Severity_Warning,
@@ -34,9 +36,8 @@ typedef struct {
 } MessageLocation;
 
 typedef union {
-  u8         token_kind;
-  AstIndex   ast_index;
-  TypeIndex  type_index;
+  u8     token_kind;
+  String string;
 } MessageArg;
 
 typedef struct {
@@ -64,9 +65,14 @@ typedef Message* MessagePtr;
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
 
+// Format args support normal printf conversions plus two custom ones:
+// - %tokenkind (u8 representing TokenKind)
+// - %string    (String)
 #define Message_error(psink, ...) (psink)->add_message((psink)->user, Severity_Error, __VA_ARGS__)
 
 u32 message_format_arg_count(String fmt);
-void print_message(Message *message, Source *source, Declaration *decl);
+void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_count);
+String message_format(Arena *scratch, Message *message);
+void print_message(Arena *scratch, Message *message, Source *source, Declaration *decl);
 
 #endif // MESSAGES_H

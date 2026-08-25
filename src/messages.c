@@ -3,6 +3,7 @@
 #include "compiler.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #define SEGMENTLIST_NAME MessageList
 #define SEGMENTLIST_TYPE MessagePtr
@@ -12,29 +13,155 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-u32 message_format_arg_count(String fmt) {
-  // ASSUME: the format string is well formed.
+enum FormatSpecKind {
+  FormatSpec_percent, // '%%', a literal '%'
+  FormatSpec_token_kind,
+  FormatSpec_string,
+};
 
-  u32 count = 0;
-  for (usize i = 0; i < fmt.len; i++) {
-    u8 c = fmt.str[i];
-    if (c == '{') {
-      if (i + 1 < fmt.len && fmt.str[i + 1] == '{') {
-        // Escaped '{{' — skip the second brace.
-        i++;
-      } else {
-        // Start of an argument; skip to the closing '}'.
-        count++;
-        while (i < fmt.len && fmt.str[i] != '}') {
-          i++;
-        }
-      }
-    } else if (c == '}') {
-      // Escaped '}}' — skip the second brace.
-      i++;
+typedef struct {
+  u8     kind;
+  usize  start; // index of the '%' in the format string
+  usize  end;   // index just past the directive
+} FormatSpec;
+
+internal b32 starts_with_at(String s, usize pos, String prefix) {
+  if (pos + prefix.len > s.len) {
+    return False;
+  }
+  return memcmp(s.str + pos, prefix.str, prefix.len) == 0;
+}
+
+// ASSUME: the format string is well formed.
+internal b32 format_next_spec(String fmt, usize pos, FormatSpec *out) {
+  for (usize i = pos; i < fmt.len; i++) {
+    if (fmt.str[i] != '%') {
+      continue;
     }
+
+    out->start = i;
+
+    if (i + 1 < fmt.len && fmt.str[i+1] == '%') {
+      out->kind = FormatSpec_percent;
+      out->end  = i + 2;
+      return True;
+    }
+
+    usize j = i + 1;
+
+    if (starts_with_at(fmt, j, string_lit("tokenkind"))) {
+      out->kind = FormatSpec_token_kind;
+      out->end  = j + 9;
+      return True;
+    }
+
+    if (starts_with_at(fmt, j, string_lit("string"))) {
+      out->kind = FormatSpec_string;
+      out->end  = j + 6;
+      return True;
+    }
+
+    Panic();
+  }
+
+  return False;
+}
+
+u32 message_format_arg_count(String fmt) {
+  u32 count = 0;
+  usize pos = 0;
+  FormatSpec spec;
+  while (format_next_spec(fmt, pos, &spec)) {
+    if (spec.kind != FormatSpec_percent) {
+      count++;
+    }
+    pos = spec.end;
   }
   return count;
+}
+
+void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_count) {
+  usize pos = 0;
+  u32 i = 0;
+  FormatSpec spec;
+
+  while (i < arg_count && format_next_spec(format, pos, &spec)) {
+    pos = spec.end;
+
+    switch (Cast(enum FormatSpecKind, spec.kind)) {
+    case FormatSpec_percent: continue;
+    case FormatSpec_token_kind: {
+      args[i].token_kind = Cast(u8, va_arg(vl, int));
+    } break;
+    case FormatSpec_string: {
+      args[i].string = va_arg(vl, String);
+    } break;
+    }
+
+    i++;
+  }
+}
+
+String message_format(Arena *scratch, Message *message) {
+  String format = message->format;
+
+  u32 bufsize = 100;
+  u8 *buf = arena_push_array(u8, scratch, bufsize);
+
+  usize len = 0;
+  usize format_i = 0;
+  u32 arg_i = 0;
+
+  FormatSpec spec;
+  while (format_next_spec(format, format_i, &spec)) {
+    usize lit_len = spec.start - format_i;
+    if ((len + lit_len) > bufsize) {
+      arena_push_array(u8, scratch, lit_len);
+    }
+
+    memcpy(buf + len, format.str + format_i, lit_len);
+    len += lit_len;
+    format_i = spec.end;
+
+    switch (Cast(enum FormatSpecKind, spec.kind)) {
+    case FormatSpec_percent: {
+      if ((len + 1) > bufsize) {
+        arena_push_array(u8, scratch, 1);
+      }
+
+      buf[len++] = '%';
+    } break;
+    case FormatSpec_token_kind: {
+      char const *s = token_kind_string(message->args[arg_i++].token_kind);
+      u32 slen = strlen(s);
+      if ((len + slen) > bufsize) {
+        arena_push_array(u8, scratch, slen);
+      }
+
+      memcpy(buf + len, s, slen);
+      len += slen;
+    } break;
+    case FormatSpec_string: {
+      String s = message->args[arg_i++].string;
+      if ((len + s.len) > bufsize) {
+        arena_push_array(u8, scratch, s.len);
+      }
+
+      memcpy(buf + len, s.str, s.len);
+      len += s.len;
+    } break;
+    }
+  }
+
+  u32 rest_len = format.len - format_i;
+  if ((len + rest_len) > bufsize) {
+    arena_push_array(u8, scratch, rest_len);
+  }
+
+  memcpy(buf + len, format.str + format_i, rest_len);
+  len += rest_len;
+
+  return (String){ .str = buf, .len = len };
 }
 
 internal b32 location_kind_has_line_col(u8 kind) {
@@ -128,7 +255,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   };
 }
 
-void print_message(Message *message, Source *source, Declaration *decl) {
+void print_message(Arena *scratch, Message *message, Source *source, Declaration *decl) {
   // clang-format off
   switch (Cast(MessageSeverity, message->severity)) {
   case Severity_Error:   printf("\033[1m[\033[31merror\033[39m]\033[22m"); break;
@@ -157,7 +284,10 @@ void print_message(Message *message, Source *source, Declaration *decl) {
     printf("\033[1m%u:%u:\033[22m", info.line, info.col);
   }
 
-  printf(" %.*s\n", Cast(int, message->format.len), message->format.str);
+  ArenaSnapshot scope = arena_scope_begin(scratch);
+  String formatted = message_format(scratch, message);
+  printf(" %.*s\n", Cast(int, formatted.len), formatted.str);
+  arena_scope_end(scratch, scope);
 
   if (info.line) {
     printf("%5u | %.*s\n", info.line, Cast(int, info.textline.len), info.textline.str);

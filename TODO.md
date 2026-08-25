@@ -3,7 +3,7 @@
 - [ ] Get `samples/aoc_2025_day_01.blu` to compile and run and get the right answer :)
   - [x] IR_load needs to be updated to also take a type arg.
   - [x] Introduce a split in the IR: IR for the specializer and IR for the interpreter.
-  - [ ] Side quest: finish the stubs in the message printing for {tokenkind} etc.
+  - [x] Side quest: finish the stubs in the message printing for {tokenkind} etc.
   - [ ] Add `.len()` method to slices and arrays.
     - [ ] Needs compound identifiers (is compound the word here?).
 
@@ -15,20 +15,6 @@
 - Are anonymous structs nominal or structural?
 
 ## Bugs/issues found by Claude (may be out of date)
-
-# M3 — Message formatting is unimplemented and the vararg path is UB
-
-`src/messages.c:69-95`, `src/messages.h:29-61`, `src/source_file.c:6-30`, `src/compiler.c:61-83`
-
-`print_message` prints the raw format string (`{tok}`, `{str}` placeholders appear literally) and
-never consumes the collected `args`. Meanwhile the sinks read each argument with
-`va_arg(vl, MessageArg)`, where `MessageArg` is a 4-byte union — but callers pass a 16-byte
-`String` for `{str}` (e.g. `source_read_file`). Reading a `String` as a 4-byte union is undefined
-and would desync any message with multiple args. The `{tok}`/`{type}` cases happen to work only
-because a promoted `int` and a 4-byte union pass identically on the ABI. The whole arg-collection
-path is effectively dead until formatting is implemented — but it's live UB in the meantime.
-
----
 
 # Low / nits
 
