@@ -475,7 +475,7 @@ String token_string(Tokens *tokens, String text, TokenIndex tok) {
 
 char const *token_kind_string_literals[Tok_kind_max] = {
   "colon",        "semicolon",
-  "comma",        "dot", "arrow",
+  "comma",        "dot",
   "equals",       "minus",
   "plus",         "star",
   "slash",        "percent",

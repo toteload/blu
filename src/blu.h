@@ -17,8 +17,6 @@ typedef u32 ValueIndex;       // Optional, 0 means nil
 typedef u32 SourceIndex;      // Optional, 0 means nil
 typedef u32 DeclarationIndex; // Optional, 0 means nil or root
 
-typedef struct EnvAllocator EnvAllocator;
-typedef struct Env Env;
 typedef struct ValueStore ValueStore;
 typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;

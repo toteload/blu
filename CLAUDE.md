@@ -43,7 +43,12 @@ The unit test binary's source list is in `add_test_suite` in `build.py`.
 
 ## Compiler pipeline
 
-`src/main.c` parses CLI options (`cli_options.c`), creates a `Compiler`, adds a source file, calls `compile()`, and prints all messages.
+`src/main.c` parses CLI options (`cli_options.c`), creates a `Compiler`, adds a source file, calls `compile()`, then (if it succeeded) `run_main()`, printing all messages if either fails.
+
+There are **two IRs**, defined together in `src/ir.h` (opcodes also tabulated as X-macros in `x_sir.h` / `x_iir.h` for `ir.c` and `print.c`):
+
+- **SIR (Specializer IR)** — emitted by codegen from the AST. One `SIrChunk` per declaration, built with `SIrBuilder`. References are `SRef` (`ref.h`): either a comptime `ValueIndex` or an instruction result.
+- **IIR (Interpreter IR)** — the *residual* code left over after comptime evaluation (the specializer folds away everything it can and lowers the rest to IIR). Built with `IIrBuilder`; references are `IRef`. This is what actually runs at "execution time".
 
 `compile()` in `src/compiler.c` runs the following, currently for a single source file:
 
@@ -52,17 +57,16 @@ The unit test binary's source list is in `add_test_suite` in `build.py`.
 3. `source_parse` (`parse.c`) — `Tokens` → `AstNodes`
 4. `source_index_declarations` — collect the file's top-level/module declarations
 5. **global declaration map** — every source's declarations are interned into `Compiler.decls`, a `DeclarationInterner` keyed by `(parent, name)`; module nesting is walked with a small stack
-6. `source_generate_code` (`codegen.c`) — AST → IR chunk per declaration (`ir.c` / `ir.h`, built via an `IrBuilder`)
-7. `source_interpret_declaration` (`interpret.c`) — interpret each IR chunk to produce a "runtime IR" chunk (partial evaluation: comptime work is folded to constants)
+6. `generate_code` (`codegen.c`, per user declaration) — AST → **SIR**, stored as `Declaration.data.decl.chunk`. Each declaration's chunk holds two evaluable blocks: one that computes its *type* (`block_type`) and one that computes its *value* (`block_val`).
+7. **Resolver / Specializer** (`compiler.c`'s `resolve_declarations` driving `run_toplevel_block` in `specialize.c`) — interprets each declaration's SIR type-block then value-block. This is the comptime partial evaluator ("specialization"): anything comptime-known is folded to a `Value`; anything that depends on runtime state is lowered to a residual **IIR** chunk (built via a stack of `IIrBuilder`s, one per nested function — see `Specializer.builders`). Declarations are resolved on demand: hitting `SIR_lookup_decl_type`/`SIR_lookup_decl_value` for an unresolved declaration suspends the current entry and pushes a new one onto `Resolver.resolve_stack` (circular declarations are detected via `resolve_status`).
+8. `run_main` (`compiler.c`) — looks up `main.main`, then `interpreter_call` (`interpret.c`) tree-walks its **IIR** chunk directly to actually execute the program. This is a separate, simpler interpreter from the specializer: it has no comptime/residual split, just executes.
 
-The IR chunks are printed (`ir_print.c` / `ir_chunk_print`) after codegen and after interpretation.
+SIR and IIR chunks are printed via `print.c` (`print_sir_chunk` after codegen with `--print-decl-ir`, and the final specialized value — including any residual IIR function bodies — after specialization with `--print-residual`; `--print-tokens` / `--print-ast` dump the earlier stages).
 
 `Compiler.common` caches interned builtin types and values (`nil`, `type`, `i32`, `comptime_int`).
 
-`src/env.h` / `env.c` (`Env` lexical scoping) exists but is **not in the `build.py` inputs list** and is not currently wired in.
-
 Diagnostics flow through `MessageSink` (`src/messages.h`), a function-pointer sink that stages append errors to. Messages are collected on the `Compiler` (and per-`Source`) and printed at the end by `compiler_print_all_messages`.
-Note: message formatting (`{tok}`/`{str}` placeholders) and the vararg arg path are still unimplemented / known-buggy — see `TODO.md`.
+Note: message formatting (`{tok}`/`{str}` placeholders) and the vararg arg path are still unimplemented / known-buggy — see `TODO.md` and `unimplemented.md`.
 
 ## Key files
 
@@ -75,23 +79,24 @@ Note: message formatting (`{tok}`/`{str}` placeholders) and the vararg arg path 
 | `src/source_file.h` / `source_file.c` | `Source` — one per file; owns its own arena holding filename, text, tokens, AST, declarations, IR chunks, and messages |
 | `src/tokens.h` / `tokenize.c` | `TokenKind` enum, `Tokens` parallel-array store |
 | `src/ast.h` / `parse.c` | `AstKind` enum, `AstNodes` store |
-| `src/codegen.h` / `codegen.c` | AST → IR generation (`source_generate_code`) |
-| `src/ir.h` / `ir.c` | IR representation and `IrBuilder`; design rationale in the header comment |
-| `src/ir_print.c` | Human-readable IR dump (`ir_chunk_print`) |
-| `src/interpret.h` / `interpret.c` | IR interpreter producing runtime IR (`source_interpret_declaration`) |
+| `src/codegen.h` / `codegen.c` | AST → SIR generation (`generate_code`, one call per top-level declaration) |
+| `src/ir.h` / `ir.c` | SIR and IIR representations, `SIrBuilder` / `IIrBuilder`; design rationale in the header comment |
+| `src/x_sir.h`, `src/x_iir.h` | X-macro opcode tables for SIR / IIR (name string + "has extra payload" flag + payload type), consumed by `ir.c` and `print.c`. `src/x_ir.h` is the pre-split precursor and is now unused/dead |
+| `src/specialize.h` / `specialize.c` | `Specializer` / `Resolver` — the comptime partial evaluator. Walks SIR (`run_toplevel_block` → `step`), folding comptime-known code to `Value`s and emitting residual IIR for the rest |
+| `src/interpret.h` / `interpret.c` | `Interpreter` — tree-walks a finished IIR chunk directly (`interpreter_call`); used by `run_main` to execute `main.main` after compilation |
+| `src/ref.h` | Macro-templated tagged reference (instantiated as `SRef`/`sref_*` and `IRef`/`iref_*`): a `u32` that's either a comptime `ValueIndex` or an `InstructionIndex`, distinguished by the top bit |
+| `src/print.h` / `src/print.c` | Human-readable dumps: `print_sir_chunk`, `print_iir_chunk`, `print_value_raw`, `print_type`, `print_tokens`, `print_ast_nodes` (formerly `ir_print.c`) |
 | `src/types.h` / `types.c` | `TypeInterner` — interns types by value; `TypeIndex` is an opaque `u32` |
 | `src/value.h` / `value.c` | `ValueStore` — runtime/comptime values |
-| `src/eval.c` | Value reading/casting helpers used during evaluation |
-| `src/env.h` / `env.c` | `Env` / `EnvAllocator` — lexical scoping (not currently built) |
+| `src/eval.c` | Value reading/casting/coercion/unification helpers (`eval_cast_int`, `eval_coerce`, `eval_unify`, `eval_int_add/sub/mul/div`) shared by the specializer and interpreter |
+| `src/util.c` | Misc helpers; currently just the (unfinished) `decode_string_literal` |
 | `src/messages.h` / `messages.c` | `Message`, `MessageSink`, severity and location kinds |
 | `src/string_interner.h` / `string_interner.c` | `StringInterner` — string deduplication (an `interner.h` instantiation) |
 | `src/interner.h` | Macro-templated interner (see below) |
 | `src/segment_list.h` | Macro-templated segmented list (see below) |
 | `src/hashmap.h` | Macro-templated hash map (see below) |
-| `src/x_ast_kinds.h`, `src/x_ir.h` | X-macro tables (kind enum ↔ payload type ↔ name string) `#include`d with an `X(...)` macro defined by the includer |
+| `src/x_ast_kinds.h` | X-macro table for `AstKind` (used by `parse.c` for e.g. `ast_kind_string`), `#include`d with an `X(...)` macro defined by the includer |
 | `vendor/` | Vendored code: `xxhash.h`, `khash.h`, and the `splitmix64`/`xoshiro256plusplus` RNGs used by the fuzz tests |
-
-`src/builder.cc` is a leftover from the pre-rewrite C++ codebase and is not part of the build.
 
 ## Generic container pattern
 
@@ -118,7 +123,7 @@ It can optionally hold an `INTERNER_EXTRA_TYPE` per entry (e.g. `DeclarationInte
 
 Everything is arena-based (`Arena` in `toteload.h` reserves virtual memory upfront and commits pages on demand).
 The `Compiler` owns an `arena` and a `scratch` arena.
-Each `Source` additionally owns its own `arena`, which back its filename, text, tokens, IR, and messages.
+Each `Source` additionally owns its own `arena`, which backs its filename, text, tokens, AST, and messages. SIR chunks live on the `Declaration` in `Compiler.decls` and are allocated from `Compiler.arena`/`scratch`, not the `Source`'s arena.
 `Allocator` is a function-pointer allocator interface; `compiler.c` wraps `realloc`/`free` as `cstd_allocator` for growable collections.
 
 ## Language syntax (Blu)

@@ -351,9 +351,9 @@ internal b32 resolve_entry(Resolver *resolver) {
 
   u8 resolve_status = decl->resolve_status;
 
-  decl->resolve_status = (resolve_status + 1);
-
   if (!entry->state.requested_resolution) {
+    decl->resolve_status = (resolve_status + 1);
+
     CallFrame *frame = top_frame(&entry->state);
     ScopeSpan *scope = push_scope(frame);
 

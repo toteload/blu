@@ -820,9 +820,16 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 
   AstKind kind = ast->kinds[idx_ast];
   switch (kind) {
+  case Ast_literal_int:
+  case Ast_literal_string:
   case Ast_identifier: {
     return declared_type;
   } break;
+
+  case Ast_block: {
+    Todo();
+  } break;
+
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
@@ -865,6 +872,7 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 
     return sref_from_instruction(inst_unify);
   } break;
+
   default:
     Todo();
   }
