@@ -162,10 +162,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out);
 internal b32 parse_expression(Parser *parser, AstIndex *out);
 internal b32 parse_literal_int(Parser *parser, AstIndex *out);
 internal b32 parse_literal_string(Parser *parser, AstIndex *out);
-internal b32 parse_for(Parser *parser, AstIndex label, AstIndex *out);
 internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out);
-internal b32 parse_defer(Parser *parser, AstIndex *out);
-internal b32 parse_const(Parser *parser, AstIndex *out);
 internal b32 parse_identifier(Parser *parser, AstIndex *out);
 internal b32 parse_param(Parser *parser, AstIndex *out);
 internal b32 parse_builtin_print(Parser *parser, AstIndex *out);
@@ -605,32 +602,6 @@ internal b32 parse_function(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_for(Parser *parser, AstIndex label, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  Try(expect_token(parser, Tok_keyword_for));
-
-  AstFor *for_ = node_push_data(parser, AstFor, idx);
-
-  for_->label = label;
-
-  Try(parse_expression(parser, &for_->iterable));
-
-  Try(expect_token(parser, Tok_keyword_do));
-
-  Try(parse_identifier(parser, &for_->iterator));
-
-  Try(parse_block(parser, 0, &for_->body));
-
-  *node_kind(parser, idx) = Ast_for;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
 internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
@@ -646,23 +617,6 @@ internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
   Try(parse_block(parser, 0, &data->body));
 
   *node_kind(parser, idx) = Ast_while;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
-internal b32 parse_defer(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  Try(expect_token(parser, Tok_keyword_defer));
-
-  AstDefer *defer = node_push_data(parser, AstDefer, idx);
-  Try(parse_expression(parser, &defer->value));
-
-  *node_kind(parser, idx) = Ast_defer;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = idx;
@@ -723,68 +677,6 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   }
 
   *node_kind(parser, idx) = Ast_if_else;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
-internal b32 parse_const(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  Try(expect_token(parser, Tok_keyword_const));
-
-  AstConst *const_ = node_push_data(parser, AstConst, idx);
-
-  Try(parse_base_expression(parser, &const_->expr));
-
-  *node_kind(parser, idx) = Ast_const;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
-internal b32 parse_cast(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  Try(expect_token(parser, Tok_keyword_cast));
-
-  AstCast *cast = node_push_data(parser, AstCast, idx);
-
-  Try(expect_token(parser, Tok_paren_open));
-  Try(parse_type(parser, &cast->type_dst));
-  Try(expect_token(parser, Tok_paren_close));
-
-  Try(parse_base_expression(parser, &cast->value));
-
-  *node_kind(parser, idx) = Ast_cast;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
-internal b32 parse_as(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  Try(expect_token(parser, Tok_keyword_as));
-
-  AstCast *cast = node_push_data(parser, AstCast, idx);
-
-  Try(expect_token(parser, Tok_paren_open));
-  Try(parse_type(parser, &cast->type_dst));
-  Try(expect_token(parser, Tok_paren_close));
-
-  Try(parse_base_expression(parser, &cast->value));
-
-  *node_kind(parser, idx) = Ast_as;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = idx;
@@ -876,17 +768,12 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   AstIndex base;
   switch (tok) {
     // clang-format off
-  case Tok_keyword_for:    Try(parse_for(parser, 0, &base));         break;
   case Tok_keyword_while:  Try(parse_while(parser, 0, &base));       break;
-  case Tok_keyword_defer:  Try(parse_defer(parser, &base));          break;
   case Tok_keyword_if:     Try(parse_if_else(parser, &base));        break;
   case Tok_literal_int:    Try(parse_literal_int(parser, &base));    break;
   case Tok_literal_string: Try(parse_literal_string(parser, &base)); break;
   case Tok_bar:            Try(parse_function(parser, &base));       break;
   case Tok_builtin_debug:  Try(parse_builtin_debug(parser, &base));  break;
-  case Tok_keyword_const:  Try(parse_const(parser, &base));          break;
-  case Tok_keyword_cast:   Try(parse_cast(parser, &base));           break;
-  case Tok_keyword_as:     Try(parse_as(parser, &base));             break;
   case Tok_keyword_break:  Try(parse_break(parser, &base));          break;
   case Tok_brace_open:     Try(parse_block(parser, 0, &base));       break;
     // clang-format on
@@ -899,7 +786,6 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     // clang-format off
     switch (tok) {
     case Tok_brace_open:    Try(parse_block(parser, label, &base)); break;
-    case Tok_keyword_for:   Try(parse_for(parser, label, &base));   break;
     case Tok_keyword_while: Try(parse_while(parser, label, &base)); break;
     default: Unreachable();
     }

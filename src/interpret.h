@@ -31,6 +31,13 @@ typedef struct {
   CallStack2 call_stack;
 } Interpreter;
 
+typedef enum {
+  Interpret_ok,
+  Interpret_integer_overflow,
+  Interpret_zero_division,
+  Interpret_illegal_opcode,
+} InterpretResult;
+
 u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out);
 
 #endif // INTERPRET_H

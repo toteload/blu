@@ -25,12 +25,7 @@ typedef enum {
   Ast_function,
   Ast_param,
   Ast_if_else,
-  Ast_for,
   Ast_while,
-  Ast_defer,
-  Ast_const,
-  Ast_cast,
-  Ast_as,
   Ast_break,
 
   // Make sure to update Ast_kind_max when you update this enum!
@@ -147,11 +142,6 @@ typedef struct {
 } AstBlock;
 
 typedef struct {
-  u32 count;
-  AstIndex items[];
-} AstLiteralSequence;
-
-typedef struct {
   TokenIndex name;
   AstIndex   type;
 } AstParam;
@@ -171,13 +161,6 @@ typedef struct {
 
 typedef struct {
   AstIndex label;
-  AstIndex iterable;
-  AstIndex iterator;
-  AstIndex body;
-} AstFor;
-
-typedef struct {
-  AstIndex label;
   AstIndex cond;
   AstIndex body;
 } AstWhile;
@@ -194,11 +177,6 @@ typedef struct {
 } AstBinaryOp;
 
 typedef struct {
-  AstIndex base;
-  AstIndex field;
-} AstFieldAccess;
-
-typedef struct {
   AstIndex callee;
   u32 count;
   AstIndex args[];
@@ -210,28 +188,10 @@ typedef struct {
 } AstIndexData;
 
 typedef struct {
-  AstIndex value;
-} AstDefer;
-
-typedef struct {
   u8 kind;
   AstIndex lhs;
   AstIndex value;
 } AstAssign;
-
-typedef struct {
-  AstIndex expr;
-} AstConst;
-
-typedef struct {
-  AstIndex type_dst;
-  AstIndex value;
-} AstCast;
-
-typedef struct {
-  AstIndex type_dst;
-  AstIndex value;
-} AstAs;
 
 typedef struct {
   AstIndex label;
@@ -248,11 +208,9 @@ typedef union {
   AstTypeArray       type_array;
   AstDeclaration     declaration;
   AstAssign          assign;
-  AstLiteralSequence literal_sequence;
   TokenIndex         literal_int;
   TokenIndex         literal_string;
   TokenIndex         identifier;
-  AstFieldAccess     access;
   AstCall            call;
   AstIndexData       index;
   AstUnaryOp         unary_op;
@@ -260,11 +218,6 @@ typedef union {
   AstFunction        function;
   AstParam           param;
   AstIfElse          if_else;
-  AstFor             for_;
-  AstDefer           defer;
-  AstConst           const_;
-  AstCast            cast;
-  AstAs              as;
 } AstNodeData;
 
 typedef struct {

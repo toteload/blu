@@ -686,7 +686,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   } break;
 
   case Ast_param: { Todo(); } break;
-  case Ast_for: { Todo(); } break;
+
   case Ast_while: { 
     AstWhile *ast_while = ast_data(ast, idx_ast);
 
@@ -737,10 +737,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     return sref_from_instruction(loop);
   } break;
-  case Ast_defer: { Todo(); } break;
-  case Ast_const: { Todo(); } break;
-  case Ast_cast: { Todo(); } break;
-  case Ast_as: { Todo(); } break;
 
   case Ast_break: {
     AstBreak *b = ast_data(ast, idx_ast);

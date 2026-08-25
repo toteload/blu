@@ -61,6 +61,9 @@ internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionIndex blo
 typedef enum {
   Step_ok,
   Step_return,
+  Step_integer_overflow,
+  Step_zero_division,
+  Step_illegal_opcode,
 } StepResult;
 
 internal u32 step(Interpreter *in) {
@@ -78,6 +81,27 @@ internal u32 step(Interpreter *in) {
   }
 
   switch (op) {
+  case IIR_func: {
+    Message_error(
+      in->msg_sink,
+      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      string_lit("Stepped into IIR_func instruction which is only allowed to be called")
+    );
+    return Step_illegal_opcode;
+  } break;
+
+  case IIR_param: {
+    Message_error(
+      in->msg_sink,
+      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      string_lit("Stepped into IIR_param instruction which should be set by caller")
+    );
+    return Step_illegal_opcode;
+  } break;
+
+  case IIR_loop: { Todo(); } break;
+  case IIR_repeat: { Todo(); } break;
+
   case IIR_block: {
     u32 inst_count = iir_chunk_data(f->chunk, pc);
     stack_push(&f->scope_stack, ((ScopeSpan2){ .start = pc, .end = pc + inst_count, .snapshot = arena_scope_begin(in->scratch) }));
@@ -166,9 +190,14 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, type);
-    b32 ok = eval_int_add(t->data.integer, lhs, rhs, local);
+    b32 ok = eval_int_add_safe(t->data.integer, lhs, rhs, local);
     if (!ok) {
-      Todo();
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        string_lit("int_add_safe overflow")
+      );
+      return Step_integer_overflow;
     }
 
     f->pc += 1;
@@ -180,9 +209,14 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, type);
-    b32 ok = eval_int_sub(t->data.integer, lhs, rhs, local);
+    b32 ok = eval_int_sub_safe(t->data.integer, lhs, rhs, local);
     if (!ok) {
-      Todo();
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        string_lit("int_sub_safe overflow")
+      );
+      return Step_integer_overflow;
     }
 
     f->pc += 1;
@@ -194,9 +228,14 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, type);
-    b32 ok = eval_int_mul(t->data.integer, lhs, rhs, local);
+    b32 ok = eval_int_mul_safe(t->data.integer, lhs, rhs, local);
     if (!ok) {
-      Todo();
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        string_lit("int_mul_safe overflow")
+      );
+      return Step_integer_overflow;
     }
 
     f->pc += 1;
@@ -208,15 +247,33 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, type);
-    b32 ok = eval_int_div(t->data.integer, lhs, rhs, local);
-    if (!ok) {
-      Todo();
+    u32 err = eval_int_div_safe(t->data.integer, lhs, rhs, local);
+    if (err) {
+      if (err == IntDivSafe_zero_division) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          string_lit("int_div_safe overflow")
+        );
+
+        return Step_zero_division;
+      }
+
+      if (err == IntDivSafe_overflow) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          string_lit("int_div_safe overflow")
+        );
+
+        return Step_integer_overflow;
+      }
+
+      Unreachable();
     }
 
     f->pc += 1;
   } break;
-
-  default: Todo();
   }
 
   return Step_ok;
@@ -233,15 +290,15 @@ u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg
   while (True) {
     u32 err = step(in);
 
-    if (err == Step_ok) {
-      continue;
+    // clang-format off
+    switch (Cast(StepResult, err)) {
+    case Step_ok: break;
+    case Step_integer_overflow: return Interpret_integer_overflow;
+    case Step_zero_division: return Interpret_zero_division;
+    case Step_illegal_opcode: return Interpret_illegal_opcode;
+    case Step_return: if (in->call_stack.len == 0) return 0;
     }
-
-    if (err == Step_return) {
-      if (in->call_stack.len == 0) {
-        return 0;
-      }
-    }
+    // clang-format on
   }
 
   Unreachable();

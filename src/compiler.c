@@ -830,7 +830,9 @@ b32 run_main(Compiler *compiler) {
 
   u8 buf[16];
   u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
-  Assert(!err);
+  if (err) {
+    return False;
+  }
 
   return True;
 }

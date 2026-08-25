@@ -279,6 +279,7 @@ void print_message(Arena *scratch, Message *message, Source *source, Declaration
     .textline = {0},
     .underline_len = 0,
   };
+
   if (location_kind_has_line_col(message->location.kind)) {
     info = get_position_info(source, decl, message->location);
     printf("\033[1m%u:%u:\033[22m", info.line, info.col);

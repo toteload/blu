@@ -32,12 +32,18 @@ enum CoerceResult {
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res);
 
 // Returns False if the addition overflowed.
-b32 eval_int_add(TypeInteger int_type, void *lhs, void *rhs, void *res);
+b32 eval_int_add_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
 // Returns False if the subtraction overflowed.
-b32 eval_int_sub(TypeInteger int_type, void *lhs, void *rhs, void *res);
+b32 eval_int_sub_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
 // Returns False if the multiplication overflowed.
-b32 eval_int_mul(TypeInteger int_type, void *lhs, void *rhs, void *res);
-// Returns False if rhs is zero, or if lhs / rhs overflows (INT_MIN / -1).
-b32 eval_int_div(TypeInteger int_type, void *lhs, void *rhs, void *res);
+b32 eval_int_mul_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
+
+typedef enum {
+  IntDivSafe_ok,
+  IntDivSafe_zero_division,
+  IntDivSafe_overflow,
+} IntDivSafeResult;
+
+u32 eval_int_div_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
 
 #endif // EVAL_H
