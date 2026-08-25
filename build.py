@@ -36,6 +36,7 @@ def add_test_suite(out):
     outputs.append(outd('tokenize.c.o'))
     outputs.append(outd('parse.c.o'))
     outputs.append(outd('messages.c.o'))
+    outputs.append(outd('types.c.o'))
 
     for f in inputs:
         fout = outd(f'{f}.o')

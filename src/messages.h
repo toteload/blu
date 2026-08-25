@@ -2,6 +2,7 @@
 #define MESSAGES_H
 
 #include "blu.h"
+#include "types.h"
 
 #include <stdarg.h>
 
@@ -38,6 +39,7 @@ typedef struct {
 typedef union {
   u8     token_kind;
   String string;
+  TypeIndex type;
 } MessageArg;
 
 typedef struct {
@@ -68,11 +70,12 @@ typedef Message* MessagePtr;
 // Format args support normal printf conversions plus two custom ones:
 // - %tokenkind (u8 representing TokenKind)
 // - %string    (String)
+// - %type      (TypeIndex)
 #define Message_error(psink, ...) (psink)->add_message((psink)->user, Severity_Error, __VA_ARGS__)
 
 u32 message_format_arg_count(String fmt);
 void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_count);
-String message_format(Arena *scratch, Message *message);
-void print_message(Arena *scratch, Message *message, Source *source, Declaration *decl);
+String message_format(Arena *scratch, TypeInterner *types, Message *message);
+void print_message(Arena *scratch, TypeInterner *types, Message *message, Source *source, Declaration *decl);
 
 #endif // MESSAGES_H

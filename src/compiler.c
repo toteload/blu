@@ -257,7 +257,7 @@ Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
 void compiler_print_all_messages(Compiler *compiler) {
   for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
-    source_print_all_messages(source, &compiler->scratch);
+    source_print_all_messages(source, &compiler->types, &compiler->scratch);
   }
 
   u32 count = compiler->msg_list.len;
@@ -274,7 +274,7 @@ void compiler_print_all_messages(Compiler *compiler) {
       source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
     }
 
-    print_message(&compiler->scratch, msg, source, decl);
+    print_message(&compiler->scratch, &compiler->types, msg, source, decl);
   }
 }
 
@@ -408,7 +408,7 @@ internal b32 resolve_entry(Resolver *resolver) {
     return True;
   }
 
-  if (err == Run_encountered_error) {
+  if (err == Run_error) {
     return False;
   }
 

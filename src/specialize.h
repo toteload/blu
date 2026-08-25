@@ -82,7 +82,7 @@ typedef struct {
 
 typedef enum {
   Step_ok,
-  Step_encountered_error,
+  Step_error,
   Step_resolve_declaration_type,
   Step_resolve_declaration_value,
   Step_leave_scope,
@@ -90,7 +90,7 @@ typedef enum {
 
 typedef enum {
   Run_ok,
-  Run_encountered_error = Step_encountered_error,
+  Run_error = Step_error,
 
   // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
   // which needs to be resolved.

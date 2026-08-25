@@ -60,6 +60,6 @@ b32 source_parse(Source *source, Arena *scratch);
 // - Allocates `decl_idxs` (decl_tree_size).
 void source_index_declarations(Source *source, StringInterner *strings);
 
-void source_print_all_messages(Source *source, Arena *scratch);
+void source_print_all_messages(Source *source, TypeInterner *types, Arena *scratch);
 
 #endif // SOURCE_FILE_H

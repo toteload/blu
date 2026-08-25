@@ -202,10 +202,10 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   source->decl_idxs      = arena_push_array(DeclarationIndex, &source->arena, count);
 }
 
-void source_print_all_messages(Source *source, Arena *scratch) {
+void source_print_all_messages(Source *source, TypeInterner *types, Arena *scratch) {
   u32 count = source->msg_list.len;
   for (u32 i = 0; i < count; i++) {
     Message *msg = msglist_at_unchecked(&source->msg_list, i);
-    print_message(scratch, msg, source, Null);
+    print_message(scratch, types, msg, source, Null);
   }
 }

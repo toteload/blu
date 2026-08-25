@@ -533,3 +533,4 @@ void print_ast_nodes(AstNodes *nodes, Tokens *tokens, String source) {
     printf("%.*s\n", Cast(int, kind_string.len), kind_string.str);
   }
 }
+

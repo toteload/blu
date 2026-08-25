@@ -317,7 +317,6 @@ internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref,
 internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
   Value *v = values_get(in->values, val);
 
-
   if (v->type != in->common->type.type) {
     ScopeSpan *s = stack_peek_ptr(&f->scopes);
     Message_error(
@@ -456,7 +455,7 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex return_type;
     b32 ok = expect_some_type_value(in, f, func->return_type, &return_type);
     if (!ok) {
-      return Step_encountered_error;
+      return Step_error;
     }
 
     iir_builder_set_type(builder, inst_func, return_type);
@@ -564,7 +563,7 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex type_dst;
     b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
     if (!ok) {
-      return Step_encountered_error;
+      return Step_error;
     }
 
     f->inst_types[pc] = type_dst;
@@ -596,11 +595,13 @@ internal u32 step(Specializer *in, RunState *state) {
               .decl_idx = f->decl_idx,
               .data.offset = s->pc,
             },
-            string_lit("Invalid type coercion")
+            string_lit("Cannot coerce value of type %type to type %type"),
+            v->type,
+            type_dst
           );
         }
 
-        return Step_encountered_error;
+        return Step_error;
       }
 
       store_inst_value(f, pc, iref_from_value(val_coerced));
@@ -724,13 +725,13 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex type_lhs;
     ok = expect_type_value_or_nil(in, f, unify->type_lhs, &type_lhs);
     if (!ok) {
-      return Step_encountered_error;
+      return Step_error;
     }
 
     TypeIndex type_rhs;
     ok = expect_type_value_or_nil(in, f, unify->type_rhs, &type_rhs);
     if (!ok) {
-      return Step_encountered_error;
+      return Step_error;
     }
 
     TypeIndex type_unified;
@@ -1193,7 +1194,18 @@ internal u32 step(Specializer *in, RunState *state) {
 
     b32 ok = check_can_type_add(t);
     if (!ok) {
-      Todo();
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Type %type does not support +"),
+        type_lhs
+      );
+
+      return Step_error;
     }
 
     store_inst_type(f, pc, type_lhs);

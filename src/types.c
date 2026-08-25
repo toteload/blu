@@ -4,6 +4,8 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
+#include <stdarg.h>
+
 internal b32 cmp_type(void *context, Type *a, Type *b);
 internal u32 hash_type(void *context, Type *x);
 
@@ -214,4 +216,57 @@ b32 check_can_type_add(Type *t) {
   }
 
   return False;
+}
+
+internal String arena_printf(Arena *arena, char const *format, ...) {
+  va_list args;
+  va_start(args, format);
+  i32 len = vsnprintf(Null, 0, format, args);
+  va_end(args);
+
+  u8 *s = arena_push_array(u8, arena, len+1);
+
+  va_start(args, format);
+  vsnprintf(s, len+1, format, args);
+  va_end(args);
+
+  arena->at = ptr_offset(arena->at, -1);
+
+  return (String){ .str = s, .len = len };
+}
+
+String write_type(Arena *arena, TypeInterner *types, TypeIndex type) {
+  if (type == 0) {
+    return arena_copy_string(arena, string_lit("?"));
+  }
+
+  Type *t = types_get(types, type);
+  switch (Cast(TypeKind, t->kind)) {
+  case Type_comptime_int: return arena_copy_string(arena, string_lit("comptime_int"));
+  case Type_bool: return arena_copy_string(arena, string_lit("bool"));
+  case Type_nil: return arena_copy_string(arena, string_lit("nil"));
+  case Type_never: return arena_copy_string(arena, string_lit("never"));
+  case Type_type: return arena_copy_string(arena, string_lit("type"));
+  case Type_integer: {
+    return arena_printf(arena, "%c%u", (t->data.integer.signedness == Signed) ? 'i' : 'u', t->data.integer.bitwidth);
+  } break;
+  case Type_array: {
+    String s = arena_printf(arena, "[%u]", t->data.array.size);
+    String a = write_type(arena, types, t->data.array.base_type);
+    return (String){ .str = s.str, .len = s.len + a.len };
+  } break;
+  case Type_function: {
+    Todo();
+  } break;
+  case Type_slice: {
+    String s = arena_printf(arena, "[]", t->data.array.size);
+    String a = write_type(arena, types, t->data.array.base_type);
+    return (String){ .str = s.str, .len = s.len + a.len };
+  } break;
+  case Type_pointer: {
+    String s = arena_printf(arena, "*", t->data.array.size);
+    String a = write_type(arena, types, t->data.array.base_type);
+    return (String){ .str = s.str, .len = s.len + a.len };
+  } break;
+  }
 }

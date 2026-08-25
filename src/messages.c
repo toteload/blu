@@ -1,4 +1,5 @@
 #include "messages.h"
+#include "print.h"
 #include "source_file.h"
 #include "compiler.h"
 
@@ -17,6 +18,7 @@ enum FormatSpecKind {
   FormatSpec_percent, // '%%', a literal '%'
   FormatSpec_token_kind,
   FormatSpec_string,
+  FormatSpec_type,
 };
 
 typedef struct {
@@ -61,6 +63,12 @@ internal b32 format_next_spec(String fmt, usize pos, FormatSpec *out) {
       return True;
     }
 
+    if (starts_with_at(fmt, j, string_lit("type"))) {
+      out->kind = FormatSpec_type;
+      out->end  = j + 4;
+      return True;
+    }
+
     Panic();
   }
 
@@ -96,17 +104,18 @@ void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_c
     case FormatSpec_string: {
       args[i].string = va_arg(vl, String);
     } break;
+    case FormatSpec_type: { args[i].type = va_arg(vl, TypeIndex); } break;
     }
 
     i++;
   }
 }
 
-String message_format(Arena *scratch, Message *message) {
+String message_format(Arena *scratch, TypeInterner *types, Message *message) {
   String format = message->format;
 
-  u32 bufsize = 100;
-  u8 *buf = arena_push_array(u8, scratch, bufsize);
+  u32 bufsize = 0;
+  u8 *buf = arena_push_array(u8, scratch, 0);
 
   usize len = 0;
   usize format_i = 0;
@@ -148,6 +157,11 @@ String message_format(Arena *scratch, Message *message) {
       }
 
       memcpy(buf + len, s.str, s.len);
+      len += s.len;
+    } break;
+    case FormatSpec_type: {
+      TypeIndex type = message->args[arg_i++].type;
+      String s = write_type(scratch, types, type);
       len += s.len;
     } break;
     }
@@ -255,7 +269,7 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   };
 }
 
-void print_message(Arena *scratch, Message *message, Source *source, Declaration *decl) {
+void print_message(Arena *scratch, TypeInterner *types, Message *message, Source *source, Declaration *decl) {
   // clang-format off
   switch (Cast(MessageSeverity, message->severity)) {
   case Severity_Error:   printf("\033[1m[\033[31merror\033[39m]\033[22m"); break;
@@ -286,7 +300,7 @@ void print_message(Arena *scratch, Message *message, Source *source, Declaration
   }
 
   ArenaSnapshot scope = arena_scope_begin(scratch);
-  String formatted = message_format(scratch, message);
+  String formatted = message_format(scratch, types, message);
   printf(" %.*s\n", Cast(int, formatted.len), formatted.str);
   arena_scope_end(scratch, scope);
 

@@ -46,7 +46,7 @@ internal String format_with_args(MessagesTestContext *ctx, String format, Messag
   for (u32 i = 0; i < arg_count; i++) {
     msg->args[i] = args[i];
   }
-  return message_format(ctx->scratch, msg);
+  return message_format(ctx->scratch, Null, msg);
 }
 
 void test_no_args(TestResult *test, MessagesTestContext *ctx) {
