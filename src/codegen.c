@@ -134,9 +134,9 @@ internal InstructionIndex lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx
     Message_error(
       gen->msg_sink,
       (MessageLocation){
-        .kind = MessageLocation_token_index,
+        .kind = MessageLocation_ast_index,
         .source_idx = gen->source->idx,
-        .data.token_index = str,
+        .data.ast_index = ast_idx,
       },
       string_lit("Could not find identifier.")
     );
@@ -381,9 +381,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     AstTypeFunction *func = ast_data(ast, idx_ast);
     SRef ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
 
+    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+
     for (u32 i = 0; i < func->count; i++) {
-      // TODO Add the parameter types
-      Panic();
+      param_types[i] = gen_code(gen, func->param_types[i], sref_from_value(gen->common->val.type));
     }
 
     InstructionIndex inst_type = sir_builder_add(&gen->builder, SIR_type, source_idx, idx_ast);
@@ -402,6 +403,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     };
 
     data_type->args[0] = ref_ret_type;
+
+    for (u32 i = 0; i < func->count; i++) {
+      data_type->args[1 + i] = param_types[i];
+    }
 
     InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst_type), source_idx, idx_ast);
     return sref_from_instruction(i);
@@ -427,12 +432,45 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex first_param_type = inst_return_type + 1;
 
+    InstructionIndex first_param = inst_func + 1;
+
     for (u32 i = 0; i < func->count; i++) {
       InstructionIndex inst_param = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
       sir_builder_set_data(builder, inst_param, sref_to_u32(sref_from_instruction(first_param_type + i)));
     }
 
+    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block_or_loop });
+
+    for (u32 i = 0; i < func->count; i++) {
+      AstParam *ast_param = ast_data(ast, func->params[i]);
+      StringIndex str = strings_add(gen->strings, token_string(tokens, text, ast_param->name));
+
+      InstructionIndex inst_var = sir_builder_add(builder, SIR_alloc, source_idx, func->params[i]);
+      sir_builder_set_data(builder, inst_var, sref_to_u32(sref_from_instruction(first_param_type + i)));
+
+      InstructionIndex inst_store = sir_builder_add(builder, SIR_store, source_idx, func->params[i]);
+      SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
+      *store = (SIrStore){
+        .dst = sref_from_instruction(inst_var),
+        .value = sref_from_instruction(first_param + i),
+      };
+
+      stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
+      locals_insert(&gen->locals, str, inst_var);
+    }
+
     SRef inst_body = gen_code(gen, func->body, sref_from_instruction(inst_return_type));
+
+    while (True) {
+      ScopeEntry entry = stack_pop(&gen->scope_stack);
+
+      if (entry.kind == ScopeEntry_block_or_loop) {
+        break;
+      }
+
+      b32 found = locals_remove(&gen->locals, entry.name);
+      Assert(found);
+    }
 
     InstructionIndex inst_ret = sir_builder_add(&gen->builder, SIR_ret, source_idx, func->body);
     sir_builder_set_data(&gen->builder, inst_ret, sref_to_u32(inst_body));
@@ -504,6 +542,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     if (ast_call->count > 0) {
       InstructionIndex callee_type = sir_builder_add(builder, SIR_typeof, source_idx, ast_call->callee);
+      sir_builder_set_data(builder, callee_type, sref_to_u32(callee));
+
       for (u32 i = 0; i < ast_call->count; i++) {
         InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, ast_call->args[i]);
         SIrParamType *data = sir_builder_push_data(builder, inst_param_type, SIrParamType);
@@ -517,7 +557,12 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex inst_call = sir_builder_add(builder, SIR_call, source_idx, idx_ast);
 
-    SIrCall *call = sir_builder_push_data(builder, inst_call, SIrCall);
+    SIrCall *call = sir_builder_push_data_raw(
+      builder,
+      inst_call,
+      sizeof(SIrCall) + ast_call->count * sizeof(SRef),
+      Align_of(SIrCall)
+    );
     *call = (SIrCall){
       .func = callee,
       .arg_count = ast_call->count,
@@ -841,7 +886,11 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
     // Output param type expressions
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
-      param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+
+      param_types[i] = (SRef){0};
+      if (ast_param->type) {
+        param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+      }
     }
 
     InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);

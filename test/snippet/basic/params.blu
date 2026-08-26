@@ -1,0 +1,25 @@
+mod main
+
+main := ||: i32 {
+  #debug(inc(3))
+  #debug(add(3, 4))
+  #debug(add(inc(1), mul(2, 5)))
+  #debug(apply_twice(7))
+  #debug(first(11, 22))
+  #debug(second(11, 22))
+  #debug(annotated(20, 3))
+}
+
+inc := |a: i32|: i32 { a + 1 }
+
+add := |a: i32, b: i32|: i32 { a + b }
+
+mul := |a: i32, b: i32|: i32 { a * b }
+
+apply_twice := |a: i32|: i32 { inc(inc(a)) + a }
+
+first := |a: i32, b: i32|: i32 { a }
+
+second := |a: i32, b: i32|: i32 { b }
+
+annotated: (i32, i32) i32 = |a, b| { a - b }

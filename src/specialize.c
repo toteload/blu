@@ -461,7 +461,14 @@ internal u32 step(Specializer *in, RunState *state) {
     iir_builder_set_type(builder, inst_func, return_type);
 
     for (u32 i = 0; i < func->param_count; i++) {
-      Todo(); // set param types
+      TypeIndex param_type;
+      ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc + 1 + i)}, &param_type);
+      if (!ok) {
+        return Step_error;
+      }
+
+      InstructionIndex inst_param = iir_builder_add(builder, IIR_param);
+      iir_builder_set_type(builder, inst_param, param_type);
     }
 
     stack_push(
@@ -563,9 +570,16 @@ internal u32 step(Specializer *in, RunState *state) {
     Assert(!iref_is_nil(ref));
 
     TypeIndex type_dst;
-    b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
+    b32 ok = expect_type_value_or_nil(in, f, as->type_to, &type_dst);
     if (!ok) {
       return Step_error;
+    }
+
+    if (type_dst == 0) {
+      store_inst_value(f, pc, ref);
+      f->inst_types[pc] = ref_typeof(in, f, as->val);
+      s->pc += 1;
+      break;
     }
 
     f->inst_types[pc] = type_dst;
@@ -706,18 +720,27 @@ internal u32 step(Specializer *in, RunState *state) {
     case Type_function: {
       Assert(type->arg_count != 0);
 
-      Assert(type->arg_count == 1); // For now don't support params
+      u32 param_count = type->arg_count - 1;
 
       TypeIndex return_type;
       b32 ok = expect_type_value_or_nil(in, f, type->args[0], &return_type);
       Assert(ok);
-      t = types_add(
-        in->types,
-        &(Type){
-          .kind = Type_function,
-          .data.function = {.return_type = return_type, .param_count = 0},
-        }
-      );
+
+      ArenaSnapshot snapshot = arena_scope_begin(in->scratch);
+
+      Type *func = arena_push_type_function(in->scratch, param_count);
+      func->kind = Type_function;
+      func->data.function.return_type = return_type;
+      func->data.function.param_count = param_count;
+
+      for (u32 i = 0; i < param_count; i++) {
+        ok = expect_type_value_or_nil(in, f, type->args[1 + i], &func->data.function.param_types[i]);
+        Assert(ok);
+      }
+
+      t = types_add(in->types, func);
+
+      arena_scope_end(in->scratch, snapshot);
     } break;
 
     case Type_slice: {
@@ -830,7 +853,7 @@ internal u32 step(Specializer *in, RunState *state) {
       }
 
       for (u32 i = 0; i < param_count; i++) {
-        Todo();
+        type->data.function.param_types[i] = f->inst_types[func_scope->start + 1 + i];
       }
 
       TypeIndex t = types_add(in->types, type);
@@ -891,11 +914,14 @@ internal u32 step(Specializer *in, RunState *state) {
 
     IIrBuilder *builder = get_builder(in);
 
-    Assert(call->arg_count == 0);
-
     InstructionIndex inst_call = iir_builder_add(builder, IIR_call);
 
-    IIrCall *data_call = iir_builder_push_data(builder, inst_call, IIrCall);
+    IIrCall *data_call = iir_builder_push_data_raw(
+      builder,
+      inst_call,
+      sizeof(IIrCall) + call->arg_count * sizeof(IRef),
+      Align_of(IIrCall)
+    );
 
     IRef func = resolve(f, call->func);
     if (iref_is_some_value(func)) {
@@ -904,14 +930,18 @@ internal u32 step(Specializer *in, RunState *state) {
 
     *data_call = (IIrCall){
       .func_ptr = func,
-      .arg_count = 0,
+      .arg_count = call->arg_count,
     };
+
+    for (u32 i = 0; i < call->arg_count; i++) {
+      data_call->args[i] = copy_if_value(in, resolve(f, call->args[i]));
+    }
 
     if (iref_is_some_value(func)) {
       Value *v = values_get(in->values, iref_to_value(func));
       Type *func_type = types_get(in->types, v->type);
       f->inst_types[pc] = func_type->data.function.return_type;
-      iir_builder_set_type(builder, inst_call, v->type);
+      iir_builder_set_type(builder, inst_call, func_type->data.function.return_type);
     } else {
       Todo();
     }
@@ -1212,7 +1242,22 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  case SIR_param: { Panic(); }
+  case SIR_param: {
+    TypeIndex type;
+    b32 ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
+    if (!ok) {
+      return Step_error;
+    }
+
+    ScopeSpan *func = get_func_scope(f);
+    InstructionIndex inst = pc - func->start;
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+    f->inst_types[pc] = type;
+
+    s->pc += 1;
+  } break;
+
   case SIR_loop: { Todo(); } break;
   case SIR_repeat: { Todo(); } break;
   case SIR_and: { Todo(); } break;
@@ -1226,7 +1271,21 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_index: { Todo(); } break;
   case SIR_negate: { Todo(); } break;
   case SIR_not: { Todo(); } break;
-  case SIR_param_type: { Todo(); } break;
+  case SIR_param_type: {
+    SIrParamType *param_type = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex idx;
+    b32 ok = expect_some_type_value(in, f, param_type->function_type, &idx);
+    Assert(ok);
+
+    Type *t = types_get(in->types, idx);
+    Assert(t->kind == Type_function);
+    Assert(param_type->param_index < t->data.function.param_count);
+
+    ValueIndex v = val_from_type(in, t->data.function.param_types[param_type->param_index]);
+    store_inst_value(f, pc, iref_from_value(v));
+    s->pc += 1;
+  } break;
   }
 
   return Step_ok;

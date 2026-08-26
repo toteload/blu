@@ -34,14 +34,19 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
     return False;
   }
 
-  switch (a->kind) {
+  switch (Cast(TypeKind, a->kind)) {
   case Type_nil:
   case Type_never:
   case Type_bool:
   case Type_type:
+  case Type_comptime_int:
+  case Type_usize:
+  case Type_isize:
     return True;
   case Type_slice:
     return a->data.slice.base_type == b->data.slice.base_type;
+  case Type_pointer:
+    return a->data.pointer.base_type == b->data.pointer.base_type;
   case Type_function: {
     if (a->data.function.return_type != b->data.function.return_type) {
       return False;
@@ -82,11 +87,14 @@ internal u32 push_type_data(Arena *arena, Type *x) {
 
   Push_data(x->kind);
 
-  switch (x->kind) {
+  switch (Cast(TypeKind, x->kind)) {
   case Type_nil:
   case Type_never:
   case Type_bool:
   case Type_type:
+  case Type_comptime_int:
+  case Type_usize:
+  case Type_isize:
     break;
   case Type_integer: {
     Push_data(x->data.integer.signedness);
@@ -94,6 +102,9 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   } break;
   case Type_slice: {
     Push_data(x->data.slice.base_type);
+  } break;
+  case Type_pointer: {
+    Push_data(x->data.pointer.base_type);
   } break;
   case Type_function: {
     Push_data(x->data.function.return_type);
