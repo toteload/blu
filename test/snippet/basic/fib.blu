@@ -1,0 +1,13 @@
+mod main
+
+main := ||: i32 {
+  #debug(fib(1))
+  #debug(fib(2))
+  #debug(fib(3))
+  #debug(fib(4))
+  #debug(fib(5))
+}
+
+fib := |n: i32|: i32 {
+  if n <= 0 do 1 else { fib(n-1) + fib(n-2) }
+}

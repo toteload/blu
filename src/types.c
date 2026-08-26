@@ -205,6 +205,14 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
     return True;
   }
 
+  if (type_from->kind == Type_bool && type_to->kind == Type_integer) {
+    return True;
+  }
+
+  if (type_from->kind == Type_array && type_to->kind == Type_slice) {
+    return type_from->data.array.base_type == type_to->data.slice.base_type;
+  }
+
   return False;
 }
 

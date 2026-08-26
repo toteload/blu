@@ -1082,19 +1082,26 @@ internal u32 step(Specializer *in, RunState *state) {
     Type *t = types_get(in->types, type);
 
     TypeIndex base_type;
+    // clang-format off
     switch (t->kind) {
-    case Type_pointer:
-      base_type = t->data.pointer.base_type;
-      break;
-    case Type_array:
-      base_type = t->data.array.base_type;
-      break;
-    case Type_slice:
-      base_type = t->data.slice.base_type;
-      break;
-    default:
-      Panic(); Unreachable();
+    case Type_pointer: base_type = t->data.pointer.base_type; break;
+    case Type_array: base_type = t->data.array.base_type; break;
+    case Type_slice: base_type = t->data.slice.base_type; break;
+    default: {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Tried to get base type of type %type that is not a pointer, array or slice. This is likely a compiler bug"),
+        type
+      );
+      return Step_error;
+    } break;
     }
+    // clang-format on
 
     ValueIndex v = val_from_type(in, base_type);
 
@@ -1124,94 +1131,18 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  case SIR_mul: {
-    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
-
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
-
-    if (type_lhs != type_rhs || type_lhs == 0) {
-      Todo();
-    }
-
-    Type *t = types_get(in->types, type_lhs);
-
-    b32 ok = check_can_type_add(t);
-    if (!ok) {
-      Todo();
-    }
-
-    store_inst_type(f, pc, type_lhs);
-
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
-
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-      break;
-    }
-
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_mul);
-    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
-    *data = (IIrBinary){
-      .lhs = copy_if_value(in, lhs),
-      .rhs = copy_if_value(in, rhs),
-    };
-
-    iir_builder_set_type(builder, inst, type_lhs);
-
-    store_inst_value(f, pc, iref_from_instruction(inst));
-
-    s->pc += 1;
-  } break;
-
-  case SIR_div: {
-    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
-
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
-
-    if (type_lhs != type_rhs || type_lhs == 0) {
-      Todo();
-    }
-
-    Type *t = types_get(in->types, type_lhs);
-
-    b32 ok = check_can_type_add(t);
-    if (!ok) {
-      Todo();
-    }
-
-    store_inst_type(f, pc, type_lhs);
-
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
-
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-      break;
-    }
-
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_div);
-    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
-    *data = (IIrBinary){
-      .lhs = copy_if_value(in, lhs),
-      .rhs = copy_if_value(in, rhs),
-    };
-
-    iir_builder_set_type(builder, inst, type_lhs);
-
-    store_inst_value(f, pc, iref_from_instruction(inst));
-
-    s->pc += 1;
-  } break;
-
-  case SIR_mod: {
+  case SIR_bitshift_left:
+  case SIR_bitshift_right: {
     Todo();
   } break;
 
+  case SIR_bit_and:
+  case SIR_bit_or:
+  case SIR_bit_xor:
+  case SIR_mul:
+  case SIR_div:
+  case SIR_mod:
+  case SIR_sub:
   case SIR_add: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
@@ -1224,6 +1155,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
     Type *t = types_get(in->types, type_lhs);
 
+    // Check if this operator is implemented for this type.
     b32 ok = check_can_type_add(t);
     if (!ok) {
       Message_error(
@@ -1233,7 +1165,7 @@ internal u32 step(Specializer *in, RunState *state) {
           .decl_idx = f->decl_idx,
           .data.offset = s->pc,
         },
-        string_lit("Type %type does not support +"),
+        string_lit("Type %type does not support operator"),
         type_lhs
       );
 
@@ -1250,50 +1182,23 @@ internal u32 step(Specializer *in, RunState *state) {
       break;
     }
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_add);
-    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
-    *data = (IIrBinary){
-      .lhs = copy_if_value(in, lhs),
-      .rhs = copy_if_value(in, rhs),
-    };
-
-    iir_builder_set_type(builder, inst, type_lhs);
-
-    store_inst_value(f, pc, iref_from_instruction(inst));
-
-    s->pc += 1;
-  } break;
-
-  case SIR_sub: {
-    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
-
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
-
-    if (type_lhs != type_rhs || type_lhs == 0) {
-      Todo();
+    u8 iir_op;
+    // clang-format off
+    switch (op) {
+    case SIR_mul: iir_op = IIR_int_mul; break;
+    case SIR_div: iir_op = IIR_int_div; break;
+    case SIR_mod: iir_op = IIR_int_mod; break;
+    case SIR_sub: iir_op = IIR_int_sub; break;
+    case SIR_add: iir_op = IIR_int_add; break;
+    case SIR_bit_and: iir_op = IIR_bit_and; break;
+    case SIR_bit_or: iir_op = IIR_bit_or; break;
+    case SIR_bit_xor: iir_op = IIR_bit_xor; break;
+    default: Unreachable();
     }
-
-    Type *t = types_get(in->types, type_lhs);
-
-    b32 ok = check_can_type_add(t);
-    if (!ok) {
-      Todo();
-    }
-
-    store_inst_type(f, pc, type_lhs);
-
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
-
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-      break;
-    }
+    // clang-format on
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub);
+    InstructionIndex inst = iir_builder_add(builder, iir_op);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = copy_if_value(in, lhs),

@@ -274,6 +274,22 @@ internal u32 step(Interpreter *in) {
 
     f->pc += 1;
   } break;
+
+  case IIR_int_mod: {
+    Todo();
+  } break;
+
+  case IIR_bit_and: {
+    Todo();
+  } break;
+
+  case IIR_bit_or: {
+    Todo();
+  } break;
+
+  case IIR_bit_xor: {
+    Todo();
+  } break;
   }
 
   return Step_ok;

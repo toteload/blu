@@ -201,7 +201,10 @@ internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef ty
 
   case Bit_shift_left:
   case Bit_shift_right: {
-    Todo();
+    lhs = type_destination;
+
+    // TODO: for now the rhs can be a usize, but at some point it should become log2(bitwidth(lhs))
+    rhs = sref_from_value(gen->common->val.usize);
   } break;
 
   case Mul:
@@ -414,7 +417,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, func->params[i]);
       SIrParamType *param_type = sir_builder_push_data(builder, inst_param_type, SIrParamType);
       *param_type = (SIrParamType){
-        .function = type_destination,
+        .function_type = type_destination,
         .param_index = i,
       };
     }
@@ -495,28 +498,21 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_call: {
     AstCall *ast_call = ast_data(ast, idx_ast);
 
-    InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, ast_call->callee);
-    u32 arg_count = ast_call->count + 1;
-    SIrType *data_type = sir_builder_push_data_raw(builder, inst_type, sizeof(SIrType) + arg_count * sizeof(SRef), Align_of(SIrType));
-    *data_type = (SIrType){
-      .kind = Type_function,
-      .arg_count = arg_count,
-    };
-    data_type->args[0] = type_destination;
+    SRef callee = gen_code(gen, ast_call->callee, (SRef){0});
 
-    // Add parameter types
-    for (u32 i = 0; i < ast_call->count; i++) {
-      Todo(); // :) haha you still have to implement this
-    }
+    SRef *args = arena_push_array(SRef, gen->scratch, ast_call->count);
 
-    // TODO as a type destination you could at least set it to a function that must return a type
-    // of the current type destination. and you also know with how many arguments it is called.
-    // could that be useful in any way?
-    SRef callee = gen_code(gen, ast_call->callee, sref_from_instruction(inst_type));
-
-    // Evaluate all the arguments
-    for (u32 i = 0; i < ast_call->count; i++) {
-      Todo(); // :) haha you still have to implement this
+    if (ast_call->count > 0) {
+      InstructionIndex callee_type = sir_builder_add(builder, SIR_typeof, source_idx, ast_call->callee);
+      for (u32 i = 0; i < ast_call->count; i++) {
+        InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, ast_call->args[i]);
+        SIrParamType *data = sir_builder_push_data(builder, inst_param_type, SIrParamType);
+        *data = (SIrParamType){
+          .function_type = sref_from_instruction(callee_type),
+          .param_index = i,
+        };
+        args[i] = gen_code(gen, ast_call->args[i], sref_from_instruction(inst_param_type));
+      }
     }
 
     InstructionIndex inst_call = sir_builder_add(builder, SIR_call, source_idx, idx_ast);
@@ -527,7 +523,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       .arg_count = ast_call->count,
     };
 
-    Assert(ast_call->count == 0); // TODO: add the args to IR
+    for (u32 i = 0; i < ast_call->count; i++) {
+      call->args[i] = args[i];
+    }
 
     InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst_call), source_idx, idx_ast);
     return sref_from_instruction(i);
@@ -826,12 +824,6 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 
   AstKind kind = ast->kinds[idx_ast];
   switch (kind) {
-  case Ast_literal_int:
-  case Ast_literal_string:
-  case Ast_identifier: {
-    return declared_type;
-  } break;
-
   case Ast_block: {
     Todo();
   } break;
@@ -855,8 +847,6 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
     InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
 
     u32 arg_count = func->count + 1; // parameters + return type
-
-    Assert(func->count == 0);
 
     SIrType *data_type = sir_builder_push_data_raw(
       &gen->builder,
@@ -886,7 +876,7 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
   } break;
 
   default:
-    Todo();
+    return declared_type;
   }
 
   Unreachable();

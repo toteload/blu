@@ -77,19 +77,24 @@ typedef enum {
   SIR_repeat,         // contains InstructionIndex of loop block to repeat
   SIR_ret,            // contains SRef to value to return
   SIR_call,           // references SIrCall
-  SIR_and,
-  SIR_or,
-  SIR_mul,
-  SIR_div,
-  SIR_mod,
-  SIR_sub,
-  SIR_add,
+  SIR_and, // references SIrBinary
+  SIR_or, // references SIrBinary
+  SIR_mul, // references SIrBinary
+  SIR_div, // references SIrBinary
+  SIR_mod, // references SIrBinary
+  SIR_sub, // references SIrBinary
+  SIR_add, // references SIrBinary
   SIR_cmp_eq,         // references SIrBinary
   SIR_cmp_ne,         // references SIrBinary
   SIR_cmp_gt,         // references SIrBinary
   SIR_cmp_ge,         // references SIrBinary
   SIR_cmp_lt,         // references SIrBinary
   SIR_cmp_le,         // references SIrBinary
+  SIR_bitshift_left, // references SIrBinary
+  SIR_bitshift_right, // references SIrBinary
+  SIR_bit_and, // references SIrBinary
+  SIR_bit_or, // references SIrBinary
+  SIR_bit_xor, // references SIrBinary
   SIR_index,
   SIR_negate,         // contains SRef
   SIR_not,            // contains SRef
@@ -156,7 +161,7 @@ typedef struct {
 } SIrType;
 
 typedef struct {
-  SRef function;
+  SRef function_type;
   u32 param_index;
 } SIrParamType;
 
@@ -237,6 +242,10 @@ typedef enum {
   IIR_int_sub,
   IIR_int_mul,
   IIR_int_div,
+  IIR_int_mod,
+  IIR_bit_and,
+  IIR_bit_or,
+  IIR_bit_xor,
   IIR_builtin_debug, // contains IRef
 } IIrOpcode;
 

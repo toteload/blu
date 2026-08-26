@@ -175,19 +175,19 @@ void test_eval_unify(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32 = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
   TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_arr_i32_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
+  TypeIndex t_arr_i32_3      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
   TypeIndex t_arr_comptime_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
-  TypeIndex t_arr_i32_4 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
+  TypeIndex t_arr_i32_4      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
 
-  TypeIndex t_slice_i32 = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
-  TypeIndex t_slice_comptime = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
+  TypeIndex t_slice_i32        = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
+  TypeIndex t_slice_comptime   = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
   TypeIndex t_slice_incomplete = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
 
-  TypeIndex t_ptr_i32 = types_add_pointer(&types, t_i32);
+  TypeIndex t_ptr_i32      = types_add_pointer(&types, t_i32);
   TypeIndex t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
 
   TypeIndex unified;
@@ -239,20 +239,19 @@ void test_is_type_coercible_to(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32 = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
-  TypeIndex t_u8  = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 32 } });
+  TypeIndex t_u8           = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
   TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_fn_i32 = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32, .param_count = 0 } });
-  TypeIndex t_fn_i32_dup = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32, .param_count = 0 } });
+  TypeIndex t_fn_i32  = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
   TypeIndex t_fn_bool = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
 
   Test_assert_eq(is_type_coercible_to(&types, t_i32, t_i32), True);
   Test_assert_eq(is_type_coercible_to(&types, t_i32, t_comptime_int), True);
-  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_i32_dup), True);
+  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_i32), True);
   Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_bool), False);
-  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_bool), False);
+  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_bool), True);
   Test_assert_eq(is_type_coercible_to(&types, t_i32, t_u8), False);
 
   arena_deinit(&arena);

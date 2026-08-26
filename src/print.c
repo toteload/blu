@@ -283,7 +283,12 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_cmp_gt:
     case SIR_cmp_ge:
     case SIR_cmp_lt:
-    case SIR_cmp_le: {
+    case SIR_cmp_le:
+    case SIR_bitshift_left: 
+    case SIR_bitshift_right: 
+    case SIR_bit_and: 
+    case SIR_bit_or: 
+    case SIR_bit_xor: {
       SIrBinary *binary = extra;
       print_sref(out, compiler, binary->lhs);
       fputs(", ", out);
@@ -314,7 +319,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
 
     case SIR_param_type: {
       SIrParamType *p = extra;
-      print_sref(out, compiler, p->function);
+      print_sref(out, compiler, p->function_type);
       fprintf(out, " %u", p->param_index);
     } break;
 
@@ -460,6 +465,10 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       print_iref(out, compiler, (IRef){data});
     } break;
 
+    case IIR_bit_and:
+    case IIR_bit_or:
+    case IIR_bit_xor:
+    case IIR_int_mod:
     case IIR_int_add:
     case IIR_int_sub:
     case IIR_int_mul:
