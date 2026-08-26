@@ -54,7 +54,7 @@ def add_test_suite(out):
             )
 
     out.build(
-        outputs = outd(exe('blu.test')),
+        outputs = outd(exe('blu_unit_test')),
         rule    = 'build_binary',
         inputs  = outputs,
         )

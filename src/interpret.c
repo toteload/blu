@@ -253,7 +253,7 @@ internal u32 step(Interpreter *in) {
         Message_error(
           in->msg_sink,
           (MessageLocation){ .kind = MessageLocation_unspecified, },
-          string_lit("int_div_safe overflow")
+          string_lit("int_div_safe zero division")
         );
 
         return Step_zero_division;

@@ -1,5 +1,5 @@
 mod main
 
-T := T
+T : type = T
 
 main: () i32 = || { 0 }

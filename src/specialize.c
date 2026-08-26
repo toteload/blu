@@ -560,6 +560,8 @@ internal u32 step(Specializer *in, RunState *state) {
     SIrAs *as = sir_chunk_extra(f->chunk, pc);
     IRef ref = resolve(f, as->val);
 
+    Assert(!iref_is_nil(ref));
+
     TypeIndex type_dst;
     b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
     if (!ok) {
@@ -568,7 +570,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
     f->inst_types[pc] = type_dst;
 
-    // If the value is comptime known, we try to do the coercion right away.
+    // If the value is comptime known, we do the coercion right away.
     if (iref_is_some_value(ref)) {
       Value *v = values_get(in->values, iref_to_value(ref));
 

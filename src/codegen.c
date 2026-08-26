@@ -234,7 +234,7 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   case Mod: sir_op = SIR_mod; break;
   case Sub: sir_op = SIR_sub; break;
   case Add: sir_op = SIR_add; break;
-  case Cmp_equal:     sir_op = SIR_cmp_eq; break;
+  case Cmp_equal: sir_op = SIR_cmp_eq; break;
   case Cmp_not_equal: sir_op = SIR_cmp_ne; break;
   case Cmp_greater_than: sir_op = SIR_cmp_gt; break;
   case Cmp_greater_equal: sir_op = SIR_cmp_ge; break;
@@ -918,11 +918,23 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
     SRef ref_decl_type = {0};
     if (ast_decl->type) {
-      SRef ref_type = sref_from_value(gen.common->val.type);
-      ref_decl_type = gen_code(&gen, ast_decl->type, ref_type);
+      ref_decl_type = gen_code(&gen, ast_decl->type, sref_from_value(gen.common->val.type));
     }
 
     SRef ref_decl_type_of_val = gen_code_for_declaration_type(&gen, ast_decl->value, ref_decl_type);
+
+    if (sref_is_nil(ref_decl_type_of_val)) {
+      Message_error(
+        gen.msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ast_index,
+          .source_idx = gen.source->idx,
+          .data.ast_index = ast_idx_decl,
+        },
+        string_lit("Declaration has no type defined")
+      );
+      gen.has_error = True;
+    }
 
     sir_builder_end_block_with(builder, block, block, ref_decl_type_of_val, source->idx, ast_idx_decl);
 
