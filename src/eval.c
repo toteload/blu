@@ -152,6 +152,8 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
   case Type_never:
   case Type_nil:
   case Type_type:
+  case Type_usize:
+  case Type_isize:
     return True;
   case Type_array: return t->data.array.base_type != 0;
   case Type_slice: return t->data.slice.base_type != 0;

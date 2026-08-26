@@ -240,7 +240,12 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   case Cmp_greater_equal: sir_op = SIR_cmp_ge; break;
   case Cmp_less_than: sir_op = SIR_cmp_lt; break;
   case Cmp_less_equal: sir_op = SIR_cmp_le; break;
-  default: Todo();
+  case Bit_shift_left: Todo(); break;
+  case Bit_shift_right: Todo(); break;
+  case Bit_and: Todo(); break;
+  case Bit_or: Todo(); break;
+  case Bit_xor: Todo(); break;
+  case BinaryOpKind_count: Unreachable();
   }
   // clang-format off
 
@@ -254,6 +259,17 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   return inst;
 }
 
+SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination);
+
+SRef gen_comptime_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
+  SIrBuilder *builder = &gen->builder;
+  SourceIndex source_idx = gen->source->idx;
+  InstructionIndex inst_block = sir_builder_add(builder, SIR_comptime_block, source_idx, idx_ast);
+  SRef ref = gen_code(gen, idx_ast, type_destination);
+  sir_builder_end_block_with(builder, inst_block, inst_block, ref, source_idx, idx_ast);
+  return sref_from_instruction(inst_block);
+}
+
 SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   String text = gen->source->text;
   Tokens *tokens = &gen->source->tokens;
@@ -263,8 +279,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   AstKind kind = ast->kinds[idx_ast];
   switch (kind) {
-  case Ast_source: { PanicMsg("Encountered 'Ast_source' in gen_code, which should never happen."); } break;
+  case Ast_source:      { PanicMsg("Encountered 'Ast_source' in gen_code, which should never happen."); } break;
   case Ast_mod_section: { PanicMsg("Encountered 'Ast_mod_section' in gen_code, which should never happen."); } break;
+  case Ast_param:       { PanicMsg("Encountered 'Ast_param' in gen_code, which should never happen."); } break;
+  case Ast_label:       { PanicMsg("Encountered 'Ast_label' in gen_code, which should never happen."); } break;
 
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
@@ -358,7 +376,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
-   SRef ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
+    SRef ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
 
     for (u32 i = 0; i < func->count; i++) {
       // TODO Add the parameter types
@@ -537,10 +555,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     void *data = values_alloc_data(gen->values, s.len, 1);
     u32 len;
-    u32 err = decode_string_literal(s, data, &len);
-    if (err) {
-      Todo();
-    }
+    decode_string_literal(s, data, &len);
 
     TypeIndex type = types_add(gen->types, &(Type){
       .kind = Type_array,
@@ -574,7 +589,19 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   } break;
 
   case Ast_type_array: {
-    Todo();
+    AstTypeArray *array = ast_data(ast, idx_ast);
+
+    SRef array_size = gen_comptime_code(gen, array->base, sref_from_value(gen->common->val.usize));
+
+    SRef base_type = gen_code(gen, array->base, sref_from_value(gen->common->val.type));
+
+    InstructionIndex inst = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
+    SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + 2 * sizeof(SRef), Align_of(SIrType));
+    data->kind = Type_array;
+    data->arg_count = 2;
+    data->args[1] = array_size;
+    data->args[1] = base_type;
+    return sref_from_instruction(inst);
   } break;
 
   case Ast_assign: { 
@@ -617,8 +644,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     return sref_from_instruction(inst_store);
   } break;
-
-  case Ast_label: { Todo(); } break;
 
   case Ast_index: {
     AstIndexData *index = ast_data(ast, idx_ast);
@@ -672,8 +697,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex i = sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(x), source_idx, idx_ast);
     return sref_from_instruction(i);
   } break;
-
-  case Ast_param: { Todo(); } break;
 
   case Ast_while: { 
     AstWhile *ast_while = ast_data(ast, idx_ast);
@@ -821,9 +844,12 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
       ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
     }
 
+    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+
     // Output param type expressions
     for (u32 i = 0; i < func->count; i++) {
-      Todo();
+      AstParam *ast_param = ast_data(ast, func->params[i]);
+      param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
     }
 
     InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
@@ -844,6 +870,10 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
     };
 
     data_type->args[0] = ref_ret_type;
+
+    for (u32 i = 0; i < func->count; i++) {
+      data_type->args[1 + i] = param_types[i];
+    }
 
     InstructionIndex inst_unify = sir_builder_add(builder, SIR_unify, source_idx, idx_ast);
     SIrUnify *data_unify = sir_builder_push_data(builder, inst_unify, SIrUnify);

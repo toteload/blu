@@ -17,6 +17,12 @@ void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
 
   Type *type = types_get(types, idx);
   switch (Cast(TypeKind, type->kind)) {
+  case Type_usize: {
+    fputs("usize", out);
+  } break;
+  case Type_isize: {
+    fputs("isize", out);
+  } break;
   case Type_comptime_int: {
     fputs("comptime_int", out);
   } break;
@@ -108,6 +114,8 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
       fprintf(out, "0x%p", data);
     }
   } break;
+  case Type_usize: Todo(); // need some data/mechanism in the compiler to query the pointer width of the target system
+  case Type_isize: Todo(); // need some data/mechanism in the compiler to query the pointer width of the target system
   case Type_pointer:
   case Type_nil:
   case Type_never:
@@ -150,6 +158,8 @@ internal char const* typekind_string(u8 kind) {
   switch (Cast(TypeKind, kind)) {
   case Type_comptime_int: return "comptime_int";
   case Type_integer:      return "integer";
+  case Type_usize:      return "usize";
+  case Type_isize:      return "isize";
   case Type_bool:         return "bool";
   case Type_function:     return "function";
   case Type_nil:          return "nil";

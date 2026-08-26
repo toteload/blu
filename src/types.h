@@ -5,6 +5,8 @@
 
 typedef enum {
   Type_comptime_int,
+  Type_usize, // pointer-width unsigned int
+  Type_isize, // pointer-width signed int
   Type_integer,
   Type_bool,
   Type_function,

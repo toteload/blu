@@ -134,6 +134,8 @@ u32 type_intern_byte_size(Type *type) {
   case Type_type:
   case Type_slice:
   case Type_pointer:
+  case Type_usize:
+  case Type_isize:
   case Type_array:
     return sizeof(Type);
   case Type_function:
@@ -245,6 +247,8 @@ String write_type(Arena *arena, TypeInterner *types, TypeIndex type) {
   case Type_comptime_int: return arena_copy_string(arena, string_lit("comptime_int"));
   case Type_bool: return arena_copy_string(arena, string_lit("bool"));
   case Type_nil: return arena_copy_string(arena, string_lit("nil"));
+  case Type_usize: return arena_copy_string(arena, string_lit("usize"));
+  case Type_isize: return arena_copy_string(arena, string_lit("isize"));
   case Type_never: return arena_copy_string(arena, string_lit("never"));
   case Type_type: return arena_copy_string(arena, string_lit("type"));
   case Type_integer: {

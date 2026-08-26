@@ -1073,7 +1073,9 @@ internal u32 step(Specializer *in, RunState *state) {
 
     TypeIndex type;
     b32 ok = expect_some_type_value(in, f, ref, &type);
-    Assert(ok);
+    if (!ok) {
+      Todo();
+    }
 
     Type *t = types_get(in->types, type);
 

@@ -145,7 +145,7 @@ void ttld_panic_handler(char const *func, char const *file, i32 line);
 #define TodoMsg(msg) do { fprintf(stderr, "TODO: %s. ", msg); Panic(); } while (0)
 #define Assert(e) assert(e)
 #define Panic()   do { ttld_panic_handler(TTLD_FUNC, __FILE__, __LINE__); Unreachable(); } while (0)
-#define PanicMsg(format, ...) do { fprintf(stderr, format, ##__VA_ARGS__); Panic(); } while (0)
+#define PanicMsg(msg) do { fprintf(stderr, "%s", msg); Panic(); } while (0)
 
 typedef struct String {
   u8 const *str;
