@@ -153,9 +153,9 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
   case Type_nil:
   case Type_type:
     return True;
-  case Type_array: Todo();
-  case Type_slice: Todo();
-  case Type_pointer: Todo();
+  case Type_array: return t->data.array.base_type != 0;
+  case Type_slice: return t->data.slice.base_type != 0;
+  case Type_pointer: return t->data.pointer.base_type != 0;
   case Type_function: {
     if (t->data.function.return_type == 0) {
       return False;
@@ -173,13 +173,13 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
 }
 
 u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified) {
+  if (a == 0 && b == 0) {
+    return UnifyResult_type_is_incomplete;
+  }
+
   if (a == b) {
     *unified = a;
     return UnifyResult_ok;
-  }
-
-  if (a == 0 && b == 0) {
-    return UnifyResult_type_is_incomplete;
   }
 
   if (a == 0) {
@@ -251,7 +251,57 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
-  Todo();
+  if (type_lhs->kind == Type_array && type_rhs->kind == Type_array) {
+    if (type_lhs->data.array.size != type_rhs->data.array.size) {
+      return UnifyResult_types_cannot_be_unified;
+    }
+
+    TypeIndex base_type;
+    u32 err = eval_unify(scratch, types, type_lhs->data.array.base_type, type_rhs->data.array.base_type, &base_type);
+    if (err) {
+      return err;
+    }
+
+    TypeIndex res = types_add(types, &(Type){
+      .kind = Type_array,
+      .data.array = { .base_type = base_type, .size = type_lhs->data.array.size },
+    });
+
+    *unified = res;
+
+    return UnifyResult_ok;
+  }
+
+  if (type_lhs->kind == Type_slice && type_rhs->kind == Type_slice) {
+    TypeIndex base_type;
+    u32 err = eval_unify(scratch, types, type_lhs->data.slice.base_type, type_rhs->data.slice.base_type, &base_type);
+    if (err) {
+      return err;
+    }
+
+    TypeIndex res = types_add(types, &(Type){
+      .kind = Type_slice,
+      .data.slice = { .base_type = base_type },
+    });
+
+    *unified = res;
+
+    return UnifyResult_ok;
+  }
+
+  if (type_lhs->kind == Type_pointer && type_rhs->kind == Type_pointer) {
+    TypeIndex base_type;
+    u32 err = eval_unify(scratch, types, type_lhs->data.pointer.base_type, type_rhs->data.pointer.base_type, &base_type);
+    if (err) {
+      return err;
+    }
+
+    TypeIndex res = types_add_pointer(types, base_type);
+
+    *unified = res;
+
+    return UnifyResult_ok;
+  }
 
   return UnifyResult_types_cannot_be_unified;
 }

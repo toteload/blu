@@ -203,7 +203,7 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
     return True;
   }
 
-  Todo();
+  return False;
 }
 
 TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {

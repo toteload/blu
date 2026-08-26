@@ -286,7 +286,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     } break;
 
     case SIR_block:
-    case SIR_eval_block:
+    case SIR_comptime_block:
     case SIR_loop: {
       fprintf(out, "count=%u", data);
       stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));

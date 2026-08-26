@@ -417,7 +417,7 @@ internal u32 step(Specializer *in, RunState *state) {
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
 
   switch (op) {
-  case SIR_eval_block: {
+  case SIR_comptime_block: {
     Todo();
   } break;
 
@@ -612,7 +612,19 @@ internal u32 step(Specializer *in, RunState *state) {
       TypeIndex from = ref_typeof(in, f, as->val);
 
       if (!is_type_coercible_to(in->types, type_dst, from)) {
-        Todo();
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ir_instruction,
+            .decl_idx = f->decl_idx,
+            .data.offset = s->pc,
+          },
+          string_lit("Cannot coerce value of type %type to type %type"),
+          from,
+          type_dst
+        );
+
+        return Step_error;
       }
 
       // TODO: check that no widening is necessary for this coercion
@@ -706,7 +718,23 @@ internal u32 step(Specializer *in, RunState *state) {
       );
     } break;
 
-    case Type_slice: { Todo(); } break;
+    case Type_slice: {
+      Assert(type->arg_count == 1);
+
+      TypeIndex base_type;
+      b32 ok = expect_type_value_or_nil(in, f, type->args[0], &base_type);
+      if (!ok) {
+        Todo();
+      }
+
+      t = types_add(
+        in->types,
+        &(Type){
+          .kind = Type_slice,
+          .data.slice = { .base_type = base_type },
+        }
+      );
+    } break;
 
     default:
       Panic(); Unreachable();
@@ -1054,8 +1082,14 @@ internal u32 step(Specializer *in, RunState *state) {
     case Type_pointer:
       base_type = t->data.pointer.base_type;
       break;
+    case Type_array:
+      base_type = t->data.array.base_type;
+      break;
+    case Type_slice:
+      base_type = t->data.slice.base_type;
+      break;
     default:
-      Todo(); Unreachable();
+      Panic(); Unreachable();
     }
 
     ValueIndex v = val_from_type(in, base_type);
@@ -1072,21 +1106,15 @@ internal u32 step(Specializer *in, RunState *state) {
     IRef val = resolve(f, ref);
 
     if (iref_is_some_value(val)) {
-      Todo();
+      TypeIndex t = type_of_val(in, iref_to_value(val));
+      ValueIndex vtype = val_from_type(in, t);
+      store_inst_value(f, pc, iref_from_value(vtype));
     } else {
       InstructionIndex res_idx = iref_to_instruction(val);
-      IIrOpcode res_op = iir_builder_get_opcode(builder, res_idx);
-
-      switch (res_op) {
-      case IIR_alloc: {
-        TypeIndex t = iir_builder_get_type(builder, res_idx);
-        TypeIndex ptr_type = types_add_pointer(in->types, t);
-        ValueIndex vtype = val_from_type(in, ptr_type);
-        store_inst_value(f, pc, iref_from_value(vtype));
-      } break;
-      default:
-        Todo();
-      }
+      TypeIndex t = iir_builder_get_type(builder, res_idx);
+      TypeIndex ptr_type = types_add_pointer(in->types, t);
+      ValueIndex vtype = val_from_type(in, ptr_type);
+      store_inst_value(f, pc, iref_from_value(vtype));
     }
 
     s->pc += 1;

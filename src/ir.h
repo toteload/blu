@@ -94,7 +94,7 @@ typedef enum {
   SIR_negate,         // contains SRef
   SIR_not,            // contains SRef
   SIR_builtin_debug,  // contains SRef
-  SIR_eval_block,     // contains instruction count of block
+  SIR_comptime_block, // contains instruction count of block
   SIR_lookup_decl_value,   // contains DeclarationIndex
   SIR_lookup_decl_type,  // contains DeclarationIndex
   SIR_comptime_alloc, // contains SRef to a type

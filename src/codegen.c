@@ -884,7 +884,7 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
   InstructionIndex block_decl_type;
   {
-    InstructionIndex block = sir_builder_add(builder, SIR_eval_block, source->idx, ast_idx_decl);
+    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
 
     SRef ref_decl_type = {0};
     if (ast_decl->type) {
@@ -901,7 +901,7 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
   InstructionIndex block_decl_val;
   {
-    InstructionIndex block = sir_builder_add(builder, SIR_eval_block, source->idx, ast_idx_decl);
+    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
 
     InstructionIndex decl_type = sir_builder_add(builder, SIR_lookup_decl_type, source->idx, ast_idx_decl);
     sir_builder_set_data(builder, decl_type, decl->idx);

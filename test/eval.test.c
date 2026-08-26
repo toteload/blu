@@ -5,6 +5,31 @@
 #include "eval.h"
 #include "test.h"
 
+internal void *test_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
+  Unused(ctx, old_byte_size, align);
+
+  if (!is_null(p) && new_byte_size == 0) {
+    free(p);
+    return Null;
+  }
+
+  return realloc(p, new_byte_size);
+}
+
+internal TypeInterner test_types_init(Arena *arena, Arena *scratch) {
+  TypeInterner types;
+  types_init(
+    &types,
+    &(InternerOptions){
+      .arena          = arena,
+      .map_allocator  = (Allocator){ .fn = test_alloc_fn },
+      .map_initial_size = 32,
+      .context        = scratch,
+    }
+  );
+  return types;
+}
+
 internal TypeInteger int_type(u8 signedness, u16 bitwidth) {
   return (TypeInteger){ .signedness = signedness, .bitwidth = bitwidth };
 }
@@ -140,6 +165,100 @@ void test_eval_int_div_safe(TestResult *test, void *user) {
   }
 }
 
+void test_eval_unify(TestResult *test, void *user) {
+  Unused(user);
+
+  Arena arena;
+  arena_init(&arena, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+  Arena scratch;
+  arena_init(&scratch, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+
+  TypeInterner types = test_types_init(&arena, &scratch);
+
+  TypeIndex t_i32 = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
+  TypeIndex t_bool = types_add(&types, &(Type){ .kind = Type_bool });
+
+  TypeIndex t_arr_i32_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
+  TypeIndex t_arr_comptime_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
+  TypeIndex t_arr_i32_4 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
+
+  TypeIndex t_slice_i32 = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
+  TypeIndex t_slice_comptime = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
+  TypeIndex t_slice_incomplete = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
+
+  TypeIndex t_ptr_i32 = types_add_pointer(&types, t_i32);
+  TypeIndex t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
+
+  TypeIndex unified;
+  u32 err;
+
+  // Identical array types unify trivially.
+  err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_3, &unified);
+  Test_assert_eq(err, UnifyResult_ok);
+  Test_assert_eq(unified, t_arr_i32_3);
+
+  // Arrays with a comptime_int element unify element-wise into the concrete integer array.
+  err = eval_unify(&scratch, &types, t_arr_comptime_3, t_arr_i32_3, &unified);
+  Test_assert_eq(err, UnifyResult_ok);
+  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.array.base_type, t_i32);
+
+  // Arrays of differing size cannot be unified.
+  err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_4, &unified);
+  Test_assert_eq(err, UnifyResult_types_cannot_be_unified);
+
+  // Slices unify their base types, same as arrays.
+  err = eval_unify(&scratch, &types, t_slice_comptime, t_slice_i32, &unified);
+  Test_assert_eq(err, UnifyResult_ok);
+  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32);
+
+  // A slice whose base type is still unknown (TypeIndex 0) is itself incomplete.
+  err = eval_unify(&scratch, &types, 0, t_slice_incomplete, &unified);
+  Test_assert_eq(err, UnifyResult_type_is_incomplete);
+
+  // Pointers unify their base types.
+  err = eval_unify(&scratch, &types, t_ptr_comptime, t_ptr_i32, &unified);
+  Test_assert_eq(err, UnifyResult_ok);
+  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.pointer.base_type, t_i32);
+
+  // Unrelated kinds cannot be unified.
+  err = eval_unify(&scratch, &types, t_bool, t_arr_i32_3, &unified);
+  Test_assert_eq(err, UnifyResult_types_cannot_be_unified);
+
+  arena_deinit(&arena);
+  arena_deinit(&scratch);
+}
+
+void test_is_type_coercible_to(TestResult *test, void *user) {
+  Unused(user);
+
+  Arena arena;
+  arena_init(&arena, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+  Arena scratch;
+  arena_init(&scratch, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+
+  TypeInterner types = test_types_init(&arena, &scratch);
+
+  TypeIndex t_i32 = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  TypeIndex t_u8  = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
+  TypeIndex t_bool = types_add(&types, &(Type){ .kind = Type_bool });
+
+  TypeIndex t_fn_i32 = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32, .param_count = 0 } });
+  TypeIndex t_fn_i32_dup = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32, .param_count = 0 } });
+  TypeIndex t_fn_bool = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
+
+  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_i32), True);
+  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_comptime_int), True);
+  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_i32_dup), True);
+  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_bool), False);
+  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_bool), False);
+  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_u8), False);
+
+  arena_deinit(&arena);
+  arena_deinit(&scratch);
+}
+
 void register_eval_tests(TestRunner *runner) {
 #define EvalTest(function) \
   test_runner_register_test(runner, string_lit(#function), function, Null)
@@ -148,6 +267,8 @@ void register_eval_tests(TestRunner *runner) {
   EvalTest(test_eval_int_sub_safe);
   EvalTest(test_eval_int_mul_safe);
   EvalTest(test_eval_int_div_safe);
+  EvalTest(test_eval_unify);
+  EvalTest(test_is_type_coercible_to);
 
 #undef EvalTest
 }
