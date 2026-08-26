@@ -53,3 +53,4 @@ There is some type inference, but nothing fancy like Hindley-Milner.
 
 I use Claude Code to assist in debugging and analyzing the code.
 Claude Code has generated some of the tests, after first writing an example test, generated the first version of printing IR and generated some of the more boilerplatey code, like the eval functions for integer operations.
+I am experimenting with how to use LLMs in a way that works for me, so it is possible that in the future more code will be written with Claude.

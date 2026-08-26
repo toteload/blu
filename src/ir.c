@@ -37,16 +37,16 @@
 // Specializer IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op) {
+InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_idx, AstIndex ast_idx) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
-  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ 0, 0 });
+  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx });
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;
 }
 
-InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val) {
-  InstructionIndex idx = sir_builder_add(builder, SIR_as);
+InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx) {
+  InstructionIndex idx = sir_builder_add(builder, SIR_as, source_idx, ast_idx);
 
   SIrAs *data = sir_builder_push_data(builder, idx, SIrAs);
   *data = (SIrAs){
@@ -63,16 +63,12 @@ void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 s
   return p;
 }
 
-void sir_builder_set_source(SIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx) {
-  *sourcelist_ptr_at_unchecked(&builder->ast_source, idx) = (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx };
-}
-
 void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
-InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref) {
-  InstructionIndex br = sir_builder_add(builder, SIR_br);
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx) {
+  InstructionIndex br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
 
   SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
   *data = (SIrBr){

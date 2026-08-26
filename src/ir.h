@@ -198,18 +198,17 @@ typedef struct {
   InstDataList data;
 } SIrBuilder;
 
-InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op);
-InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val);
+InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_idx, AstIndex ast_idx);
+InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx);
 
 void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
 
 #define sir_builder_push_data(builder, idx, type)                                                  \
   sir_builder_push_data_raw(builder, idx, sizeof(type), Align_of(type))
 
-void sir_builder_set_source(SIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
 void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data);
 
-InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx);
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex idx);
 void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk);
