@@ -469,6 +469,9 @@ internal u32 step(Specializer *in, RunState *state) {
 
       InstructionIndex inst_param = iir_builder_add(builder, IIR_param);
       iir_builder_set_type(builder, inst_param, param_type);
+
+      store_inst_value(f, pc + 1 + i, iref_from_instruction(inst_param));
+      f->inst_types[pc + 1 + i] = param_type;
     }
 
     stack_push(
@@ -477,7 +480,7 @@ internal u32 step(Specializer *in, RunState *state) {
         .scope_kind = Scope_func,
         .start = pc,
         .end = pc + inst_count,
-        .pc = pc + 1,
+        .pc = pc + 1 + func->param_count,
       })
     );
 
@@ -1235,21 +1238,7 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  case SIR_param: {
-    TypeIndex type;
-    b32 ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
-    if (!ok) {
-      return Step_error;
-    }
-
-    ScopeSpan *func = get_func_scope(f);
-    InstructionIndex inst = pc - func->start;
-
-    store_inst_value(f, pc, iref_from_instruction(inst));
-    f->inst_types[pc] = type;
-
-    s->pc += 1;
-  } break;
+  case SIR_param: { Unreachable(); } break;
 
   case SIR_loop: { Todo(); } break;
   case SIR_repeat: { Todo(); } break;
