@@ -33,7 +33,7 @@ def main():
     for path in sorted(SNIPPETS.rglob("*.blu")):
         rel = path.relative_to(ROOT)
         want_code = 1 if "error" in path.relative_to(SNIPPETS).parts else 0
-        code, output = run(path)
+        code, output = run(rel)
 
         if code != want_code:
             print(f"FAIL {rel}: exit {code}, expected {want_code}")

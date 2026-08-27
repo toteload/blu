@@ -1,1 +1,1 @@
-[error] /Users/davidbos/code/blu/test/snippet/error/recursive_type.blu: Encountered circular declaration
+[error] test/snippet/error/recursive_type.blu: Encountered circular declaration
