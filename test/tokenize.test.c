@@ -112,7 +112,7 @@ void test_keywords_and_identifiers(TestResult *test, TokenizeContext *context) {
 
 void test_newlines_and_comments_dropped(TestResult *test, TokenizeContext *context) {
   Tokens toks;
-  b32 ok = tokenize(context, string_lit("a\n; comment\nb"), &toks);
+  b32 ok = tokenize(context, string_lit("a\n// comment\nb"), &toks);
   Test_assert(ok);
   Test_assert_eq(toks.tok_count, 2);          // only `a` and `b`
   Test_assert_eq(toks.kinds[0], Tok_identifier);
