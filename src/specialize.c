@@ -570,16 +570,9 @@ internal u32 step(Specializer *in, RunState *state) {
     Assert(!iref_is_nil(ref));
 
     TypeIndex type_dst;
-    b32 ok = expect_type_value_or_nil(in, f, as->type_to, &type_dst);
+    b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
     if (!ok) {
       return Step_error;
-    }
-
-    if (type_dst == 0) {
-      store_inst_value(f, pc, ref);
-      f->inst_types[pc] = ref_typeof(in, f, as->val);
-      s->pc += 1;
-      break;
     }
 
     f->inst_types[pc] = type_dst;

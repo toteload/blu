@@ -45,7 +45,11 @@ InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_
   return idx;
 }
 
-InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx) {
+SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx) {
+  if (sref_is_nil(type_destination)) {
+    return val;
+  }
+
   InstructionIndex idx = sir_builder_add(builder, SIR_as, source_idx, ast_idx);
 
   SIrAs *data = sir_builder_push_data(builder, idx, SIrAs);
@@ -54,7 +58,7 @@ InstructionIndex sir_builder_add_as(SIrBuilder *builder, SRef type_destination, 
     .val = val,
   };
 
-  return idx;
+  return sref_from_instruction(idx);
 }
 
 void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 size, u32 align) {
