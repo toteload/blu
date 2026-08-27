@@ -417,6 +417,8 @@ internal u32 step(Specializer *in, RunState *state) {
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
 
   switch (op) {
+  case SIR_param: { Unreachable(); } break;
+
   case SIR_comptime_block: {
     Todo();
   } break;
@@ -464,6 +466,7 @@ internal u32 step(Specializer *in, RunState *state) {
       TypeIndex param_type;
       ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc + 1 + i)}, &param_type);
       if (!ok) {
+        Todo(); // report problem. can this happen?
         return Step_error;
       }
 
@@ -623,23 +626,32 @@ internal u32 step(Specializer *in, RunState *state) {
 
       TypeIndex from = ref_typeof(in, f, as->val);
 
-      if (!is_type_coercible_to(in->types, type_dst, from)) {
-        Message_error(
-          in->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_ir_instruction,
-            .decl_idx = f->decl_idx,
-            .data.offset = s->pc,
-          },
-          string_lit("Cannot coerce value of type %type to type %type"),
-          from,
-          type_dst
-        );
+      if (type_dst != from) {
+        if (!is_type_coercible_to(in->types, type_dst, from)) {
+          Message_error(
+            in->msg_sink,
+            (MessageLocation){
+              .kind = MessageLocation_ir_instruction,
+              .decl_idx = f->decl_idx,
+              .data.offset = s->pc,
+            },
+            string_lit("Cannot coerce value of type %type to type %type"),
+            from,
+            type_dst
+          );
 
-        return Step_error;
+          return Step_error;
+        }
+
+        // TODO add different casts for when there are more than just integer types
+
+        IIrBuilder *builder = get_builder(in);
+        InstructionIndex inst = iir_builder_add(builder, IIR_int_cast);
+        iir_builder_set_data(builder, inst, iref_to_u32(ref));
+        iir_builder_set_type(builder, inst, type_dst);
+
+        ref = iref_from_instruction(inst);
       }
-
-      // TODO: check that no widening is necessary for this coercion
 
       store_inst_value(f, pc, ref);
       store_inst_type(f, pc, type_dst);
@@ -785,7 +797,9 @@ internal u32 step(Specializer *in, RunState *state) {
 
     TypeIndex type_unified;
     u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
-    Assert(!err);
+    if (err) {
+      Todo();
+    }
 
     ValueIndex v = val_from_type(in, type_unified);
     store_inst_value(f, pc, iref_from_value(v));
@@ -1144,14 +1158,13 @@ internal u32 step(Specializer *in, RunState *state) {
 
     if (iref_is_some_value(val)) {
       TypeIndex t = type_of_val(in, iref_to_value(val));
-      ValueIndex vtype = val_from_type(in, t);
-      store_inst_value(f, pc, iref_from_value(vtype));
+      ValueIndex v = val_from_type(in, t);
+      store_inst_value(f, pc, iref_from_value(v));
     } else {
-      InstructionIndex res_idx = iref_to_instruction(val);
-      TypeIndex t = iir_builder_get_type(builder, res_idx);
-      TypeIndex ptr_type = types_add_pointer(in->types, t);
-      ValueIndex vtype = val_from_type(in, ptr_type);
-      store_inst_value(f, pc, iref_from_value(vtype));
+      InstructionIndex i = sref_to_instruction(ref);
+      TypeIndex t = f->inst_types[i];
+      ValueIndex v = val_from_type(in, t);
+      store_inst_value(f, pc, iref_from_value(v));
     }
 
     s->pc += 1;
@@ -1238,21 +1251,82 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  case SIR_param: { Unreachable(); } break;
 
   case SIR_loop: { Todo(); } break;
   case SIR_repeat: { Todo(); } break;
+
   case SIR_and: { Todo(); } break;
   case SIR_or: { Todo(); } break;
-  case SIR_cmp_eq: { Todo(); } break;
-  case SIR_cmp_ne: { Todo(); } break;
-  case SIR_cmp_gt: { Todo(); } break;
-  case SIR_cmp_ge: { Todo(); } break;
-  case SIR_cmp_lt: { Todo(); } break;
-  case SIR_cmp_le: { Todo(); } break;
+
+  case SIR_cmp_eq:
+  case SIR_cmp_ne:
+  case SIR_cmp_gt:
+  case SIR_cmp_ge:
+  case SIR_cmp_lt:
+  case SIR_cmp_le: {
+    //Todo();
+
+#if 1
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
+    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+
+    if (type_lhs != type_rhs || type_lhs == 0) {
+      Todo();
+    }
+
+    Type *t = types_get(in->types, type_lhs);
+    b32 ok = check_can_type_cmp(t);
+    if (!ok) {
+      Todo();
+    }
+
+    store_inst_type(f, pc, in->common->type.bool);
+
+    IRef lhs = resolve(f, bin->lhs);
+    IRef rhs = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      Todo();
+      break;
+    }
+
+    u8 iir_op;
+    // clang-format off
+    switch (op) {
+    case SIR_cmp_eq: iir_op = IIR_int_cmp_eq; break;
+    case SIR_cmp_ne: iir_op = IIR_int_cmp_ne; break;
+    case SIR_cmp_gt: iir_op = IIR_int_cmp_gt; break;
+    case SIR_cmp_ge: iir_op = IIR_int_cmp_ge; break;
+    case SIR_cmp_lt: iir_op = IIR_int_cmp_lt; break;
+    case SIR_cmp_le: iir_op = IIR_int_cmp_le; break;
+    default: Unreachable();
+    }
+    // clang-format on
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, iir_op);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, lhs),
+      .rhs = copy_if_value(in, rhs),
+    };
+
+    iir_builder_set_type(builder, inst, in->common->type.bool);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
+#endif
+  } break;
+
   case SIR_index: { Todo(); } break;
+
   case SIR_negate: { Todo(); } break;
+
   case SIR_not: { Todo(); } break;
+
   case SIR_param_type: {
     SIrParamType *param_type = sir_chunk_extra(f->chunk, pc);
 

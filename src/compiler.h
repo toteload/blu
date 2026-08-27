@@ -17,7 +17,9 @@ typedef struct {
     TypeIndex never;
     TypeIndex u8;
     TypeIndex i8;
+    TypeIndex i16;
     TypeIndex i32;
+    TypeIndex i64;
     TypeIndex usize;
   } type;
 
@@ -26,8 +28,10 @@ typedef struct {
     ValueIndex nil;
     ValueIndex bool;
     ValueIndex never;
-    ValueIndex i32;
     ValueIndex i8;
+    ValueIndex i16;
+    ValueIndex i32;
+    ValueIndex i64;
     ValueIndex u8;
     ValueIndex comptime_int;
     ValueIndex usize;

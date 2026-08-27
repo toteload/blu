@@ -216,6 +216,14 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
     return True;
   }
 
+  if (type_from->kind == Type_integer && type_to->kind == Type_integer) {
+    if (type_from->data.integer.signedness == type_to->data.integer.signedness) {
+      return type_from->data.integer.bitwidth <= type_to->data.integer.bitwidth;
+    } else {
+      Todo();
+    }
+  }
+
   if (type_from->kind == Type_bool && type_to->kind == Type_integer) {
     return True;
   }
@@ -232,6 +240,14 @@ TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
 }
 
 b32 check_can_type_add(Type *t) {
+  if (t->kind == Type_comptime_int || t->kind == Type_integer) {
+    return True;
+  }
+
+  return False;
+}
+
+b32 check_can_type_cmp(Type *t) {
   if (t->kind == Type_comptime_int || t->kind == Type_integer) {
     return True;
   }

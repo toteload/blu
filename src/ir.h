@@ -236,8 +236,11 @@ typedef enum {
   IIR_condbr, // references `ICondbr`
   IIR_br, // contains IRef
   IIR_repeat, // contains `InstructionIndex` for the loop
-  IIR_ret, // contains Iref
+  IIR_ret, // contains IRef
   IIR_call, // references `ICall`
+
+  // int_cast is for widening integer casts that cannot fail.
+  IIR_int_cast, // contains IRef
   IIR_int_add,
   IIR_int_sub,
   IIR_int_mul,
@@ -246,6 +249,12 @@ typedef enum {
   IIR_bit_and,
   IIR_bit_or,
   IIR_bit_xor,
+  IIR_int_cmp_eq,
+  IIR_int_cmp_ne,
+  IIR_int_cmp_gt,
+  IIR_int_cmp_ge,
+  IIR_int_cmp_lt,
+  IIR_int_cmp_le,
   IIR_builtin_debug, // contains IRef
 } IIrOpcode;
 

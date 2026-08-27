@@ -25,6 +25,10 @@ typedef struct {
   u32 offset;
 } ValuePointer;
 
+typedef struct {
+  DeclarationIndex idx;
+} ValueDeclarationStub;
+
 // -----------------------------------------------------------------------------
 
 #define SEGMENTLIST_NAME          ValueList

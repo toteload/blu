@@ -30,12 +30,28 @@ internal b32 cmp_string_index(void *context, StringIndex a, StringIndex b) {
   return a == b;
 }
 
-#define HASHMAP_NAME       LocalsMap
-#define HASHMAP_KEY_TYPE   StringIndex
-#define HASHMAP_VALUE_TYPE InstructionIndex
+typedef enum {
+  Lookup_param,
+  Lookup_local,
+  Lookup_decl,
+  Lookup_block,
+} LookupKind;
+
+typedef struct {
+  u8 kind;
+
+  // A param can be referenced directly.
+  // A local must be loaded first.
+  // A decl ???
+  InstructionIndex inst;
+} LookupEntry;
+
+#define HASHMAP_NAME            LocalsMap
+#define HASHMAP_KEY_TYPE        StringIndex
+#define HASHMAP_VALUE_TYPE      LookupEntry
 #define HASHMAP_FUNCTION_PREFIX locals
-#define HASHMAP_HASH_FN hash_string_index
-#define HASHMAP_KEY_COMPARE_FN cmp_string_index
+#define HASHMAP_HASH_FN         hash_string_index
+#define HASHMAP_KEY_COMPARE_FN  cmp_string_index
 #define HASHMAP_OUTPUT_TYPES
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
@@ -122,10 +138,10 @@ void codegen_deinit(CodeGen *gen) {
   arena_scope_end(gen->scratch, gen->scope_scratch);
 }
 
-internal InstructionIndex lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
-  InstructionIndex *inst = locals_find(&gen->locals, str); 
-  if (inst) {
-    return *inst;
+internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
+  LookupEntry *entry = locals_find(&gen->locals, str); 
+  if (entry) {
+    return *entry;
   }
 
   DeclarationIndex decl = 0;
@@ -143,10 +159,10 @@ internal InstructionIndex lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx
     gen->has_error = True;
   }
 
-  InstructionIndex lookup = sir_builder_add(&gen->builder, SIR_lookup_decl_value, gen->source->idx, ast_idx);
-  sir_builder_set_data(&gen->builder, lookup, decl);
+  InstructionIndex inst = sir_builder_add(&gen->builder, SIR_lookup_decl_value, gen->source->idx, ast_idx);
+  sir_builder_set_data(&gen->builder, inst, decl);
 
-  return lookup;
+  return (LookupEntry){ .kind = Lookup_decl, .inst = inst };
 }
 
 SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
@@ -160,9 +176,19 @@ SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     TokenIndex *name = ast_data(ast, idx_ast);
     StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, *name));
 
-    InstructionIndex ptr = lookup(gen, str, idx_ast);
+    LookupEntry entry = lookup(gen, str, idx_ast);
 
-    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(ptr), source_idx, idx_ast);
+    if (entry.kind == Lookup_param) {
+      Todo(); // cannot take pointer to param
+    }
+
+    if (entry.kind == Lookup_decl) {
+      Todo(); // not sure what this should mean
+              // at the moment it is unclear to me whether lookup_decl_value should return a pointer or not.
+              // it probably should
+    }
+
+    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(entry.inst), source_idx, idx_ast);
   } break;
   default: Todo();
   }
@@ -170,6 +196,20 @@ SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   Unreachable();
 
   return (SRef){0};
+}
+
+internal b32 binary_op_is_cmp(BinaryOpKind op) {
+  switch (op) {
+  case Cmp_equal:
+  case Cmp_not_equal:
+  case Cmp_greater_than:
+  case Cmp_greater_equal:
+  case Cmp_less_than:
+  case Cmp_less_equal:
+    return True;
+  default:
+    return False;
+  }
 }
 
 internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef type_destination, SRef *lhs_type_destination, SRef *rhs_type_destination) {
@@ -285,12 +325,21 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     TokenIndex *name = ast_data(ast, idx_ast);
     StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, *name));
 
-    InstructionIndex ptr = lookup(gen, str, idx_ast);
+    LookupEntry entry = lookup(gen, str, idx_ast);
 
-    InstructionIndex inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
-    sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(ptr)));
+    InstructionIndex inst;
+    switch (Cast(LookupKind, entry.kind)) {
+    case Lookup_decl:
+    case Lookup_local: {
+      InstructionIndex inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
+      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(entry.inst)));
+      inst = inst_load;
+    } break;
+    case Lookup_param: { inst = entry.inst; } break;
+    case Lookup_block: Unreachable();
+    }
 
-    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst_load), source_idx, idx_ast);
+    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst), source_idx, idx_ast);
   } break;
 
   case Ast_block: {
@@ -433,18 +482,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
       StringIndex str = strings_add(gen->strings, token_string(tokens, text, ast_param->name));
 
-      InstructionIndex inst_var = sir_builder_add(builder, SIR_alloc, source_idx, func->params[i]);
-      sir_builder_set_data(builder, inst_var, sref_to_u32(sref_from_instruction(first_param_type + i)));
-
-      InstructionIndex inst_store = sir_builder_add(builder, SIR_store, source_idx, func->params[i]);
-      SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
-      *store = (SIrStore){
-        .dst = sref_from_instruction(inst_var),
-        .value = sref_from_instruction(first_param + i),
-      };
-
       stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
-      locals_insert(&gen->locals, str, inst_var);
+      locals_insert(&gen->locals, str, (LookupEntry){.kind = Lookup_param, .inst = first_param + i});
     }
 
     SRef inst_body = gen_code(gen, func->body, sref_from_instruction(inst_return_type));
@@ -489,7 +528,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
 
     stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
-    locals_insert(&gen->locals, str, inst_var);
+    locals_insert(&gen->locals, str, (LookupEntry){ .kind = Lookup_local, .inst = inst_var});
 
     SRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
 
@@ -718,9 +757,29 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef lhs = gen_code(gen, binary->lhs, lhs_type_destination);
     SRef rhs = gen_code(gen, binary->rhs, rhs_type_destination);
 
+    if (binary_op_is_cmp(binary->op_kind)) {
+      InstructionIndex inst_typeof_lhs = sir_builder_add(builder, SIR_typeof, source_idx, binary->lhs);
+      sir_builder_set_data(builder, inst_typeof_lhs, sref_to_u32(lhs));
+
+      InstructionIndex inst_typeof_rhs = sir_builder_add(builder, SIR_typeof, source_idx, binary->rhs);
+      sir_builder_set_data(builder, inst_typeof_rhs, sref_to_u32(rhs));
+
+      InstructionIndex inst_unify = sir_builder_add(builder, SIR_unify, source_idx, idx_ast);
+      SIrUnify *unify = sir_builder_push_data(builder, inst_unify, SIrUnify);
+      *unify = (SIrUnify){
+        .type_lhs = sref_from_instruction(inst_typeof_lhs),
+        .type_rhs = sref_from_instruction(inst_typeof_rhs),
+      };
+
+      SRef unified_type = sref_from_instruction(inst_unify);
+
+      lhs = sir_builder_add_as(builder, unified_type, lhs, source_idx, binary->lhs);
+      rhs = sir_builder_add_as(builder, unified_type, rhs, source_idx, binary->rhs);
+    }
+    
     InstructionIndex x = gen_code_for_binary_op(&gen->builder, binary->op_kind, lhs, rhs, source_idx, idx_ast);
 
-    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(x), source_idx, idx_ast);
+    return sir_builder_add_as(builder, type_destination, sref_from_instruction(x), source_idx, idx_ast);
   } break;
 
   case Ast_while: { 
@@ -747,7 +806,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_block_or_loop, .name = loop_label, .inst = loop }));
     if (loop_label) {
-      locals_insert(&gen->locals, loop_label, loop);
+      locals_insert(&gen->locals, loop_label, (LookupEntry){.kind = Lookup_block, .inst = loop});
     }
 
     SRef body = gen_code(gen, ast_while->body, (SRef){0});
@@ -783,7 +842,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       TokenIndex *label_tok = ast_data(ast, b->label);
       StringIndex label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
 
-      InstructionIndex *found = locals_find(&gen->locals, label);
+      LookupEntry *found = locals_find(&gen->locals, label);
       if (!found) {
         Message_error(
           gen->msg_sink,
@@ -798,7 +857,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         return sref_from_value(gen->common->val.nil);
       }
 
-      target = *found;
+      target = found->inst;
     } else {
       b32 found = False;
 

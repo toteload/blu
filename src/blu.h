@@ -27,4 +27,7 @@ typedef struct Declaration Declaration;
 // than the size of `literal`.
 void decode_string_literal(String literal, u8 *out, u32 *len);
 
+i64 read_int_sign_extend(u16 bitwidth, void *payload);
+u64 read_int_zero_extend(u16 bitwidth, void *payload);
+
 #endif // BLU_H

@@ -98,6 +98,8 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from);
 // An add is always between two values of the same type.
 b32 check_can_type_add(Type *t);
 
+b32 check_can_type_cmp(Type *t);
+
 String write_type(Arena *arena, TypeInterner *types, TypeIndex type);
 
 #endif // TYPES_H

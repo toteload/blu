@@ -458,6 +458,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_param:
     case IIR_alloc: break;
 
+    case IIR_int_cast:
     case IIR_load:
     case IIR_ret:
     case IIR_builtin_debug: {
@@ -465,6 +466,12 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       print_iref(out, compiler, (IRef){data});
     } break;
 
+    case IIR_int_cmp_eq:
+    case IIR_int_cmp_ne:
+    case IIR_int_cmp_gt:
+    case IIR_int_cmp_ge:
+    case IIR_int_cmp_lt:
+    case IIR_int_cmp_le:
     case IIR_bit_and:
     case IIR_bit_or:
     case IIR_bit_xor:

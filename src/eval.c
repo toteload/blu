@@ -2,7 +2,7 @@
 #include "value.h"
 #include "eval.h"
 
-internal i64 read_signed_integer_extend(u16 bitwidth, void *payload) {
+i64 read_int_sign_extend(u16 bitwidth, void *payload) {
   i64 res;
 
   // clang-format off
@@ -18,7 +18,7 @@ internal i64 read_signed_integer_extend(u16 bitwidth, void *payload) {
   return res;
 }
 
-internal u64 read_unsigned_integer_extend(u16 bitwidth, void *payload) {
+u64 read_int_zero_extend(u16 bitwidth, void *payload) {
   u64 res = 0;
   memcpy(&res, payload, bitwidth / 8);
 
@@ -73,7 +73,7 @@ u32 eval_cast_int(
   }
 
   if (type_dst.signedness == Signed && type_src.signedness == Signed) {
-    i64 i = read_signed_integer_extend(type_src.bitwidth, payload_src);
+    i64 i = read_int_sign_extend(type_src.bitwidth, payload_src);
 
     i64 lo = int_value_min(type_dst.bitwidth);
     i64 hi = int_value_max(type_dst.bitwidth);
@@ -88,7 +88,7 @@ u32 eval_cast_int(
   }
 
   if (type_dst.signedness == Unsigned && type_src.signedness == Signed) {
-    i64 i = read_signed_integer_extend(type_src.bitwidth, payload_src);
+    i64 i = read_int_sign_extend(type_src.bitwidth, payload_src);
 
     if (i < 0) {
       return CastResult_integer_value_out_of_range;
@@ -110,7 +110,7 @@ u32 eval_cast_int(
   }
 
   if (type_dst.signedness == Signed && type_src.signedness == Unsigned) {
-    u64 i = read_unsigned_integer_extend(type_src.bitwidth, payload_src);
+    u64 i = read_int_zero_extend(type_src.bitwidth, payload_src);
 
     u64 hi = Cast(u64, int_value_max(type_dst.bitwidth));
 
@@ -124,7 +124,7 @@ u32 eval_cast_int(
   }
 
   if (type_dst.signedness == Unsigned && type_src.signedness == Unsigned) {
-    u64 i = read_unsigned_integer_extend(type_src.bitwidth, payload_src);
+    u64 i = read_int_zero_extend(type_src.bitwidth, payload_src);
 
     u64 hi = uint_value_max(type_dst.bitwidth);
 
@@ -214,7 +214,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     TypeIndex return_type;
     u32 err = eval_unify(scratch, types, type_lhs->data.function.return_type, type_rhs->data.function.return_type, &return_type);
     if (err) {
-      return UnifyResult_types_cannot_be_unified;
+      return err;
     }
 
     ArenaSnapshot snapshot = arena_scope_begin(scratch);
@@ -248,7 +248,12 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
-  if ((type_lhs->kind == Type_comptime_int && type_rhs->kind == Type_integer) || (type_lhs->kind == Type_integer && type_rhs->kind == Type_comptime_int)) {
+  if (type_lhs->kind == Type_integer && type_rhs->kind == Type_comptime_int) {
+    *unified = a;
+    return UnifyResult_ok;
+  }
+
+  if (type_lhs->kind == Type_comptime_int && type_rhs->kind == Type_integer) {
     *unified = b;
     return UnifyResult_ok;
   }

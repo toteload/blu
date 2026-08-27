@@ -191,16 +191,21 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
   compiler->common.type.usize = types_add(&compiler->types, &(Type){.kind = Type_usize});
   compiler->common.type.u8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
-  compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
+
   compiler->common.type.i8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
+  compiler->common.type.i16 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}});
+  compiler->common.type.i32 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
+  compiler->common.type.i64 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}});
 
   compiler->common.val.comptime_int = add_type_value(compiler, compiler->common.type.comptime_int);
   compiler->common.val.type = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil = add_type_value(compiler, compiler->common.type.nil);
   compiler->common.val.bool = add_type_value(compiler, compiler->common.type.bool);
   compiler->common.val.never = add_type_value(compiler, compiler->common.type.never);
-  compiler->common.val.i32 = add_type_value(compiler, compiler->common.type.i32);
   compiler->common.val.i8 = add_type_value(compiler, compiler->common.type.i8);
+  compiler->common.val.i16 = add_type_value(compiler, compiler->common.type.i16);
+  compiler->common.val.i32 = add_type_value(compiler, compiler->common.type.i32);
+  compiler->common.val.i64 = add_type_value(compiler, compiler->common.type.i64);
   compiler->common.val.u8 = add_type_value(compiler, compiler->common.type.u8);
   compiler->common.val.usize = add_type_value(compiler, compiler->common.type.usize);
 
@@ -236,8 +241,10 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   add_primitive(compiler, string_lit("nil"), compiler->common.val.nil);
   add_primitive(compiler, string_lit("bool"), compiler->common.val.bool);
   add_primitive(compiler, string_lit("never"), compiler->common.val.never);
-  add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
   add_primitive(compiler, string_lit("i8"), compiler->common.val.i8);
+  add_primitive(compiler, string_lit("i16"), compiler->common.val.i16);
+  add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
+  add_primitive(compiler, string_lit("i64"), compiler->common.val.i64);
   add_primitive(compiler, string_lit("u8"), compiler->common.val.u8);
 }
 

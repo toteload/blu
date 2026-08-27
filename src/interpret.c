@@ -186,6 +186,31 @@ internal u32 step(Interpreter *in) {
     f->pc += 1;
   } break;
 
+  case IIR_int_cast: {
+    IRef ref = (IRef){ iir_chunk_data(f->chunk, pc) };
+
+    // The operand of an int_cast is always runtime otherwise the cast would have already been performed in the specializer.
+    Assert(iref_is_instruction(ref));
+
+    void *val = resolve(in, f, ref);
+
+    TypeIndex dst_type = type;
+    TypeIndex from_type = iir_chunk_type(f->chunk, iref_to_instruction(ref));
+
+    Type *t = types_get(&in->compiler->types, from_type);
+    Type *v = types_get(&in->compiler->types, dst_type);
+
+    if (t->data.integer.signedness == Signed) {
+      i64 x = read_int_sign_extend(t->data.integer.bitwidth, val);
+      memcpy(local, &x, v->data.integer.bitwidth / 8);
+    } else {
+      u64 x = read_int_zero_extend(t->data.integer.bitwidth, val);
+      memcpy(local, &x, v->data.integer.bitwidth / 8);
+    }
+
+    f->pc += 1;
+  } break;
+
   case IIR_int_add: {
     IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
@@ -292,6 +317,14 @@ internal u32 step(Interpreter *in) {
   case IIR_bit_xor: {
     Todo();
   } break;
+
+  case IIR_int_cmp_eq: { Todo(); } break;
+  case IIR_int_cmp_ne: { Todo(); } break;
+  case IIR_int_cmp_gt: { Todo(); } break;
+  case IIR_int_cmp_ge: { Todo(); } break;
+  case IIR_int_cmp_lt: { Todo(); } break;
+  case IIR_int_cmp_le: { Todo(); } break;
+
   }
 
   return Step_ok;
