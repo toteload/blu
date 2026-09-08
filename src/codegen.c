@@ -546,10 +546,14 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     TokenIndex *tok = ast_data(ast, idx_ast);
     u64 value = parse_u64(token_string(tokens, text, *tok));
 
+    if (value > Cast(u64, INT64_MAX)) {
+      Todo();
+    }
+
     Value *v;
     ValueIndex idx = values_alloc(gen->values, &v);
     ComptimeInt *data = values_alloc_data(gen->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
-    *data = value;
+    *data = Cast(i64, value);
     *v = (Value){
       .type = gen->common->type.comptime_int,
       .data_size = sizeof(ComptimeInt),

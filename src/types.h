@@ -87,7 +87,7 @@ TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type);
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.
 // This is NOT the runtime size. For example, if you pass an array type to this funcion it will
-// return a constant size, since all you need to store for an array is the base type and its size.
+// return a constant size, since all you need to store for the type of an array is the base type and its size.
 u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);

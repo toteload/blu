@@ -220,7 +220,7 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
     if (type_from->data.integer.signedness == type_to->data.integer.signedness) {
       return type_from->data.integer.bitwidth <= type_to->data.integer.bitwidth;
     } else {
-      Todo();
+      return False;
     }
   }
 
@@ -258,16 +258,20 @@ b32 check_can_type_cmp(Type *t) {
 internal String arena_printf(Arena *arena, char const *format, ...) {
   va_list args;
   va_start(args, format);
-  i32 len = vsnprintf(Null, 0, format, args);
+  i32 res = vsnprintf(Null, 0, format, args);
   va_end(args);
+
+  Assert(res >= 0);
+
+  u32 len = Cast(u32, res);
 
   u8 *s = arena_push_array(u8, arena, len+1);
 
   va_start(args, format);
-  vsnprintf(s, len+1, format, args);
+  vsnprintf(Cast(char*, s), len+1, format, args);
   va_end(args);
 
-  arena->at = ptr_offset(arena->at, -1);
+  arena->at = ptr_offseti(arena->at, -1);
 
   return (String){ .str = s, .len = len };
 }

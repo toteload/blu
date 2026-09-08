@@ -717,7 +717,7 @@ b32 compile(Compiler *compiler) {
 
       is_ok &= generate_code(&context, decl);
 
-      if (compiler->options->print_decl_ir) {
+      if (compiler->options->print_sir) {
         print_sir_chunk(stdout, compiler, &decl->data.decl.chunk);
       }
     }
@@ -761,7 +761,7 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  if (compiler->options->print_residual) {
+  if (compiler->options->print_iir) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
       DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
       DeclarationKey key = decls_get(&compiler->decls, idx);

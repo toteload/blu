@@ -5,8 +5,8 @@ u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *arg
     .verbose = False,
     .print_tokens = False,
     .print_ast = False,
-    .print_decl_ir = False,
-    .print_residual = False,
+    .print_sir = False,
+    .print_iir = False,
     .source_filename = {0},
   };
 
@@ -30,13 +30,13 @@ u32 parse_cli_options(CLIOptions *options, u32 arg_count, char const *const *arg
       continue;
     }
 
-    if (string_eq(arg, string_lit("--print-decl-ir"))) {
-      options->print_decl_ir = True;
+    if (string_eq(arg, string_lit("--print-sir"))) {
+      options->print_sir = True;
       continue;
     }
 
-    if (string_eq(arg, string_lit("--print-residual"))) {
-      options->print_residual = True;
+    if (string_eq(arg, string_lit("--print-iir"))) {
+      options->print_iir = True;
       continue;
     }
 

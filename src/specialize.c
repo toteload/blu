@@ -128,8 +128,6 @@ internal b32 finalize_function(Specializer *in, CallFrame *f, ScopeSpan *func) {
 
   Assert(func->breaks_and_returns.len > 0);
 
-  TypeIndex return_type = f->inst_types[func->breaks_and_returns.sources[0]];
-
   for (u32 i = 1; i < func->breaks_and_returns.len; i++) {
     Todo();
   }
@@ -1151,8 +1149,6 @@ internal u32 step(Specializer *in, RunState *state) {
   } break;
 
   case SIR_typeof: {
-    IIrBuilder *builder = get_builder(in);
-
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
     IRef val = resolve(f, ref);
 

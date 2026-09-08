@@ -119,6 +119,10 @@ always_inline void *ptr_offset(void const *p, usize offset) {
   return Cast(void*, Cast(u8 const*, p) + offset);
 }
 
+always_inline void *ptr_offseti(void const *p, isize offset) {
+  return Cast(void*, Cast(u8 const*, p) + offset);
+}
+
 always_inline isize ptr_diff(void const *a, void const *b) {
   return Cast(isize, Cast(u8*, a) - Cast(u8*, b));
 }

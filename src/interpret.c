@@ -331,8 +331,11 @@ internal u32 step(Interpreter *in) {
 }
 
 u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out) {
+  Unused(args);
+
   // TODO: make sure that the args match the signature of the function
   CallFrame2 *f = frame_push(in, chunk, out);
+  Unused(f);
 
   for (u32 i = 0; i < arg_count; i++) {
     Todo();
