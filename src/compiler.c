@@ -3,6 +3,7 @@
 #include "string_interner.h"
 #include "codegen.h"
 #include "specialize.h"
+#include "resolver.h"
 #include "interpret.h"
 #include "ir.h"
 #include "print.h"
@@ -19,7 +20,7 @@
 #include "segment_list.h"
 
 #define SEGMENTLIST_NAME DeclIdxList
-#define SEGMENTLIST_TYPE DeclarationIndex
+#define SEGMENTLIST_TYPE DeclarationKey
 #define SEGMENTLIST_FUNCTION_PREFIX user_decls
 #define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
@@ -27,29 +28,23 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define XXH_INLINE_ALL
-#include "xxhash.h"
+#define SEGMENTLIST_NAME STUB_LIST_NAME
+#define SEGMENTLIST_TYPE STUB_LIST_TYPE
+#define SEGMENTLIST_FUNCTION_PREFIX stubs
+#define SEGMENTLIST_MIN_SIZE_LOG2 STUB_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT STUB_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
 
-internal u32 hash_decl_key(void *context, DeclarationKey key) {
-  Unused(context);
-  return XXH32(&key, sizeof(DeclarationKey), 0);
-}
-
-internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
-  Unused(context);
-  return a.parent == b.parent && a.name == b.name;
-}
-
-#define INTERNER_NAME DeclarationInterner
-#define INTERNER_TYPE DeclarationKey
-#define INTERNER_INDEX_TYPE DeclarationIndex
-#define INTERNER_EXTRA_TYPE Declaration
-#define INTERNER_RESERVE_ZERO_INDEX
-#define INTERNER_FUNCTION_PREFIX decls
-#define INTERNER_HASH_FN hash_decl_key
-#define INTERNER_COMPARE_FN cmp_decl_key
-#define INTERNER_OUTPUT_DEFINITIONS
-#include "interner.h"
+#define SEGMENTLIST_NAME RESIDUAL_FUNCTION_LIST_NAME
+#define SEGMENTLIST_TYPE RESIDUAL_FUNCTION_LIST_TYPE
+#define SEGMENTLIST_FUNCTION_PREFIX functions
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
 
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
@@ -110,30 +105,28 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
 }
 
-internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
+internal ValueKey add_type_value(Compiler *compiler, TypeKey t) {
   Value *v;
-  ValueIndex res = values_alloc(&compiler->values, &v);
-  TypeIndex *data = values_alloc_data_type(&compiler->values, TypeIndex);
+  ValueKey res = values_alloc(&compiler->values, &v);
+  TypeKey *data = values_alloc_data_type(&compiler->values, TypeKey);
   *data = t;
   *v = (Value){
-    .type = compiler->common.type.type,
-    .data_size = sizeof(TypeIndex),
+    .type = compiler->types.t_type,
+    .data_size = sizeof(TypeKey),
     .data = data,
   };
   return res;
 }
 
-internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
-  DeclarationIndex idx = decls_add(
+internal void add_primitive(Compiler *compiler, String name, ValueKey val) {
+  DeclarationKey idx = decls_add(
     &compiler->decls,
-    (DeclarationKey){.parent = 0, .name = strings_add(&compiler->strings, name)}
-  );
+    (DeclarationPath){.parent = {0}, .name = strings_add(&compiler->strings, name)});
 
   decls_set_extra(
     &compiler->decls,
     idx,
-    (Declaration){.idx = idx, .kind = Declaration_primitive, .data.primitive = val}
-  );
+    (Declaration){.idx = idx, .kind = Declaration_primitive, .data.primitive = val});
 }
 
 void compiler_init(Compiler *compiler, CLIOptions *options) {
@@ -146,16 +139,14 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     &(ArenaOptions){
       .reserve_size = MiB(16),
       .initial_commit_size = MiB(1),
-    }
-  );
+    });
 
   arena_init(
     &compiler->scratch,
     &(ArenaOptions){
       .reserve_size = MiB(16),
       .initial_commit_size = MiB(1),
-    }
-  );
+    });
 
   compiler->msg_sink = (MessageSink){
     .user = compiler,
@@ -164,6 +155,8 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   // Reserve 0 index to be nil value
   sources_push(&compiler->sources, &compiler->arena);
+  functions_push(&compiler->functions, &compiler->arena);
+  stubs_push(&compiler->stubs, &compiler->arena);
 
   strings_init(
     &compiler->strings,
@@ -171,8 +164,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .arena = &compiler->arena,
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
-    }
-  );
+    });
 
   types_init(
     &compiler->types,
@@ -181,16 +173,14 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
       .context = &compiler->scratch,
-    }
-  );
+    });
 
   values_init(
     &compiler->values,
     &(ValueStoreOptions){
       .arena = &compiler->arena,
       .payload_allocator = cstd_allocator,
-    }
-  );
+    });
 
   decls_init(
     &compiler->decls,
@@ -198,38 +188,23 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .arena = &compiler->arena,
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
-    }
-  );
+    });
 
   // clang-format off
-
-  compiler->common.type.type  = types_add(&compiler->types, &(Type){.kind = Type_type});
-  compiler->common.type.nil   = types_add(&compiler->types, &(Type){.kind = Type_nil});
-  compiler->common.type._bool  = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
-  compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
-
-  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
-
-  compiler->common.type.usize = types_add(&compiler->types, &(Type){.kind = Type_usize, .data.integer = {.signedness = Unsigned, .bitwidth = 64}});
-  compiler->common.type.u8    = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
-
-  compiler->common.type.i8  = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
-  compiler->common.type.i16 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}});
-  compiler->common.type.i32 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
-  compiler->common.type.i64 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}});
-
-  compiler->common.val.comptime_int = add_type_value(compiler, compiler->common.type.comptime_int);
-  compiler->common.val.type         = add_type_value(compiler, compiler->common.type.type);
-  compiler->common.val.nil          = add_type_value(compiler, compiler->common.type.nil);
-  compiler->common.val._bool         = add_type_value(compiler, compiler->common.type._bool);
-  compiler->common.val.never        = add_type_value(compiler, compiler->common.type.never);
-  compiler->common.val.i8           = add_type_value(compiler, compiler->common.type.i8);
-  compiler->common.val.i16          = add_type_value(compiler, compiler->common.type.i16);
-  compiler->common.val.i32          = add_type_value(compiler, compiler->common.type.i32);
-  compiler->common.val.i64          = add_type_value(compiler, compiler->common.type.i64);
-  compiler->common.val.u8           = add_type_value(compiler, compiler->common.type.u8);
-  compiler->common.val.usize        = add_type_value(compiler, compiler->common.type.usize);
-
+  compiler->common.val.comptime_int = add_type_value(compiler, compiler->types.t_comptime_int);
+  compiler->common.val.type         = add_type_value(compiler, compiler->types.t_type);
+  compiler->common.val.nil          = add_type_value(compiler, compiler->types.t_nil);
+  compiler->common.val._bool        = add_type_value(compiler, compiler->types.t_bool);
+  compiler->common.val.never        = add_type_value(compiler, compiler->types.t_never);
+  compiler->common.val.i8           = add_type_value(compiler, compiler->types.t_i8);
+  compiler->common.val.i16          = add_type_value(compiler, compiler->types.t_i16);
+  compiler->common.val.i32          = add_type_value(compiler, compiler->types.t_i32);
+  compiler->common.val.i64          = add_type_value(compiler, compiler->types.t_i64);
+  compiler->common.val.u8           = add_type_value(compiler, compiler->types.t_u8);
+  compiler->common.val.u16          = add_type_value(compiler, compiler->types.t_u16);
+  compiler->common.val.u32          = add_type_value(compiler, compiler->types.t_u32);
+  compiler->common.val.u64          = add_type_value(compiler, compiler->types.t_u64);
+  compiler->common.val.usize        = add_type_value(compiler, compiler->types.t_usize);
   // clang-format on
 
   {
@@ -238,7 +213,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 1;
     *v = (Value){
-      .type = compiler->common.type._bool,
+      .type = compiler->types.t_bool,
       .data_size = 1,
       .data = data,
     };
@@ -251,7 +226,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 0;
     *v = (Value){
-      .type = compiler->common.type._bool,
+      .type = compiler->types.t_bool,
       .data_size = 1,
       .data = data,
     };
@@ -267,6 +242,9 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
   add_primitive(compiler, string_lit("i64"), compiler->common.val.i64);
   add_primitive(compiler, string_lit("u8"), compiler->common.val.u8);
+  add_primitive(compiler, string_lit("u16"), compiler->common.val.u16);
+  add_primitive(compiler, string_lit("u32"), compiler->common.val.u32);
+  add_primitive(compiler, string_lit("u64"), compiler->common.val.u64);
   add_primitive(compiler, string_lit("usize"), compiler->common.val.usize);
 }
 
@@ -276,13 +254,39 @@ void compiler_deinit(Compiler *compiler) {
 }
 
 void compiler_add_sourcefile(Compiler *compiler, String filename) {
-  SourceIndex idx = compiler->sources.len;
+  SourceKey idx = { compiler->sources.len };
   Source *source = sources_push(&compiler->sources, &compiler->arena);
   source_file_init(source, idx, filename);
 }
 
-Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
-  return sources_ptr_at_unchecked(&compiler->sources, source_idx);
+Source *compiler_get_source(Compiler *compiler, SourceKey source_idx) {
+  return sources_ptr_at_unchecked(&compiler->sources, source_idx.x);
+}
+
+ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction **function) {
+  ResidualFunctionKey key = { compiler->functions.len };
+  *function = functions_push(&compiler->functions, &compiler->arena);
+  return key;
+}
+
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key) {
+  return functions_ptr_at_unchecked(&compiler->functions, key.x);
+}
+
+StubKey compiler_add_stub(Compiler *compiler, DeclarationKey decl, InstructionOffset inst, TypeKey type) {
+  StubKey key = {compiler->stubs.len};
+  stubs_append(&compiler->stubs, &compiler->arena, (Stub){
+    .resolve_status = RESOLVE_STATUS_UNRESOLVED,
+    .decl = decl,
+    .inst = inst,
+    .type_hint = type,
+    .val = {0}});
+
+  return key;
+}
+
+Stub *compiler_get_stub(Compiler *compiler, StubKey key) {
+  return stubs_ptr_at_unchecked(&compiler->stubs, key.x);
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
@@ -297,12 +301,12 @@ void compiler_print_all_messages(Compiler *compiler) {
     Source *source = Null;
     Declaration *decl = Null;
 
-    if (msg->location.decl_idx) {
+    if (key_is_some(msg->location.decl_idx)) {
       decl = decls_extra_get_ptr(&compiler->decls, msg->location.decl_idx);
     }
 
-    if (msg->location.source_idx) {
-      source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
+    if (key_is_some(msg->location.source_idx)) {
+      source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx.x);
     }
 
     print_message(&compiler->scratch, &compiler->types, msg, source, decl);
@@ -311,247 +315,30 @@ void compiler_print_all_messages(Compiler *compiler) {
 
 b32 lookup_identifier(
   DeclarationInterner *decl_keys,
-  DeclarationIndex *mods,
-  u32 mod_count,
-  StringIndex name,
-  DeclarationIndex *out
-) {
-  for (u32 i = 0; i < mod_count; i++) {
-    DeclarationKey key = {
-      .parent = mods[i],
+  DeclarationKey mod,
+  StringKey name,
+  DeclarationKey *out)
+{
+  for (DeclarationKey parent = mod; ; parent = decls_get(decl_keys, parent).parent) {
+    DeclarationPath key = {
+      .parent = parent,
       .name = name,
     };
 
-    DeclarationIndex idx;
-    b32 found = decls_find(decl_keys, key, &idx);
-    if (found) {
-      *out = idx;
+    if (decls_find(decl_keys, key, out)) {
       return True;
     }
-  }
 
-  return False;
-}
-
-// -------------------------------------------------------------------------------------------------
-
-#define MAX_RESOLVE_DEPTH 64
-
-typedef struct {
-  Declaration *decl;
-  RunState state;
-  u8 min_required_resolve_status;
-} ResolveEntry;
-
-typedef struct {
-  b32 ok;
-
-  Arena *scratch;
-  MessageSink *msg_sink;
-
-  // List of user defined declarations.
-  u32 user_declaration_count;
-  Declaration **user_declarations;
-
-  DeclarationInterner *decls;
-
-  Specializer *in;
-  Stack(ResolveEntry) resolve_stack;
-} Resolver;
-
-internal void
-push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
-  ResolveEntry *entry = stack_push_ptr_unchecked(&resolver->resolve_stack);
-
-  entry->decl = decl;
-  entry->min_required_resolve_status = min_required_resolve_status;
-
-  runstate_init(&entry->state, resolver->scratch);
-
-  frame_push(&entry->state, resolver->scratch, decl);
-}
-
-internal b32 resolve_entry(Resolver *resolver) {
-  ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-  Declaration *decl = entry->decl;
-  SIrChunk *chunk = &decl->data.decl.chunk;
-
-  u8 resolve_status = decl->resolve_status;
-
-  if (!entry->state.requested_resolution) {
-    decl->resolve_status = (resolve_status + 1);
-
-    CallFrame *frame = top_frame(&entry->state);
-    ScopeSpan *scope = push_scope(frame);
-
-    if (resolve_status < ResolveStatus_type_resolved) {
-      InstructionIndex block = decl->data.decl.block_type;
-      u32 count = sir_chunk_data(chunk, block);
-
-      *scope = (ScopeSpan){
-        .scope_kind = Scope_eval_block,
-        .start = block,
-        .end = block + count,
-        .pc = block + 1,
-      };
-    } else {
-      InstructionIndex block = decl->data.decl.block_val;
-      u32 count = sir_chunk_data(chunk, block);
-
-      *scope = (ScopeSpan){
-        .scope_kind = Scope_eval_block,
-        .start = block,
-        .end = block + count,
-        .pc = block + 1,
-      };
+    if (key_is_nil(parent)) {
+      return False;
     }
   }
-
-  u32 err = run_toplevel_block(resolver->in, &entry->state);
-
-  if (err == Run_ok) {
-    if (resolve_status < ResolveStatus_type_resolved) {
-      decl->resolve_status = ResolveStatus_type_resolved;
-      CallFrame *f = top_frame(&entry->state);
-
-      IRef ref = f->inst_map[decl->data.decl.block_type];
-      Assert(iref_is_some_value(ref));
-
-      Value *v = values_get(resolver->in->values, iref_to_value(ref));
-      Assert(v->type == resolver->in->common->type.type);
-
-      TypeIndex type = *Cast(TypeIndex*,v->data);
-
-      Assert(type != 0);
-
-      decl->data.decl.type = type;
-    } else {
-      decl->resolve_status = ResolveStatus_fully_resolved;
-
-      CallFrame *f = top_frame(&entry->state);
-
-      IRef ref = f->inst_map[decl->data.decl.block_val];
-      Assert(iref_is_some_value(ref));
-
-      decl->data.decl.val = values_copy(resolver->in->values, iref_to_value(ref));
-    }
-
-    return True;
-  }
-
-  if (err == Run_error) {
-    return False;
-  }
-
-  if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
-    CallFrame *f = top_frame(&entry->state);
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
-    DeclarationIndex idx = sir_chunk_data(f->chunk, s->pc);
-
-    Declaration *decl_to_resolve = decls_extra_get_ptr(resolver->decls, idx);
-
-    u8 min_required_resolve_status;
-    switch (err) {
-    case Run_resolve_declaration_type:
-      min_required_resolve_status = ResolveStatus_type_resolved;
-      break;
-    case Run_resolve_declaration_value:
-      min_required_resolve_status = ResolveStatus_fully_resolved;
-      break;
-    default:
-      Unreachable();
-    }
-
-    push_resolve_entry(resolver, decl_to_resolve, min_required_resolve_status);
-
-    return True;
-  }
-
-  Unreachable();
-}
-
-internal void clear_resolve_stack_with_error(Resolver *resolver) {
-  resolver->ok = False;
-
-  while (!stack_is_empty(&resolver->resolve_stack)) {
-    ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-    entry->decl->resolve_status = ResolveStatus_error;
-    stack_pop_unchecked(&resolver->resolve_stack);
-  }
-}
-
-b32 resolve_declarations(Resolver *resolver) {
-  for (u32 i = 0; i < resolver->user_declaration_count; i++) {
-    {
-      Declaration *decl = resolver->user_declarations[i];
-
-      u8 resolve_status = decl->resolve_status;
-
-      if (resolve_status == ResolveStatus_fully_resolved || resolve_status == ResolveStatus_error) {
-        continue;
-      }
-
-      Assert(
-        resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved
-      );
-
-      push_resolve_entry(resolver, decl, ResolveStatus_fully_resolved);
-    }
-
-    while (!stack_is_empty(&resolver->resolve_stack)) {
-      ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-
-      u8 resolve_status = entry->decl->resolve_status;
-
-      if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(
-          &resolver->resolve_stack
-        ); // TODO: free callstack of entry? yeah, sounds like a good idea
-        continue;
-      }
-
-      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_type) {
-        Message_error(
-          resolver->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_unspecified,
-            .decl_idx = entry->decl->idx,
-          },
-          string_lit("Encountered circular declaration")
-        );
-
-        clear_resolve_stack_with_error(resolver);
-        break;
-      }
-
-      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_value) {
-        Message_error(
-          resolver->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_unspecified,
-            .decl_idx = entry->decl->idx,
-          },
-          string_lit("Encountered circular declaration")
-        );
-
-        clear_resolve_stack_with_error(resolver);
-        break;
-      }
-
-      b32 ok = resolve_entry(resolver);
-      if (!ok) {
-        clear_resolve_stack_with_error(resolver);
-      }
-    }
-  }
-
-  return resolver->ok;
 }
 
 // -------------------------------------------------------------------------------------------------
 
 typedef struct {
-  DeclarationIndex mod;
+  DeclarationKey mod;
   u32 n;
 } DeclFrame;
 
@@ -613,9 +400,9 @@ b32 compile(Compiler *compiler) {
     DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
     stack_init(&stack, stackmem, 4);
-    stack_push(&stack, ((DeclFrame){.mod = 0, .n = source->decls[0].child_count}));
+    stack_push(&stack, ((DeclFrame){.mod = {0}, .n = source->decls[0].child_count}));
 
-    source->decl_idxs[0] = 0;
+    source->decl_keys[0] = (DeclarationKey){0};
 
     u32 offset = 1;
 
@@ -633,9 +420,9 @@ b32 compile(Compiler *compiler) {
 
       if (decl->kind == SourceDeclaration_mod) {
         b32 already_exists;
-        DeclarationIndex idx = decls_add_checked(
+        DeclarationKey idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){.parent = top->mod, .name = decl->name},
+          (DeclarationPath){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -664,7 +451,7 @@ b32 compile(Compiler *compiler) {
 
         stack_push(&stack, ((DeclFrame){.mod = idx, .n = decl->child_count}));
 
-        source->decl_idxs[offset] = idx;
+        source->decl_keys[offset] = idx;
 
         decls_set_extra(
           &compiler->decls,
@@ -672,16 +459,15 @@ b32 compile(Compiler *compiler) {
           (Declaration){
             .idx = idx,
             .kind = Declaration_mod,
-            .resolve_status = ResolveStatus_fully_resolved,
             .data.mod = {.source = source, .tree_idx = offset},
           });
 
         offset += 1;
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
-        DeclarationIndex idx = decls_add_checked(
+        DeclarationKey idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){.parent = top->mod, .name = decl->name},
+          (DeclarationPath){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -703,7 +489,9 @@ b32 compile(Compiler *compiler) {
 
         user_decls_append(&compiler->user_decls, &compiler->arena, idx);
 
-        source->decl_idxs[offset] = idx;
+        source->decl_keys[offset] = idx;
+
+        StubKey stub = compiler_add_stub(compiler, idx, 0, (TypeKey){0});
 
         decls_set_extra(
           &compiler->decls,
@@ -711,10 +499,10 @@ b32 compile(Compiler *compiler) {
           (Declaration){
             .idx = idx,
             .kind = Declaration_decl,
-            .resolve_status = ResolveStatus_unresolved,
             .data.decl = {
               .source = source,
               .tree_idx = offset,
+              .stub = stub,
             },
           });
 
@@ -723,8 +511,8 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  Declaration **user_decls =
-    arena_push_array(Declaration *, &compiler->scratch, compiler->user_decls.len);
+  DeclarationKey *user_decls =
+    arena_push_array(DeclarationKey, &compiler->scratch, compiler->user_decls.len);
 
   {
     CodeGenContext context = {
@@ -740,10 +528,11 @@ b32 compile(Compiler *compiler) {
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      Declaration *decl =
-        decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
-      user_decls[i] = decl;
+      DeclarationKey declidx = user_decls_at_unchecked(&compiler->user_decls, i);
 
+      user_decls[i] = declidx;
+
+      Declaration *decl = decls_extra_get_ptr(&compiler->decls, declidx);
       is_ok &= generate_code(&context, decl);
 
       if (compiler->options->print_sir) {
@@ -757,33 +546,18 @@ b32 compile(Compiler *compiler) {
   }
 
   {
-    Specializer specializer = {
+    ResolveContext resolve_context = {
       .perm = &compiler->arena,
       .scratch = &compiler->scratch,
       .msg_sink = &compiler->msg_sink,
-      .declarations = &compiler->decls,
+      .decls = &compiler->decls,
       .types = &compiler->types,
       .values = &compiler->values,
       .common = &compiler->common,
+      .compiler = compiler,
     };
 
-    IIrBuilder *builders = arena_push_array(IIrBuilder, &compiler->scratch, MAX_BUILDERS);
-    stack_init(&specializer.builders, builders, MAX_BUILDERS);
-
-    Resolver resolver = {
-      .ok = True,
-      .scratch = &compiler->scratch,
-      .user_declaration_count = compiler->user_decls.len,
-      .user_declarations = user_decls,
-      .decls = &compiler->decls,
-      .in = &specializer,
-      .msg_sink = &compiler->msg_sink,
-    };
-
-    ResolveEntry *entries = arena_push_array(ResolveEntry, &compiler->scratch, MAX_RESOLVE_DEPTH);
-    stack_init(&resolver.resolve_stack, entries, MAX_RESOLVE_DEPTH);
-
-    b32 ok = resolve_declarations(&resolver);
+    b32 ok = resolve_declarations(&resolve_context, compiler->user_decls.len, user_decls);
 
     if (!ok) {
       return False;
@@ -792,15 +566,16 @@ b32 compile(Compiler *compiler) {
 
   if (compiler->options->print_iir) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
-      DeclarationKey key = decls_get(&compiler->decls, idx);
+      DeclarationKey idx = user_decls_at_unchecked(&compiler->user_decls, i);
+      DeclarationPath key = decls_get(&compiler->decls, idx);
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
       String name = strings_get(&compiler->strings, key.name);
 
-      ValueIndex val = decl->data.decl.val;
+      Stub *stub = compiler_get_stub(compiler, decl->data.decl.stub);
+      ValueKey val = stub->val;
 
       printf("%.*s : ", Cast(int, name.len), name.str);
-      print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
+      print_type(stdout, compiler, values_get(&compiler->values, val)->type);
       printf(" = ");
       Value *v = values_get(&compiler->values, val);
       print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
@@ -811,52 +586,101 @@ b32 compile(Compiler *compiler) {
   return is_ok;
 }
 
+internal b32 get_decl_key_by_path(Compiler *compiler, String identifier, DeclarationKey *key) {
+  u32 parts_count = 1;
+  for (u32 i = 0; i < identifier.len; i++) {
+    if (identifier.str[i] == '.') {
+      parts_count++;
+    }
+  }
+
+  ArenaSnapshot snapshot = arena_scope_begin(&compiler->scratch);
+  String *names = arena_push_array(String, &compiler->scratch, parts_count);
+
+  u32 offset = 0;
+  for (u32 i = 0; i < parts_count; i++) {
+    u32 at = offset;
+    while (at < identifier.len && identifier.str[at] != '.') {
+      at++;
+    }
+
+    names[i] = string_sub(identifier, offset, at);
+
+    offset = at + 1;
+  }
+
+  DeclarationKey idx = {0};
+
+  for (u32 i = 0; i < parts_count; i++) {
+    DeclarationPath key = {
+      .parent = idx,
+      .name = strings_add(&compiler->strings, names[i]),
+    };
+
+    b32 found = decls_find(&compiler->decls, key, &idx);
+    if (!found) {
+      arena_scope_end(&compiler->scratch, snapshot);
+
+      Message_error(
+        &compiler->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_unspecified,
+        },
+        string_lit("Declaration '%string' not found"),
+        names[i]);
+
+      return False;
+    }
+  }
+
+  *key = idx;
+
+  arena_scope_end(&compiler->scratch, snapshot);
+
+  return True;
+}
+
+internal b32 get_decl_val(Compiler *compiler, DeclarationKey key, ValueKey *val) {
+  Declaration *decl = decls_extra_get_ptr(&compiler->decls, key);
+
+  if (decl->kind != Declaration_decl) {
+    Todo();
+  }
+
+  Stub *stub = compiler_get_stub(compiler, decl->data.decl.stub);
+  Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
+  Value *v = values_get(&compiler->values, stub->val);
+
+  while (key_eq(v->type, compiler->types.t_stub)) {
+    StubKey ref = Cast(ValueStubRef*, v->data)->stub;
+    stub = compiler_get_stub(compiler, ref);
+    Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
+    v = values_get(&compiler->values, stub->val);
+  }
+
+  *val = stub->val;
+
+  return True;
+}
+
 b32 run_main(Compiler *compiler) {
-  DeclarationIndex mod_main;
-  b32 ok = lookup_identifier(
-    &compiler->decls,
-    (DeclarationIndex[]){0},
-    1,
-    strings_add(&compiler->strings, string_lit("main")),
-    &mod_main
-  );
+  DeclarationKey fn_main;
+  b32 ok = get_decl_key_by_path(compiler, string_lit("main.main"), &fn_main);
   if (!ok) {
-    Message_error(
-      &compiler->msg_sink,
-      (MessageLocation){
-        .kind = MessageLocation_unspecified,
-      },
-      string_lit("Module 'main' not found")
-    );
-
     return False;
   }
 
-  DeclarationIndex fn_main;
-  ok = lookup_identifier(
-    &compiler->decls,
-    (DeclarationIndex[]){mod_main},
-    1,
-    strings_add(&compiler->strings, string_lit("main")),
-    &fn_main
-  );
+  ValueKey v;
+  ok = get_decl_val(compiler, fn_main, &v);
   if (!ok) {
-    Message_error(
-      &compiler->msg_sink,
-      (MessageLocation){
-        .kind = MessageLocation_unspecified,
-      },
-      string_lit("Declaration 'main' not found in module 'main'")
-    );
     return False;
   }
 
-  Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
+  Value *vfunc = values_get(&compiler->values, v);
+  ResidualFunctionKey func_key = Cast(ValueResidualFunction*, vfunc->data)->key;
+  ResidualFunction *f = compiler_get_function(compiler, func_key);
 
   // TODO: make sure main has the correct type
-
-  Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-  IIrChunk *chunk = &Cast(ValueFunc *, v->data)->chunk;
 
   Interpreter in = {
     .scratch = &compiler->scratch,
@@ -867,7 +691,7 @@ b32 run_main(Compiler *compiler) {
   stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
   u8 buf[16];
-  u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
+  u32 err = interpreter_call(&in, &f->chunk, (ValueKey[]){0}, 0, &buf);
   if (err) {
     return False;
   }

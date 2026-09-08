@@ -142,29 +142,28 @@ u32 eval_cast_int(
   return CastResult_ok;
 }
 
-internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
+internal b32 is_type_complete(TypeInterner *types, TypeKey idx) {
   Type *t = types_get(types, idx);
 
   switch (Cast(TypeKind, t->kind)) {
+  case Type_stub:
   case Type_integer:
   case Type_bool:
   case Type_comptime_int:
   case Type_never:
   case Type_nil:
   case Type_type:
-  case Type_usize:
-  case Type_isize:
     return True;
-  case Type_array: return t->data.array.base_type != 0;
-  case Type_slice: return t->data.slice.base_type != 0;
-  case Type_pointer: return t->data.pointer.base_type != 0;
+  case Type_array: return key_is_some(t->data.array.base_type);
+  case Type_slice: return key_is_some(t->data.slice.base_type);
+  case Type_pointer: return key_is_some(t->data.pointer.base_type);
   case Type_function: {
-    if (t->data.function.return_type == 0) {
+    if (key_is_nil(t->data.function.return_type)) {
       return False;
     }
 
     for (u32 i = 0; i < t->data.function.param_count; i++) {
-      if (t->data.function.param_types[i] == 0) {
+      if (key_is_nil(t->data.function.param_types[i])) {
         return False;
       }
     }
@@ -174,17 +173,17 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
   return True;
 }
 
-u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified) {
-  if (a == 0 && b == 0) {
+u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKey *unified) {
+  if (key_is_nil(a) && key_is_nil(b)) {
     return UnifyResult_type_is_incomplete;
   }
 
-  if (a == b) {
+  if (key_eq(a, b)) {
     *unified = a;
     return UnifyResult_ok;
   }
 
-  if (a == 0) {
+  if (key_is_nil(a)) {
     if (!is_type_complete(types, b)) {
       return UnifyResult_type_is_incomplete;
     }
@@ -193,7 +192,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
-  if (b == 0) {
+  if (key_is_nil(b)) {
     if (!is_type_complete(types, a)) {
       return UnifyResult_type_is_incomplete;
     }
@@ -202,120 +201,115 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
-  Type *type_lhs = types_get(types, a);
-  Type *type_rhs = types_get(types, b);
+  Type *type_a = types_get(types, a);
+  Type *type_b = types_get(types, b);
 
-  if (type_lhs->kind == Type_function && type_rhs->kind == Type_function) {
-    u32 param_count = type_lhs->data.function.param_count;
-    if (param_count != type_rhs->data.function.param_count) {
-      return UnifyResult_types_cannot_be_unified;
-    }
-
-    TypeIndex return_type;
-    u32 err = eval_unify(scratch, types, type_lhs->data.function.return_type, type_rhs->data.function.return_type, &return_type);
-    if (err) {
-      return err;
-    }
-
-    ArenaSnapshot snapshot = arena_scope_begin(scratch);
-
-    Type *f = arena_push_type_function(scratch, param_count);
-    f->kind = Type_function;
-    f->data.function.return_type = return_type;
-
-    for (u32 i = 0; i < param_count; i++) {
-      TypeIndex param_type;
-      err = eval_unify(scratch, types, type_lhs->data.function.param_types[i], type_rhs->data.function.param_types[i], &param_type);
-      if (err) {
-        arena_scope_end(scratch, snapshot);
-        return err;
-      }
-
-      f->data.function.param_types[i] = param_type;
-    }
-
-    TypeIndex res = types_add(types, f);
-
-    if (!err) {
-      *unified = res;
-    }
-
-    arena_scope_end(scratch, snapshot);
-
-    if (!is_type_complete(types, res)) {
-      return UnifyResult_type_is_incomplete;
-    }
-
-    return UnifyResult_ok;
+  if (type_a->kind > type_b->kind) {
+    Swap(Type*, type_a, type_b);
+    Swap(TypeKey, a, b);
   }
 
-  if (type_lhs->kind == Type_integer && type_rhs->kind == Type_comptime_int) {
-    *unified = a;
-    return UnifyResult_ok;
-  }
+  // a and type_a will be the type with the lower or equal TypeKind value
 
-  if (type_lhs->kind == Type_comptime_int && type_rhs->kind == Type_integer) {
+  if (type_a->kind == Type_comptime_int && type_b->kind == Type_integer) {
     *unified = b;
     return UnifyResult_ok;
   }
 
-  if (type_lhs->kind == Type_array && type_rhs->kind == Type_array) {
-    if (type_lhs->data.array.size != type_rhs->data.array.size) {
+  if (type_a->kind == Type_integer && type_b->kind == Type_integer) {
+    if (type_a->data.integer.signedness != type_b->data.integer.signedness) {
       return UnifyResult_types_cannot_be_unified;
     }
 
-    TypeIndex base_type;
-    u32 err = eval_unify(scratch, types, type_lhs->data.array.base_type, type_rhs->data.array.base_type, &base_type);
-    if (err) {
-      return err;
+    if (type_a->data.integer.bitwidth > type_b->data.integer.bitwidth) {
+      *unified = a;
+    } else {
+      *unified = b;
     }
-
-    TypeIndex res = types_add(types, &(Type){
-      .kind = Type_array,
-      .data.array = { .base_type = base_type, .size = type_lhs->data.array.size },
-    });
-
-    *unified = res;
 
     return UnifyResult_ok;
   }
 
-  if (type_lhs->kind == Type_slice && type_rhs->kind == Type_slice) {
-    TypeIndex base_type;
-    u32 err = eval_unify(scratch, types, type_lhs->data.slice.base_type, type_rhs->data.slice.base_type, &base_type);
-    if (err) {
-      return err;
+  if (type_a->kind == Type_array && type_b->kind == Type_array) {
+    if (type_a->data.array.size != type_b->data.array.size) {
+      return UnifyResult_types_cannot_be_unified;
     }
 
-    TypeIndex res = types_add(types, &(Type){
-      .kind = Type_slice,
-      .data.slice = { .base_type = base_type },
-    });
+    u32 res = classify_type_coercion(types, type_a->data.array.base_type, type_b->data.array.base_type);
+    if (res == Coercion_comptime_int_to_intlike) {
+      *unified = a;
+      return UnifyResult_ok;
+    }
 
-    *unified = res;
+    res = classify_type_coercion(types, type_b->data.array.base_type, type_a->data.array.base_type);
+    if (res == Coercion_comptime_int_to_intlike) {
+      *unified = b;
+      return UnifyResult_ok;
+    }
 
-    return UnifyResult_ok;
+    return UnifyResult_types_cannot_be_unified;
   }
 
-  if (type_lhs->kind == Type_pointer && type_rhs->kind == Type_pointer) {
-    TypeIndex base_type;
-    u32 err = eval_unify(scratch, types, type_lhs->data.pointer.base_type, type_rhs->data.pointer.base_type, &base_type);
-    if (err) {
-      return err;
+  if (type_a->kind == Type_slice && type_b->kind == Type_slice) {
+    u32 res = classify_type_coercion(types, type_a->data.array.base_type, type_b->data.array.base_type);
+    if (res == Coercion_comptime_int_to_intlike) {
+      *unified = a;
+      return UnifyResult_ok;
     }
 
-    TypeIndex res = types_add_pointer(types, base_type);
+    res = classify_type_coercion(types, type_b->data.array.base_type, type_a->data.array.base_type);
+    if (res == Coercion_comptime_int_to_intlike) {
+      *unified = b;
+      return UnifyResult_ok;
+    }
 
-    *unified = res;
+    return UnifyResult_types_cannot_be_unified;
+  }
 
-    return UnifyResult_ok;
+  if (type_a->kind == Type_function && type_b->kind == Type_function) {
+    TypeFunction *fa = &type_a->data.function;
+    TypeFunction *fb = &type_b->data.function;
+
+    if (fa->param_count != fb->param_count) {
+      return UnifyResult_types_cannot_be_unified;
+    }
+
+    ArenaSnapshot snapshot = arena_scope_begin(scratch);
+
+    Type *t = arena_push_type_function(scratch, fa->param_count);
+    t->kind = Type_function;
+    t->data.function.param_count = fa->param_count;
+
+    u32 res = UnifyResult_ok;
+    for (u32 i = 0; i < 1 + fa->param_count; i++) {
+      TypeKey x = (i == 0) ? fa->return_type : fa->param_types[i - 1];
+      TypeKey y = (i == 0) ? fb->return_type : fb->param_types[i - 1];
+      TypeKey *dst = (i == 0) ? &t->data.function.return_type : &t->data.function.param_types[i - 1];
+
+      if (key_is_some(x) && key_is_some(y) && !key_eq(x, y)) {
+        res = UnifyResult_types_cannot_be_unified;
+        break;
+      }
+
+      *dst = key_is_some(x) ? x : y;
+
+      if (key_is_nil(*dst)) {
+        res = UnifyResult_type_is_incomplete;
+      }
+    }
+
+    *unified = types_intern(types, t);
+
+    arena_scope_end(scratch, snapshot);
+
+    return res;
   }
 
   return UnifyResult_types_cannot_be_unified;
 }
 
-u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
-  TypeIndex type_from = val->type;
+u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueKey *res) {
+  TypeKey type_from = val->type;
 
   u32 coercion = classify_type_coercion(types, dst, type_from);
 
@@ -326,7 +320,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   case Coercion_invalid: return CoerceResult_invalid_coercion_types;
   case Coercion_identical_types: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
@@ -343,12 +337,18 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   }
   case Coercion_bool_to_int: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
     memset(data, 0, size_info.size);
     *Cast(u8*,data) = *Cast(u8*, val->data);
+
+    *p = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size_info.size,
+    };
 
     *res = idx;
 
@@ -356,7 +356,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   }
   case Coercion_int_widen: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
@@ -366,6 +366,12 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
 
     u32 err = eval_cast_int(int_src, val->data, int_dst, data);
     Assert(err == CastResult_ok);
+
+    *p = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size_info.size,
+    };
 
     *res = idx;
 
@@ -387,7 +393,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     }
 
     Value *v;
-    ValueIndex idx = values_alloc(values, &v);
+    ValueKey idx = values_alloc(values, &v);
     *v = (Value){
       .type = dst,
       .data = data,
@@ -400,7 +406,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   }
   case Coercion_array_to_slice: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     u32 size = sizeof(ValueSlice);
     ValueSlice *data = values_alloc_data(values, size, Align_of(ValueSlice));

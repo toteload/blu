@@ -412,9 +412,9 @@ LineInfo tokens_find_line_info(String text, Tokens *tokens, u32 byte_offset) {
   };
 }
 
-u8 tokens_kind(Tokens *tokens, TokenIndex idx) { return tokens->kinds[idx]; }
+u8 tokens_kind(Tokens *tokens, TokenOffset idx) { return tokens->kinds[idx]; }
 
-SpanU32 tokens_span(Tokens *tokens, TokenIndex idx) { return tokens->spans[idx]; }
+SpanU32 tokens_span(Tokens *tokens, TokenOffset idx) { return tokens->spans[idx]; }
 
 b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   Tokenizer tokenizer = {
@@ -480,7 +480,7 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   return res == TokResult_end;
 }
 
-String token_string(Tokens *tokens, String text, TokenIndex tok) {
+String token_string(Tokens *tokens, String text, TokenOffset tok) {
   SpanU32 span = tokens->spans[tok];
   return (String){.str = text.str + span.start, .len = span.end - span.start};
 }

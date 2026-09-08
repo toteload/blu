@@ -5,22 +5,94 @@
 
 #define MAX_MODULE_DEPTH 16 
 
-#define AstIndex_source 1
+typedef u32 TokenOffset;
+typedef u32 InstructionOffset;
 
-typedef u32 TokenIndex;       // Offset, not optional
-typedef u32 InstructionIndex; // Offset, not optional
+typedef u32 AstIndex;
 
-typedef u32 AstIndex;         // Optional, 0 means nil
-typedef u32 TypeIndex;        // Optional, 0 means nil
-typedef u32 StringIndex;      // Optional, 0 means nil
-typedef u32 ValueIndex;       // Optional, 0 means nil
-typedef u32 SourceIndex;      // Optional, 0 means nil
-typedef u32 DeclarationIndex; // Optional, 0 means nil or root
+#define AST_INDEX_SOURCE 1
+
+#define KEY_NAME TypeKey
+#define KEY_FUNCTION_PREFIX type_key
+#include "key.h"
+
+#define KEY_NAME SourceKey
+#define KEY_FUNCTION_PREFIX source_key
+#include "key.h"
+
+#define KEY_NAME ResidualFunctionKey
+#define KEY_FUNCTION_PREFIX residual_function_key
+#include "key.h"
+
+#define KEY_NAME StringKey
+#define KEY_FUNCTION_PREFIX string_key
+#include "key.h"
+
+#define KEY_NAME ValueKey
+#define KEY_FUNCTION_PREFIX value_key
+#include "key.h"
+
+#define KEY_NAME DeclarationKey
+#define KEY_FUNCTION_PREFIX declaration_key
+#include "key.h"
+
+#define KEY_NAME StubKey
+#define KEY_FUNCTION_PREFIX stub_key
+#include "key.h"
+
+#define key_is_nil(K) _Generic((K), \
+  TypeKey : type_key_is_nil, \
+  SourceKey : source_key_is_nil, \
+  ResidualFunctionKey : residual_function_key_is_nil, \
+  StringKey : string_key_is_nil, \
+  ValueKey : value_key_is_nil, \
+  DeclarationKey : declaration_key_is_nil)(K)
+
+#define key_is_some(K) _Generic((K), \
+  TypeKey : type_key_is_some, \
+  SourceKey : source_key_is_some, \
+  ResidualFunctionKey : residual_function_key_is_some, \
+  StringKey : string_key_is_some, \
+  ValueKey : value_key_is_some, \
+  DeclarationKey : declaration_key_is_some)(K)
+
+#define key_eq(K,M) _Generic((K), \
+  TypeKey : type_key_eq, \
+  SourceKey : source_key_eq, \
+  ResidualFunctionKey : residual_function_key_eq, \
+  StringKey : string_key_eq, \
+  ValueKey : value_key_eq, \
+  DeclarationKey : declaration_key_eq)(K,M)
 
 typedef struct ValueStore ValueStore;
 typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;
 typedef struct Declaration Declaration;
+typedef struct Compiler Compiler;
+
+typedef struct {
+  struct {
+    ValueKey type;
+    ValueKey nil;
+    ValueKey _bool;
+    ValueKey never;
+    ValueKey comptime_int;
+
+    ValueKey i8;
+    ValueKey i16;
+    ValueKey i32;
+    ValueKey i64;
+
+    ValueKey u8;
+    ValueKey u16;
+    ValueKey u32;
+    ValueKey u64;
+    ValueKey usize;
+
+    ValueKey _true;
+    ValueKey _false;
+  } val;
+} Common;
 
 // `out` must point to enough memory for the decoded string.
 // The caller may assume that the amount of memory needed for the decoded string is equal to or less

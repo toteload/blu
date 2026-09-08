@@ -15,11 +15,11 @@ enum SourceDeclarationKind {
 };
 
 typedef struct {
-  u8          kind;
-  AstIndex    node;
-  u32         child_count;
-  u32         parent;
-  StringIndex name;
+  u8        kind;
+  AstIndex  node;
+  u32       child_count;
+  u32       parent;
+  StringKey name;
 } SourceDeclaration;
 
 enum SourceStatus {
@@ -30,7 +30,7 @@ enum SourceStatus {
 
 struct Source {
   u32         status;
-  SourceIndex idx; // Saves its own index :)
+  SourceKey idx; // Saves its own index :)
   Arena       arena;
 
   MessageList msg_list;
@@ -45,10 +45,10 @@ struct Source {
 
   u32                decl_tree_size;
   SourceDeclaration *decls;
-  DeclarationIndex  *decl_idxs;
+  DeclarationKey    *decl_keys;
 };
 
-void source_file_init(Source *source, SourceIndex idx, String filename);
+void source_file_init(Source *source, SourceKey idx, String filename);
 void source_file_deinit(Source *source);
 
 b32 source_read_file(Source *source);

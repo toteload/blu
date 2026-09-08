@@ -1,0 +1,3 @@
+[error] test/snippet/error/coerce_runtime_invalid.blu:9:12: Cannot coerce value of type i32 to type u32
+    9 |   x: u32 = a
+      |            ^

@@ -4,6 +4,7 @@ import ninja_syntax as n
 from subprocess import run, call
 import sys
 import os
+import glob
 import platform
 
 join = os.path.join
@@ -11,7 +12,7 @@ join = os.path.join
 is_macos = platform.system() == 'Darwin'
 is_windows = platform.system() == 'Windows'
 
-USE_SANITIZERS = False
+USE_SANITIZERS = True
 
 def exe(name):
     if is_windows:
@@ -42,6 +43,7 @@ def add_test_suite(out):
     outputs.append(outd('types.c.o'))
     outputs.append(outd('value.c.o'))
     outputs.append(outd('symbol_map.c.o'))
+    outputs.append(outd('string_interner.c.o'))
 
     for f in inputs:
         fout = outd(f'{f}.o')
@@ -129,6 +131,8 @@ def create_build_ninja():
         'print.c',
         'util.c',
         'symbol_map.c',
+        'resolver.c',
+        'declaration_interner.c',
     ]
 
     outputs = []
@@ -153,7 +157,19 @@ def create_build_ninja():
 
     add_test_suite(out)
 
+def format_sources():
+    files = sorted(
+        f
+        for d in ['src', 'test']
+        for ext in ['c', 'h']
+        for f in glob.glob(join(d, '**', f'*.{ext}'), recursive=True)
+        )
+    return call(['clang-format', '-i'] + files)
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['format']:
+        sys.exit(format_sources())
+
     create_build_ninja()
     run(['ninja'] + sys.argv[1:])
     comp_commands = open('compile_commands.json', 'w')

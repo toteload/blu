@@ -165,6 +165,15 @@ void test_eval_int_div_safe(TestResult *test, void *user) {
   }
 }
 
+internal TypeKey test_func_type(Arena *arena, TypeInterner *types, TypeKey ret, TypeKey param) {
+  Type *t = arena_push_type_function(arena, 1);
+  t->kind = Type_function;
+  t->data.function.return_type = ret;
+  t->data.function.param_count = 1;
+  t->data.function.param_types[0] = param;
+  return types_intern(types, t);
+}
+
 void test_eval_unify(TestResult *test, void *user) {
   Unused(user);
 
@@ -175,33 +184,34 @@ void test_eval_unify(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
-  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeKey t_i32          = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  TypeKey t_i64          = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 64 } });
+  TypeKey t_comptime_int = types_intern(&types, &(Type){ .kind = Type_comptime_int });
+  TypeKey t_bool         = types_intern(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_arr_i32_3      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
-  TypeIndex t_arr_comptime_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
-  TypeIndex t_arr_i32_4      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
+  TypeKey t_arr_i32_3      = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
+  TypeKey t_arr_comptime_3 = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
+  TypeKey t_arr_i32_4      = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
 
-  TypeIndex t_slice_i32        = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
-  TypeIndex t_slice_comptime   = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
-  TypeIndex t_slice_incomplete = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
+  TypeKey t_slice_i32        = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
+  TypeKey t_slice_comptime   = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
+  TypeKey t_slice_incomplete = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
 
-  TypeIndex t_ptr_i32      = types_add_pointer(&types, t_i32);
-  TypeIndex t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
+  TypeKey t_ptr_i32      = types_add_pointer(&types, t_i32);
+  TypeKey t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
 
-  TypeIndex unified;
+  TypeKey unified;
   u32 err;
 
   // Identical array types unify trivially.
   err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_3, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(unified, t_arr_i32_3);
+  Test_assert(key_eq(unified, t_arr_i32_3));
 
   // Arrays with a comptime_int element unify element-wise into the concrete integer array.
   err = eval_unify(&scratch, &types, t_arr_comptime_3, t_arr_i32_3, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.array.base_type, t_i32);
+  Test_assert(key_eq(Cast(Type *, types_get(&types, unified))->data.array.base_type, t_i32));
 
   // Arrays of differing size cannot be unified.
   err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_4, &unified);
@@ -210,20 +220,38 @@ void test_eval_unify(TestResult *test, void *user) {
   // Slices unify their base types, same as arrays.
   err = eval_unify(&scratch, &types, t_slice_comptime, t_slice_i32, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32);
+  Test_assert(key_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32));
 
-  // A slice whose base type is still unknown (TypeIndex 0) is itself incomplete.
-  err = eval_unify(&scratch, &types, 0, t_slice_incomplete, &unified);
+  // A slice whose base type is still unknown (TypeKey 0) is itself incomplete.
+  err = eval_unify(&scratch, &types, (TypeKey){0}, t_slice_incomplete, &unified);
   Test_assert_eq(err, UnifyResult_type_is_incomplete);
-
-  // Pointers unify their base types.
-  err = eval_unify(&scratch, &types, t_ptr_comptime, t_ptr_i32, &unified);
-  Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.pointer.base_type, t_i32);
 
   // Unrelated kinds cannot be unified.
   err = eval_unify(&scratch, &types, t_bool, t_arr_i32_3, &unified);
   Test_assert_eq(err, UnifyResult_types_cannot_be_unified);
+
+  TypeKey t_fn_i32_bool  = test_func_type(&arena, &types, t_i32, t_bool);
+  TypeKey t_fn_nil_bool  = test_func_type(&arena, &types, (TypeKey){0}, t_bool);
+  TypeKey t_fn_i32_nil   = test_func_type(&arena, &types, t_i32, (TypeKey){0});
+  TypeKey t_fn_nil_nil   = test_func_type(&arena, &types, (TypeKey){0}, (TypeKey){0});
+  TypeKey t_fn_bool_bool = test_func_type(&arena, &types, t_bool, t_bool);
+  TypeKey t_fn_i64_bool  = test_func_type(&arena, &types, t_i64, t_bool);
+
+  err = eval_unify(&scratch, &types, t_fn_nil_bool, t_fn_i32_nil, &unified);
+  Test_assert_eq(err, UnifyResult_ok);
+  Test_assert(key_eq(unified, t_fn_i32_bool));
+
+  err = eval_unify(&scratch, &types, t_fn_nil_bool, t_fn_nil_nil, &unified);
+  Test_assert_eq(err, UnifyResult_type_is_incomplete);
+
+  err = eval_unify(&scratch, &types, t_fn_i32_bool, t_fn_bool_bool, &unified);
+  Test_assert_eq(err, UnifyResult_types_cannot_be_unified);
+
+  err = eval_unify(&scratch, &types, t_fn_i32_bool, t_fn_i64_bool, &unified);
+  Test_assert_eq(err, UnifyResult_types_cannot_be_unified);
+
+  err = eval_unify(&scratch, &types, t_fn_i32_bool, test_func_type(&arena, &types, t_i32, t_bool), &unified);
+  Test_assert_eq(err, UnifyResult_ok);
 
   arena_deinit(&arena);
   arena_deinit(&scratch);
@@ -239,13 +267,13 @@ void test_classify_type_coercion(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 32 } });
-  TypeIndex t_u8           = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
-  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeKey t_i32          = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 32 } });
+  TypeKey t_u8           = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+  TypeKey t_comptime_int = types_intern(&types, &(Type){ .kind = Type_comptime_int });
+  TypeKey t_bool         = types_intern(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_fn_i32  = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
-  TypeIndex t_fn_bool = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
+  TypeKey t_fn_i32  = types_intern(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
+  TypeKey t_fn_bool = types_intern(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
 
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_i32), Coercion_identical_types);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime_int_to_intlike);
@@ -253,6 +281,49 @@ void test_classify_type_coercion(TestResult *test, void *user) {
   Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_bool), Coercion_invalid);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_bool), Coercion_bool_to_int);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_u8), Coercion_invalid);
+
+  arena_deinit(&arena);
+  arena_deinit(&scratch);
+}
+
+void test_eval_coerce(TestResult *test, void *user) {
+  Unused(user);
+
+  Arena arena;
+  arena_init(&arena, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+  Arena scratch;
+  arena_init(&scratch, &(ArenaOptions){ .reserve_size = MiB(1), .initial_commit_size = KiB(64) });
+
+  TypeInterner types = test_types_init(&arena, &scratch);
+
+  ValueStore values;
+  values_init(&values, &(ValueStoreOptions){ .arena = &arena, .payload_allocator = (Allocator){ .fn = test_alloc_fn } });
+
+  TypeKey t_i8   = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 8 } });
+  TypeKey t_i64  = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 64 } });
+  TypeKey t_u32  = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 32 } });
+  TypeKey t_bool = types_intern(&types, &(Type){ .kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+
+  ValueKey res;
+  Value *v;
+
+  // Widening a signed int sign-extends and yields a fully initialized value of the destination type.
+  i8 neg = -5;
+  u32 err = eval_coerce(&types, &values, t_i64, &(Value){ .type = t_i8, .data = &neg, .data_size = 1 }, &res);
+  Test_assert_eq(err, CoerceResult_ok);
+  v = values_get(&values, res);
+  Test_assert(key_eq(v->type, t_i64));
+  Test_assert_eq(v->data_size, 8);
+  Test_assert_eq(*Cast(i64 *, v->data), -5);
+
+  // bool -> int zero-extends.
+  u8 yes = 1;
+  err = eval_coerce(&types, &values, t_u32, &(Value){ .type = t_bool, .data = &yes, .data_size = 1 }, &res);
+  Test_assert_eq(err, CoerceResult_ok);
+  v = values_get(&values, res);
+  Test_assert(key_eq(v->type, t_u32));
+  Test_assert_eq(v->data_size, 4);
+  Test_assert_eq(*Cast(u32 *, v->data), 1);
 
   arena_deinit(&arena);
   arena_deinit(&scratch);
@@ -268,6 +339,7 @@ void register_eval_tests(TestRunner *runner) {
   EvalTest(test_eval_int_div_safe);
   EvalTest(test_eval_unify);
   EvalTest(test_classify_type_coercion);
+  EvalTest(test_eval_coerce);
 
 #undef EvalTest
 }

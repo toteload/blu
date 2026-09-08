@@ -1,9 +1,8 @@
-- [ ] Add user error reporting on failure for SIR_unify in specialize.c
 - [ ] Compile time evaluation of binary operators in specialize.c
 - [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `case Ast_declaration` in codegen.c
-- [ ] Add location information to interpreter error reporting
-- [ ] The symbol table doesn't work correctly for nested functions. you keep access to variables in the enclosing function.
 - [ ] Typecheck main.main before running it
+- [ ] SIR code generation can be moved to `Source`.
+- [ ] ValueSlice should use ValuePointer instead of void*
 
 ## Comptime
 
@@ -30,10 +29,6 @@
 - [ ] `break`/`continue`
 - [ ] Add `return` expression.
 - [ ] `for` loop
-- [ ] `while` loop
-- [ ] `match` expression.
-  - Can match on integer values.
-  - Can match on enums.
 
 
 ## Types
@@ -42,7 +37,7 @@
 - [ ] optional types.
   - Analyze the type which is made optional for niche values.
 - [ ] Add `distinct` qualifier.
-- [ ] Aribtrary size integers
+- [ ] Arbitrary size integers
 - [ ] Integer range.
   - `a..b` exclusive range. `a..=b` inclusive range.
 - [ ] Refinement
@@ -55,9 +50,8 @@
     - Then what is the type of `Direction`? I am guessing `distinct enum`?
       - I guess that would mean that enums are nominal. Does that make sense?
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
-- [ ] Add coercion of `bool` to integer types.
 - [ ] Floating point type
-- [ ] Add flow typing
+- [ ] Add flow typing. is this that useful?
 
 - pointer to member of a struct. `PtrY := *{struct { x: i32, y: i32 }}.y` this type is only allowed to point to y member.
 
@@ -133,6 +127,3 @@
 - `arena_init` doesn't check for `NULL`/`MAP_FAILED`.
 - `read_file` uses `i32` for `ftell` (`source_file.c:290`).
   Note: these last two were in the `TODO.md` section deleted in the working tree, so they are no longer tracked anywhere.
-
-- [ ] Bounds checking
-- [ ] Integer overflow checks

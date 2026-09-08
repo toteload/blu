@@ -2,7 +2,7 @@
 //
 //   #define INTERNER_NAME       StringInterner
 //   #define INTERNER_TYPE       String
-//   #define INTERNER_INDEX_TYPE StringIndex // optional, default u32
+//   #define INTERNER_INDEX_TYPE StringKey // optional, default u32
 //   #define INTERNER_OUTPUT_TYPES
 //   #include "interner.h"
 //
@@ -10,11 +10,12 @@
 //
 //   #define INTERNER_NAME            StringInterner
 //   #define INTERNER_TYPE            String
-//   #define INTERNER_INDEX_TYPE      StringIndex
+//   #define INTERNER_INDEX_TYPE      StringKey
 //   #define INTERNER_FUNCTION_PREFIX strings  // optional, default INTERNER_NAME
 //   #define INTERNER_HASH_FN         str_hash // u32 fn(void *context, INTERNER_TYPE item)
 //   #define INTERNER_COMPARE_FN      str_eq   // b32 fn(void *context, INTERNER_TYPE a, INTERNER_TYPE b)
 //   #define INTERNER_COPY_FN         str_copy // optional, INTERNER_TYPE fn(Arena *arena, INTERNER_TYPE item)
+//   #define INTERNER_INDEX_IS_KEY             // optional, INTERNER_INDEX_TYPE is a key from key.h
 //   #define INTERNER_OUTPUT_DEFINITIONS
 //   #include "interner.h"
 //
@@ -135,6 +136,14 @@ INTERNER_LINKAGE void                 Cat(INTERNER_FUNCTION_PREFIX, _set_extra)(
 #define INTERNER_LIST_PREFIX Cat(INTERNER_FUNCTION_PREFIX, __list)
 #define INTERNER_MAP_PREFIX  Cat(INTERNER_FUNCTION_PREFIX, __map)
 
+#ifdef INTERNER_INDEX_IS_KEY
+#define INTERNER_INDEX_FROM_U32(I) ((INTERNER_INDEX_TYPE){ (I) })
+#define INTERNER_INDEX_TO_U32(I)   ((I).x)
+#else
+#define INTERNER_INDEX_FROM_U32(I) Cast(INTERNER_INDEX_TYPE, I)
+#define INTERNER_INDEX_TO_U32(I)   (I)
+#endif
+
 #ifdef INTERNER_EXTRA_TYPE
 #define SEGMENTLIST_TYPE INTERNER_EXTRA_NAME
 #else
@@ -201,7 +210,7 @@ INTERNER_LINKAGE INTERNER_INDEX_TYPE Cat(INTERNER_FUNCTION_PREFIX, _add_checked)
   INTERNER_TYPE intern = item;
 #endif
 
-  INTERNER_INDEX_TYPE idx = Cast(INTERNER_INDEX_TYPE, interner->list.len);
+  INTERNER_INDEX_TYPE idx = INTERNER_INDEX_FROM_U32(interner->list.len);
 
   *bucket = (INTERNER_BUCKET_NAME){ .key = intern, .val = idx, };
   *already_present = False;
@@ -229,9 +238,9 @@ b32 Cat(INTERNER_FUNCTION_PREFIX, _find)(INTERNER_NAME *interner, INTERNER_TYPE 
 INTERNER_LINKAGE
 INTERNER_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx) {
 #ifdef INTERNER_EXTRA_TYPE
-  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx).key;
+  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, INTERNER_INDEX_TO_U32(idx)).key;
 #else
-  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx);
+  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, INTERNER_INDEX_TO_U32(idx));
 #endif
 }
 
@@ -239,17 +248,17 @@ INTERNER_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get)(INTERNER_NAME *interner, INTER
 #ifdef INTERNER_EXTRA_TYPE
 INTERNER_LINKAGE
 INTERNER_EXTRA_TYPE Cat(INTERNER_FUNCTION_PREFIX, _get_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx) {
-  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, idx).extra;
+  return Cat(INTERNER_LIST_PREFIX, _at_unchecked)(&interner->list, INTERNER_INDEX_TO_U32(idx)).extra;
 }
 
 INTERNER_LINKAGE
 INTERNER_EXTRA_TYPE *Cat(INTERNER_FUNCTION_PREFIX, _extra_get_ptr)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx) {
-  return &Cat(INTERNER_LIST_PREFIX, _ptr_at_unchecked)(&interner->list, idx)->extra;
+  return &Cat(INTERNER_LIST_PREFIX, _ptr_at_unchecked)(&interner->list, INTERNER_INDEX_TO_U32(idx))->extra;
 }
 
 INTERNER_LINKAGE
 void Cat(INTERNER_FUNCTION_PREFIX, _set_extra)(INTERNER_NAME *interner, INTERNER_INDEX_TYPE idx, INTERNER_EXTRA_TYPE val) {
-  Cat(INTERNER_LIST_PREFIX, _ptr_at_unchecked)(&interner->list, idx)->extra = val;
+  Cat(INTERNER_LIST_PREFIX, _ptr_at_unchecked)(&interner->list, INTERNER_INDEX_TO_U32(idx))->extra = val;
 }
 #endif
 
@@ -273,3 +282,6 @@ void Cat(INTERNER_FUNCTION_PREFIX, _set_extra)(INTERNER_NAME *interner, INTERNER
 #undef INTERNER_MAP_PREFIX
 #undef INTERNER_EXTRA_TYPE
 #undef INTERNER_RESERVE_ZERO_INDEX
+#undef INTERNER_INDEX_IS_KEY
+#undef INTERNER_INDEX_FROM_U32
+#undef INTERNER_INDEX_TO_U32

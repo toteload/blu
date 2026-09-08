@@ -9,62 +9,11 @@
 #include "source_file.h"
 #include "print.h"
 
-void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
-  if (idx == 0) {
-    fputc('?', out);
-    return;
-  }
-
-  Type *type = types_get(types, idx);
-  switch (Cast(TypeKind, type->kind)) {
-  case Type_usize: {
-    fputs("usize", out);
-  } break;
-  case Type_isize: {
-    fputs("isize", out);
-  } break;
-  case Type_comptime_int: {
-    fputs("comptime_int", out);
-  } break;
-  case Type_integer: {
-    fprintf(out, "%c%u", (type->data.integer.signedness == Signed) ? 'i' : 'u', type->data.integer.bitwidth);
-  } break;
-  case Type_bool: {
-    fputs("bool", out);
-  } break;
-  case Type_function: {
-    fputs("(", out);
-    for (u32 i = 0; i < type->data.function.param_count; i++) {
-      if (i != 0) {
-        fputs(", ", out);
-      }
-      print_type(out, types, type->data.function.param_types[i]);
-    }
-    fputs(") ", out);
-    print_type(out, types, type->data.function.return_type);
-  } break;
-  case Type_nil: {
-    fputs("nil", out);
-  } break;
-  case Type_never: {
-    fputs("never", out);
-  } break;
-  case Type_slice: {
-    fputs("[]", out);
-    print_type(out, types, type->data.slice.base_type);
-  } break;
-  case Type_pointer: {
-    fputs("*", out);
-    print_type(out, types, type->data.pointer.base_type);
-  } break;
-  case Type_array: {
-    fprintf(out, "[%llu]", Cast(unsigned long long, type->data.array.size));
-    print_type(out, types, type->data.array.base_type);
-  } break;
-  case Type_type: {
-    fputs("type", out);
-  } break;
-  }
+void print_type(FILE *out, Compiler *compiler, TypeKey idx) {
+  ArenaSnapshot snap = arena_scope_begin(&compiler->scratch);
+  String s = write_type(&compiler->scratch, &compiler->types, idx);
+  fprintf(out, "%.*s", Cast(int, s.len), s.str);
+  arena_scope_end(&compiler->scratch, snap);
 }
 
 internal i64 read_signed(u16 bitwidth, void *data) {
@@ -84,11 +33,27 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
   return res;
 }
 
-void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, void *data) {
-  print_type(out, &compiler->types, type);
+internal char const *resolve_status_string(ResolveStatus status) {
+  switch (status) {
+  case RESOLVE_STATUS_UNRESOLVED: return "unresolved";
+  case RESOLVE_STATUS_RESOLVING: return "resolving";
+  case RESOLVE_STATUS_FULLY_RESOLVED: return "fully_resolved";
+  case RESOLVE_STATUS_ERROR: return "error";
+  }
+}
+
+void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, void *data) {
+  print_type(out, compiler, type);
   fputs(" ", out);
   Type *t = types_get(&compiler->types, type);
   switch (Cast(TypeKind, t->kind)) {
+  case Type_stub: {
+    ValueStubRef *ref = data;
+    Stub *stub = compiler_get_stub(compiler, ref->stub);
+    Value *v = values_get(&compiler->values, stub->val);
+    fprintf(out, "(stub_%u) ", ref->stub.x);
+    print_value_raw(out, compiler, flags, v->type, v->data);
+  } break;
   case Type_comptime_int: {
     fprintf(out, "%lld", Cast(long long, read_signed(64, data)));
   } break;
@@ -103,23 +68,14 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
     fputs((*Cast(u8 *, data)) ? "true" : "false", out);
   } break;
   case Type_type: {
-    print_type(out, &compiler->types, *Cast(TypeIndex *, data));
+    print_type(out, compiler, *Cast(TypeKey *, data));
   } break;
   case Type_function: {
     if (flags & PrintFlag_expand_function) {
-      ValueFunc *func = data;
-      fprintf(out, "0x%p\n", data);
-      print_iir_chunk(out, compiler, &func->chunk);
-    } else {
-      fprintf(out, "0x%p", data);
+      ValueResidualFunction *func = data;
+      fputs("\n", out);
+      print_iir_chunk(out, compiler, &compiler_get_function(compiler, func->key)->chunk);
     }
-  } break;
-  case Type_usize: {
-    // ASSUME: pointers are 8 bytes, as everywhere else in the compiler.
-    fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(64, data)));
-  } break;
-  case Type_isize: {
-    fprintf(out, "%" PRId64, Cast(i64, read_signed(64, data)));
   } break;
   case Type_pointer:
   case Type_nil:
@@ -161,10 +117,9 @@ internal void print_iref(FILE *out, Compiler *compiler, IRef ref) {
 
 internal char const* typekind_string(u8 kind) {
   switch (Cast(TypeKind, kind)) {
+  case Type_stub:         return "stub";
   case Type_comptime_int: return "comptime_int";
   case Type_integer:      return "integer";
-  case Type_usize:      return "usize";
-  case Type_isize:      return "isize";
   case Type_bool:         return "bool";
   case Type_function:     return "function";
   case Type_nil:          return "nil";
@@ -181,7 +136,7 @@ internal char const* typekind_string(u8 kind) {
 internal void print_inst_source(FILE *out, Compiler *compiler, AstAndSourceIndex src) {
   fputs(" ; ", out);
 
-  if (src.source_idx == 0 || src.ast_idx == 0) {
+  if (key_is_nil(src.source_idx) || src.ast_idx == 0) {
     fputs("_\n", out);
     return;
   }
@@ -230,7 +185,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
 
-  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
+  for (InstructionOffset i = 0; i < chunk->opcode_count; i++) {
     SIrOpcode  op   = sir_chunk_op(chunk, i);
 
     u32 data = sir_chunk_data(chunk, i);
@@ -261,10 +216,15 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     void *extra = sir_chunk_extra(chunk, i);
 
     switch (op) {
+    case SIR_typeof_param: {
+      SIrTypeofParam *typeof_param = extra;
+      print_sref(out, compiler, typeof_param->function_type);
+      fprintf(out, " param_index=%u", typeof_param->param_index);
+    } break;
     case SIR_func: {
       SIrFunc *func = extra;
-      fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
-      print_sref(out, compiler, func->return_type);
+      fprintf(out, "instruction_count=%u body=%%%u type_hint=", func->instruction_count, func->body);
+      print_sref(out, compiler, func->type_hint);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
 
@@ -272,11 +232,18 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       SIrCondbr *cond_br = extra;
       fputs("cond=", out);
       print_sref(out, compiler, cond_br->cond);
-      fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
+      fprintf(out, " otherwise=%%%u", cond_br->otherwise);
+    } break;
+
+    case SIR_logical_and:
+    case SIR_logical_or: {
+      SIrLogicalAndOr *andor = extra; // Funny Star Wars joke it is
+      fprintf(out, "lhs=");
+      print_sref(out, compiler, andor->lhs);
+      fprintf(out, " block=%%%u", andor->block);
     } break;
 
     case SIR_index:
-    case SIR_bool_and:
     case SIR_mul:
     case SIR_div:
     case SIR_mod:
@@ -307,8 +274,18 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_block:
     case SIR_comptime_block:
     case SIR_loop: {
-      fprintf(out, "count=%u", data);
-      stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
+      u32 count = sir_chunk_block_count(chunk, i);
+      fprintf(out, "count=%u", count);
+
+      if (op == SIR_block) {
+        SIrBlock *block = extra;
+        if (!sref_is_nil(block->result_type)) {
+          fputs(" result_type=", out);
+          print_sref(out, compiler, block->result_type);
+        }
+      }
+
+      stack_push(&blocks, ((BlockPrint){ .count = count - 1, .at = 0 }));
     } break;
 
     case SIR_br: {
@@ -317,17 +294,13 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       print_sref(out, compiler, br->value);
     } break;
 
+    case SIR_return_type: break;
+
+    case SIR_param:
     case SIR_repeat: {
       fprintf(out, "%%%u", data);
     } break;
 
-    case SIR_param_type: {
-      SIrParamType *p = extra;
-      print_sref(out, compiler, p->function_type);
-      fprintf(out, " %u", p->param_index);
-    } break;
-
-    case SIR_param:
     case SIR_builtin_debug:
     case SIR_builtin_len:
     case SIR_ret:
@@ -335,8 +308,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_typeof:
     case SIR_base_type:
     case SIR_alloc:
-    case SIR_comptime_alloc:
-    case SIR_return_type: {
+    case SIR_comptime_alloc: {
       print_sref(out, compiler, (SRef){data});
     } break;
 
@@ -362,15 +334,14 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       }
     } break;
 
-    case SIR_lookup_decl_type:
-    case SIR_lookup_decl_value: {
+    case SIR_get_decl_value: {
       fprintf(out, "decl=%u", data);
     } break;
 
     case SIR_as:
     case SIR_cast: {
       SIrAs *as = extra;
-      print_sref(out, compiler, as->type_to);
+      print_sref(out, compiler, as->type_dst);
       fputs(" ", out);
       print_sref(out, compiler, as->val);
     } break;
@@ -425,7 +396,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
 
-  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
+  for (InstructionOffset i = 0; i < chunk->opcode_count; i++) {
     IIrOpcode op = iir_chunk_op(chunk, i);
 
     u32 data = iir_chunk_data(chunk, i);
@@ -508,7 +479,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       IIrCondbr *condbr = iir_chunk_extra(chunk, i);
       fputs(" cond=", out);
       print_iref(out, compiler, condbr->cond);
-      fprintf(out, " then=%%%u otherwise=%%%u", condbr->then, condbr->otherwise);
+      fprintf(out, " otherwise=%%%u", condbr->otherwise);
     } break;
 
     case IIR_br: {
@@ -538,7 +509,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     }
 
     fputs(" : ", out);
-    print_type(out, &compiler->types, iir_chunk_type(chunk, i));
+    print_type(out, compiler, iir_chunk_type(chunk, i));
 
     print_inst_source(out, compiler, chunk->sources[i]);
   }

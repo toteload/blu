@@ -4,67 +4,90 @@
 #include "blu.h"
 #include "compiler.h"
 
-// For simplicity the maximum depths are a fixed number. This will likely change.
-#define MAX_SCOPE_DEPTH 64
-#define MAX_CALL_DEPTH 128
-
-#define MAX_BUILDERS 64 // Arbitrary number.
-#define MAX_BREAKS_AND_RETURNS 16
+#define BREAK_RETURN_LIST_MIN_SIZE_LOG_2 4
+#define BREAK_RETURN_LIST_SEGMENT_COUNT  12
+#define BREAK_RETURN_LIST_NAME BreakReturnList
+#define BREAK_RETURN_LIST_TYPE InstructionOffset
+#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#include "segment_list.h"
 
 typedef enum {
-  Scope_chunk,
+  Scope_comptime,
+  Scope_signature_of_function,
+  Scope_function,
   Scope_block,
-  Scope_eval_block,
-  Scope_func,
 } ScopeKind;
 
 typedef struct {
   u8 scope_kind;
 
-  InstructionIndex start;
-  InstructionIndex end;
-  InstructionIndex pc;
+  InstructionOffset start;
+  InstructionOffset end;
+  InstructionOffset pc;
 
-  InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
-  InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
+  InstructionOffset residual; // if scope_kind == Scope_block then this refers to the block in residual code
+  InstructionOffset condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
+  InstructionOffset logical_and; // if this scope wraps a runtime `and` then this refers to the SIR_logical_and
 
-  struct {
-    u32 len;
-    InstructionIndex sources[MAX_BREAKS_AND_RETURNS];
-  } breaks_and_returns;
-} ScopeSpan;
+  TypeKey result_type; // if scope_kind == Scope_block, the type every br to this block is coerced to, or nil to unify the brs
 
-typedef Stack(ScopeSpan) ScopeStack;
+  BreakReturnList breaks_and_returns;
 
-ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block);
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
+  union {
+    struct {
+      StubKey stub;
+    } signature_of_function;
+
+    struct {
+      TypeKey function_type;
+      TypeKey return_type;
+    } function;
+  } data;
+} Scope;
+
+b8 scope_kind_is_comptime(ScopeKind kind);
+void scope_add_break_or_return(Scope *scope, Arena *arena, InstructionOffset source);
+
+#define SCOPE_STACK_MIN_SIZE_LOG_2 4
+#define SCOPE_STACK_SEGMENT_COUNT  12
+#define SCOPE_STACK_NAME ScopeStack
+#define SCOPE_STACK_TYPE Scope
+#define SEGMENTLIST_NAME SCOPE_STACK_NAME
+#define SEGMENTLIST_TYPE SCOPE_STACK_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 SCOPE_STACK_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT SCOPE_STACK_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#include "segment_list.h"
 
 typedef struct {
-  DeclarationIndex decl_idx;
+  DeclarationKey decl;
   SIrChunk *chunk;
 
   IRef *inst_map;
-  TypeIndex *inst_types;
+  TypeKey *inst_types;
 
+  u32 comptime_depth;
   ScopeStack scopes;
+} Frame;
 
-  ArenaSnapshot snapshot;
-} CallFrame;
-
-ScopeSpan *push_scope(CallFrame *frame);
-
-typedef Stack(CallFrame) CallStack;
+void   frame_init(Frame *frame, Arena *arena, Declaration *decl);
+b32    frame_is_comptime(Frame *frame);
+Scope *frame_push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionOffset start, u32 count);
+Scope  frame_pop_scope(Frame *frame);
+Scope *frame_get_func_scope(Frame *f);
 
 typedef struct {
-  b8 requested_resolution;
-  CallStack call_stack;
-} RunState;
-
-void runstate_init(RunState *state, Arena *arena);
-CallFrame *frame_push(RunState *state, Arena *arena, Declaration* decl);
-void frame_pop(RunState *state, Arena *arena, ValueStore *values);
-CallFrame *top_frame(RunState *state);
-ScopeSpan *get_func_scope(CallFrame *frame);
+  Frame frame;
+  struct {
+    IIrBuilder builder;
+  } function;
+} Specializer;
 
 typedef struct {
   Arena               *perm;
@@ -76,28 +99,36 @@ typedef struct {
   TypeInterner        *types;
   ValueStore          *values;
   Common              *common;
-
-  Stack(IIrBuilder)     builders;
-} Specializer;
+  Compiler            *compiler;
+} SpecializerContext;
 
 typedef enum {
-  Step_ok,
+  Step_next_step,
+  Step_finished,
   Step_error,
-  Step_resolve_declaration_type,
   Step_resolve_declaration_value,
-  Step_leave_scope,
+  Step_register_function,
+} StepResultKind;
+
+typedef struct {
+  StepResultKind kind;
+  union {
+    struct {
+      ValueKey val;
+    } finished;
+    struct {
+      DeclarationKey decl;
+    } resolve_decl;
+    struct {
+      StubKey stub;
+    } register_function;
+  } data;
 } StepResult;
 
-typedef enum {
-  Run_ok,
-  Run_error = Step_error,
+void specializer_init_function(SpecializerContext *sp, Specializer *state, StubKey stub_key);
 
-  // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
-  // which needs to be resolved.
-  Run_resolve_declaration_type = Step_resolve_declaration_type,
-  Run_resolve_declaration_value = Step_resolve_declaration_value,
-} RunResult;
-
-u32 run_toplevel_block(Specializer *in, RunState *state);
+StepResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
+void specializer_resolve_decl(Specializer *state, ValueKey decl_val);
 
 #endif // SPECIALIZE_H
+

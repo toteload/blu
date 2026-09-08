@@ -13,6 +13,13 @@ String string_from_cstr(char const *s) {
   };
 }
 
+String string_sub(String s, usize start, usize end) {
+  return (String){
+    .str = s.str + start,
+    .len = end - start,
+  };
+}
+
 u32 parse_u64(String s, u64 *out) {
   u64 value = 0;
   for (usize i = 0; i < s.len; i++) {

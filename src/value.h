@@ -3,13 +3,18 @@
 
 #include "blu.h"
 #include "types.h"
-#include "ir.h"
+#include "resolver.h"
 
 typedef struct {
-  TypeIndex  type;
-  u32        data_size;
-  void      *data;
+  TypeKey  type;
+  u32      data_size;
+  void    *data;
 } Value;
+
+typedef struct {
+  ValueKey val;
+  u32 offset;
+} ValuePointer;
 
 typedef struct {
   usize  len;
@@ -17,17 +22,12 @@ typedef struct {
 } ValueSlice;
 
 typedef struct {
-  IIrChunk chunk;
-} ValueFunc;
+  ResidualFunctionKey key;
+} ValueResidualFunction;
 
 typedef struct {
-  ValueIndex val;
-  u32 offset;
-} ValuePointer;
-
-typedef struct {
-  DeclarationIndex idx;
-} ValueDeclarationStub;
+  StubKey stub;
+} ValueStubRef;
 
 // -----------------------------------------------------------------------------
 
@@ -52,12 +52,12 @@ typedef struct {
 void values_init(ValueStore *values, ValueStoreOptions *options);
 void values_deinit(ValueStore *values);
 
-ValueIndex  values_alloc(ValueStore *values, Value **out);
-void       *values_alloc_data(ValueStore *values, u32 size, u32 align);
-void        values_dealloc_data(ValueStore *values, void *data, u32 size);
-void        values_dealloc(ValueStore *values, ValueIndex idx);
-Value      *values_get(ValueStore *values, ValueIndex idx);
-ValueIndex  values_copy(ValueStore *values, ValueIndex val);
+ValueKey  values_alloc(ValueStore *values, Value **out);
+void     *values_alloc_data(ValueStore *values, u32 size, u32 align);
+void      values_dealloc_data(ValueStore *values, void *data, u32 size);
+void      values_dealloc(ValueStore *values, ValueKey idx);
+Value    *values_get(ValueStore *values, ValueKey idx);
+ValueKey  values_copy(ValueStore *values, ValueKey val);
 
 #define values_alloc_data_type(values, type) \
   Cast(type*, values_alloc_data((values), sizeof(type), Align_of(type)))

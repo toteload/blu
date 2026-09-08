@@ -2,219 +2,310 @@
 #include "ir.h"
 #include "eval.h"
 
+#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX breaks
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+#define SEGMENTLIST_NAME SCOPE_STACK_NAME
+#define SEGMENTLIST_TYPE SCOPE_STACK_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 SCOPE_STACK_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT SCOPE_STACK_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX scopes
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 extern Allocator const cstd_allocator;
 
-internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref);
+internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *state);
 
-ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block) {
-  for (u32 i = 0; i < count; i++) {
-    if (spans[i].start == start_of_block) {
-      return spans + i;
+internal void store_inst_value(Frame *f, InstructionOffset idx, IRef val);
+internal void store_inst_type(Frame *f, InstructionOffset idx, TypeKey type);
+
+internal IRef load_inst_value(Frame *f, InstructionOffset inst) {
+  return f->inst_map[inst];
+}
+
+internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref);
+internal TypeKey get_iref_type(SpecializerContext *ctx, Specializer *sp, IRef ref);
+
+internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builder, Frame *f, Scope *block);
+internal InstructionOffset function_body_start(SIrChunk *chunk, InstructionOffset func);
+internal b32 finalize_function_signature(SpecializerContext *ctx, Specializer *state, TypeKey *type_signature);
+
+void specializer_init_function(SpecializerContext *ctx, Specializer *state, StubKey stub_key);
+
+internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref);
+
+internal InstructionOffset expect_residual_at_instruction_index(Frame *f, InstructionOffset inst);
+internal b32 expect_comptime_value_or_nil(SpecializerContext *ctx, Specializer *state, SRef ref, ValueKey *out);
+internal b32 expect_some_comptime_value(SpecializerContext *sp, Specializer *state, SRef ref, ValueKey *out);
+internal b32 _get_value_expect_type(SpecializerContext *sp, Specializer *state, ValueKey val, TypeKey *out);
+internal b32 expect_some_type_value(SpecializerContext *sp, Specializer *state, SRef ref, TypeKey *out);
+internal b32 expect_type_value_or_nil(SpecializerContext *sp, Specializer *state, SRef ref, TypeKey *out);
+internal TypeKey type_of_val(SpecializerContext *ctx, ValueKey v);
+internal ValueKey val_from_type(SpecializerContext *ctx, TypeKey t);
+internal ValueKey val_from_usize(SpecializerContext *ctx, usize x);
+internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref);
+internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx);
+
+// ---
+
+internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey dst, InstructionOffset pc, IRef *res) {
+  MessageLocation loc = {
+    .kind = MessageLocation_ir_instruction,
+    .decl_idx = sp->frame.decl,
+    .data.offset = pc,
+  };
+
+  if (iref_is_nil(ref)) {
+    Message_error(ctx->msg_sink, loc, string_lit("Expected a value of type %type"), dst);
+    return False;
+  }
+
+  if (iref_is_some_value(ref)) {
+    Value *v = values_get(ctx->values, iref_to_value(ref));
+
+    ValueKey val_res;
+    u32 err = eval_coerce(ctx->types, ctx->values, dst, v, &val_res);
+    if (err == CoerceResult_comptime_int_value_out_of_range) {
+      Message_error(ctx->msg_sink, loc, string_lit("Value of comptime_int is out of range of destination type"));
+      return False;
     }
+
+    if (err == CoerceResult_invalid_coercion_types) {
+      Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), v->type, dst);
+      return False;
+    }
+
+    *res = iref_from_value(val_res);
+    return True;
+  }
+
+  TypeKey from = get_iref_type(ctx, sp, ref);
+  if (key_is_nil(from)) {
+    TodoMsg("coerce a runtime value whose type is unknown");
+  }
+
+  switch (Cast(CoercionResult, classify_type_coercion(ctx->types, dst, from))) {
+  case Coercion_identical_types:
+    *res = ref;
+    return True;
+
+  case Coercion_int_widen:
+  case Coercion_bool_to_int: {
+    IIrBuilder *builder = &sp->function.builder;
+    InstructionOffset inst = iir_builder_add(builder, IIR_int_cast, sp->frame.chunk->sources[pc]);
+    iir_builder_set_data(builder, inst, iref_to_u32(ref));
+    iir_builder_set_type(builder, inst, dst);
+    *res = iref_from_instruction(inst);
+    return True;
+  }
+
+  case Coercion_array_to_slice: Todo();
+  case Coercion_comptime_int_to_intlike:
+    Message_error(ctx->msg_sink, loc, string_lit("Value of type %type must be comptime known"), from);
+    return False;
+
+  case Coercion_invalid:
+    Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), from, dst);
+    return False;
   }
 
   Unreachable();
 }
 
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source) {
-  if (scope->breaks_and_returns.len == MAX_BREAKS_AND_RETURNS) {
-    Todo();
+// --- Scope
+
+b8 scope_kind_is_comptime(ScopeKind kind) {
+  switch (kind) {
+  case Scope_block:
+  case Scope_function:
+    return False;
+  case Scope_comptime:
+  case Scope_signature_of_function:
+    return True;
+  }
+}
+
+void scope_add_break_or_return(Scope *scope, Arena *arena, InstructionOffset source) {
+  breaks_append(&scope->breaks_and_returns, arena, source);
+}
+
+Scope *find_scope(ScopeStack *scopes, InstructionOffset start_of_block) {
+  for (u32 i = 0; i < scopes->len; i++) {
+    Scope *s = scopes_ptr_at_unchecked(scopes, i);
+    if (s->start == start_of_block) {
+      return s;
+    }
   }
 
-  u32 i = scope->breaks_and_returns.len++;
-  scope->breaks_and_returns.sources[i] = source;
+  Panic();
 }
 
-internal IIrBuilder *push_ir_builder(Specializer *in) {
-  IIrBuilder *builder = stack_push_ptr(&in->builders);
-  *builder = (IIrBuilder){.scratch = in->scratch};
-  return builder;
+internal void dealloc_scope_values(SpecializerContext *ctx, Frame *f, Scope* span) {
+  // Do not dealloc the value stored at the block address
+  for (u32 i = span->start + 1; i < span->end; i++) {
+    if (iref_is_some_value(f->inst_map[i])) {
+      values_dealloc(ctx->values, iref_to_value(f->inst_map[i]));
+      f->inst_map[i] = (IRef){0};
+    }
+  }
 }
 
-internal void pop_ir_builder(Specializer *in) { stack_pop(&in->builders); }
+// --- Frame
 
-internal IIrBuilder *get_builder(Specializer *in) { return stack_peek_ptr(&in->builders); }
+void frame_init(Frame *f, Arena *arena, Declaration *decl) {
+  SIrChunk *chunk = &decl->data.decl.chunk;
 
-internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx, IRef val) {
+  *f = (Frame){
+    .decl = decl->idx,
+    .chunk = chunk,
+    .inst_map = arena_push_array(IRef, arena, chunk->opcode_count),
+    .inst_types = arena_push_array(TypeKey, arena, chunk->opcode_count),
+  };
+
+  memset(f->inst_map, 0, chunk->opcode_count * sizeof(IRef));
+  memset(f->inst_types, 0, chunk->opcode_count * sizeof(TypeKey));
+}
+
+b32 frame_is_comptime(Frame *frame) { return frame->comptime_depth > 0; }
+
+Scope *frame_push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionOffset start, u32 count) {
+  Scope *span = scopes_push(&frame->scopes, arena);
+
+  if (scope_kind_is_comptime(kind)) {
+    frame->comptime_depth++;
+  }
+
+  *span = (Scope){
+    .scope_kind = kind,
+    .start = start,
+    .end = start + count,
+    .pc = start + 1,
+  };
+
+  return span;
+}
+
+Scope frame_pop_scope(Frame *frame) {
+  Scope *top = scopes_peek_ptr_unchecked(&frame->scopes);
+  if (scope_kind_is_comptime(top->scope_kind)) {
+    frame->comptime_depth--;
+  }
+
+  return scopes_pop(&frame->scopes);
+}
+
+Scope *frame_get_func_scope(Frame *f) {
+  Scope *s = scopes_ptr_at_unchecked(&f->scopes, 0);
+  Assert(s->scope_kind == Scope_function);
+  return s;
+}
+
+// ---
+
+internal void store_inst_value(Frame *f, InstructionOffset idx, IRef val) {
   f->inst_map[idx] = val;
 }
 
-internal always_inline void store_inst_type(CallFrame *f, InstructionIndex idx, TypeIndex type) {
+internal void store_inst_type(Frame *f, InstructionOffset idx, TypeKey type) {
   f->inst_types[idx] = type;
 }
 
-internal IRef copy_if_value(Specializer *sp, IRef ref) {
-  if (iref_is_instruction(ref) || iref_is_nil(ref)) {
-    return ref;
-  } else {
-    return iref_from_value(values_copy(sp->values, iref_to_value(ref)));
+internal TypeKey get_value_type(SpecializerContext *ctx, ValueKey key) {
+  Value *v = values_get(ctx->values, key);
+  Type *t = types_get(ctx->types, v->type);
+
+  if (t->kind == Type_stub) {
+    Stub *stub = compiler_get_stub(ctx->compiler, Cast(ValueStubRef*, v->data)->stub);
+    return stub->type_hint;
   }
+
+  return v->type;
 }
 
-internal always_inline TypeIndex get_sref_type(Specializer *spec, CallFrame *f, SRef ref) {
+internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
-    Value *v = values_get(spec->values, sref_to_value(ref));
+    Value *v = values_get(ctx->values, sref_to_value(ref));
     return v->type;
   }
 
   return f->inst_types[sref_to_instruction(ref)];
 }
 
-void runstate_init(RunState *state, Arena *arena) {
-  state->requested_resolution = False;
-  stack_init(
-    &state->call_stack,
-    arena_push_array(CallFrame, arena, MAX_CALL_DEPTH),
-    MAX_CALL_DEPTH
-  );
-}
-
-CallFrame *top_frame(RunState *state) { return stack_peek_ptr(&state->call_stack); }
-
-ScopeSpan *get_func_scope(CallFrame *frame) {
-  for (u32 i = frame->scopes.len; i-- > 0;) {
-    ScopeSpan *s = &frame->scopes.data[i];
-    if (s->scope_kind == Scope_func) {
-      return s;
-    }
+internal TypeKey get_iref_type(SpecializerContext *ctx, Specializer *sp, IRef ref) {
+  if (iref_is_some_value(ref)) {
+    Value *v = values_get(ctx->values, iref_to_value(ref));
+    return v->type;
   }
 
-  Unreachable();
+  return iir_builder_get_type(&sp->function.builder, iref_to_instruction(ref));
 }
 
-ScopeSpan *push_scope(CallFrame *frame) { return stack_push_ptr(&frame->scopes); }
-
-internal b32 end_residual_block(IIrBuilder *builder, CallFrame *f, ScopeSpan *block) {
+internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builder, Frame *f, Scope *block) {
   iir_builder_set_data(builder, block->residual, iir_builder_offset(builder, block->residual));
+
+  if (key_is_some(block->result_type)) {
+    f->inst_types[block->start] = block->result_type;
+    iir_builder_set_type(builder, block->residual, block->result_type);
+    return True;
+  }
 
   if (block->breaks_and_returns.len == 0) {
     return True;
   }
 
-  TypeIndex type = f->inst_types[block->breaks_and_returns.sources[0]];
+  TypeKey type_unified = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, 0)];
+  u32 err = UnifyResult_ok;
 
   for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
-    TypeIndex t = f->inst_types[block->breaks_and_returns.sources[i]];
-    if (t != type) {
+    TypeKey t = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, i)];
+
+    err = eval_unify(ctx->scratch, ctx->types, type_unified, t, &type_unified);
+
+    switch (Cast(UnifyResult, err)) {
+    case UnifyResult_ok:
+    case UnifyResult_type_is_incomplete:
+      continue;
+    case UnifyResult_types_cannot_be_unified:
       Todo();
     }
   }
 
-  f->inst_types[block->start] = type;
-
-  iir_builder_set_type(builder, block->residual, type);
-
-  return True;
-}
-
-internal b32 finalize_function(Specializer *in, CallFrame *f, ScopeSpan *func) {
-  IIrBuilder *builder = get_builder(in);
-
-  while (True) {
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
-    if (s == func) {
-      break;
-    }
-
-    if (s->scope_kind == Scope_block) {
-      b32 ok = end_residual_block(builder, f, s);
-      if (!ok) {
-        return False;
-      }
-    }
-
-    stack_pop(&f->scopes);
-  }
-
-  Assert(func->breaks_and_returns.len > 0);
-
-  for (u32 i = 1; i < func->breaks_and_returns.len; i++) {
+  if (err != UnifyResult_ok) {
     Todo();
   }
 
+  f->inst_types[block->start] = type_unified;
+
+  iir_builder_set_type(builder, block->residual, type_unified);
+
   return True;
-}
-
-CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
-  SIrChunk *chunk = &decl->data.decl.chunk;
-
-  CallFrame *f = stack_push_ptr(&state->call_stack);
-  *f = (CallFrame){
-    .decl_idx = decl->idx,
-    .chunk = chunk,
-    .inst_map = arena_push_array(IRef, arena, chunk->opcode_count),
-    .inst_types = arena_push_array(TypeIndex, arena, chunk->opcode_count),
-    .snapshot = arena_scope_begin(arena),
-  };
-
-  memset(f->inst_map, 0, chunk->opcode_count * sizeof(IRef));
-  memset(f->inst_types, 0, chunk->opcode_count * sizeof(TypeIndex));
-
-  stack_init(&f->scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
-
-  stack_push(
-    &f->scopes,
-    ((ScopeSpan){
-      .scope_kind = Scope_chunk,
-      .start = 0,
-      .end = f->chunk->opcode_count,
-      .pc = 0,
-    })
-  );
-
-  return f;
-}
-
-void frame_pop(RunState *state, Arena *arena, ValueStore *values) {
-  CallFrame f = stack_pop(&state->call_stack);
-
-  ScopeSpan span = f.scopes.data[0];
-  for (u32 i = span.start; i < span.end; i++) {
-    if (iref_is_some_value(f.inst_map[i])) {
-      values_dealloc(values, iref_to_value(f.inst_map[i]));
-    }
-  }
-
-  arena_scope_end(arena, f.snapshot);
-}
-
-internal void dealloc_scope_values(Specializer *in, CallFrame *f, ScopeSpan span) {
-  // Do not dealloc the value stored at the block address
-  for (u32 i = span.start + 1; i < span.end; i++) {
-    if (iref_is_some_value(f->inst_map[i])) {
-      values_dealloc(in->values, iref_to_value(f->inst_map[i]));
-      f->inst_map[i] = (IRef){0};
-    }
-  }
-}
-
-internal void pop_scopes_to(Specializer *in, CallFrame *f, InstructionIndex idx) {
-  while (True) {
-    ScopeSpan span = stack_pop(&f->scopes);
-
-    if (span.start == idx) {
-      dealloc_scope_values(in, f, span);
-      return;
-    }
-  }
-
-  Unreachable();
 }
 
 // A value-index ref is already a comptime value; an instruction-index ref is the result recorded
 // for that instruction in the current frame.
 // The returned IrRef can be either a value or an instruction index that maps to a residual
 // instruction.
-internal IRef resolve(CallFrame *f, SRef ref) {
+internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_value(ref)) {
-    return (IRef){sref_to_u32(ref)};
+    if (sref_is_some_value(ref)) {
+      return iref_from_value(values_copy(ctx->values, sref_to_value(ref)));
+    }
+
+    return IREF_NIL;
   }
 
   return f->inst_map[sref_to_instruction(ref)];
 }
 
-internal InstructionIndex
-expect_residual_at_instruction_index(CallFrame *f, InstructionIndex inst) {
+internal InstructionOffset expect_residual_at_instruction_index(Frame *f, InstructionOffset inst) {
   IRef res = f->inst_map[inst];
 
   Assert(iref_is_instruction(res));
@@ -222,61 +313,143 @@ expect_residual_at_instruction_index(CallFrame *f, InstructionIndex inst) {
   return iref_to_instruction(res);
 }
 
-internal void pop_finished_scopes(Specializer *in, CallFrame *f, InstructionIndex end) {
-  IIrBuilder *builder = get_builder(in);
-  ScopeSpan last;
+internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *state) {
+  IIrBuilder *builder = &state->function.builder;
+  Frame *f = &state->frame;
 
-  while (True) {
-    ScopeSpan *span = stack_peek_ptr(&f->scopes);
+  ValueKey last_value = {0};
 
-    if (span->end > end) {
-      break;
+  while (!scopes_is_empty(&f->scopes)) {
+    Scope *span = scopes_peek_ptr_unchecked(&f->scopes);
+
+    if (span->pc < span->end) {
+      return (StepResult){ .kind = Step_next_step };
     }
 
-    if (span->residual) {
-      b32 ok = end_residual_block(builder, f, span);
+    switch (Cast(ScopeKind, span->scope_kind)) {
+    case Scope_signature_of_function: {
+      TypeKey type_signature;
+      b32 ok = finalize_function_signature(ctx, state, &type_signature);
+
       if (!ok) {
         Todo();
       }
-    }
 
-    if (span->condbr) {
-      SIrCondbr *condbr = sir_chunk_extra(f->chunk, span->condbr);
+      Stub *stub = compiler_get_stub(ctx->compiler, span->data.signature_of_function.stub);
+      stub->type_hint = type_signature;
 
-      InstructionIndex residual_condbr =
-        iref_to_instruction(resolve(f, sref_from_instruction(span->condbr)));
+      //dealloc_scope_values(ctx, f, span);
+      scopes_pop(&f->scopes);
 
-      IIrBuilder *builder = get_builder(in);
-      IIrCondbr *data = iir_builder_push_data(builder, residual_condbr, IIrCondbr);
-      *data = (IIrCondbr){
-        .cond = resolve(f, condbr->cond),
-        .then = iref_to_instruction(resolve(f, sref_from_instruction(condbr->then))),
-        .otherwise = iref_to_instruction(resolve(f, sref_from_instruction(condbr->otherwise))),
+      return (StepResult){
+        .kind = Step_register_function,
+        .data.register_function = {
+          .stub = span->data.signature_of_function.stub,
+        },
       };
-    }
+    } break;
 
-    last = stack_pop(&f->scopes);
+    case Scope_function: {
+      ResidualFunction *func;
+      ResidualFunctionKey key = compiler_add_function(ctx->compiler, &func);
+
+      iir_builder_flatten(builder, ctx->perm, &func->chunk);
+
+      Value *v;
+      last_value = values_alloc(ctx->values, &v);
+      ValueResidualFunction *data = values_alloc_data_type(ctx->values, ValueResidualFunction);
+      *data = (ValueResidualFunction){ .key = key };
+      *v = (Value){
+        .type = span->data.function.function_type,
+        .data_size = sizeof(ValueResidualFunction),
+        .data = data,
+      };
+
+      //dealloc_scope_values(ctx, f, span);
+      scopes_pop(&f->scopes);
+    } break;
+
+    case Scope_block: {
+      // Must come before finalize_residual_block, so the short-circuit br is counted as part of the block.
+      if (span->logical_and) {
+        SIrLogicalAndOr *logic = sir_chunk_extra(f->chunk, span->logical_and);
+        AstAndSourceIndex source = f->chunk->sources[span->logical_and];
+
+        InstructionOffset inst_br = iir_builder_add(builder, IIR_br, source);
+        IIrBr *br = iir_builder_push_data(builder, inst_br, IIrBr);
+        *br = (IIrBr){
+          .block = span->residual,
+          .value = resolve(ctx, f, sref_from_value(ctx->common->val._false)),
+        };
+        iir_builder_set_type(builder, inst_br, ctx->types->t_bool);
+
+        InstructionOffset inst_condbr = expect_residual_at_instruction_index(f, span->logical_and);
+        IIrCondbr *condbr = iir_builder_push_data(builder, inst_condbr, IIrCondbr);
+        *condbr = (IIrCondbr){
+          .cond = resolve(ctx, f, logic->lhs),
+          .otherwise = inst_br,
+        };
+      }
+
+      if (span->residual) {
+        b32 ok = finalize_residual_block(ctx, builder, f, span);
+        if (!ok) {
+          Todo();
+        }
+      }
+
+      if (span->condbr) {
+        SIrCondbr *condbr = sir_chunk_extra(f->chunk, span->condbr);
+
+        InstructionOffset residual_condbr =
+          iref_to_instruction(resolve(ctx, f, sref_from_instruction(span->condbr)));
+
+        IIrCondbr *data = iir_builder_push_data(builder, residual_condbr, IIrCondbr);
+        *data = (IIrCondbr){
+          .cond = resolve(ctx, f, condbr->cond),
+          .otherwise = iref_to_instruction(resolve(ctx, f, sref_from_instruction(condbr->otherwise))),
+        };
+      }
+
+      //dealloc_scope_values(ctx, f, span);
+      scopes_pop(&f->scopes);
+    } break;
+
+    case Scope_comptime: {
+      IRef r = load_inst_value(f, span->start);
+      if (iref_is_instruction(r)) {
+        Todo();
+      }
+      last_value = iref_to_value(r);
+      //dealloc_scope_values(ctx, f, span);
+      scopes_pop(&f->scopes);
+    } break;
+    }
   }
 
-  dealloc_scope_values(in, f, last);
+  return (StepResult){
+    .kind = Step_finished,
+    .data.finished = { .val = last_value },
+  };
 }
 
-internal b32
-expect_comptime_value_or_nil(Specializer *in, CallFrame *f, SRef ref, ValueIndex *out) {
-  IRef x = resolve(f, ref);
+internal b32 expect_comptime_value_or_nil(SpecializerContext *ctx, Specializer *state, SRef ref, ValueKey *out) {
+  Frame *f = &state->frame;
+
+  IRef x = resolve(ctx, f, ref);
 
   if (iref_is_value(x)) {
     *out = iref_to_value(x);
     return True;
   }
 
-  ScopeSpan *s = stack_peek_ptr(&f->scopes);
+  Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
 
   Message_error(
-    in->msg_sink,
+    ctx->msg_sink,
     (MessageLocation){
       .kind = MessageLocation_ir_instruction,
-      .decl_idx = f->decl_idx,
+      .decl_idx = state->frame.decl,
       .data.offset = s->pc,
     },
     string_lit("Value must be comptime known")
@@ -285,20 +458,22 @@ expect_comptime_value_or_nil(Specializer *in, CallFrame *f, SRef ref, ValueIndex
   return False;
 }
 
-internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref, ValueIndex *out) {
-  ValueIndex idx;
-  b32 ok = expect_comptime_value_or_nil(in, f, ref, &idx);
+internal b32 expect_some_comptime_value(SpecializerContext *sp, Specializer *state, SRef ref, ValueKey *out) {
+  Frame *f = &state->frame;
+
+  ValueKey idx;
+  b32 ok = expect_comptime_value_or_nil(sp, state, ref, &idx);
   if (!ok) {
     return False;
   }
 
-  if (idx == 0) {
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
+  if (key_is_nil(idx)) {
+    Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
     Message_error(
-      in->msg_sink,
+      sp->msg_sink,
       (MessageLocation){
         .kind = MessageLocation_ir_instruction,
-        .decl_idx = f->decl_idx,
+        .decl_idx = state->frame.decl,
         .data.offset = s->pc,
       },
       string_lit("Value may not be omitted")
@@ -312,16 +487,18 @@ internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref,
   return True;
 }
 
-internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
-  Value *v = values_get(in->values, val);
+internal b32 _get_value_expect_type(SpecializerContext *sp, Specializer *state, ValueKey val, TypeKey *out) {
+  Frame *f = &state->frame;
 
-  if (v->type != in->common->type.type) {
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
+  Value *v = values_get(sp->values, val);
+
+  if (!key_eq(v->type, sp->types->t_type)) {
+    Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
     Message_error(
-      in->msg_sink,
+      sp->msg_sink,
       (MessageLocation){
         .kind = MessageLocation_ir_instruction,
-        .decl_idx = f->decl_idx,
+        .decl_idx = state->frame.decl,
         .data.offset = s->pc,
       },
       string_lit("Expected a type, but got something else")
@@ -330,25 +507,25 @@ internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex va
     return False;
   }
 
-  *out = *Cast(TypeIndex *, v->data);
+  *out = *Cast(TypeKey *, v->data);
 
   return True;
 }
 
-internal b32 expect_some_type_value(Specializer *in, CallFrame *f, SRef ref, TypeIndex *out) {
-  ValueIndex val;
-  b32 ok = expect_some_comptime_value(in, f, ref, &val);
+internal b32 expect_some_type_value(SpecializerContext *sp, Specializer *state, SRef ref, TypeKey *out) {
+  ValueKey val;
+  b32 ok = expect_some_comptime_value(sp, state, ref, &val);
   if (!ok) {
     return False;
   }
 
-  TypeIndex t;
-  ok = _get_value_expect_type(in, f, val, &t);
+  TypeKey t;
+  ok = _get_value_expect_type(sp, state, val, &t);
   if (!ok) {
     return False;
   }
 
-  if (!t) {
+  if (key_is_nil(t)) {
     Todo();
   }
 
@@ -357,317 +534,341 @@ internal b32 expect_some_type_value(Specializer *in, CallFrame *f, SRef ref, Typ
   return True;
 }
 
-internal b32 expect_type_value_or_nil(Specializer *in, CallFrame *f, SRef ref, TypeIndex *out) {
-  ValueIndex val;
-  b32 ok = expect_comptime_value_or_nil(in, f, ref, &val);
+internal b32 expect_type_value_or_nil(SpecializerContext *sp, Specializer *state, SRef ref, TypeKey *out) {
+  ValueKey val;
+  b32 ok = expect_comptime_value_or_nil(sp, state, ref, &val);
   if (!ok) {
     return False;
   }
 
-  if (val == 0) {
-    *out = 0;
+  if (key_is_nil(val)) {
+    *out = (TypeKey){0};
     return True;
   }
 
-  return _get_value_expect_type(in, f, val, out);
+  return _get_value_expect_type(sp, state, val, out);
 }
 
-internal TypeIndex type_of_val(Specializer *in, ValueIndex v) {
-  Assert(v);
+internal TypeKey type_of_val(SpecializerContext *ctx, ValueKey v) {
+  Assert(key_is_some(v));
 
-  Value *val = values_get(in->values, v);
+  Value *val = values_get(ctx->values, v);
   return val->type;
 }
 
-internal ValueIndex val_from_type(Specializer *in, TypeIndex t) {
+internal ValueKey val_from_type(SpecializerContext *ctx, TypeKey t) {
   Value *v;
-  ValueIndex res = values_alloc(in->values, &v);
-  TypeIndex *data = values_alloc_data(in->values, sizeof(TypeIndex), Align_of(TypeIndex));
+  ValueKey res = values_alloc(ctx->values, &v);
+  TypeKey *data = values_alloc_data(ctx->values, sizeof(TypeKey), Align_of(TypeKey));
   *data = t;
   *v = (Value){
-    .type = in->common->type.type,
-    .data_size = sizeof(TypeIndex),
+    .type = ctx->types->t_type,
+    .data_size = sizeof(TypeKey),
     .data = data,
   };
   return res;
 }
 
-internal ValueIndex val_from_usize(Specializer *in, usize x) {
+internal ValueKey val_from_usize(SpecializerContext *ctx, usize x) {
   Value *v;
-  ValueIndex res = values_alloc(in->values, &v);
-  usize *data = values_alloc_data_type(in->values, usize);
+  ValueKey res = values_alloc(ctx->values, &v);
+  usize *data = values_alloc_data_type(ctx->values, usize);
   *data = x;
   *v = (Value){
-    .type = in->common->type.usize,
+    .type = ctx->types->t_usize,
     .data_size = sizeof(usize),
     .data = data,
   };
   return res;
 }
 
-internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref) {
+internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
-    Value *v = values_get(in->values, sref_to_value(ref));
+    Value *v = values_get(ctx->values, sref_to_value(ref));
     return v->type;
   }
 
-  InstructionIndex i = sref_to_instruction(ref);
+  InstructionOffset i = sref_to_instruction(ref);
 
-  TypeIndex type = f->inst_types[i];
+  TypeKey type = f->inst_types[i];
 
-  Assert(type);
+  Assert(key_is_some(type));
 
   return type;
 }
 
-internal u32 step(Specializer *in, RunState *state) {
-  CallFrame *f = top_frame(state);
-  ScopeSpan *s = stack_peek_ptr(&f->scopes);
+internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
+  TypeKey type_ptr;
+  {
+    Value *v = values_get(sp->values, idx);
+    type_ptr = types_add_pointer(sp->types, v->type);
+  }
 
-  InstructionIndex pc = s->pc;
+  Value *v;
+  ValueKey res = values_alloc(sp->values, &v);
+  ValuePointer *data = values_alloc_data_type(sp->values, ValuePointer);
+
+  *data = (ValuePointer){
+    .val = idx,
+    .offset = 0,
+  };
+
+  *v = (Value){
+    .type = type_ptr,
+    .data = data,
+    .data_size = sizeof(ValuePointer),
+  };
+
+  return res;
+}
+
+internal b32 finalize_function_signature(SpecializerContext *ctx, Specializer *state, TypeKey *type_signature) {
+  Frame *f = &state->frame;
+
+  Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
+  Assert(s->scope_kind == Scope_signature_of_function);
+
+  InstructionOffset pc = s->start;
+  SIrFunc *func = sir_chunk_extra(f->chunk, pc);
+
+  ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
+
+  Type *type_value = arena_push_type_function(ctx->scratch, func->param_count);
+  type_value->kind = Type_function;
+  type_value->data.function.param_count = func->param_count;
+
+  InstructionOffset at = pc + 1;
+  for (u32 i = 0; i < 1 + func->param_count; i++) {
+    TypeKey *dst = (i == 0) ? &type_value->data.function.return_type : &type_value->data.function.param_types[i - 1];
+
+    b32 ok = expect_type_value_or_nil(ctx, state, sref_from_instruction(at), dst);
+    if (!ok) {
+      arena_scope_end(ctx->scratch, snapshot);
+      return False;
+    }
+
+    at += sir_chunk_block_count(f->chunk, at);
+  }
+
+  TypeKey type_func = types_intern(ctx->types, type_value);
+
+  TypeKey type_hint;
+  if (!expect_type_value_or_nil(ctx, state, func->type_hint, &type_hint)) {
+    arena_scope_end(ctx->scratch, snapshot);
+    return False;
+  }
+
+  u32 err = eval_unify(ctx->scratch, ctx->types, type_func, type_hint, type_signature);
+  if (err != UnifyResult_ok) {
+    arena_scope_end(ctx->scratch, snapshot);
+    return False;
+  }
+
+  arena_scope_end(ctx->scratch, snapshot);
+
+  return True;
+}
+
+void specializer_init_function(SpecializerContext *ctx, Specializer *state, StubKey stub_key) {
+  Stub *stub = compiler_get_stub(ctx->compiler, stub_key);
+  Declaration *decl = decls_extra_get_ptr(ctx->declarations, stub->decl);
+
+  zero_struct(Specializer, state);
+
+  state->function.builder.scratch = ctx->scratch;
+
+  Frame *f = &state->frame;
+  IIrBuilder *builder = &state->function.builder;
+
+  frame_init(f, ctx->scratch, decl);
+
+  SIrFunc *ir_func = sir_chunk_extra(f->chunk, stub->inst);
+  Scope *scope = frame_push_scope(f, ctx->scratch, Scope_function, stub->inst, ir_func->instruction_count);
+
+  InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[stub->inst]);
+  iir_builder_set_type(builder, inst_func, stub->type_hint);
+
+  TypeFunction *type = &types_get(ctx->types, stub->type_hint)->data.function;
+
+  scope->data.function.function_type = stub->type_hint;
+  scope->data.function.return_type = type->return_type;
+
+  InstructionOffset pc = ir_func->body;
+
+  for (u32 i = 0; i < type->param_count; i++) {
+    Assert(sir_chunk_op(f->chunk, pc + i) == SIR_param);
+
+    InstructionOffset inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc + i]);
+    iir_builder_set_type(builder, inst_param, type->param_types[i]);
+
+    store_inst_value(f, pc + i, iref_from_instruction(inst_param));
+    store_inst_type(f, pc + i, type->param_types[i]);
+  }
+
+  pc += type->param_count;
+
+  scope->pc = pc;
+}
+
+internal StepResult step(SpecializerContext *ctx, Specializer *state) {
+  Frame *f = &state->frame;
+  IIrBuilder *builder = &state->function.builder;
+
+  {
+    StepResult res = pop_finished_scopes(ctx, state);
+    if (res.kind != Step_next_step) {
+      return res;
+    }
+  }
+
+  Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
+
+  InstructionOffset pc = s->pc;
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
 
   switch (op) {
-  case SIR_param: { Unreachable(); } break;
-
   case SIR_comptime_block: {
+    u32 inst_count = sir_chunk_block_count(f->chunk, pc);
+    frame_push_scope(f, ctx->scratch, Scope_comptime, pc, inst_count);
+    s->pc += inst_count;
+  } break;
+
+  case SIR_param: {
     Todo();
+    s->pc += 1;
+  } break;
+
+  case SIR_return_type: {
+    TypeKey type = frame_get_func_scope(f)->data.function.return_type;
+    store_inst_value(f, pc, key_is_nil(type) ? IREF_NIL : iref_from_value(val_from_type(ctx, type)));
+    s->pc += 1;
   } break;
 
   case SIR_loop:
   case SIR_block: {
-    if (s->scope_kind == Scope_eval_block) {
-      Todo();
+    u32 inst_count = sir_chunk_block_count(f->chunk, pc);
+
+    TypeKey result_type = {0};
+    if (op == SIR_block) {
+      SIrBlock *block = sir_chunk_extra(f->chunk, pc);
+      b32 ok = expect_type_value_or_nil(ctx, state, block->result_type, &result_type);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
     }
 
-    u32 inst_count = sir_chunk_data(f->chunk, pc);
+    Scope *scope = frame_push_scope(f, ctx->scratch, Scope_block, pc, inst_count);
+    scope->result_type = result_type;
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
+    if (!frame_is_comptime(f)) {
+      InstructionOffset inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
 
-    store_inst_value(f, pc, iref_from_instruction(inst));
+      store_inst_value(f, pc, iref_from_instruction(inst));
 
-    ScopeSpan *scope = push_scope(f);
-    *scope = (ScopeSpan){
-      .scope_kind = Scope_block,
-      .start = pc,
-      .end = pc + inst_count,
-      .pc = pc + 1,
-      .residual = inst,
-    };
+      scope->residual = inst;
+    }
 
     s->pc += inst_count;
   } break;
 
   case SIR_func: {
     SIrFunc *func = sir_chunk_extra(f->chunk, pc);
-    u32 inst_count = func->instruction_count;
 
-    IIrBuilder *builder = push_ir_builder(in);
-    InstructionIndex inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[pc]);
+    DeclarationKey decl = f->decl;
+    InstructionOffset inst = pc;
 
-    TypeIndex return_type;
-    b32 ok = expect_some_type_value(in, f, func->return_type, &return_type);
-    if (!ok) {
-      return Step_error;
-    }
-
-    iir_builder_set_type(builder, inst_func, return_type);
-
-    for (u32 i = 0; i < func->param_count; i++) {
-      TypeIndex param_type;
-      ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc + 1 + i)}, &param_type);
-      if (!ok) {
-        Todo(); // report problem. can this happen?
-        return Step_error;
-      }
-
-      InstructionIndex inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc + 1 + i]);
-      iir_builder_set_type(builder, inst_param, param_type);
-
-      store_inst_value(f, pc + 1 + i, iref_from_instruction(inst_param));
-      f->inst_types[pc + 1 + i] = param_type;
-    }
-
-    stack_push(
-      &f->scopes,
-      ((ScopeSpan){
-        .scope_kind = Scope_func,
-        .start = pc,
-        .end = pc + inst_count,
-        .pc = pc + 1 + func->param_count,
-      })
-    );
-
-    s->pc += inst_count;
-  } break;
-
-  case SIR_lookup_decl_type: {
-    DeclarationIndex decl_idx = sir_chunk_data(f->chunk, pc);
-    Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
-
-    if (!state->requested_resolution) {
-      if (decl->kind == Declaration_decl) {
-        state->requested_resolution = True;
-        return Step_resolve_declaration_type;
-      }
-
-      Todo();
-    }
-
-    TypeIndex type;
-    switch (Cast(DeclarationKind, decl->kind)) {
-    case Declaration_primitive: { Todo(); } break;
-    case Declaration_decl: {
-      state->requested_resolution = False;
-      type = decl->data.decl.type;
-    } break;
-    case Declaration_mod:
-    case Declaration_root:
-      Panic();
-    }
-
-    ValueIndex v = val_from_type(in, type);
-
-    store_inst_value(f, pc, iref_from_value(v));
-
-    s->pc += 1;
-  } break;
-
-  case SIR_lookup_decl_value: {
-    DeclarationIndex decl_idx = sir_chunk_data(f->chunk, pc);
-    Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
-
-    if (decl->kind == Declaration_mod) {
-      Todo();
-    }
-
-    if (!state->requested_resolution && decl->kind == Declaration_decl) {
-      state->requested_resolution = True;
-      return Step_resolve_declaration_value;
-    }
-
-    ValueIndex val;
-    if (decl->kind == Declaration_primitive) {
-      val = decl->data.primitive;
-    } else {
-      state->requested_resolution = False;
-      val = decl->data.decl.val;
-    }
-
-    TypeIndex type;
-    {
-      Value *v = values_get(in->values, val);
-      type = types_add_pointer(in->types, v->type);
-    }
+    StubKey stub = compiler_add_stub(ctx->compiler, decl, inst, (TypeKey){0});
 
     Value *v;
-    ValueIndex ptr = values_alloc(in->values, &v);
-    ValuePointer *data = values_alloc_data_type(in->values, ValuePointer);
-
-    *data = (ValuePointer){
-      .val = val,
-      .offset = 0,
-    };
-
+    ValueKey ref = values_alloc(ctx->values, &v);
+    ValueStubRef *stub_ref = values_alloc_data_type(ctx->values, ValueStubRef);
+    *stub_ref = (ValueStubRef){.stub = stub};
     *v = (Value){
-      .type = type,
-      .data = data,
-      .data_size = sizeof(ValuePointer),
+      .type = ctx->types->t_stub,
+      .data_size = sizeof(ValueStubRef),
+      .data = stub_ref,
     };
 
-    store_inst_value(f, pc, iref_from_value(ptr));
+    store_inst_value(f, pc, iref_from_value(ref));
 
-    s->pc += 1;
+    InstructionOffset body = func->body;
+    Scope *scope = frame_push_scope(f, ctx->scratch, Scope_signature_of_function, pc, body - pc);
+    scope->data.signature_of_function.stub = stub;
+
+    s->pc += func->instruction_count;
+  } break;
+
+  case SIR_get_decl_value: {
+    DeclarationKey decl_idx = {sir_chunk_data(f->chunk, pc)};
+    Declaration *decl = decls_extra_get_ptr(ctx->declarations, decl_idx);
+
+    switch (Cast(DeclarationKind, decl->kind)) {
+    case Declaration_root: Panic(); break;
+    case Declaration_mod: { Todo(); } break;
+    case Declaration_primitive: {
+      ValueKey val = values_copy(ctx->values, decl->data.primitive);
+      ValueKey ptr = create_value_pointer(ctx, val);
+      store_inst_value(f, pc, iref_from_value(ptr));
+      s->pc += 1;
+    } break;
+    case Declaration_decl: {
+      Stub *stub = compiler_get_stub(ctx->compiler, decl->data.decl.stub);
+
+      switch (Cast(ResolveStatus, stub->resolve_status)) {
+      case RESOLVE_STATUS_FULLY_RESOLVED: {
+        ValueKey ptr = create_value_pointer(ctx, stub->val);
+        store_inst_value(f, pc, iref_from_value(ptr));
+        s->pc += 1;
+      } break;
+
+      case RESOLVE_STATUS_ERROR: Panic();
+
+      case RESOLVE_STATUS_UNRESOLVED:
+      case RESOLVE_STATUS_RESOLVING: {
+        return (StepResult){
+          .kind = Step_resolve_declaration_value,
+          .data.resolve_decl = {
+            .decl = decl_idx,
+          },
+        };
+      } break;
+      }
+    } break;
+    }
   } break;
 
   case SIR_as: {
     SIrAs *as = sir_chunk_extra(f->chunk, pc);
-    IRef ref = resolve(f, as->val);
+    IRef ref = resolve(ctx, f, as->val);
+    IRef ref_type_to = resolve(ctx, f, as->type_dst);
 
     Assert(!iref_is_nil(ref));
 
-    TypeIndex type_dst;
-    b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
+    if (iref_is_nil(ref_type_to)) {
+      if (iref_is_some_value(ref)) {
+        store_inst_value(f, pc, ref);
+      } else {
+        Todo();
+      }
+
+      s->pc = pc + 1;
+      break;
+    }
+
+    TypeKey type_dst;
+    b32 ok = expect_some_type_value(ctx, state, as->type_dst, &type_dst);
     if (!ok) {
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
     f->inst_types[pc] = type_dst;
 
-    // If the value is comptime known, we do the coercion right away.
-    if (iref_is_some_value(ref)) {
-      Value *v = values_get(in->values, iref_to_value(ref));
-
-      ValueIndex val_coerced;
-      u32 err = eval_coerce(in->types, in->values, type_dst, v, &val_coerced);
-      if (err) {
-        if (err == CoerceResult_comptime_int_value_out_of_range) {
-          Message_error(
-            in->msg_sink,
-            (MessageLocation){
-              .kind = MessageLocation_ir_instruction,
-              .decl_idx = f->decl_idx,
-              .data.offset = s->pc,
-            },
-            string_lit("Value of comptime_int is out of range of destination type")
-          );
-        }
-
-        if (err == CoerceResult_invalid_coercion_types) {
-          Message_error(
-            in->msg_sink,
-            (MessageLocation){
-              .kind = MessageLocation_ir_instruction,
-              .decl_idx = f->decl_idx,
-              .data.offset = s->pc,
-            },
-            string_lit("Cannot coerce value of type %type to type %type"),
-            v->type,
-            type_dst
-          );
-        }
-
-        return Step_error;
-      }
-
-      store_inst_value(f, pc, iref_from_value(val_coerced));
-    } else {
-      // as->val is a non-comptime known value, so we can only check if the types are valid for
-      // coercion. probably also insert some sort of widening cast that cannot fail
-
-      TypeIndex from = ref_typeof(in, f, as->val);
-
-      if (type_dst != from) {
-        if (classify_type_coercion(in->types, type_dst, from) == Coercion_invalid) {
-          Message_error(
-            in->msg_sink,
-            (MessageLocation){
-              .kind = MessageLocation_ir_instruction,
-              .decl_idx = f->decl_idx,
-              .data.offset = s->pc,
-            },
-            string_lit("Cannot coerce value of type %type to type %type"),
-            from,
-            type_dst
-          );
-
-          return Step_error;
-        }
-
-        // TODO add different casts for when there are more than just integer types
-
-        IIrBuilder *builder = get_builder(in);
-        InstructionIndex inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
-        iir_builder_set_data(builder, inst, iref_to_u32(ref));
-        iir_builder_set_type(builder, inst, type_dst);
-
-        ref = iref_from_instruction(inst);
-      }
-
-      store_inst_value(f, pc, ref);
-      store_inst_type(f, pc, type_dst);
+    ok = coerce(ctx, state, ref, type_dst, pc, &ref);
+    if (!ok) {
+      return (StepResult){ .kind = Step_error };
     }
+
+    store_inst_value(f, pc, ref);
 
     s->pc = pc + 1;
   } break;
@@ -675,20 +876,20 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_cast: {
     SIrAs *cast = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex type_dst;
-    b32 ok = expect_some_type_value(in, f, cast->type_to, &type_dst);
+    TypeKey type_dst;
+    b32 ok = expect_some_type_value(ctx, state, cast->type_dst, &type_dst);
     if (!ok) {
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
-    TypeIndex type_src = ref_typeof(in, f, cast->val);
+    TypeKey type_src = ref_typeof(ctx, f, cast->val);
 
-    if (!is_type_castable_to(in->types, type_dst, type_src)) {
+    if (!is_type_castable_to(ctx->types, type_dst, type_src)) {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Cannot cast value of type %type to type %type"),
@@ -696,51 +897,51 @@ internal u32 step(Specializer *in, RunState *state) {
         type_dst
       );
 
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
     store_inst_type(f, pc, type_dst);
 
-    IRef ref = resolve(f, cast->val);
+    IRef ref = resolve(ctx, f, cast->val);
     Assert(!iref_is_nil(ref));
 
-    if (type_dst == type_src) {
+    if (key_eq(type_dst, type_src)) {
       store_inst_value(f, pc, ref);
       s->pc = pc + 1;
       break;
     }
 
     if (iref_is_some_value(ref)) {
-      Type *t_src = types_get(in->types, type_src);
+      Type *t_src = types_get(ctx->types, type_src);
 
       TypeInteger int_src = (t_src->kind == Type_comptime_int)
         ? (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 }
         : t_src->data.integer;
 
-      TypeInteger int_dst = types_get(in->types, type_dst)->data.integer;
+      TypeInteger int_dst = types_get(ctx->types, type_dst)->data.integer;
 
       u32 size = int_dst.bitwidth / 8;
 
       Value *v;
-      ValueIndex res = values_alloc(in->values, &v);
-      void *data = values_alloc_data(in->values, size, size);
+      ValueKey res = values_alloc(ctx->values, &v);
+      void *data = values_alloc_data(ctx->values, size, size);
 
-      void *payload = values_get(in->values, iref_to_value(ref))->data;
+      void *payload = values_get(ctx->values, iref_to_value(ref))->data;
 
       u32 err = eval_cast_int(int_src, payload, int_dst, data);
       if (err) {
         Message_error(
-          in->msg_sink,
+          ctx->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = f->decl_idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Value does not fit in the destination type %type of the cast"),
           type_dst
         );
 
-        return Step_error;
+        return (StepResult){ .kind = Step_error };
       }
 
       *v = (Value){
@@ -751,8 +952,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
       store_inst_value(f, pc, iref_from_value(res));
     } else {
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
+      InstructionOffset inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(ref));
       iir_builder_set_type(builder, inst, type_dst);
 
@@ -765,52 +965,68 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_br: {
     SIrBr *br = sir_chunk_extra(f->chunk, pc);
 
-    if (s->scope_kind == Scope_eval_block) {
-      ValueIndex val;
-      b32 ok = expect_comptime_value_or_nil(in, f, br->value, &val);
+    TypeKey result_type = {0};
+    if (sir_chunk_op(f->chunk, br->block) == SIR_block) {
+      result_type = find_scope(&f->scopes, br->block)->result_type;
+    }
+
+    if (frame_is_comptime(f)) {
+      ValueKey val;
+      b32 ok = expect_comptime_value_or_nil(ctx, state, br->value, &val);
       if (!ok) {
         Todo();
       }
 
-      if (val) {
-        f->inst_types[br->block] = type_of_val(in, val);
-        val = values_copy(in->values, val);
-      } else {
-        f->inst_types[br->block] = 0;
+      if (key_is_some(result_type)) {
+        IRef coerced;
+        ok = coerce(ctx, state, iref_from_value(val), result_type, pc, &coerced);
+        if (!ok) {
+          return (StepResult){ .kind = Step_error };
+        }
+
+        val = iref_to_value(coerced);
+      }
+
+      if (key_is_some(val)) {
+        f->inst_types[br->block] = type_of_val(ctx, val);
       }
 
       store_inst_value(f, br->block, iref_from_value(val));
 
-      pop_scopes_to(in, f, br->block);
-
-      return Step_leave_scope;
+      s->pc += 1;
+      break;
     }
 
     if (s->scope_kind == Scope_block) {
-      IRef ref = resolve(f, br->value);
-      TypeIndex type_br = iref_is_nil(ref) ? 0 : get_sref_type(in, f, br->value);
+      IRef ref = resolve(ctx, f, br->value);
+      TypeKey type_br = iref_is_nil(ref) ? (TypeKey){0} : get_sref_type(ctx, f, br->value);
 
-      f->inst_types[pc] = type_br;
+      if (key_is_some(result_type)) {
+        b32 ok = coerce(ctx, state, ref, result_type, pc, &ref);
+        if (!ok) {
+          return (StepResult){ .kind = Step_error };
+        }
 
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
+        type_br = result_type;
+      }
+
+      InstructionOffset inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
       IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
       *data_br = (IIrBr){
         .block = expect_residual_at_instruction_index(f, br->block),
-        .value = copy_if_value(in, ref),
+        .value = ref,
       };
 
-      ScopeSpan *block = find_scope(f->scopes.data, f->scopes.len, br->block);
-      scope_add_break_or_return(block, pc);
+      Scope *block = find_scope(&f->scopes, br->block);
+      scope_add_break_or_return(block, ctx->scratch, pc);
 
-      Assert(s->end == pc + 1); // br may only appear at the end of a block
+      store_inst_type(f, pc, type_br);
+      store_inst_value(f, pc, iref_from_instruction(inst_br));
 
-      f->inst_types[pc] = type_br;
       iir_builder_set_type(builder, inst_br, type_br);
 
-      pop_finished_scopes(in, f, pc + 1);
-
-      return Step_leave_scope;
+      s->pc += 1;
+      break;
     }
 
     Unreachable();
@@ -819,45 +1035,45 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_type: {
     SIrType *type = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex t;
+    TypeKey t;
     switch (Cast(TypeKind, type->kind)) {
     case Type_function: {
       Assert(type->arg_count != 0);
 
       u32 param_count = type->arg_count - 1;
 
-      TypeIndex return_type;
-      b32 ok = expect_type_value_or_nil(in, f, type->args[0], &return_type);
+      TypeKey return_type;
+      b32 ok = expect_type_value_or_nil(ctx, state, type->args[0], &return_type);
       Assert(ok);
 
-      ArenaSnapshot snapshot = arena_scope_begin(in->scratch);
+      ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
 
-      Type *func = arena_push_type_function(in->scratch, param_count);
+      Type *func = arena_push_type_function(ctx->scratch, param_count);
       func->kind = Type_function;
       func->data.function.return_type = return_type;
       func->data.function.param_count = param_count;
 
       for (u32 i = 0; i < param_count; i++) {
-        ok = expect_type_value_or_nil(in, f, type->args[1 + i], &func->data.function.param_types[i]);
+        ok = expect_type_value_or_nil(ctx, state, type->args[1 + i], &func->data.function.param_types[i]);
         Assert(ok);
       }
 
-      t = types_add(in->types, func);
+      t = types_intern(ctx->types, func);
 
-      arena_scope_end(in->scratch, snapshot);
+      arena_scope_end(ctx->scratch, snapshot);
     } break;
 
     case Type_slice: {
       Assert(type->arg_count == 1);
 
-      TypeIndex base_type;
-      b32 ok = expect_type_value_or_nil(in, f, type->args[0], &base_type);
+      TypeKey base_type;
+      b32 ok = expect_type_value_or_nil(ctx, state, type->args[0], &base_type);
       if (!ok) {
         Todo();
       }
 
-      t = types_add(
-        in->types,
+      t = types_intern(
+        ctx->types,
         &(Type){
           .kind = Type_slice,
           .data.slice = { .base_type = base_type },
@@ -871,7 +1087,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Panic();
     }
 
-    ValueIndex v = val_from_type(in, t);
+    ValueKey v = val_from_type(ctx, t);
     store_inst_value(f, pc, iref_from_value(v));
     s->pc += 1;
   } break;
@@ -881,54 +1097,62 @@ internal u32 step(Specializer *in, RunState *state) {
 
     b32 ok = True;
 
-    TypeIndex type_lhs;
-    ok = expect_type_value_or_nil(in, f, unify->type_lhs, &type_lhs);
+    TypeKey type_lhs;
+    ok = expect_type_value_or_nil(ctx, state, unify->type_lhs, &type_lhs);
     if (!ok) {
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
-    TypeIndex type_rhs;
-    ok = expect_type_value_or_nil(in, f, unify->type_rhs, &type_rhs);
+    TypeKey type_rhs;
+    ok = expect_type_value_or_nil(ctx, state, unify->type_rhs, &type_rhs);
     if (!ok) {
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
-    TypeIndex type_unified;
-    u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
+    TypeKey type_unified;
+    u32 err = eval_unify(ctx->scratch, ctx->types, type_lhs, type_rhs, &type_unified);
     if (err) {
-      Todo();
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("Unable to unify types"));
+      return (StepResult){ .kind = Step_error };
     }
 
-    ValueIndex v = val_from_type(in, type_unified);
-    store_inst_value(f, pc, iref_from_value(v));
-    s->pc += 1;
-  } break;
-
-  case SIR_return_type: {
-    SRef ref_func = (SRef){sir_chunk_data(f->chunk, pc)};
-
-    TypeIndex idx;
-    b32 ok = expect_some_type_value(in, f, ref_func, &idx);
-    Assert(ok);
-
-    Type *t = types_get(in->types, idx);
-    ValueIndex v = val_from_type(in, t->data.function.return_type);
+    ValueKey v = val_from_type(ctx, type_unified);
     store_inst_value(f, pc, iref_from_value(v));
     s->pc += 1;
   } break;
 
   case SIR_ret: {
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_ret, f->chunk->sources[pc]);
-
     SRef ref_val = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(f, ref_val);
+    IRef val = resolve(ctx, f, ref_val);
 
-    TypeIndex type_ret;
-    if (iref_is_some_value(val)) {
-      ValueIndex vidx = values_copy(in->values, iref_to_value(val));
+    Scope *func_scope = frame_get_func_scope(f);
+    TypeKey return_type = func_scope->data.function.return_type;
+
+    if (key_is_some(return_type)) {
+      b32 ok = coerce(ctx, state, val, return_type, pc, &val);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
+
+    InstructionOffset inst = iir_builder_add(builder, IIR_ret, f->chunk->sources[pc]);
+
+    TypeKey type_ret;
+    if (key_is_some(return_type)) {
+      type_ret = return_type;
+    } else if (iref_is_some_value(val)) {
+      ValueKey vidx = values_copy(ctx->values, iref_to_value(val));
       val = iref_from_value(vidx);
-      type_ret = type_of_val(in, vidx);
+      type_ret = type_of_val(ctx, vidx);
+    } else if (iref_is_nil(val)) {
+      type_ret = (TypeKey){0};
     } else {
       type_ret = f->inst_types[sref_to_instruction(ref_val)];
     }
@@ -938,77 +1162,25 @@ internal u32 step(Specializer *in, RunState *state) {
     iir_builder_set_data(builder, inst, iref_to_u32(val));
     iir_builder_set_type(builder, inst, type_ret);
 
-    ScopeSpan *func_scope = get_func_scope(f);
-    scope_add_break_or_return(func_scope, pc);
+    scope_add_break_or_return(func_scope, ctx->scratch, pc);
 
-    if (pc + 1 == func_scope->end) {
-      b32 ok = finalize_function(in, f, func_scope);
-      if (!ok) {
-        Todo();
-      }
-
-      SIrFunc *ir_func = sir_chunk_extra(f->chunk, func_scope->start);
-
-      u32 param_count = ir_func->param_count;
-
-      Type *type = arena_push_type_function(in->scratch, param_count);
-      type->kind = Type_function;
-      type->data.function.param_count = param_count;
-
-      ok = expect_some_type_value(in, f, ir_func->return_type, &type->data.function.return_type);
-      if (!ok) {
-        Todo();
-      }
-
-      for (u32 i = 0; i < param_count; i++) {
-        type->data.function.param_types[i] = f->inst_types[func_scope->start + 1 + i];
-      }
-
-      TypeIndex t = types_add(in->types, type);
-
-      ValueFunc *data = values_alloc_data_type(in->values, ValueFunc);
-      Value *v;
-      ValueIndex vidx = values_alloc(in->values, &v);
-      *v = (Value){
-        .type = t,
-        .data = data,
-        .data_size = sizeof(ValueFunc),
-      };
-
-      IIrBuilder *builder = get_builder(in);
-
-      iir_builder_set_data(builder, 0, builder->kinds.len);
-
-      iir_builder_flatten(builder, in->perm, &data->chunk);
-
-      pop_ir_builder(in);
-
-      store_inst_value(f, func_scope->start, iref_from_value(vidx));
-
-      stack_pop(&f->scopes);
-
-      return Step_leave_scope;
-    }
-
-    Todo();
+    s->pc += 1;
   } break;
 
   case SIR_condbr: {
     SIrCondbr *condbr = sir_chunk_extra(f->chunk, pc);
 
-    IRef cond = resolve(f, condbr->cond);
+    IRef cond = resolve(ctx, f, condbr->cond);
 
     if (iref_is_some_value(cond)) {
-      Value *v = values_get(in->values, iref_to_value(cond));
-      if (*Cast(u8 *, v->data)) {
-        s->pc = condbr->then;
+      ValueKey v = iref_to_value(cond);
+      if (key_eq(v, ctx->common->val._true)) {
+        s->pc += 1;
       } else {
         s->pc = condbr->otherwise;
       }
     } else {
-      IIrBuilder *builder = get_builder(in);
-
-      InstructionIndex inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
+      InstructionOffset inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
 
       store_inst_value(f, pc, iref_from_instruction(inst_condbr));
 
@@ -1020,9 +1192,7 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_call: {
     SIrCall *call = sir_chunk_extra(f->chunk, pc);
 
-    IIrBuilder *builder = get_builder(in);
-
-    InstructionIndex inst_call = iir_builder_add(builder, IIR_call, f->chunk->sources[pc]);
+    InstructionOffset inst_call = iir_builder_add(builder, IIR_call, f->chunk->sources[pc]);
 
     IIrCall *data_call = iir_builder_push_data_raw(
       builder,
@@ -1031,10 +1201,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Align_of(IIrCall)
     );
 
-    IRef func = resolve(f, call->func);
-    if (iref_is_some_value(func)) {
-      func = iref_from_value(values_copy(in->values, iref_to_value(func)));
-    }
+    IRef func = resolve(ctx, f, call->func);
 
     *data_call = (IIrCall){
       .func_ptr = func,
@@ -1042,13 +1209,18 @@ internal u32 step(Specializer *in, RunState *state) {
     };
 
     for (u32 i = 0; i < call->arg_count; i++) {
-      data_call->args[i] = copy_if_value(in, resolve(f, call->args[i]));
+      data_call->args[i] = resolve(ctx, f, call->args[i]);
     }
 
     if (iref_is_some_value(func)) {
-      Value *v = values_get(in->values, iref_to_value(func));
-      Type *func_type = types_get(in->types, v->type);
-      f->inst_types[pc] = func_type->data.function.return_type;
+      TypeKey t = get_value_type(ctx, iref_to_value(func));
+      Type *func_type = types_get(ctx->types, t);
+
+      if (func_type->kind != Type_function) {
+        Todo();
+      }
+
+      store_inst_type(f, pc, func_type->data.function.return_type);
       iir_builder_set_type(builder, inst_call, func_type->data.function.return_type);
     } else {
       Todo();
@@ -1061,45 +1233,44 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_builtin_len: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    Type *t = types_get(in->types, ref_typeof(in, f, ref));
+    Type *t = types_get(ctx->types, ref_typeof(ctx, f, ref));
 
-    store_inst_type(f, pc, in->common->type.usize);
+    store_inst_type(f, pc, ctx->types->t_usize);
 
     // An array carries its length in its type, so #len is comptime known even when the array
     // itself is not.
     if (t->kind == Type_array) {
-      store_inst_value(f, pc, iref_from_value(val_from_usize(in, t->data.array.size)));
+      store_inst_value(f, pc, iref_from_value(val_from_usize(ctx, t->data.array.size)));
       s->pc += 1;
       break;
     }
 
     if (t->kind != Type_slice) {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("#len expects an array or a slice, but got a value of type %type"),
-        ref_typeof(in, f, ref)
+        ref_typeof(ctx, f, ref)
       );
 
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
-    IRef val = resolve(f, ref);
+    IRef val = resolve(ctx, f, ref);
 
     if (iref_is_some_value(val)) {
-      Value *v = values_get(in->values, iref_to_value(val));
-      store_inst_value(f, pc, iref_from_value(val_from_usize(in, Cast(ValueSlice *, v->data)->len)));
+      Value *v = values_get(ctx->values, iref_to_value(val));
+      store_inst_value(f, pc, iref_from_value(val_from_usize(ctx, Cast(ValueSlice *, v->data)->len)));
       s->pc += 1;
       break;
     }
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_len, f->chunk->sources[pc]);
-    iir_builder_set_type(builder, inst, in->common->type.usize);
+    InstructionOffset inst = iir_builder_add(builder, IIR_builtin_len, f->chunk->sources[pc]);
+    iir_builder_set_type(builder, inst, ctx->types->t_usize);
     iir_builder_set_data(builder, inst, iref_to_u32(val));
 
     store_inst_value(f, pc, iref_from_instruction(inst));
@@ -1110,21 +1281,20 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_builtin_debug: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
-    TypeIndex type;
+    TypeKey type;
     if (sref_is_some_value(ref)) {
-      type = type_of_val(in, sref_to_value(ref));
+      type = type_of_val(ctx, sref_to_value(ref));
     } else {
       type = f->inst_types[sref_to_instruction(ref)];
     }
 
     f->inst_types[pc] = type;
 
-    IRef val = resolve(f, ref);
+    IRef val = resolve(ctx, f, ref);
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_debug, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, IIR_builtin_debug, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst, type);
-    iir_builder_set_data(builder, inst, iref_to_u32(copy_if_value(in, val)));
+    iir_builder_set_data(builder, inst, iref_to_u32(val));
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -1133,35 +1303,34 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_load: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(f, ref);
+    IRef val = resolve(ctx, f, ref);
 
     // TODO make sure it is a pionter
 
     if (iref_is_some_value(val)) {
-      Value *v = values_get(in->values, iref_to_value(val));
+      Value *v = values_get(ctx->values, iref_to_value(val));
       ValuePointer *p = v->data;
       Assert(p->offset == 0);
 
-      ValueIndex x = values_copy(in->values, p->val);
+      ValueKey x = values_copy(ctx->values, p->val);
 
       store_inst_value(f, pc, iref_from_value(x));
 
-      TypeIndex type_idx = type_of_val(in, iref_to_value(val));
-      Type *t = types_get(in->types, type_idx);
+      TypeKey type_idx = type_of_val(ctx, iref_to_value(val));
+      Type *t = types_get(ctx->types, type_idx);
       Assert(t->kind == Type_pointer);
 
       f->inst_types[pc] = t->data.pointer.base_type;
     } else {
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_load, f->chunk->sources[pc]);
-      TypeIndex type = iir_builder_get_type(builder, iref_to_instruction(val));
+      InstructionOffset inst = iir_builder_add(builder, IIR_load, f->chunk->sources[pc]);
+      TypeKey type = iir_builder_get_type(builder, iref_to_instruction(val));
       iir_builder_set_type(builder, inst, type);
       iir_builder_set_data(builder, inst, iref_to_u32(val));
 
       store_inst_value(f, pc, iref_from_instruction(inst));
 
-      TypeIndex type_idx = ref_typeof(in, f, ref);
-      Type *t = types_get(in->types, type_idx);
+      TypeKey type_idx = ref_typeof(ctx, f, ref);
+      Type *t = types_get(ctx->types, type_idx);
       Assert(t->kind == Type_pointer);
 
       f->inst_types[pc] = t->data.pointer.base_type;
@@ -1173,61 +1342,72 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_store: {
     SIrStore *store = sir_chunk_extra(f->chunk, pc);
 
-    IRef dst = resolve(f, store->dst);
+    IRef dst = resolve(ctx, f, store->dst);
 
     if (iref_is_some_value(dst)) {
       Todo();
     } else {
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_store, f->chunk->sources[pc]);
-      IIrStore *data = iir_builder_push_data(builder, inst, IIrStore);
+      IRef val = resolve(ctx, f, store->value);
 
-      IRef val = resolve(f, store->value);
+      TypeKey type_dst;
+      {
+        TypeKey type_dst_ptr = get_sref_type(ctx, f, store->dst);
+        Type *t = types_get(ctx->types, type_dst_ptr);
+        Assert(t->kind == Type_pointer);
+        type_dst = t->data.pointer.base_type;
+      }
+
+      b32 ok = coerce(ctx, state, val, type_dst, pc, &val);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+
+      InstructionOffset inst = iir_builder_add(builder, IIR_store, f->chunk->sources[pc]);
+      IIrStore *data = iir_builder_push_data(builder, inst, IIrStore);
 
       *data = (IIrStore){
         .ptr = dst,
-        .value = copy_if_value(in, val),
+        .value = val,
       };
 
-      if (iref_is_some_value(val)) {
-        iir_builder_set_type(builder, inst, type_of_val(in, iref_to_value(val)));
-      } else {
-        iir_builder_set_type(builder, inst, iir_builder_get_type(builder, iref_to_instruction(val)));
-      }
+      iir_builder_set_type(builder, inst, type_dst);
     }
 
     s->pc += 1;
   } break;
 
   case SIR_alloc: {
-    TypeIndex type;
-    b32 ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
-    Assert(ok);
+    TypeKey type;
+    b32 ok = expect_some_type_value(ctx, state, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
+    if (!ok) {
+      Todo();
+    }
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_alloc, f->chunk->sources[pc]);
+    // TODO type may not be comptime
+
+    InstructionOffset inst = iir_builder_add(builder, IIR_alloc, f->chunk->sources[pc]);
 
     iir_builder_set_type(builder, inst, type);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
-    TypeIndex ptr_type = types_add_pointer(in->types, type);
+    TypeKey ptr_type = types_add_pointer(ctx->types, type);
     f->inst_types[pc] = ptr_type;
 
     s->pc += 1;
   } break;
 
   case SIR_comptime_alloc: {
-    TypeIndex type;
-    b32 ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
+    TypeKey type;
+    b32 ok = expect_some_type_value(ctx, state, (SRef){sir_chunk_data(f->chunk, pc)}, &type);
     Assert(ok);
 
-    ValueIndex idx_alloc;
+    ValueKey idx_alloc;
     {
       Value *v;
-      idx_alloc = values_alloc(in->values, &v);
-      TypeSizeInfo size_info = types_size_info_by_index(in->types, type);
-      void *data = values_alloc_data(in->values, size_info.size, size_info.align);
+      idx_alloc = values_alloc(ctx->values, &v);
+      TypeSizeInfo size_info = types_size_info_by_index(ctx->types, type);
+      void *data = values_alloc_data(ctx->values, size_info.size, size_info.align);
       *v = (Value){
         .type = type,
         .data = data,
@@ -1235,17 +1415,17 @@ internal u32 step(Specializer *in, RunState *state) {
       };
     }
 
-    ValueIndex idx_p;
+    ValueKey idx_p;
     {
       Value *v;
-      idx_p = values_alloc(in->values, &v);
-      ValuePointer *data = values_alloc_data_type(in->values, ValuePointer);
+      idx_p = values_alloc(ctx->values, &v);
+      ValuePointer *data = values_alloc_data_type(ctx->values, ValuePointer);
       *data = (ValuePointer){
         .val = idx_alloc,
         .offset = 0,
       };
       *v = (Value){
-        .type = types_add_pointer(in->types, type),
+        .type = types_add_pointer(ctx->types, type),
         .data = data,
         .data_size = sizeof(ValuePointer),
       };
@@ -1259,15 +1439,15 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_base_type: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
-    TypeIndex type;
-    b32 ok = expect_some_type_value(in, f, ref, &type);
+    TypeKey type;
+    b32 ok = expect_some_type_value(ctx, state, ref, &type);
     if (!ok) {
       Todo();
     }
 
-    Type *t = types_get(in->types, type);
+    Type *t = types_get(ctx->types, type);
 
-    TypeIndex base_type;
+    TypeKey base_type;
     // clang-format off
     switch (t->kind) {
     case Type_pointer: base_type = t->data.pointer.base_type; break;
@@ -1275,21 +1455,21 @@ internal u32 step(Specializer *in, RunState *state) {
     case Type_slice: base_type = t->data.slice.base_type; break;
     default: {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Tried to get base type of type %type that is not a pointer, array or slice. This is likely a compiler bug"),
         type
       );
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     } break;
     }
     // clang-format on
 
-    ValueIndex v = val_from_type(in, base_type);
+    ValueKey v = val_from_type(ctx, base_type);
 
     store_inst_value(f, pc, iref_from_value(v));
 
@@ -1298,18 +1478,65 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_typeof: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(f, ref);
+    IRef val = resolve(ctx, f, ref);
 
     if (iref_is_some_value(val)) {
-      TypeIndex t = type_of_val(in, iref_to_value(val));
-      ValueIndex v = val_from_type(in, t);
+      TypeKey t = type_of_val(ctx, iref_to_value(val));
+      ValueKey v = val_from_type(ctx, t);
       store_inst_value(f, pc, iref_from_value(v));
     } else {
-      InstructionIndex i = sref_to_instruction(ref);
-      TypeIndex t = f->inst_types[i];
-      ValueIndex v = val_from_type(in, t);
+      InstructionOffset i = sref_to_instruction(ref);
+      TypeKey t = f->inst_types[i];
+      ValueKey v = val_from_type(ctx, t);
       store_inst_value(f, pc, iref_from_value(v));
     }
+
+    s->pc += 1;
+  } break;
+
+  case SIR_typeof_param: {
+    SIrTypeofParam *typeof_param = sir_chunk_extra(f->chunk, pc);
+
+    TypeKey type;
+    b32 ok = expect_some_type_value(ctx, state, typeof_param->function_type, &type);
+    if (!ok) {
+      return (StepResult){ .kind = Step_error };
+    }
+
+    Type *t = types_get(ctx->types, type);
+
+    if (t->kind != Type_function) {
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("Cannot call a value of type %type"),
+        type
+      );
+
+      return (StepResult){ .kind = Step_error };
+    }
+
+    if (typeof_param->param_index >= t->data.function.param_count) {
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("Too many arguments for function of type %type"),
+        type
+      );
+
+      return (StepResult){ .kind = Step_error };
+    }
+
+    ValueKey v = val_from_type(ctx, t->data.function.param_types[typeof_param->param_index]);
+    store_inst_value(f, pc, iref_from_value(v));
 
     s->pc += 1;
   } break;
@@ -1319,37 +1546,57 @@ internal u32 step(Specializer *in, RunState *state) {
     Todo();
   } break;
 
-  case SIR_bool_and: {
-    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+  case SIR_logical_or:
+  case SIR_logical_and: {
+    SIrLogicalAndOr *data = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+    TypeKey type_lhs = get_sref_type(ctx, f, data->lhs);
 
-    if (type_lhs != type_rhs || type_lhs != in->common->type._bool) {
+    if (!key_eq(type_lhs, ctx->types->t_bool)) {
       Todo();
     }
 
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
+    IRef lhs = resolve(ctx, f, data->lhs);
+    if (iref_is_some_value(lhs)) {
+      // Compare payloads, not keys: resolve() hands out copies of the canonical true/false values.
+      u8 lhs_bool = *Cast(u8 *, values_get(ctx->values, iref_to_value(lhs))->data);
+      u8 short_circuit_bool = op == SIR_logical_or;
+      if (lhs_bool == short_circuit_bool) {
+        store_inst_value(f, data->block, lhs);
 
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-    } else {
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_bit_and, f->chunk->sources[pc]);
-      IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
-      *data = (IIrBinary){
-        .lhs = copy_if_value(in, lhs),
-        .rhs = copy_if_value(in, rhs),
-      };
-
-      iir_builder_set_type(builder, inst, in->common->type._bool);
-
-      store_inst_value(f, pc, iref_from_instruction(inst));
-      store_inst_type(f, pc, in->common->type._bool);
+        u32 inst_count = sir_chunk_block_count(f->chunk, data->block);
+        s->pc = data->block + inst_count;
+        break;
+      }
 
       s->pc += 1;
+      break;
     }
+
+    Assert(s->start == data->block);
+
+    InstructionOffset inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
+    store_inst_value(f, pc, iref_from_instruction(inst_condbr));
+
+    if (op == SIR_logical_or) {
+      InstructionOffset inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
+      IIrBr *br = iir_builder_push_data(builder, inst_br, IIrBr);
+      *br = (IIrBr){
+        .block = s->residual,
+        .value = resolve(ctx, f, sref_from_value(ctx->common->val._true)),
+      };
+      iir_builder_set_type(builder, inst_br, ctx->types->t_bool);
+
+      IIrCondbr *condbr = iir_builder_push_data(builder, inst_condbr, IIrCondbr);
+      *condbr = (IIrCondbr){
+        .cond = lhs,
+        .otherwise = inst_br + 1,
+      };
+    } else {
+      s->logical_and = pc;
+    }
+
+    s->pc += 1;
   } break;
 
   case SIR_bit_and:
@@ -1362,36 +1609,53 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_add: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+    TypeKey type_lhs = get_sref_type(ctx, f, bin->lhs);
+    TypeKey type_rhs = get_sref_type(ctx, f, bin->rhs);
 
-    if (type_lhs != type_rhs || type_lhs == 0) {
+    Assert(!key_is_nil(type_lhs));
+    Assert(!key_is_nil(type_rhs));
+
+    TypeKey type_unified;
+    u32 err = eval_unify(ctx->scratch, ctx->types, type_lhs, type_rhs, &type_unified);
+    if (err != UnifyResult_ok) {
       Todo();
     }
 
-    Type *t = types_get(in->types, type_lhs);
+    Type *t = types_get(ctx->types, type_unified);
 
-    // Check if this operator is implemented for this type.
     b32 ok = check_can_type_add(t);
     if (!ok) {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Type %type does not support operator"),
         type_lhs
       );
 
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
-    store_inst_type(f, pc, type_lhs);
+    store_inst_type(f, pc, type_unified);
 
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
+    IRef lhs = resolve(ctx, f, bin->lhs);
+    if (!key_eq(type_lhs, type_unified)) {
+      ok = coerce(ctx, state, lhs, type_unified, pc, &lhs);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
+
+    IRef rhs = resolve(ctx, f, bin->rhs);
+    if (!key_eq(type_rhs, type_unified)) {
+      ok = coerce(ctx, state, rhs, type_unified, pc, &rhs);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
 
     if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
       Todo();
@@ -1413,15 +1677,11 @@ internal u32 step(Specializer *in, RunState *state) {
     }
     // clang-format on
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
-    *data = (IIrBinary){
-      .lhs = copy_if_value(in, lhs),
-      .rhs = copy_if_value(in, rhs),
-    };
+    *data = (IIrBinary){ .lhs = lhs, .rhs = rhs, };
 
-    iir_builder_set_type(builder, inst, type_lhs);
+    iir_builder_set_type(builder, inst, type_unified);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -1430,19 +1690,18 @@ internal u32 step(Specializer *in, RunState *state) {
 
 
   case SIR_repeat: {
-    InstructionIndex loop = sref_to_instruction((SRef){sir_chunk_data(f->chunk, pc)});
+    InstructionOffset loop = sref_to_instruction((SRef){sir_chunk_data(f->chunk, pc)});
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_repeat, f->chunk->sources[pc]);
+    if (frame_is_comptime(f)) {
+      Todo();
+    }
+
+    InstructionOffset inst = iir_builder_add(builder, IIR_repeat, f->chunk->sources[pc]);
     iir_builder_set_data(builder, inst, expect_residual_at_instruction_index(f, loop));
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
-    Assert(s->end == pc + 1); // repeat may only appear at the end of a loop body
-
-    pop_finished_scopes(in, f, pc + 1);
-
-    return Step_leave_scope;
+    s->pc += 1;
   } break;
 
   case SIR_cmp_eq:
@@ -1451,28 +1710,43 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_cmp_ge:
   case SIR_cmp_lt:
   case SIR_cmp_le: {
-    //Todo();
-
-#if 1
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
-    TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
+    TypeKey type_lhs = get_sref_type(ctx, f, bin->lhs);
+    TypeKey type_rhs = get_sref_type(ctx, f, bin->rhs);
 
-    if (type_lhs != type_rhs || type_lhs == 0) {
+    Assert(!key_is_nil(type_lhs));
+    Assert(!key_is_nil(type_rhs));
+
+    TypeKey type_unified;
+    u32 err = eval_unify(ctx->scratch, ctx->types, type_lhs, type_rhs, &type_unified);
+    if (err != UnifyResult_ok) {
       Todo();
     }
 
-    Type *t = types_get(in->types, type_lhs);
+    Type *t = types_get(ctx->types, type_unified);
     b32 ok = check_can_type_cmp(t);
     if (!ok) {
       Todo();
     }
 
-    store_inst_type(f, pc, in->common->type._bool);
+    store_inst_type(f, pc, ctx->types->t_bool);
 
-    IRef lhs = resolve(f, bin->lhs);
-    IRef rhs = resolve(f, bin->rhs);
+    IRef lhs = resolve(ctx, f, bin->lhs);
+    if (!key_eq(type_lhs, type_unified)) {
+      ok = coerce(ctx, state, lhs, type_unified, pc, &lhs);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
+
+    IRef rhs = resolve(ctx, f, bin->rhs);
+    if (!key_eq(type_rhs, type_unified)) {
+      ok = coerce(ctx, state, rhs, type_unified, pc, &rhs);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
 
     if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
       Todo();
@@ -1492,53 +1766,51 @@ internal u32 step(Specializer *in, RunState *state) {
     }
     // clang-format on
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
-      .lhs = copy_if_value(in, lhs),
-      .rhs = copy_if_value(in, rhs),
+      .lhs = lhs,
+      .rhs = rhs,
     };
 
-    iir_builder_set_type(builder, inst, in->common->type._bool);
+    iir_builder_set_type(builder, inst, ctx->types->t_bool);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
     s->pc += 1;
-#endif
   } break;
 
   case SIR_index: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex type_indexable = ref_typeof(in, f, bin->lhs);
-    Type *t = types_get(in->types, type_indexable);
+    TypeKey type_indexable = ref_typeof(ctx, f, bin->lhs);
+    Type *t = types_get(ctx->types, type_indexable);
 
     if (t->kind != Type_array && t->kind != Type_slice) {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Cannot index a value of type %type, expected an array or a slice"),
         type_indexable
       );
 
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
     b32 is_array = t->kind == Type_array;
-    TypeIndex base_type = is_array ? t->data.array.base_type : t->data.slice.base_type;
+    TypeKey base_type = is_array ? t->data.array.base_type : t->data.slice.base_type;
 
     store_inst_type(f, pc, base_type);
 
-    IRef indexable = resolve(f, bin->lhs);
-    IRef index = resolve(f, bin->rhs);
+    IRef indexable = resolve(ctx, f, bin->lhs);
+    IRef index = resolve(ctx, f, bin->rhs);
 
     if (iref_is_some_value(indexable) && iref_is_some_value(index)) {
-      Value *v_indexable = values_get(in->values, iref_to_value(indexable));
+      Value *v_indexable = values_get(ctx->values, iref_to_value(indexable));
 
       void *base;
       u64 len;
@@ -1552,27 +1824,27 @@ internal u32 step(Specializer *in, RunState *state) {
       }
 
       // The index is coerced to a usize by codegen, so it is always 8 bytes wide here.
-      u64 at = read_int_zero_extend(64, values_get(in->values, iref_to_value(index))->data);
+      u64 at = read_int_zero_extend(64, values_get(ctx->values, iref_to_value(index))->data);
 
       if (at >= len) {
         Message_error(
-          in->msg_sink,
+          ctx->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = f->decl_idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Index is out of bounds")
         );
 
-        return Step_error;
+        return (StepResult){ .kind = Step_error };
       }
 
-      TypeSizeInfo size_info = types_size_info_by_index(in->types, base_type);
+      TypeSizeInfo size_info = types_size_info_by_index(ctx->types, base_type);
 
       Value *v;
-      ValueIndex res = values_alloc(in->values, &v);
-      void *data = values_alloc_data(in->values, size_info.size, size_info.align);
+      ValueKey res = values_alloc(ctx->values, &v);
+      void *data = values_alloc_data(ctx->values, size_info.size, size_info.align);
       memcpy(data, Cast(u8 *, base) + at * size_info.stride, size_info.size);
       *v = (Value){
         .type = base_type,
@@ -1586,12 +1858,11 @@ internal u32 step(Specializer *in, RunState *state) {
       break;
     }
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_index, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, IIR_index, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
-      .lhs = copy_if_value(in, indexable),
-      .rhs = copy_if_value(in, index),
+      .lhs = indexable,
+      .rhs = index,
     };
 
     iir_builder_set_type(builder, inst, base_type);
@@ -1604,22 +1875,22 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_negate: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
-    TypeIndex type = ref_typeof(in, f, ref);
-    Type *t = types_get(in->types, type);
+    TypeKey type = ref_typeof(ctx, f, ref);
+    Type *t = types_get(ctx->types, type);
 
     if (!check_can_type_add(t)) {
       Message_error(
-        in->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = f->decl_idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Type %type does not support negation"),
         type
       );
 
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
     // A comptime_int carries no TypeInteger of its own; it is stored as a ComptimeInt.
@@ -1631,7 +1902,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
     store_inst_type(f, pc, type);
 
-    IRef val = resolve(f, ref);
+    IRef val = resolve(ctx, f, ref);
 
     // Negation is 0 - x, which gets subtraction's overflow checking for free. Negating the
     // most negative value of a signed type overflows, as does negating any non-zero unsigned.
@@ -1640,28 +1911,28 @@ internal u32 step(Specializer *in, RunState *state) {
       Assert(size <= sizeof(zero));
 
       Value *v;
-      ValueIndex res = values_alloc(in->values, &v);
-      void *data = values_alloc_data(in->values, size, size);
+      ValueKey res = values_alloc(ctx->values, &v);
+      void *data = values_alloc_data(ctx->values, size, size);
 
       b32 ok = eval_int_sub_safe(
         int_type,
         zero,
-        values_get(in->values, iref_to_value(val))->data,
+        values_get(ctx->values, iref_to_value(val))->data,
         data
       );
       if (!ok) {
         Message_error(
-          in->msg_sink,
+          ctx->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = f->decl_idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Negating this value overflows its type %type"),
           type
         );
 
-        return Step_error;
+        return (StepResult){ .kind = Step_error };
       }
 
       *v = (Value){
@@ -1677,8 +1948,8 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     Value *v_zero;
-    ValueIndex zero = values_alloc(in->values, &v_zero);
-    void *data_zero = values_alloc_data(in->values, size, size);
+    ValueKey zero = values_alloc(ctx->values, &v_zero);
+    void *data_zero = values_alloc_data(ctx->values, size, size);
     memset(data_zero, 0, size);
     *v_zero = (Value){
       .type = type,
@@ -1686,12 +1957,11 @@ internal u32 step(Specializer *in, RunState *state) {
       .data_size = size,
     };
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, IIR_int_sub, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = iref_from_value(zero),
-      .rhs = copy_if_value(in, val),
+      .rhs = val,
     };
 
     iir_builder_set_type(builder, inst, type);
@@ -1703,22 +1973,21 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_not: {
     SRef val = (SRef){sir_chunk_data(f->chunk, pc)};
-    TypeIndex type = get_sref_type(in, f, val);
+    TypeKey type = get_sref_type(ctx, f, val);
 
-    if (type != in->common->type._bool) {
+    if (!key_eq(type, ctx->types->t_bool)) {
       Todo();
     }
 
     store_inst_type(f, pc, type);
 
-    IRef res = resolve(f, val);
+    IRef res = resolve(ctx, f, val);
 
     if (iref_is_some_value(res)) {
-      b32 b = *Cast(u8 *, values_get(in->values, iref_to_value(res))->data);
-      store_inst_value(f, pc, iref_from_value(b ? in->common->val._false : in->common->val._true));
+      b32 b = *Cast(u8 *, values_get(ctx->values, iref_to_value(res))->data);
+      store_inst_value(f, pc, iref_from_value(b ? ctx->common->val._false : ctx->common->val._true));
     } else {
-      IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_bit_not, f->chunk->sources[pc]);
+      InstructionOffset inst = iir_builder_add(builder, IIR_bit_not, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(res));
       iir_builder_set_type(builder, inst, type);
 
@@ -1727,50 +1996,27 @@ internal u32 step(Specializer *in, RunState *state) {
 
     s->pc += 1;
   } break;
-
-  case SIR_param_type: {
-    SIrParamType *param_type = sir_chunk_extra(f->chunk, pc);
-
-    TypeIndex idx;
-    b32 ok = expect_some_type_value(in, f, param_type->function_type, &idx);
-    Assert(ok);
-
-    Type *t = types_get(in->types, idx);
-    Assert(t->kind == Type_function);
-    Assert(param_type->param_index < t->data.function.param_count);
-
-    ValueIndex v = val_from_type(in, t->data.function.param_types[param_type->param_index]);
-    store_inst_value(f, pc, iref_from_value(v));
-    s->pc += 1;
-  } break;
   }
 
-  return Step_ok;
+  return (StepResult){ .kind = Step_next_step };
 }
 
-u32 run_toplevel_block(Specializer *in, RunState *state) {
-  CallFrame *base_frame = state->call_stack.data;
-
+StepResult run_toplevel_block(SpecializerContext *ctx, Specializer *state) {
   while (True) {
-    CallFrame *f = top_frame(state);
+    StepResult res = step(ctx, state);
 
-    u32 err = step(in, state);
-
-    if (!err) {
-      continue;
+    switch (res.kind) {
+    case Step_next_step: continue;
+    case Step_finished:
+    case Step_error:
+    case Step_resolve_declaration_value:
+    case Step_register_function:
+      return res;
     }
 
-    if (err == Step_leave_scope) {
-      u32 scope_depth = f->scopes.len;
-      if (f == base_frame && scope_depth == 1) {
-        return Run_ok;
-      }
-
-      continue;
-    }
-
-    return err;
+    Unreachable();
   }
 
   Unreachable();
 }
+

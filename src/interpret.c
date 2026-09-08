@@ -8,6 +8,13 @@
 internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
   if (iref_is_value(ref)) {
     Value *v = values_get(&in->compiler->values, iref_to_value(ref));
+    
+    while (key_eq(v->type, in->compiler->types.t_stub)) {
+      StubKey ref = Cast(ValueStubRef*, v->data)->stub;
+      Stub *stub = compiler_get_stub(in->compiler, ref);
+      v = values_get(&in->compiler->values, stub->val);
+    }
+
     return v->data;
   } else {
     return f->inst_values[iref_to_instruction(ref)];
@@ -45,7 +52,7 @@ internal void frame_pop(Interpreter *in) {
   stack_pop_unchecked(&in->call_stack);
 }
 
-internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
+internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionOffset block) {
   u32 inst_count = iir_chunk_data(f->chunk, block);
   stack_push(&f->scope_stack, ((ScopeSpan2){
     .start = block,
@@ -54,7 +61,7 @@ internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionIndex block)
   }));
 }
 
-internal TypeIndex ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
+internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
   if (iref_is_value(ref)) {
     return values_get(&in->compiler->values, iref_to_value(ref))->type;
   }
@@ -62,7 +69,7 @@ internal TypeIndex ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
   return iir_chunk_type(f->chunk, iref_to_instruction(ref));
 }
 
-internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
+internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionOffset block) {
   while (True) {
     ScopeSpan2 span = stack_pop(&f->scope_stack);
 
@@ -84,7 +91,7 @@ typedef enum {
   Step_illegal_opcode,
 } StepResult;
 
-internal MessageLocation inst_location(CallFrame2 *f, InstructionIndex pc) {
+internal MessageLocation inst_location(CallFrame2 *f, InstructionOffset pc) {
   AstAndSourceIndex src = f->chunk->sources[pc];
   if (!src.ast_idx) {
     return (MessageLocation){ .kind = MessageLocation_unspecified, };
@@ -99,13 +106,13 @@ internal MessageLocation inst_location(CallFrame2 *f, InstructionIndex pc) {
 
 internal u32 step(Interpreter *in) {
   CallFrame2 *f = stack_peek_ptr(&in->call_stack);
-  InstructionIndex pc = f->pc;
+  InstructionOffset pc = f->pc;
   IIrOpcode op = f->chunk->opcodes[pc];
 
   void *local;
   TypeSizeInfo size_info;
-  TypeIndex type = iir_chunk_type(f->chunk, pc);
-  if (type) {
+  TypeKey type = iir_chunk_type(f->chunk, pc);
+  if (key_is_some(type)) {
     size_info = types_size_info_by_index(&in->compiler->types, type);
     local = arena_push(in->scratch, size_info.size, size_info.align);
     f->inst_values[pc] = local;
@@ -137,7 +144,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_repeat: {
-    InstructionIndex loop = iir_chunk_data(f->chunk, pc);
+    InstructionOffset loop = iir_chunk_data(f->chunk, pc);
     scopes_pop_to(in, f, loop);
     scope_push(in, f, loop);
     f->pc = loop + 1;
@@ -145,7 +152,7 @@ internal u32 step(Interpreter *in) {
 
   case IIR_br: {
     IIrBr *br = iir_chunk_extra(f->chunk, pc);
-    if (type) {
+    if (key_is_some(type)) {
       memcpy(f->inst_values[br->block], resolve(in, f, br->value), size_info.size);
     }
     scopes_pop_to(in, f, br->block);
@@ -157,7 +164,7 @@ internal u32 step(Interpreter *in) {
     IIrCondbr *condbr = iir_chunk_extra(f->chunk, pc);
     u8* v = resolve(in, f, condbr->cond);
     if (*v) {
-      f->pc = condbr->then;
+      f->pc += 1;
     } else {
       f->pc = condbr->otherwise;
     }
@@ -165,9 +172,8 @@ internal u32 step(Interpreter *in) {
 
   case IIR_call: {
     IIrCall *call = iir_chunk_extra(f->chunk, pc);
-    ValueFunc *func = resolve(in, f, call->func_ptr);
-
-    IIrChunk *chunk = &func->chunk;
+    ValueResidualFunction *func = resolve(in, f, call->func_ptr);
+    IIrChunk *chunk = &compiler_get_function(in->compiler, func->key)->chunk;
 
     CallFrame2 *g = frame_push(in, chunk, f->inst_values[pc]);
 
@@ -269,8 +275,8 @@ internal u32 step(Interpreter *in) {
 
     void *val = resolve(in, f, ref);
 
-    TypeIndex dst_type = type;
-    TypeIndex from_type = iir_chunk_type(f->chunk, iref_to_instruction(ref));
+    TypeKey dst_type = type;
+    TypeKey from_type = iir_chunk_type(f->chunk, iref_to_instruction(ref));
 
     Type *t = types_get(&in->compiler->types, from_type);
     Type *v = types_get(&in->compiler->types, dst_type);
@@ -475,7 +481,7 @@ internal u32 step(Interpreter *in) {
   return Step_ok;
 }
 
-u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out) {
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueKey *args, u32 arg_count, void *out) {
   Unused(args);
 
   // TODO: make sure that the args match the signature of the function

@@ -24,13 +24,13 @@ typedef struct {
   u8 kind;
 
   // `source_idx` is set if kind is byte_offset, token_index or ast_index.
-  SourceIndex source_idx;
+  SourceKey source_idx;
 
   // `decl_idx` is set if kind is ir_instruction.
-  DeclarationIndex decl_idx;
+  DeclarationKey decl_idx;
 
   union {
-    TokenIndex token_index;
+    TokenOffset token_index;
     AstIndex ast_index;
     u32 offset;
   } data;
@@ -39,7 +39,7 @@ typedef struct {
 typedef union {
   u8     token_kind;
   String string;
-  TypeIndex type;
+  TypeKey type;
   u64 u64;
 } MessageArg;
 
@@ -71,7 +71,7 @@ typedef Message* MessagePtr;
 // Format args support:
 // - %tokenkind (u8 representing TokenKind)
 // - %string    (String)
-// - %type      (TypeIndex)
+// - %type      (TypeKey)
 // - %u64       (u64)
 #define Message_error(psink, ...) (psink)->add_message((psink)->user, Severity_Error, __VA_ARGS__)
 

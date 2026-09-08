@@ -168,6 +168,8 @@ typedef struct String {
 
 String string_from_cstr(char const *s);
 
+String string_sub(String s, usize start, usize end);
+
 typedef enum {
   PARSE_U64_OK,
   PARSE_U64_OVERFLOW,

@@ -1,0 +1,23 @@
+mod main
+
+main := ||: i32 {
+  // Runtime operands, so each coercion leaves a residual IIR_int_cast behind.
+  #debug(widen_store(-5))
+  #debug(widen_operand(-3, 1000))
+  #debug(bool_store(yes()))
+  0
+}
+
+widen_store := |a: i8|: i64 {
+  x: i64 = a
+  x
+}
+
+widen_operand := |a: i8, b: i32|: i32 { a + b }
+
+bool_store := |b: bool|: u8 {
+  x: u8 = b
+  x
+}
+
+yes := ||: bool true

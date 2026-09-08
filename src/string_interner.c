@@ -15,11 +15,12 @@ internal b32 str_eq(void *context, String a, String b) {
 
 #define INTERNER_NAME            StringInterner
 #define INTERNER_TYPE            String
-#define INTERNER_INDEX_TYPE      StringIndex
+#define INTERNER_INDEX_TYPE      StringKey
 #define INTERNER_FUNCTION_PREFIX strings
 #define INTERNER_HASH_FN         str_hash
 #define INTERNER_COMPARE_FN      str_eq
 #define INTERNER_COPY_FN         arena_copy_string
 #define INTERNER_RESERVE_ZERO_INDEX
+#define INTERNER_INDEX_IS_KEY
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"

@@ -7,98 +7,7 @@
 #include "value.h"
 #include "ir.h"
 #include "cli_options.h"
-
-typedef struct {
-  struct {
-    TypeIndex comptime_int;
-    TypeIndex type;
-    TypeIndex nil;
-    TypeIndex _bool;
-    TypeIndex never;
-    TypeIndex u8;
-    TypeIndex i8;
-    TypeIndex i16;
-    TypeIndex i32;
-    TypeIndex i64;
-    TypeIndex usize;
-  } type;
-
-  struct {
-    ValueIndex type;
-    ValueIndex nil;
-    ValueIndex _bool;
-    ValueIndex never;
-    ValueIndex i8;
-    ValueIndex i16;
-    ValueIndex i32;
-    ValueIndex i64;
-    ValueIndex u8;
-    ValueIndex comptime_int;
-    ValueIndex usize;
-
-    ValueIndex _true;
-    ValueIndex _false;
-  } val;
-} Common;
-
-typedef struct {
-  DeclarationIndex parent;
-  StringIndex      name;
-} DeclarationKey;
-
-typedef enum {
-  ResolveStatus_error,
-  ResolveStatus_unresolved,
-  ResolveStatus_resolving_type,
-  ResolveStatus_type_resolved,
-  ResolveStatus_resolving_value,
-  ResolveStatus_fully_resolved,
-} ResolveStatus;
-
-typedef enum {
-  Declaration_root,
-  Declaration_primitive,
-  Declaration_mod,
-  Declaration_decl,
-} DeclarationKind;
-
-struct Declaration {
-  DeclarationIndex idx;
-
-  u8 kind;
-  u8 resolve_status;
-
-  union {
-    ValueIndex primitive;
-
-    struct {
-      Source *source;
-      u32     tree_idx;
-    } mod;
-
-    struct {
-      Source  *source;
-      u32      tree_idx;
-
-      SIrChunk  chunk;
-
-      InstructionIndex block_type;
-      TypeIndex type; // will be set after the type of the declaration has been resolved
-
-      InstructionIndex block_val;
-      ValueIndex val; // will be set after the declaration has been fully resolved
-    } decl;
-  } data;
-};
-
-#define INTERNER_NAME       DeclarationInterner
-#define INTERNER_TYPE       DeclarationKey
-#define INTERNER_INDEX_TYPE DeclarationIndex
-#define INTERNER_EXTRA_TYPE Declaration
-#define INTERNER_FUNCTION_PREFIX decls
-#define INTERNER_OUTPUT_TYPES
-#define INTERNER_OUTPUT_DECLARATIONS
-#include "interner.h"
+#include "declaration_interner.h"
 
 #define SOURCELIST_MIN_SIZE_LOG2  4
 #define SOURCELIST_SEGMENT_COUNT  20
@@ -112,13 +21,54 @@ struct Declaration {
 #define DECLIDXLIST_MIN_SIZE_LOG2 4
 #define DECLIDXLIST_SEGMENT_COUNT 20
 #define SEGMENTLIST_NAME          DeclIdxList
-#define SEGMENTLIST_TYPE          DeclarationIndex
+#define SEGMENTLIST_TYPE          DeclarationKey
 #define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+typedef enum {
+  RESOLVE_STATUS_UNRESOLVED,
+  RESOLVE_STATUS_RESOLVING,
+  RESOLVE_STATUS_FULLY_RESOLVED,
+  RESOLVE_STATUS_ERROR,
+} ResolveStatus;
+
 typedef struct {
+  u8 resolve_status;
+  DeclarationKey decl;
+  InstructionOffset inst;
+  TypeKey type_hint;
+  ValueKey val;
+} Stub;
+
+#define STUB_LIST_NAME StubList
+#define STUB_LIST_TYPE Stub
+#define STUB_LIST_MIN_SIZE_LOG2 5
+#define STUB_LIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME STUB_LIST_NAME
+#define SEGMENTLIST_TYPE STUB_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 STUB_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT STUB_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
+  IIrChunk chunk;
+} ResidualFunction;
+
+#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 5
+#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 20
+#define RESIDUAL_FUNCTION_LIST_NAME ResidualFunctionList
+#define RESIDUAL_FUNCTION_LIST_TYPE ResidualFunction
+#define SEGMENTLIST_NAME RESIDUAL_FUNCTION_LIST_NAME
+#define SEGMENTLIST_TYPE RESIDUAL_FUNCTION_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct Compiler {
   Arena arena;
   Arena scratch;
 
@@ -136,19 +86,29 @@ typedef struct {
 
   DeclarationInterner decls;
   DeclIdxList         user_decls;
+
+  ResidualFunctionList functions;
+  StubList stubs;
 } Compiler;
 
 void compiler_init(Compiler *compiler, CLIOptions *options);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
-Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx);
+Source *compiler_get_source(Compiler *compiler, SourceKey source_idx);
 
-b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
+ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction **function);
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
+
+StubKey compiler_add_stub(Compiler *compiler, DeclarationKey decl, InstructionOffset inst, TypeKey type);
+Stub *compiler_get_stub(Compiler *compiler, StubKey key);
+
+b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationKey mod, StringKey name, DeclarationKey *out);
 
 void compiler_print_all_messages(Compiler *compiler);
 
 b32 compile(Compiler *compiler);
+
 b32 run_main(Compiler *compiler);
 
 #endif // COMPILER_H

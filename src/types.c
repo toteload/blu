@@ -16,16 +16,50 @@ internal Type *intern_type(Arena *arena, Type *x) {
   return intern;
 }
 
-#define INTERNER_NAME TypeInterner
+#define INTERNER_NAME TypeInternerAux
 #define INTERNER_TYPE TypePtr
-#define INTERNER_INDEX_TYPE TypeIndex
-#define INTERNER_FUNCTION_PREFIX types
+#define INTERNER_INDEX_TYPE u32
+#define INTERNER_FUNCTION_PREFIX aux
 #define INTERNER_HASH_FN hash_type
 #define INTERNER_COMPARE_FN cmp_type
 #define INTERNER_COPY_FN intern_type
 #define INTERNER_RESERVE_ZERO_INDEX
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
+
+void types_init(TypeInterner *types, InternerOptions *options) {
+  aux_init(&types->_interner, options);
+
+  // clang-format off
+  types->t_stub         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_stub}) };
+  types->t_type         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_type}) };
+  types->t_nil          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_nil}) };
+  types->t_bool         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}}) };
+  types->t_never        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_never}) };
+  types->t_comptime_int = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_comptime_int}) };
+  types->t_u8           = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}) };
+  types->t_u16          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 16}}) };
+  types->t_u32          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 32}}) };
+  types->t_u64          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 64}}) };
+  types->t_usize        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Unsigned, .bitwidth = 64}}) };
+  types->t_i8           = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}) };
+  types->t_i16          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}}) };
+  types->t_i32          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}) };
+  types->t_i64          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}}) };
+  // clang-format on
+}
+
+void types_deinit(TypeInterner *types) {
+  Todo();
+}
+
+TypeKey types_intern(TypeInterner *types, Type *t) {
+  return (TypeKey){ aux_add(&types->_interner, t) };
+}
+
+Type *types_get(TypeInterner *types, TypeKey key) {
+  return aux_get(&types->_interner, key.x);
+}
 
 internal b32 cmp_type(void *context, Type *a, Type *b) {
   Unused(context);
@@ -35,20 +69,19 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
   }
 
   switch (Cast(TypeKind, a->kind)) {
+  case Type_stub:
   case Type_nil:
   case Type_never:
   case Type_bool:
   case Type_type:
   case Type_comptime_int:
-  case Type_usize:
-  case Type_isize:
     return True;
   case Type_slice:
-    return a->data.slice.base_type == b->data.slice.base_type;
+    return key_eq(a->data.slice.base_type, b->data.slice.base_type);
   case Type_pointer:
-    return a->data.pointer.base_type == b->data.pointer.base_type;
+    return key_eq(a->data.pointer.base_type, b->data.pointer.base_type);
   case Type_function: {
-    if (a->data.function.return_type != b->data.function.return_type) {
+    if (!key_eq(a->data.function.return_type, b->data.function.return_type)) {
       return False;
     }
 
@@ -57,7 +90,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
     }
 
     for (u32 i = 0; i < a->data.function.param_count; i++) {
-      if (a->data.function.param_types[i] != b->data.function.param_types[i]) {
+      if (!key_eq(a->data.function.param_types[i], b->data.function.param_types[i])) {
         return False;
       }
     }
@@ -66,10 +99,11 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
   }
   case Type_integer:
     return a->data.integer.signedness == b->data.integer.signedness &&
-           a->data.integer.bitwidth == b->data.integer.bitwidth;
+           a->data.integer.bitwidth == b->data.integer.bitwidth &&
+           a->data.integer.is_uisize == b->data.integer.is_uisize;
   case Type_array: {
     return a->data.array.size == b->data.array.size &&
-           a->data.array.base_type == b->data.array.base_type;
+           key_eq(a->data.array.base_type, b->data.array.base_type);
   }
   }
 
@@ -89,15 +123,15 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   Push_data(x->kind);
 
   switch (Cast(TypeKind, x->kind)) {
+  case Type_stub:
   case Type_nil:
   case Type_never:
   case Type_bool:
   case Type_type:
   case Type_comptime_int:
-  case Type_usize:
-  case Type_isize:
     break;
   case Type_integer: {
+    Push_data(x->data.integer.is_uisize);
     Push_data(x->data.integer.signedness);
     Push_data(x->data.integer.bitwidth);
   } break;
@@ -140,6 +174,7 @@ internal u32 hash_type(void *context, Type *x) {
 
 u32 type_intern_byte_size(Type *type) {
   switch (Cast(TypeKind, type->kind)) {
+  case Type_stub:
   case Type_comptime_int:
   case Type_integer:
   case Type_bool:
@@ -148,12 +183,10 @@ u32 type_intern_byte_size(Type *type) {
   case Type_type:
   case Type_slice:
   case Type_pointer:
-  case Type_usize:
-  case Type_isize:
   case Type_array:
     return sizeof(Type);
   case Type_function:
-    return sizeof(Type) + type->data.function.param_count * sizeof(TypeIndex);
+    return sizeof(Type) + type->data.function.param_count * sizeof(TypeKey);
   }
 
   Unreachable();
@@ -165,8 +198,8 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   // ASSUME: pointers are 8 bytes.
 
   switch (Cast(TypeKind, type->kind)) {
-  case Type_comptime_int:
-    Unreachable();
+  case Type_comptime_int: Unreachable();
+  case Type_stub: Unreachable();
   case Type_bool:
     return (TypeSizeInfo){.size = 1, .align = 1, .stride = 1};
   case Type_nil:
@@ -176,8 +209,6 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   case Type_type:
     return (TypeSizeInfo){.size = 4, .align = 4, .stride = 4};
   case Type_pointer:
-  case Type_usize:
-  case Type_isize:
     return (TypeSizeInfo){.size = 8, .align = 8, .stride = 8};
   case Type_integer: {
     // ASSUME: the bitwidth of integers is always a multiple of 8.
@@ -198,11 +229,8 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
     };
   }
   case Type_function: {
-    // A variable holding a function is stored as an 8-byte pointer to the actual code of the
-    // function.
-    return (TypeSizeInfo){.size = sizeof(ValueFunc),
-                          .align = Align_of(ValueFunc),
-                          .stride = sizeof(ValueFunc)};
+    // A variable holding a function is stored as an 8-byte pointer to the actual code of the function.
+    Todo();
   }
   }
 
@@ -211,13 +239,13 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   return (TypeSizeInfo){0};
 }
 
-TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx) {
+TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeKey idx) {
   Type *type = types_get(types, idx);
   return types_size_info(types, type);
 }
 
-u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from) {
-  if (to == from) {
+u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
+  if (key_eq(to, from)) {
     return Coercion_identical_types;
   }
 
@@ -225,8 +253,7 @@ u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from) {
   Type *type_from = types_get(types, from);
 
   if (type_from->kind == Type_comptime_int) {
-    if (type_to->kind == Type_integer || type_to->kind == Type_usize ||
-        type_to->kind == Type_isize) {
+    if (type_to->kind == Type_integer) {
       return Coercion_comptime_int_to_intlike;
     }
 
@@ -247,7 +274,7 @@ u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from) {
   }
 
   if (type_from->kind == Type_array && type_to->kind == Type_slice) {
-    if (type_from->data.array.base_type == type_to->data.slice.base_type) {
+    if (key_eq(type_from->data.array.base_type, type_to->data.slice.base_type)) {
       return Coercion_array_to_slice;
     }
 
@@ -258,11 +285,10 @@ u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from) {
 }
 
 internal b32 is_type_int_like(Type *t) {
-  return t->kind == Type_integer || t->kind == Type_usize || t->kind == Type_isize ||
-         t->kind == Type_comptime_int;
+  return t->kind == Type_integer || t->kind == Type_comptime_int;
 }
 
-b32 is_type_castable_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
+b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from) {
   if (classify_type_coercion(types, to, from) != Coercion_invalid) {
     return True;
   }
@@ -277,8 +303,8 @@ b32 is_type_castable_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
   return is_type_int_like(type_to) && is_type_int_like(type_from);
 }
 
-TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
-  return types_add(types, &(Type){.kind = Type_pointer, .data.pointer = {.base_type = base_type}});
+TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type) {
+  return types_intern(types, &(Type){.kind = Type_pointer, .data.pointer = {.base_type = base_type}});
 }
 
 b32 check_can_type_add(Type *t) {
@@ -310,34 +336,32 @@ internal String arena_printf(Arena *arena, char const *format, ...) {
   return (String){.str = s, .len = len};
 }
 
-String write_type(Arena *arena, TypeInterner *types, TypeIndex type) {
-  if (type == 0) {
+String write_type(Arena *arena, TypeInterner *types, TypeKey type) {
+  if (key_is_nil(type)) {
     return arena_copy_string(arena, string_lit("?"));
   }
 
   Type *t = types_get(types, type);
   switch (Cast(TypeKind, t->kind)) {
-  case Type_comptime_int:
-    return arena_copy_string(arena, string_lit("comptime_int"));
-  case Type_bool:
-    return arena_copy_string(arena, string_lit("bool"));
-  case Type_nil:
-    return arena_copy_string(arena, string_lit("nil"));
-  case Type_usize:
-    return arena_copy_string(arena, string_lit("usize"));
-  case Type_isize:
-    return arena_copy_string(arena, string_lit("isize"));
-  case Type_never:
-    return arena_copy_string(arena, string_lit("never"));
-  case Type_type:
-    return arena_copy_string(arena, string_lit("type"));
+  case Type_comptime_int: return arena_copy_string(arena, string_lit("comptime_int"));
+  case Type_bool: return arena_copy_string(arena, string_lit("bool"));
+  case Type_stub: return arena_copy_string(arena, string_lit("stub"));
+  case Type_nil: return arena_copy_string(arena, string_lit("nil"));
+  case Type_never: return arena_copy_string(arena, string_lit("never"));
+  case Type_type: return arena_copy_string(arena, string_lit("type"));
   case Type_integer: {
+    if (t->data.integer.is_uisize) {
+      return arena_printf(
+        arena,
+        "%csize",
+        (t->data.integer.signedness == Signed) ? 'i' : 'u');
+    }
+
     return arena_printf(
       arena,
       "%c%u",
       (t->data.integer.signedness == Signed) ? 'i' : 'u',
-      t->data.integer.bitwidth
-    );
+      t->data.integer.bitwidth);
   } break;
   case Type_array: {
     String s = arena_printf(arena, "[%u]", t->data.array.size);
@@ -345,7 +369,17 @@ String write_type(Arena *arena, TypeInterner *types, TypeIndex type) {
     return (String){.str = s.str, .len = s.len + a.len};
   } break;
   case Type_function: {
-    Todo();
+    String s = arena_printf(arena, "(");
+    u32 len = s.len;
+    for (u32 i = 0; i < t->data.function.param_count; i++) {
+      if (i != 0) {
+        len += arena_printf(arena, ", ").len;
+      }
+      len += write_type(arena, types, t->data.function.param_types[i]).len;
+    }
+    len += arena_printf(arena, ") ").len;
+    len += write_type(arena, types, t->data.function.return_type).len;
+    return (String){.str = s.str, .len = len};
   } break;
   case Type_slice: {
     String s = arena_printf(arena, "[]", t->data.array.size);

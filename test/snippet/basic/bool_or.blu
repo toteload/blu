@@ -1,0 +1,13 @@
+mod main
+
+main: () i32 = || {
+  // Runtime operands, so each of these leaves a residual condbr + short-circuit br behind.
+  #debug(yes() or yes())
+  #debug(yes() or no())
+  #debug(no() or yes())
+  #debug(no() or no())
+  0
+}
+
+yes := ||: bool true
+no := ||: bool false

@@ -23,15 +23,16 @@ enum FormatSpecKind {
 };
 
 typedef struct {
-  u8     kind;
-  usize  start; // index of the '%' in the format string
-  usize  end;   // index just past the directive
+  u8    kind;
+  usize start; // index of the '%' in the format string
+  usize end;   // index just past the directive
 } FormatSpec;
 
 internal b32 starts_with_at(String s, usize pos, String prefix) {
   if (pos + prefix.len > s.len) {
     return False;
   }
+
   return memcmp(s.str + pos, prefix.str, prefix.len) == 0;
 }
 
@@ -111,7 +112,7 @@ void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_c
     case FormatSpec_string: {
       args[i].string = va_arg(vl, String);
     } break;
-    case FormatSpec_type: { args[i].type = va_arg(vl, TypeIndex); } break;
+    case FormatSpec_type: { args[i].type = va_arg(vl, TypeKey); } break;
     case FormatSpec_u64: { args[i].u64 = va_arg(vl, u64); } break;
     }
 
@@ -171,7 +172,7 @@ String message_format(Arena *scratch, TypeInterner *types, Message *message) {
     } break;
 
     case FormatSpec_type: {
-      TypeIndex type = message->args[arg_i++].type;
+      TypeKey type = message->args[arg_i++].type;
       String s = write_type(scratch, types, type);
       len += s.len;
     } break;
