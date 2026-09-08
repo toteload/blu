@@ -14,7 +14,7 @@
 typedef enum {
   Scope_chunk,
   Scope_block,
-  Scope_eval_block,
+  Scope_comptime_block,
   Scope_func,
 } ScopeKind;
 
@@ -24,6 +24,8 @@ typedef struct {
   InstructionIndex start;
   InstructionIndex end;
   InstructionIndex pc;
+
+  b32 is_decl_value;
 
   InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
   InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr

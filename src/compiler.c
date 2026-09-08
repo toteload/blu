@@ -370,7 +370,7 @@ internal b32 resolve_entry(Resolver *resolver) {
       u32 count = sir_chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
-        .scope_kind = Scope_eval_block,
+        .scope_kind = Scope_comptime_block,
         .start = block,
         .end = block + count,
         .pc = block + 1,
@@ -380,7 +380,7 @@ internal b32 resolve_entry(Resolver *resolver) {
       u32 count = sir_chunk_data(chunk, block);
 
       *scope = (ScopeSpan){
-        .scope_kind = Scope_eval_block,
+        .scope_kind = Scope_comptime_block,
         .start = block,
         .end = block + count,
         .pc = block + 1,
@@ -396,9 +396,13 @@ internal b32 resolve_entry(Resolver *resolver) {
       CallFrame *f = top_frame(&entry->state);
 
       IRef ref = f->inst_map[decl->data.decl.block_type];
-      Assert(iref_is_some_value(ref));
+
+      if (iref_is_nil(ref)) {
+        return True;
+      }
 
       Value *v = values_get(resolver->in->values, iref_to_value(ref));
+
       Assert(v->type == resolver->in->common->type.type);
 
       TypeIndex type = *Cast(TypeIndex*,v->data);

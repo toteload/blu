@@ -491,14 +491,64 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
+    SRef function_type;
+    {
+      SRef ref_ret_type = {0};
+      if (func->return_type) {
+        ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
+      }
+
+      SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+
+      // Output param type expressions
+      for (u32 i = 0; i < func->count; i++) {
+        AstParam *ast_param = ast_data(ast, func->params[i]);
+
+        param_types[i] = (SRef){0};
+        if (ast_param->type) {
+          param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+        }
+      }
+
+      InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
+
+      u32 arg_count = func->count + 1; // parameters + return type
+
+      SIrType *data_type = sir_builder_push_data_raw(
+        &gen->builder,
+        inst_type,
+        sizeof(SIrType) + arg_count * sizeof(SRef),
+        Align_of(SIrType)
+      );
+      *data_type = (SIrType){
+        .kind = Type_function,
+        .arg_count = arg_count,
+      };
+
+      data_type->args[0] = ref_ret_type;
+
+      for (u32 i = 0; i < func->count; i++) {
+        data_type->args[1 + i] = param_types[i];
+      }
+
+      InstructionIndex inst_unify = sir_builder_add(builder, SIR_unify, source_idx, idx_ast);
+      SIrUnify *data_unify = sir_builder_push_data(builder, inst_unify, SIrUnify);
+      *data_unify = (SIrUnify){
+        .type_lhs = type_destination,
+        .type_rhs = sref_from_instruction(inst_type),
+      };
+
+      function_type = sref_from_instruction(inst_unify);
+    }
+
     InstructionIndex inst_return_type = sir_builder_add(builder, SIR_return_type, source_idx, idx_ast);
-    sir_builder_set_data(builder, inst_return_type, sref_to_u32(type_destination));
+    sir_builder_set_data(builder, inst_return_type, sref_to_u32(function_type));
 
     for (u32 i = 0; i < func->count; i++) {
       InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, func->params[i]);
       SIrParamType *param_type = sir_builder_push_data(builder, inst_param_type, SIrParamType);
       *param_type = (SIrParamType){
-        .function_type = type_destination,
+        .function_type = function_type,
         .param_index = i,
       };
     }
@@ -1033,77 +1083,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   Unreachable();
 }
 
-// For some constructions a part of the declaration type is allowed to live in the value.
-// This function is for adding type checking code for those constructs.
-SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared_type) {
-  AstNodes *ast = &gen->source->ast;
-  SIrBuilder *builder = &gen->builder;
-  SourceIndex source_idx = gen->source->idx;
-
-  AstKind kind = ast->kinds[idx_ast];
-  switch (kind) {
-  case Ast_block: {
-    Todo();
-  } break;
-
-  case Ast_function: {
-    AstFunction *func = ast_data(ast, idx_ast);
-
-    SRef ref_ret_type = {0};
-    if (func->return_type) {
-      ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
-    }
-
-    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
-
-    // Output param type expressions
-    for (u32 i = 0; i < func->count; i++) {
-      AstParam *ast_param = ast_data(ast, func->params[i]);
-
-      param_types[i] = (SRef){0};
-      if (ast_param->type) {
-        param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
-      }
-    }
-
-    InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
-
-    u32 arg_count = func->count + 1; // parameters + return type
-
-    SIrType *data_type = sir_builder_push_data_raw(
-      &gen->builder,
-      inst_type,
-      sizeof(SIrType) + arg_count * sizeof(SRef),
-      Align_of(SIrType)
-    );
-    *data_type = (SIrType){
-      .kind = Type_function,
-      .arg_count = arg_count,
-    };
-
-    data_type->args[0] = ref_ret_type;
-
-    for (u32 i = 0; i < func->count; i++) {
-      data_type->args[1 + i] = param_types[i];
-    }
-
-    InstructionIndex inst_unify = sir_builder_add(builder, SIR_unify, source_idx, idx_ast);
-    SIrUnify *data_unify = sir_builder_push_data(builder, inst_unify, SIrUnify);
-    *data_unify = (SIrUnify){
-      .type_lhs = declared_type,
-      .type_rhs = sref_from_instruction(inst_type),
-    };
-
-    return sref_from_instruction(inst_unify);
-  } break;
-
-  default:
-    return declared_type;
-  }
-
-  Unreachable();
-}
-
 b32 generate_code(CodeGenContext *context, Declaration *decl) {
   // NOTE: It is possible to output dependencies on other declarations for the pieces of code.
   // However, these dependencies may contain false positives, because whether another declaration is
@@ -1128,27 +1107,12 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   {
     InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
 
-    SRef ref_decl_type = {0};
+    SRef ref_decl_type = (SRef){0};
     if (ast_decl->type) {
       ref_decl_type = gen_code(&gen, ast_decl->type, sref_from_value(gen.common->val.type));
     }
 
-    SRef ref_decl_type_of_val = gen_code_for_declaration_type(&gen, ast_decl->value, ref_decl_type);
-
-    if (sref_is_nil(ref_decl_type_of_val)) {
-      Message_error(
-        gen.msg_sink,
-        (MessageLocation){
-          .kind = MessageLocation_ast_index,
-          .source_idx = gen.source->idx,
-          .data.ast_index = ast_idx_decl,
-        },
-        string_lit("Declaration has no type defined")
-      );
-      gen.has_error = True;
-    }
-
-    sir_builder_end_block_with(builder, block, block, ref_decl_type_of_val, source->idx, ast_idx_decl);
+    sir_builder_end_block_with(builder, block, block, ref_decl_type, source->idx, ast_idx_decl);
 
     block_decl_type = block;
   }

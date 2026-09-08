@@ -436,7 +436,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_loop:
   case SIR_block: {
-    if (s->scope_kind == Scope_eval_block) {
+    if (s->scope_kind == Scope_comptime_block) {
       Todo();
     }
 
@@ -515,7 +515,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Todo();
     }
 
-    TypeIndex type;
+    TypeIndex type = 0;
     switch (Cast(DeclarationKind, decl->kind)) {
     case Declaration_primitive: { Todo(); } break;
     case Declaration_decl: {
@@ -527,9 +527,10 @@ internal u32 step(Specializer *in, RunState *state) {
       Panic();
     }
 
-    ValueIndex v = val_from_type(in, type);
-
-    store_inst_value(f, pc, iref_from_value(v));
+    if (type != 0) {
+      ValueIndex v = val_from_type(in, type);
+      store_inst_value(f, pc, iref_from_value(v));
+    }
 
     s->pc += 1;
   } break;
@@ -584,8 +585,20 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_as: {
     SIrAs *as = sir_chunk_extra(f->chunk, pc);
     IRef ref = resolve(f, as->val);
+    IRef ref_type_to = resolve(f, as->type_to);
 
     Assert(!iref_is_nil(ref));
+
+    if (iref_is_nil(ref_type_to)) {
+      if (iref_is_some_value(ref)) {
+        store_inst_value(f, pc, ref);
+      } else {
+        Todo();
+      }
+
+      s->pc = pc + 1;
+      break;
+    }
 
     TypeIndex type_dst;
     b32 ok = expect_some_type_value(in, f, as->type_to, &type_dst);
@@ -765,7 +778,7 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_br: {
     SIrBr *br = sir_chunk_extra(f->chunk, pc);
 
-    if (s->scope_kind == Scope_eval_block) {
+    if (s->scope_kind == Scope_comptime_block) {
       ValueIndex val;
       b32 ok = expect_comptime_value_or_nil(in, f, br->value, &val);
       if (!ok) {
@@ -894,7 +907,15 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex type_unified;
     u32 err = eval_unify(in->scratch, in->types, type_lhs, type_rhs, &type_unified);
     if (err) {
-      Todo();
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Unable to unify types"));
+      return Step_error;
     }
 
     ValueIndex v = val_from_type(in, type_unified);
