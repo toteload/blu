@@ -52,6 +52,7 @@ typedef enum {
   ResolveStatus_resolving_type,
   ResolveStatus_type_resolved,
   ResolveStatus_resolving_value,
+  ResolveStatus_stub_value,
   ResolveStatus_fully_resolved,
 } ResolveStatus;
 

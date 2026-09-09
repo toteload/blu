@@ -64,54 +64,56 @@ typedef union {
 #define REF_FUNCTION_PREFIX sref
 #include "ref.h"
 
+// clang-format off
 typedef enum {
-  SIR_func,           // references SIrFunc
-  SIR_param,          // contains SRef to a type
-  SIR_alloc,          // contains SRef to a type
+  SIR_func,              // references SIrFunc
+  SIR_param,             // contains SRef to a type
+  SIR_alloc,             // contains SRef to a type
   SIR_load,
-  SIR_store,          // references SIrStore
-  SIR_block,          // contains instruction count of block
-  SIR_loop,           // contains instruction count of block
-  SIR_condbr,         // references SIrCondbr
-  SIR_br,             // references SIrBr
-  SIR_repeat,         // contains InstructionIndex of loop block to repeat
-  SIR_ret,            // contains SRef to value to return
-  SIR_call,           // references SIrCall
+  SIR_store,             // references SIrStore
+  SIR_block,             // contains instruction count of block
+  SIR_loop,              // contains instruction count of block
+  SIR_condbr,            // references SIrCondbr
+  SIR_br,                // references SIrBr
+  SIR_repeat,            // contains InstructionIndex of loop block to repeat
+  SIR_ret,               // contains SRef to value to return
+  SIR_call,              // references SIrCall
   SIR_bool_and, // references SIrBinary
-  SIR_mul, // references SIrBinary
-  SIR_div, // references SIrBinary
-  SIR_mod, // references SIrBinary
-  SIR_sub, // references SIrBinary
-  SIR_add, // references SIrBinary
-  SIR_cmp_eq,         // references SIrBinary
-  SIR_cmp_ne,         // references SIrBinary
-  SIR_cmp_gt,         // references SIrBinary
-  SIR_cmp_ge,         // references SIrBinary
-  SIR_cmp_lt,         // references SIrBinary
-  SIR_cmp_le,         // references SIrBinary
-  SIR_bitshift_left, // references SIrBinary
-  SIR_bitshift_right, // references SIrBinary
-  SIR_bit_and, // references SIrBinary
-  SIR_bit_or, // references SIrBinary
-  SIR_bit_xor, // references SIrBinary
+  SIR_mul,               // references SIrBinary
+  SIR_div,               // references SIrBinary
+  SIR_mod,               // references SIrBinary
+  SIR_sub,               // references SIrBinary
+  SIR_add,               // references SIrBinary
+  SIR_cmp_eq,            // references SIrBinary
+  SIR_cmp_ne,            // references SIrBinary
+  SIR_cmp_gt,            // references SIrBinary
+  SIR_cmp_ge,            // references SIrBinary
+  SIR_cmp_lt,            // references SIrBinary
+  SIR_cmp_le,            // references SIrBinary
+  SIR_bitshift_left,     // references SIrBinary
+  SIR_bitshift_right,    // references SIrBinary
+  SIR_bit_and,           // references SIrBinary
+  SIR_bit_or,            // references SIrBinary
+  SIR_bit_xor,           // references SIrBinary
   SIR_index,
-  SIR_negate,         // contains SRef
-  SIR_not,            // contains SRef
-  SIR_builtin_debug,  // contains SRef
+  SIR_negate,            // contains SRef
+  SIR_not,               // contains SRef
+  SIR_builtin_debug,     // contains SRef
   SIR_builtin_len,    // contains SRef to an array or slice
-  SIR_comptime_block, // contains instruction count of block
-  SIR_lookup_decl_value,   // contains DeclarationIndex
+  SIR_comptime_block,    // contains instruction count of block
+  SIR_lookup_decl_value, // contains DeclarationIndex
   SIR_lookup_decl_type,  // contains DeclarationIndex
-  SIR_comptime_alloc, // contains SRef to a type
-  SIR_as,             // references SIrAs
+  SIR_comptime_alloc,    // contains SRef to a type
+  SIR_as,                // references SIrAs
   SIR_cast,           // references SIrCast
-  SIR_unify,          // references SIrUnify
-  SIR_type,           // references SIrType
-  SIR_typeof,         // contains SRef
-  SIR_base_type,      // contains SRef
-  SIR_return_type,    // contains SRef
-  SIR_param_type,     // references SIrParamType
+  SIR_unify,             // references SIrUnify
+  SIR_type,              // references SIrType
+  SIR_typeof,            // contains SRef
+  SIR_base_type,         // contains SRef
+  SIR_return_type,       // contains SRef
+  SIR_param_type,        // references SIrParamType
 } SIrOpcode;
+// clang-format on
 
 // A SOP_func instruction is followed by `param_count` SOP_param instructions.
 typedef struct {

@@ -126,14 +126,12 @@ internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
 internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
   DeclarationIndex idx = decls_add(
     &compiler->decls,
-    (DeclarationKey){.parent = 0, .name = strings_add(&compiler->strings, name)}
-  );
+    (DeclarationKey){.parent = 0, .name = strings_add(&compiler->strings, name)});
 
   decls_set_extra(
     &compiler->decls,
     idx,
-    (Declaration){.idx = idx, .kind = Declaration_primitive, .data.primitive = val}
-  );
+    (Declaration){.idx = idx, .kind = Declaration_primitive, .data.primitive = val});
 }
 
 void compiler_init(Compiler *compiler, CLIOptions *options) {
@@ -146,16 +144,14 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     &(ArenaOptions){
       .reserve_size = MiB(16),
       .initial_commit_size = MiB(1),
-    }
-  );
+    });
 
   arena_init(
     &compiler->scratch,
     &(ArenaOptions){
       .reserve_size = MiB(16),
       .initial_commit_size = MiB(1),
-    }
-  );
+    });
 
   compiler->msg_sink = (MessageSink){
     .user = compiler,
@@ -171,8 +167,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .arena = &compiler->arena,
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
-    }
-  );
+    });
 
   types_init(
     &compiler->types,
@@ -181,16 +176,14 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
       .context = &compiler->scratch,
-    }
-  );
+    });
 
   values_init(
     &compiler->values,
     &(ValueStoreOptions){
       .arena = &compiler->arena,
       .payload_allocator = cstd_allocator,
-    }
-  );
+    });
 
   decls_init(
     &compiler->decls,
@@ -198,8 +191,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .arena = &compiler->arena,
       .map_allocator = cstd_allocator,
       .map_initial_size = 32,
-    }
-  );
+    });
 
   // clang-format off
 
