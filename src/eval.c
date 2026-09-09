@@ -387,20 +387,6 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     return CoerceResult_ok;
   }
 
-  // A one-element array holds exactly its element, so coercing it to the element type is a
-  // reinterpretation of the same bytes.
-  if (type_val->kind == Type_array && type_val->data.array.size == 1) {
-    TypeIndex base_type = type_val->data.array.base_type;
-
-    Value element = {
-      .type = base_type,
-      .data = val->data,
-      .data_size = types_size_info_by_index(types, base_type).size,
-    };
-
-    return eval_coerce(types, values, dst, &element, res);
-  }
-
   if (type_val->kind == Type_function && type_dst->kind == Type_function) {
     u32 param_count = type_val->data.function.param_count;
     if (param_count != type_dst->data.function.param_count) {

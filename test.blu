@@ -1,0 +1,8 @@
+mod main
+
+f := {
+  if false do 777
+  else |a: i32|: i32 { if a < 0 do 1 else f(a-1) }
+}
+
+main := ||: i32 #debug(0)

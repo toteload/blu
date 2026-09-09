@@ -3,6 +3,8 @@
 
 - [ ] Reuse deallocated values! And add generation check.
 
+- [ ] SIR code generation can be moved to `Source`.
+
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
   Just all the ones that match and if they have overlap it's an error?
