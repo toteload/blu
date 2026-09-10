@@ -368,7 +368,8 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       fprintf(out, "decl=%u", data);
     } break;
 
-    case SIR_as: {
+    case SIR_as:
+    case SIR_cast: {
       SIrAs *as = extra;
       print_sref(out, compiler, as->type_to);
       fputs(" ", out);

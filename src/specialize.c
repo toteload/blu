@@ -672,6 +672,96 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc = pc + 1;
   } break;
 
+  case SIR_cast: {
+    SIrAs *cast = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_dst;
+    b32 ok = expect_some_type_value(in, f, cast->type_to, &type_dst);
+    if (!ok) {
+      return Step_error;
+    }
+
+    TypeIndex type_src = ref_typeof(in, f, cast->val);
+
+    if (!is_type_castable_to(in->types, type_dst, type_src)) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Cannot cast value of type %type to type %type"),
+        type_src,
+        type_dst
+      );
+
+      return Step_error;
+    }
+
+    store_inst_type(f, pc, type_dst);
+
+    IRef ref = resolve(f, cast->val);
+    Assert(!iref_is_nil(ref));
+
+    if (type_dst == type_src) {
+      store_inst_value(f, pc, ref);
+      s->pc = pc + 1;
+      break;
+    }
+
+    if (iref_is_some_value(ref)) {
+      Type *t_src = types_get(in->types, type_src);
+
+      TypeInteger int_src = (t_src->kind == Type_comptime_int)
+        ? (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 }
+        : t_src->data.integer;
+
+      TypeInteger int_dst = types_get(in->types, type_dst)->data.integer;
+
+      u32 size = int_dst.bitwidth / 8;
+
+      Value *v;
+      ValueIndex res = values_alloc(in->values, &v);
+      void *data = values_alloc_data(in->values, size, size);
+
+      void *payload = values_get(in->values, iref_to_value(ref))->data;
+
+      u32 err = eval_cast_int(int_src, payload, int_dst, data);
+      if (err) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ir_instruction,
+            .decl_idx = f->decl_idx,
+            .data.offset = s->pc,
+          },
+          string_lit("Value does not fit in the destination type %type of the cast"),
+          type_dst
+        );
+
+        return Step_error;
+      }
+
+      *v = (Value){
+        .type = type_dst,
+        .data = data,
+        .data_size = size,
+      };
+
+      store_inst_value(f, pc, iref_from_value(res));
+    } else {
+      IIrBuilder *builder = get_builder(in);
+      InstructionIndex inst = iir_builder_add(builder, IIR_int_cast);
+      iir_builder_set_data(builder, inst, iref_to_u32(ref));
+      iir_builder_set_type(builder, inst, type_dst);
+
+      store_inst_value(f, pc, iref_from_instruction(inst));
+    }
+
+    s->pc = pc + 1;
+  } break;
+
   case SIR_br: {
     SIrBr *br = sir_chunk_extra(f->chunk, pc);
 

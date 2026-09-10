@@ -1,0 +1,3 @@
+[error] test/snippet/error/cast_out_of_range_comptime.blu:4:15: Value does not fit in the destination type u8 of the cast
+    4 |   x: u8 = cast(u8) 300
+      |               ^

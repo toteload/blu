@@ -105,6 +105,7 @@ typedef enum {
   SIR_lookup_decl_type,  // contains DeclarationIndex
   SIR_comptime_alloc, // contains SRef to a type
   SIR_as,             // references SIrAs
+  SIR_cast,           // references SIrAs
   SIR_unify,          // references SIrUnify
   SIR_type,           // references SIrType
   SIR_typeof,         // contains SRef

@@ -1,0 +1,7 @@
+mod main
+
+main := ||: i32 {
+  x: u8 = cast(u8) 300
+  #debug(x)
+  0
+}

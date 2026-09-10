@@ -248,6 +248,26 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
   return False;
 }
 
+internal b32 is_type_int_like(Type *t) {
+  return t->kind == Type_integer || t->kind == Type_usize || t->kind == Type_isize
+      || t->kind == Type_comptime_int;
+}
+
+b32 is_type_castable_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
+  if (to == from) {
+    return True;
+  }
+
+  Type *type_to = types_get(types, to);
+  Type *type_from = types_get(types, from);
+
+  if (type_to->kind == Type_comptime_int) {
+    return False;
+  }
+
+  return is_type_int_like(type_to) && is_type_int_like(type_from);
+}
+
 TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
   return types_add(types, &(Type){ .kind = Type_pointer, .data.pointer = { .base_type = base_type } });
 }

@@ -262,12 +262,14 @@ internal u32 step(Interpreter *in) {
     Type *t = types_get(&in->compiler->types, from_type);
     Type *v = types_get(&in->compiler->types, dst_type);
 
-    if (t->data.integer.signedness == Signed) {
-      i64 x = read_int_sign_extend(t->data.integer.bitwidth, val);
-      memcpy(local, &x, v->data.integer.bitwidth / 8);
-    } else {
-      u64 x = read_int_zero_extend(t->data.integer.bitwidth, val);
-      memcpy(local, &x, v->data.integer.bitwidth / 8);
+    u32 err = eval_cast_int(t->data.integer, val, v->data.integer, local);
+    if (err) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        string_lit("Value does not fit in the destination type of the cast")
+      );
+      return Step_integer_overflow;
     }
 
     f->pc += 1;

@@ -822,6 +822,28 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     Try(parse_type(parser, &base));
   } break;
 
+  case Tok_keyword_cast: {
+    u8 ignored;
+    next(parser, &ignored);
+
+    AstIndex   ast_index = node_alloc(parser);
+    TokenIndex start     = parser->at;
+    AstCast   *cast      = node_push_data(parser, AstCast, ast_index);
+
+    Try(expect_token(parser, Tok_paren_open));
+
+    Try(parse_type(parser, &cast->type));
+
+    Try(expect_token(parser, Tok_paren_close));
+
+    Try(parse_base_expression(parser, &cast->value));
+
+    *node_kind(parser, ast_index) = Ast_cast;
+    *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
+
+    base = ast_index;
+  } break;
+
   case Tok_exclamation:
   case Tok_minus: {
     AstIndex   ast_index = node_alloc(parser);
@@ -841,7 +863,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     }
     // clang-format on
 
-    Try(parse_expression(parser, &unary_op->value));
+    Try(parse_base_expression(parser, &unary_op->value));
 
     *node_kind(parser, ast_index) = Ast_unary_op;
     *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };

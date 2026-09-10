@@ -321,6 +321,22 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_param:       { PanicMsg("Encountered 'Ast_param' in gen_code, which should never happen."); } break;
   case Ast_label:       { PanicMsg("Encountered 'Ast_label' in gen_code, which should never happen."); } break;
 
+  case Ast_cast: {
+    AstCast *cast = ast_data(ast, idx_ast);
+
+    SRef ref_type = gen_code(gen, cast->type, sref_from_value(gen->common->val.type));
+    SRef ref_val = gen_code(gen, cast->value, (SRef){0});
+
+    InstructionIndex inst = sir_builder_add(builder, SIR_cast, source_idx, idx_ast);
+    SIrAs *data = sir_builder_push_data(builder, inst, SIrAs);
+    *data = (SIrAs){
+      .type_to = ref_type,
+      .val = ref_val,
+    };
+
+    return sir_builder_add_as(builder, type_destination, sref_from_instruction(inst), source_idx, idx_ast);
+  } break;
+
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
     StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, *name));

@@ -1,0 +1,27 @@
+mod main
+
+main := ||: i32 {
+  s: []u8 = "9"
+  i: usize = 0
+
+  // Comptime operand: the cast is folded away, no residual instruction.
+  a: u8 = 200
+  #debug(cast(i32) a)
+
+  // Narrowing is allowed as long as the value fits in the destination type.
+  b: i32 = 250
+  #debug(cast(u8) b)
+
+  // Signedness changes are allowed too, under the same range check.
+  c: i32 = 7
+  #debug(cast(usize) c)
+
+  // Runtime operand: lowered to a residual int_cast that range checks at execution time.
+  n: i32 = cast(i32) s[i]
+  #debug(n)
+
+  m: i32 = n - 9
+  #debug(cast(u8) m)
+
+  0
+}

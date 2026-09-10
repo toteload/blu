@@ -1,0 +1,12 @@
+mod main
+
+main := ||: i32 {
+  s: []u8 = "9"
+  i: usize = 0
+
+  // 57 - 100 is negative, so it does not fit in a u8.
+  m: i32 = cast(i32) s[i] - 100
+  #debug(cast(u8) m)
+
+  0
+}

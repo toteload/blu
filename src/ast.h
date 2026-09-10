@@ -27,11 +27,12 @@ typedef enum {
   Ast_if_else,
   Ast_while,
   Ast_break,
+  Ast_cast,
 
   // Make sure to update Ast_kind_max when you update this enum!
 } AstKind;
 
-#define Ast_kind_max (Ast_break + 1)
+#define Ast_kind_max (Ast_cast + 1)
 
 typedef enum {
   Builtin_debug,
@@ -198,6 +199,11 @@ typedef struct {
   AstIndex label;
   AstIndex value;
 } AstBreak;
+
+typedef struct {
+  AstIndex type;
+  AstIndex value;
+} AstCast;
 
 typedef union {
   AstSource          source;
