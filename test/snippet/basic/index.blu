@@ -1,0 +1,21 @@
+mod main
+
+main := ||: i32 {
+  i: usize = 0
+
+  // Array with a comptime index: folds away entirely, no residual instruction.
+  #debug("hello"[1])
+
+  // Array with a runtime index: indexes the array data inline.
+  #debug("hello"[i])
+
+  s: []u8 = "world"
+
+  // Slice with a runtime index: indexes through the slice's data pointer.
+  #debug(s[i])
+
+  // Slice with a comptime index: still residual, the slice itself is runtime.
+  #debug(s[4])
+
+  0
+}

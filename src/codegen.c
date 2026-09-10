@@ -727,10 +727,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_index: {
     AstIndexData *index = ast_data(ast, idx_ast);
-    SRef indexable = gen_code(gen, index->indexable, type_destination);
-    SRef index_at = gen_code(gen, index->index_at, (SRef){0});
-
-    // TODO check that the indexable is actually indexable
+    SRef indexable = gen_code(gen, index->indexable, (SRef){0});
+    SRef index_at = gen_code(gen, index->index_at, sref_from_value(gen->common->val.usize));
 
     InstructionIndex inst = sir_builder_add(builder, SIR_index, source_idx, idx_ast);
     SIrBinary *data = sir_builder_push_data(builder, inst, SIrBinary);

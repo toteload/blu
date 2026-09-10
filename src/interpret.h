@@ -35,6 +35,7 @@ typedef enum {
   Interpret_ok,
   Interpret_integer_overflow,
   Interpret_zero_division,
+  Interpret_index_out_of_bounds,
   Interpret_illegal_opcode,
 } InterpretResult;
 

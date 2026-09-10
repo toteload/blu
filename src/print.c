@@ -473,6 +473,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       print_iref(out, compiler, (IRef){data});
     } break;
 
+    case IIR_index:
     case IIR_int_cmp_eq:
     case IIR_int_cmp_ne:
     case IIR_int_cmp_gt:

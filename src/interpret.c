@@ -80,6 +80,7 @@ typedef enum {
   Step_return,
   Step_integer_overflow,
   Step_zero_division,
+  Step_index_out_of_bounds,
   Step_illegal_opcode,
 } StepResult;
 
@@ -175,6 +176,39 @@ internal u32 step(Interpreter *in) {
     memcpy(f->ret, src, size_info.size);
     frame_pop(in);
     return Step_return;
+  } break;
+
+  case IIR_index: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+
+    Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
+
+    void *base;
+    u64 len;
+    if (t->kind == Type_array) {
+      // An array's elements are stored inline, so the operand is already the element data.
+      base = resolve(in, f, bin->lhs);
+      len = t->data.array.size;
+    } else {
+      ValueSlice *slice = resolve(in, f, bin->lhs);
+      base = slice->data;
+      len = slice->len;
+    }
+
+    u64 at = read_int_zero_extend(64, resolve(in, f, bin->rhs));
+
+    if (at >= len) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        string_lit("Index is out of bounds")
+      );
+      return Step_index_out_of_bounds;
+    }
+
+    memcpy(local, Cast(u8 *, base) + at * size_info.stride, size_info.size);
+
+    f->pc += 1;
   } break;
 
   case IIR_builtin_len: {
@@ -357,7 +391,6 @@ internal u32 step(Interpreter *in) {
     void *rhs = resolve(in, f, bin->rhs);
 
     Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
-    Assert(t->kind == Type_integer);
 
     i32 ord;
     if (t->data.integer.signedness == Signed) {
@@ -412,6 +445,7 @@ u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg
     case Step_ok: break;
     case Step_integer_overflow: return Interpret_integer_overflow;
     case Step_zero_division: return Interpret_zero_division;
+    case Step_index_out_of_bounds: return Interpret_index_out_of_bounds;
     case Step_illegal_opcode: return Interpret_illegal_opcode;
     case Step_return: if (in->call_stack.len == 0) return 0;
     }

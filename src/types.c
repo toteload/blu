@@ -161,7 +161,8 @@ u32 type_intern_byte_size(Type *type) {
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   // ASSUME: pointers are 8 bytes.
 
-  switch (type->kind) {
+  switch (Cast(TypeKind, type->kind)) {
+  case Type_comptime_int: Unreachable();
   case Type_bool:
     return (TypeSizeInfo){ .size = 1, .align = 1, .stride = 1 };
   case Type_nil:
@@ -170,6 +171,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
     return (TypeSizeInfo){ .size = 0, .align = 0, .stride = 0 };
   case Type_type:
     return (TypeSizeInfo){ .size = 4, .align = 4, .stride = 4 };
+  case Type_pointer:
   case Type_usize:
   case Type_isize:
     return (TypeSizeInfo){ .size = 8, .align = 8, .stride = 8 };

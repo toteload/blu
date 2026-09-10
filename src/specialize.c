@@ -1386,7 +1386,98 @@ internal u32 step(Specializer *in, RunState *state) {
 #endif
   } break;
 
-  case SIR_index: { Todo(); } break;
+  case SIR_index: {
+    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+
+    TypeIndex type_indexable = ref_typeof(in, f, bin->lhs);
+    Type *t = types_get(in->types, type_indexable);
+
+    if (t->kind != Type_array && t->kind != Type_slice) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Cannot index a value of type %type, expected an array or a slice"),
+        type_indexable
+      );
+
+      return Step_error;
+    }
+
+    b32 is_array = t->kind == Type_array;
+    TypeIndex base_type = is_array ? t->data.array.base_type : t->data.slice.base_type;
+
+    store_inst_type(f, pc, base_type);
+
+    IRef indexable = resolve(f, bin->lhs);
+    IRef index = resolve(f, bin->rhs);
+
+    if (iref_is_some_value(indexable) && iref_is_some_value(index)) {
+      Value *v_indexable = values_get(in->values, iref_to_value(indexable));
+
+      void *base;
+      u64 len;
+      if (is_array) {
+        base = v_indexable->data;
+        len = t->data.array.size;
+      } else {
+        ValueSlice *slice = v_indexable->data;
+        base = slice->data;
+        len = slice->len;
+      }
+
+      // The index is coerced to a usize by codegen, so it is always 8 bytes wide here.
+      u64 at = read_int_zero_extend(64, values_get(in->values, iref_to_value(index))->data);
+
+      if (at >= len) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ir_instruction,
+            .decl_idx = f->decl_idx,
+            .data.offset = s->pc,
+          },
+          string_lit("Index is out of bounds")
+        );
+
+        return Step_error;
+      }
+
+      TypeSizeInfo size_info = types_size_info_by_index(in->types, base_type);
+
+      Value *v;
+      ValueIndex res = values_alloc(in->values, &v);
+      void *data = values_alloc_data(in->values, size_info.size, size_info.align);
+      memcpy(data, Cast(u8 *, base) + at * size_info.stride, size_info.size);
+      *v = (Value){
+        .type = base_type,
+        .data = data,
+        .data_size = size_info.size,
+      };
+
+      store_inst_value(f, pc, iref_from_value(res));
+
+      s->pc += 1;
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_index);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = copy_if_value(in, indexable),
+      .rhs = copy_if_value(in, index),
+    };
+
+    iir_builder_set_type(builder, inst, base_type);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
+  } break;
 
   case SIR_negate: { Todo(); } break;
 

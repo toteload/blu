@@ -7,7 +7,7 @@ void decode_string_literal(String literal, u8 *out, u32 *len) {
     }
   }
 
-  memcpy(out+1, literal.str+1, literal.len-2);
+  memcpy(out, literal.str+1, literal.len-2);
   *len = literal.len-2;
 }
 
