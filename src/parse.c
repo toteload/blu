@@ -344,15 +344,15 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_builtin_debug(Parser *parser, AstIndex *out) {
+internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  Try(expect_token(parser, Tok_builtin_debug));
+  Try(expect_token(parser, tok));
 
   AstBuiltinTmp *builtin = node_push_data(parser, AstBuiltinTmp, idx);
   zero_struct(AstBuiltinTmp, builtin);
-  builtin->base.kind = Builtin_debug;
+  builtin->base.kind = kind;
 
   Try(expect_token(parser, Tok_paren_open));
   AstIndex *e = list_push(&builtin->args, parser->scratch);
@@ -773,7 +773,8 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   case Tok_literal_int:    Try(parse_literal_int(parser, &base));    break;
   case Tok_literal_string: Try(parse_literal_string(parser, &base)); break;
   case Tok_bar:            Try(parse_function(parser, &base));       break;
-  case Tok_builtin_debug:  Try(parse_builtin_debug(parser, &base));  break;
+  case Tok_builtin_debug:  Try(parse_builtin(parser, Tok_builtin_debug, Builtin_debug, &base));  break;
+  case Tok_builtin_len:    Try(parse_builtin(parser, Tok_builtin_len, Builtin_len, &base));  break;
   case Tok_keyword_break:  Try(parse_break(parser, &base));          break;
   case Tok_brace_open:     Try(parse_block(parser, 0, &base));       break;
     // clang-format on

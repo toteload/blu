@@ -617,6 +617,15 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
       return sref_from_instruction(inst_debug);
     } break;
+
+    case Builtin_len: {
+      SRef val = gen_code(gen, builtin->args[0], (SRef){0});
+
+      InstructionIndex inst_len = sir_builder_add(builder, SIR_builtin_len, source_idx, idx_ast);
+      sir_builder_set_data(builder, inst_len, sref_to_u32(val));
+
+      return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst_len), source_idx, idx_ast);
+    } break;
     }
   } break;
 

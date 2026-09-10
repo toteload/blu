@@ -70,6 +70,7 @@ typedef enum {
   Tok_label,
 
   Tok_builtin_debug,
+  Tok_builtin_len,
 
   Tok_line_comment,
   Tok_newline,

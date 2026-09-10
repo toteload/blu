@@ -177,6 +177,12 @@ internal u32 step(Interpreter *in) {
     return Step_return;
   } break;
 
+  case IIR_builtin_len: {
+    ValueSlice *slice = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
+    *Cast(usize *, local) = slice->len;
+    f->pc += 1;
+  } break;
+
   case IIR_builtin_debug: {
     void *p = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
     memcpy(f->inst_values[pc], p, size_info.size);

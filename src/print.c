@@ -114,8 +114,13 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
       fprintf(out, "0x%p", data);
     }
   } break;
-  case Type_usize: Todo(); // need some data/mechanism in the compiler to query the pointer width of the target system
-  case Type_isize: Todo(); // need some data/mechanism in the compiler to query the pointer width of the target system
+  case Type_usize: {
+    // ASSUME: pointers are 8 bytes, as everywhere else in the compiler.
+    fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(64, data)));
+  } break;
+  case Type_isize: {
+    fprintf(out, "%" PRId64, Cast(i64, read_signed(64, data)));
+  } break;
   case Type_pointer:
   case Type_nil:
   case Type_never:
@@ -325,6 +330,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
 
     case SIR_param:
     case SIR_builtin_debug:
+    case SIR_builtin_len:
     case SIR_ret:
     case SIR_load:
     case SIR_typeof:
@@ -461,7 +467,8 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_int_cast:
     case IIR_load:
     case IIR_ret:
-    case IIR_builtin_debug: {
+    case IIR_builtin_debug:
+    case IIR_builtin_len: {
       fputs(" ", out);
       print_iref(out, compiler, (IRef){data});
     } break;

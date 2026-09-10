@@ -35,6 +35,7 @@ typedef enum {
 
 typedef enum {
   Builtin_debug,
+  Builtin_len,
 } BuiltinKind;
 
 typedef enum {

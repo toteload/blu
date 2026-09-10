@@ -1,0 +1,12 @@
+mod main
+
+main := ||: i32 {
+  // An array literal's length is in its type, so this folds at comptime.
+  #debug(#len("hello"))
+
+  // A slice held in a runtime local carries its length at runtime.
+  s: []u8 = "hello world"
+  #debug(#len(s))
+
+  0
+}

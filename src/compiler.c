@@ -246,6 +246,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
   add_primitive(compiler, string_lit("i64"), compiler->common.val.i64);
   add_primitive(compiler, string_lit("u8"), compiler->common.val.u8);
+  add_primitive(compiler, string_lit("usize"), compiler->common.val.usize);
 }
 
 void compiler_deinit(Compiler *compiler) {

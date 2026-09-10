@@ -392,6 +392,19 @@ internal ValueIndex val_from_type(Specializer *in, TypeIndex t) {
   return res;
 }
 
+internal ValueIndex val_from_usize(Specializer *in, usize x) {
+  Value *v;
+  ValueIndex res = values_alloc(in->values, &v);
+  usize *data = values_alloc_data_type(in->values, usize);
+  *data = x;
+  *v = (Value){
+    .type = in->common->type.usize,
+    .data_size = sizeof(usize),
+    .data = data,
+  };
+  return res;
+}
+
 internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
     Value *v = values_get(in->values, sref_to_value(ref));
@@ -950,6 +963,54 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     store_inst_value(f, pc, iref_from_instruction(inst_call));
+
+    s->pc += 1;
+  } break;
+
+  case SIR_builtin_len: {
+    SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
+    Type *t = types_get(in->types, ref_typeof(in, f, ref));
+
+    store_inst_type(f, pc, in->common->type.usize);
+
+    // An array carries its length in its type, so #len is comptime known even when the array
+    // itself is not.
+    if (t->kind == Type_array) {
+      store_inst_value(f, pc, iref_from_value(val_from_usize(in, t->data.array.size)));
+      s->pc += 1;
+      break;
+    }
+
+    if (t->kind != Type_slice) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("#len expects an array or a slice, but got a value of type %type"),
+        ref_typeof(in, f, ref)
+      );
+
+      return Step_error;
+    }
+
+    IRef val = resolve(f, ref);
+
+    if (iref_is_some_value(val)) {
+      Value *v = values_get(in->values, iref_to_value(val));
+      store_inst_value(f, pc, iref_from_value(val_from_usize(in, Cast(ValueSlice *, v->data)->len)));
+      s->pc += 1;
+      break;
+    }
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_len);
+    iir_builder_set_type(builder, inst, in->common->type.usize);
+    iir_builder_set_data(builder, inst, iref_to_u32(val));
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
 
     s->pc += 1;
   } break;

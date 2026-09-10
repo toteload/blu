@@ -99,6 +99,7 @@ typedef enum {
   SIR_negate,         // contains SRef
   SIR_not,            // contains SRef
   SIR_builtin_debug,  // contains SRef
+  SIR_builtin_len,    // contains SRef to an array or slice
   SIR_comptime_block, // contains instruction count of block
   SIR_lookup_decl_value,   // contains DeclarationIndex
   SIR_lookup_decl_type,  // contains DeclarationIndex
@@ -256,6 +257,7 @@ typedef enum {
   IIR_int_cmp_lt,
   IIR_int_cmp_le,
   IIR_builtin_debug, // contains IRef
+  IIR_builtin_len, // contains IRef to a slice
 } IIrOpcode;
 
 typedef struct {

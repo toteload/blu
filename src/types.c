@@ -170,6 +170,9 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
     return (TypeSizeInfo){ .size = 0, .align = 0, .stride = 0 };
   case Type_type:
     return (TypeSizeInfo){ .size = 4, .align = 4, .stride = 4 };
+  case Type_usize:
+  case Type_isize:
+    return (TypeSizeInfo){ .size = 8, .align = 8, .stride = 8 };
   case Type_integer: { 
     // ASSUME: the bitwidth of integers is always a multiple of 8.
     u32 size = type->data.integer.bitwidth / 8;
@@ -212,8 +215,12 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
   Type *type_to = types_get(types, to);
   Type *type_from = types_get(types, from);
 
-  if (type_from->kind == Type_comptime_int && type_to->kind == Type_integer) {
-    return True;
+  if (type_from->kind == Type_comptime_int) {
+    if (type_to->kind == Type_integer || type_to->kind == Type_usize) {
+      return True;
+    }
+
+    return False;
   }
 
   if (type_from->kind == Type_integer && type_to->kind == Type_integer) {
@@ -248,7 +255,7 @@ b32 check_can_type_add(Type *t) {
 }
 
 b32 check_can_type_cmp(Type *t) {
-  if (t->kind == Type_comptime_int || t->kind == Type_integer) {
+  if (t->kind == Type_comptime_int || t->kind == Type_integer || t->kind == Type_usize) {
     return True;
   }
 

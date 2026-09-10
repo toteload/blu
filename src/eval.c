@@ -335,7 +335,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   Type *type_dst = types_get(types, dst);
   Type *type_val = types_get(types, val->type);
 
-  if (type_val->kind == Type_comptime_int && type_dst->kind == Type_integer) {
+  if (type_val->kind == Type_comptime_int && (type_dst->kind == Type_integer || type_dst->kind == Type_usize || type_dst->kind == Type_isize)) {
     TypeInteger comptime_int = {
       .signedness = Signed,
       .bitwidth   = sizeof(ComptimeInt) * 8,
