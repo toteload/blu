@@ -59,7 +59,7 @@ SEGMENTLIST_LINKAGE void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_
 // if you define two segment lists in the same translation unit leading to compile errors.
 
 internal usize segment_count_at_size(usize min_size_log2, usize size) {
-  return bitwidth(size >> min_size_log2) + 1;
+  return bitwidth(((size - 1) >> min_size_log2) + 1);
 }
 
 internal usize segment_size(usize min_size_log2, usize si) {
@@ -141,7 +141,7 @@ void Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SE
   }
 
   u32 offset = 0;
-  u32 segment_count = segment_count_at_size(SEGMENTLIST_MIN_SIZE_LOG2, list->len);
+  u32 segment_count = Cast(u32, segment_count_at_size(SEGMENTLIST_MIN_SIZE_LOG2, list->len));
   for (u32 i = 0; i < segment_count - 1; i++) {
     u32 size = segment_size(SEGMENTLIST_MIN_SIZE_LOG2, i);
     memcpy(out + offset, list->segments[i], size * sizeof(SEGMENTLIST_TYPE));

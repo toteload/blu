@@ -1,0 +1,3 @@
+[error] test/snippet/error/negate_bool.blu:5:10: Type bool does not support negation
+    5 |   #debug(-b)
+      |          ^

@@ -241,6 +241,10 @@ b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
     return type_from->data.array.base_type == type_to->data.slice.base_type;
   }
 
+  if (type_from->kind == Type_array && type_from->data.array.size == 1) {
+    return is_type_coercible_to(types, to, type_from->data.array.base_type);
+  }
+
   return False;
 }
 
@@ -249,7 +253,7 @@ TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type) {
 }
 
 b32 check_can_type_add(Type *t) {
-  if (t->kind == Type_comptime_int || t->kind == Type_integer) {
+  if (t->kind == Type_comptime_int || t->kind == Type_integer || t->kind == Type_usize) {
     return True;
   }
 

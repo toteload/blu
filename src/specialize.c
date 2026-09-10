@@ -1479,7 +1479,105 @@ internal u32 step(Specializer *in, RunState *state) {
     s->pc += 1;
   } break;
 
-  case SIR_negate: { Todo(); } break;
+  case SIR_negate: {
+    SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
+
+    TypeIndex type = ref_typeof(in, f, ref);
+    Type *t = types_get(in->types, type);
+
+    if (!check_can_type_add(t)) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl_idx,
+          .data.offset = s->pc,
+        },
+        string_lit("Type %type does not support negation"),
+        type
+      );
+
+      return Step_error;
+    }
+
+    // A comptime_int carries no TypeInteger of its own; it is stored as a ComptimeInt.
+    TypeInteger int_type = (t->kind == Type_comptime_int)
+      ? (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 }
+      : t->data.integer;
+
+    u32 size = int_type.bitwidth / 8;
+
+    store_inst_type(f, pc, type);
+
+    IRef val = resolve(f, ref);
+
+    // Negation is 0 - x, which gets subtraction's overflow checking for free. Negating the
+    // most negative value of a signed type overflows, as does negating any non-zero unsigned.
+    if (iref_is_some_value(val)) {
+      u8 zero[sizeof(u64)] = {0};
+      Assert(size <= sizeof(zero));
+
+      Value *v;
+      ValueIndex res = values_alloc(in->values, &v);
+      void *data = values_alloc_data(in->values, size, size);
+
+      b32 ok = eval_int_sub_safe(
+        int_type,
+        zero,
+        values_get(in->values, iref_to_value(val))->data,
+        data
+      );
+      if (!ok) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ir_instruction,
+            .decl_idx = f->decl_idx,
+            .data.offset = s->pc,
+          },
+          string_lit("Negating this value overflows its type %type"),
+          type
+        );
+
+        return Step_error;
+      }
+
+      *v = (Value){
+        .type = type,
+        .data = data,
+        .data_size = size,
+      };
+
+      store_inst_value(f, pc, iref_from_value(res));
+
+      s->pc += 1;
+      break;
+    }
+
+    Value *v_zero;
+    ValueIndex zero = values_alloc(in->values, &v_zero);
+    void *data_zero = values_alloc_data(in->values, size, size);
+    memset(data_zero, 0, size);
+    *v_zero = (Value){
+      .type = type,
+      .data = data_zero,
+      .data_size = size,
+    };
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub);
+    IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
+    *data = (IIrBinary){
+      .lhs = iref_from_value(zero),
+      .rhs = copy_if_value(in, val),
+    };
+
+    iir_builder_set_type(builder, inst, type);
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    s->pc += 1;
+  } break;
 
   case SIR_not: { Todo(); } break;
 

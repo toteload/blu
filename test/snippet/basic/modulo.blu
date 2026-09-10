@@ -1,0 +1,25 @@
+mod main
+
+main := ||: i32 {
+  a: i32 = 11
+  p: i32 = a % 4
+  #debug(p)
+
+  d: i32 = -4
+  q: i32 = a % d
+  #debug(q)
+
+  n: i32 = -11
+  r: i32 = n % 4
+  #debug(r)
+
+  u: usize = 11
+  v: usize = u % 4
+  #debug(v)
+
+  c: i32 = 100
+  c %= 30
+  #debug(c)
+
+  0
+}

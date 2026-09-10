@@ -279,6 +279,16 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
+  // A one-element array coerces to its element type, so unifying [1]T against anything else
+  // is the same as unifying T against it.
+  if (type_lhs->kind == Type_array && type_lhs->data.array.size == 1) {
+    return eval_unify(scratch, types, type_lhs->data.array.base_type, b, unified);
+  }
+
+  if (type_rhs->kind == Type_array && type_rhs->data.array.size == 1) {
+    return eval_unify(scratch, types, a, type_rhs->data.array.base_type, unified);
+  }
+
   if (type_lhs->kind == Type_slice && type_rhs->kind == Type_slice) {
     TypeIndex base_type;
     u32 err = eval_unify(scratch, types, type_lhs->data.slice.base_type, type_rhs->data.slice.base_type, &base_type);
@@ -387,6 +397,20 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     return CoerceResult_ok;
   }
 
+  // A one-element array holds exactly its element, so coercing it to the element type is a
+  // reinterpretation of the same bytes.
+  if (type_val->kind == Type_array && type_val->data.array.size == 1) {
+    TypeIndex base_type = type_val->data.array.base_type;
+
+    Value element = {
+      .type = base_type,
+      .data = val->data,
+      .data_size = types_size_info_by_index(types, base_type).size,
+    };
+
+    return eval_coerce(types, values, dst, &element, res);
+  }
+
   if (type_val->kind == Type_function && type_dst->kind == Type_function) {
     u32 param_count = type_val->data.function.param_count;
     if (param_count != type_dst->data.function.param_count) {
@@ -423,6 +447,36 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
   }
 
   return CoerceResult_invalid_coercion_types;
+}
+
+u32 eval_int_mod_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  Assert(int_type.bitwidth % 8 == 0);
+
+  // x % -1 is 0 for every x, and computing it directly traps for MIN % -1, so it is a
+  // special case rather than the overflow that division reports for the same operands.
+  if (int_type.signedness == Signed) {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { if (*Cast(i8*,rhs)  == 0) return IntDivSafe_zero_division; if (*Cast(i8*,rhs)  == -1) { *Cast(i8*,res)  = 0; break; } *Cast(i8*,res)  = *Cast(i8*,lhs)  % *Cast(i8*,rhs);  } break;
+    case 16: { if (*Cast(i16*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i16*,rhs) == -1) { *Cast(i16*,res) = 0; break; } *Cast(i16*,res) = *Cast(i16*,lhs) % *Cast(i16*,rhs); } break;
+    case 32: { if (*Cast(i32*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i32*,rhs) == -1) { *Cast(i32*,res) = 0; break; } *Cast(i32*,res) = *Cast(i32*,lhs) % *Cast(i32*,rhs); } break;
+    case 64: { if (*Cast(i64*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i64*,rhs) == -1) { *Cast(i64*,res) = 0; break; } *Cast(i64*,res) = *Cast(i64*,lhs) % *Cast(i64*,rhs); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  } else {
+    // clang-format off
+    switch (int_type.bitwidth) {
+    case 8:  { if (*Cast(u8*,rhs)  == 0) return IntDivSafe_zero_division; *Cast(u8*,res)  = *Cast(u8*,lhs)  % *Cast(u8*,rhs);  } break;
+    case 16: { if (*Cast(u16*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u16*,res) = *Cast(u16*,lhs) % *Cast(u16*,rhs); } break;
+    case 32: { if (*Cast(u32*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u32*,res) = *Cast(u32*,lhs) % *Cast(u32*,rhs); } break;
+    case 64: { if (*Cast(u64*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u64*,res) = *Cast(u64*,lhs) % *Cast(u64*,rhs); } break;
+    default: Unreachable();
+    }
+    // clang-format on
+  }
+
+  return IntDivSafe_ok;
 }
 
 b32 eval_int_add_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {

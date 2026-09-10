@@ -365,7 +365,27 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_mod: {
-    Todo();
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, type);
+    u32 err = eval_int_mod_safe(t->data.integer, lhs, rhs, local);
+    if (err) {
+      if (err == IntDivSafe_zero_division) {
+        Message_error(
+          in->msg_sink,
+          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          string_lit("int_mod_safe zero division")
+        );
+
+        return Step_zero_division;
+      }
+
+      Unreachable();
+    }
+
+    f->pc += 1;
   } break;
 
   case IIR_bit_and: {

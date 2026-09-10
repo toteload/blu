@@ -1,0 +1,14 @@
+mod main
+
+main := ||: i32 {
+  // Comptime operand: folded away, the store sees the negated value directly.
+  a: i32 = -1
+  #debug(a)
+
+  // Runtime operand: lowered to 0 - x, which reuses subtraction's overflow check.
+  n: i32 = 5
+  #debug(-n)
+  #debug(- -n)
+
+  0
+}

@@ -1,0 +1,24 @@
+mod main
+
+main := ||: i32 {
+  i: usize = 0
+  i += 11
+  #debug(i)
+
+  a: usize = i * 3
+  #debug(a)
+  b: usize = i - 4
+  #debug(b)
+  c: usize = i / 2
+  #debug(c)
+
+  // A usize counter walking a slice.
+  s: []u8 = "abc"
+  j: usize = 0
+  while j < #len(s) {
+    #debug(s[j])
+    j += 1
+  }
+
+  0
+}

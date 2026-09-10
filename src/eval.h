@@ -46,4 +46,8 @@ typedef enum {
 
 u32 eval_int_div_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
 
+// Truncating remainder, matching eval_int_div_safe, so (a / b) * b + (a % b) == a.
+// Cannot overflow, so IntDivSafe_zero_division is the only failure.
+u32 eval_int_mod_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);
+
 #endif // EVAL_H
