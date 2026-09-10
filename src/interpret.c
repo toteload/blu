@@ -45,6 +45,23 @@ internal void frame_pop(Interpreter *in) {
   stack_pop_unchecked(&in->call_stack);
 }
 
+internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
+  u32 inst_count = iir_chunk_data(f->chunk, block);
+  stack_push(&f->scope_stack, ((ScopeSpan2){
+    .start = block,
+    .end = block + inst_count,
+    .snapshot = arena_scope_begin(in->scratch),
+  }));
+}
+
+internal TypeIndex ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
+  if (iref_is_value(ref)) {
+    return values_get(&in->compiler->values, iref_to_value(ref))->type;
+  }
+
+  return iir_chunk_type(f->chunk, iref_to_instruction(ref));
+}
+
 internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
   while (True) {
     ScopeSpan2 span = stack_pop(&f->scope_stack);
@@ -99,19 +116,24 @@ internal u32 step(Interpreter *in) {
     return Step_illegal_opcode;
   } break;
 
-  case IIR_loop: { Todo(); } break;
-  case IIR_repeat: { Todo(); } break;
-
+  case IIR_loop:
   case IIR_block: {
-    u32 inst_count = iir_chunk_data(f->chunk, pc);
-    stack_push(&f->scope_stack, ((ScopeSpan2){ .start = pc, .end = pc + inst_count, .snapshot = arena_scope_begin(in->scratch) }));
+    scope_push(in, f, pc);
     f->pc += 1;
+  } break;
+
+  case IIR_repeat: {
+    InstructionIndex loop = iir_chunk_data(f->chunk, pc);
+    scopes_pop_to(in, f, loop);
+    scope_push(in, f, loop);
+    f->pc = loop + 1;
   } break;
 
   case IIR_br: {
     IIrBr *br = iir_chunk_extra(f->chunk, pc);
-    void *src = resolve(in, f, br->value);
-    memcpy(f->inst_values[br->block], src, size_info.size);
+    if (type) {
+      memcpy(f->inst_values[br->block], resolve(in, f, br->value), size_info.size);
+    }
     scopes_pop_to(in, f, br->block);
     u32 inst_count = iir_chunk_data(f->chunk, br->block);
     f->pc = br->block + inst_count;
@@ -318,12 +340,47 @@ internal u32 step(Interpreter *in) {
     Todo();
   } break;
 
-  case IIR_int_cmp_eq: { Todo(); } break;
-  case IIR_int_cmp_ne: { Todo(); } break;
-  case IIR_int_cmp_gt: { Todo(); } break;
-  case IIR_int_cmp_ge: { Todo(); } break;
-  case IIR_int_cmp_lt: { Todo(); } break;
-  case IIR_int_cmp_le: { Todo(); } break;
+  case IIR_int_cmp_eq:
+  case IIR_int_cmp_ne:
+  case IIR_int_cmp_gt:
+  case IIR_int_cmp_ge:
+  case IIR_int_cmp_lt:
+  case IIR_int_cmp_le: {
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    void *lhs = resolve(in, f, bin->lhs);
+    void *rhs = resolve(in, f, bin->rhs);
+
+    Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
+    Assert(t->kind == Type_integer);
+
+    i32 ord;
+    if (t->data.integer.signedness == Signed) {
+      i64 l = read_int_sign_extend(t->data.integer.bitwidth, lhs);
+      i64 r = read_int_sign_extend(t->data.integer.bitwidth, rhs);
+      ord = (l > r) - (l < r);
+    } else {
+      u64 l = read_int_zero_extend(t->data.integer.bitwidth, lhs);
+      u64 r = read_int_zero_extend(t->data.integer.bitwidth, rhs);
+      ord = (l > r) - (l < r);
+    }
+
+    b32 res;
+    // clang-format off
+    switch (op) {
+    case IIR_int_cmp_eq: res = ord == 0; break;
+    case IIR_int_cmp_ne: res = ord != 0; break;
+    case IIR_int_cmp_gt: res = ord >  0; break;
+    case IIR_int_cmp_ge: res = ord >= 0; break;
+    case IIR_int_cmp_lt: res = ord <  0; break;
+    case IIR_int_cmp_le: res = ord <= 0; break;
+    default: Unreachable();
+    }
+    // clang-format on
+
+    *Cast(u8 *, local) = res != 0;
+
+    f->pc += 1;
+  } break;
 
   }
 

@@ -692,16 +692,16 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       BinaryOpKind binop = compound_assign_kind_to_binary_op_kind(kind);
 
       SRef lhs_type_destination, rhs_type_destination;
-      binary_op_type_destinations(gen, binop, type_destination, &lhs_type_destination, &rhs_type_destination);
+      binary_op_type_destinations(gen, binop, sref_from_instruction(inst_basetype), &lhs_type_destination, &rhs_type_destination);
 
       InstructionIndex lhs = sir_builder_add(builder, SIR_load, source_idx, assign->lhs);
       sir_builder_set_data(builder, lhs, sref_to_u32(lhs_ptr));
 
-      sir_builder_add_as(&gen->builder, lhs_type_destination, sref_from_instruction(lhs), source_idx, idx_ast);
+      SRef lhs_val = sir_builder_add_as(&gen->builder, lhs_type_destination, sref_from_instruction(lhs), source_idx, idx_ast);
 
       SRef rhs = gen_code(gen, assign->value, rhs_type_destination);
 
-      value = sref_from_instruction(gen_code_for_binary_op(&gen->builder, binop, sref_from_instruction(lhs), rhs, source_idx, idx_ast));
+      value = sref_from_instruction(gen_code_for_binary_op(&gen->builder, binop, lhs_val, rhs, source_idx, idx_ast));
     } else {
       value = gen_code(gen, assign->value, sref_from_instruction(inst_basetype));
     }
@@ -826,12 +826,13 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
     sir_builder_set_data(builder, repeat, sref_to_u32(sref_from_instruction(loop)));
 
+    sir_builder_set_data(builder, body_block, sir_builder_offset(builder, body_block));
     sir_builder_set_data(builder, loop, sir_builder_offset(builder, loop));
 
     *data_condbr = (SIrCondbr){
       .cond = cond_val,
-      .then = exit_block,
-      .otherwise = body_block,
+      .then = body_block,
+      .otherwise = exit_block,
     };
 
     return sref_from_instruction(loop);

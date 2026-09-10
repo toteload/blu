@@ -421,6 +421,7 @@ internal u32 step(Specializer *in, RunState *state) {
     Todo();
   } break;
 
+  case SIR_loop:
   case SIR_block: {
     if (s->scope_kind == Scope_eval_block) {
       Todo();
@@ -429,7 +430,7 @@ internal u32 step(Specializer *in, RunState *state) {
     u32 inst_count = sir_chunk_data(f->chunk, pc);
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_block);
+    InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -683,14 +684,8 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     if (s->scope_kind == Scope_block) {
-      TypeIndex type_br;
       IRef ref = resolve(f, br->value);
-      if (iref_is_some_value(ref)) {
-        Value *v = values_get(in->values, iref_to_value(ref));
-        type_br = v->type;
-      } else {
-        type_br = f->inst_types[sref_to_instruction(br->value)];
-      }
+      TypeIndex type_br = iref_is_nil(ref) ? 0 : get_sref_type(in, f, br->value);
 
       f->inst_types[pc] = type_br;
 
@@ -1248,8 +1243,21 @@ internal u32 step(Specializer *in, RunState *state) {
   } break;
 
 
-  case SIR_loop: { Todo(); } break;
-  case SIR_repeat: { Todo(); } break;
+  case SIR_repeat: {
+    InstructionIndex loop = sref_to_instruction((SRef){sir_chunk_data(f->chunk, pc)});
+
+    IIrBuilder *builder = get_builder(in);
+    InstructionIndex inst = iir_builder_add(builder, IIR_repeat);
+    iir_builder_set_data(builder, inst, expect_residual_at_instruction_index(f, loop));
+
+    store_inst_value(f, pc, iref_from_instruction(inst));
+
+    Assert(s->end == pc + 1); // repeat may only appear at the end of a loop body
+
+    pop_finished_scopes(in, f, pc + 1);
+
+    return Step_leave_scope;
+  } break;
 
   case SIR_and: { Todo(); } break;
   case SIR_or: { Todo(); } break;

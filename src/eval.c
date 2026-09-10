@@ -363,6 +363,30 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     return CoerceResult_ok;
   }
 
+  if (type_val->kind == Type_array && type_dst->kind == Type_slice) {
+    if (type_val->data.array.base_type != type_dst->data.slice.base_type) {
+      return CoerceResult_invalid_coercion_types;
+    }
+
+    Value *p;
+    ValueIndex idx = values_alloc(values, &p);
+
+    u32 size = sizeof(ValueSlice);
+    ValueSlice *data = values_alloc_data(values, size, Align_of(ValueSlice));
+    *data = (ValueSlice){
+      .len = type_val->data.array.size,
+      .data = val->data, // TODO this may very well be wrong and result in a dangling pointer
+    };
+    *p = (Value){
+      .type = dst,
+      .data = data,
+      .data_size = size,
+    };
+
+    *res = idx;
+    return CoerceResult_ok;
+  }
+
   if (type_val->kind == Type_function && type_dst->kind == Type_function) {
     u32 param_count = type_val->data.function.param_count;
     if (param_count != type_dst->data.function.param_count) {
