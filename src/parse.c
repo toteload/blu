@@ -836,7 +836,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
     Try(expect_token(parser, Tok_paren_close));
 
-    Try(parse_base_expression(parser, &cast->value));
+    Try(parse_expression(parser, &cast->value));
 
     *node_kind(parser, ast_index) = Ast_cast;
     *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
@@ -936,13 +936,13 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
 // clang-format off
 internal const u8 op_precedence_group[Binary_and_assign_op_count] = {
-  10, 10, 10,
-  20, 20,
-  30, 30,
-  40, 40, 40,
-  50, 50, 50, 50, 50, 50,
-  60, 60,
-  100, 100, 100, 100,
+  10, 10, 10, // mul, div, mod
+  20, 20, // sub, add
+  30, 30, // bit shift left, bit shift right
+  40, 40, 40, // bit and, bit or, bit xor
+  50, 50, 50, 50, 50, 50, // ==, !=, >, >=, <, <=
+  60, 60, // and, or
+  100, 100, 100, 100, 100, 100, // =, *=, /=, %=, -=, +=
 };
 // clang-format on
 

@@ -71,6 +71,10 @@ void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
+u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionIndex idx) {
+  return opcodelist_at_unchecked(&builder->kinds, idx);
+}
+
 InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx) {
   InstructionIndex br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
 

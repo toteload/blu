@@ -276,8 +276,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     } break;
 
     case SIR_index:
-    case SIR_and:
-    case SIR_or:
+    case SIR_bool_and:
     case SIR_mul:
     case SIR_div:
     case SIR_mod:
@@ -465,6 +464,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_param:
     case IIR_alloc: break;
 
+    case IIR_not:
     case IIR_int_cast:
     case IIR_load:
     case IIR_ret:

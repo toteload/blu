@@ -77,8 +77,7 @@ typedef enum {
   SIR_repeat,         // contains InstructionIndex of loop block to repeat
   SIR_ret,            // contains SRef to value to return
   SIR_call,           // references SIrCall
-  SIR_and, // references SIrBinary
-  SIR_or, // references SIrBinary
+  SIR_bool_and, // references SIrBinary
   SIR_mul, // references SIrBinary
   SIR_div, // references SIrBinary
   SIR_mod, // references SIrBinary
@@ -105,7 +104,7 @@ typedef enum {
   SIR_lookup_decl_type,  // contains DeclarationIndex
   SIR_comptime_alloc, // contains SRef to a type
   SIR_as,             // references SIrAs
-  SIR_cast,           // references SIrAs
+  SIR_cast,           // references SIrCast
   SIR_unify,          // references SIrUnify
   SIR_type,           // references SIrType
   SIR_typeof,         // contains SRef
@@ -155,6 +154,11 @@ typedef struct {
   SRef type_to;
   SRef val;
 } SIrAs;
+
+typedef struct {
+  SRef type_dst;
+  SRef val;
+} SIrCast;
 
 typedef struct {
   u8 kind; // TypeKind
@@ -215,6 +219,8 @@ void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 s
 
 void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data);
 
+u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionIndex idx);
+
 InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx);
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex idx);
@@ -248,6 +254,7 @@ typedef enum {
   IIR_int_mul,
   IIR_int_div,
   IIR_int_mod,
+  IIR_not, // contains IRef
   IIR_bit_and,
   IIR_bit_or,
   IIR_bit_xor,

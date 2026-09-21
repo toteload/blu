@@ -60,13 +60,14 @@ typedef struct {
 
 typedef enum {
   ScopeEntry_local,
-  ScopeEntry_block_or_loop,
+  ScopeEntry_block,
+  ScopeEntry_loop,
 } ScopeEntryKind;
 
 typedef struct {
   u8 kind;
   StringIndex name;
-  InstructionIndex inst; // valid when kind == ScopeEntry_block_or_loop
+  InstructionIndex inst; // valid when kind == ScopeEntry_block or ScopeEntry_loop
 } ScopeEntry;
 
 typedef struct {
@@ -163,6 +164,24 @@ internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
   sir_builder_set_data(&gen->builder, inst, decl);
 
   return (LookupEntry){ .kind = Lookup_decl, .inst = inst };
+}
+
+b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
+  if (!sref_is_instruction(ref)) {
+    return False;
+  }
+
+  InstructionIndex inst = sref_to_instruction(ref);
+  SIrOpcode op = sir_builder_get_opcode(builder, inst);
+
+  switch (op) {
+  case SIR_br:
+  case SIR_repeat:
+  case SIR_ret:
+    return True;
+  default:
+    return False;
+  }
 }
 
 SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
@@ -264,8 +283,8 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   // clang-format on
   u8 sir_op;
   switch (op) {
-  case Logical_and: sir_op = SIR_and; break;
-  case Logical_or: sir_op = SIR_or; break;
+  case Logical_and: Panic();
+  case Logical_or: Panic();
   case Mul: sir_op = SIR_mul; break;
   case Div: sir_op = SIR_div; break;
   case Mod: sir_op = SIR_mod; break;
@@ -328,9 +347,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef ref_val = gen_code(gen, cast->value, (SRef){0});
 
     InstructionIndex inst = sir_builder_add(builder, SIR_cast, source_idx, idx_ast);
-    SIrAs *data = sir_builder_push_data(builder, inst, SIrAs);
-    *data = (SIrAs){
-      .type_to = ref_type,
+    SIrCast *data = sir_builder_push_data(builder, inst, SIrCast);
+    *data = (SIrCast){
+      .type_dst = ref_type,
       .val = ref_val,
     };
 
@@ -367,7 +386,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block_or_loop });
+    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
 
     for (u32 i = 0; i < count-1; i++) {
       gen_code(gen, block->items[i], (SRef){0});
@@ -375,12 +394,16 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     SRef res = gen_code(gen, block->items[count-1], type_destination);
 
-    sir_builder_end_block_with(builder, inst_block, inst_block, res, source_idx, idx_ast);
+    if (sref_is_terminator_instruction(builder, res)) {
+      sir_builder_set_data(builder, inst_block, sir_builder_offset(builder, inst_block));
+    } else {
+      sir_builder_end_block_with(builder, inst_block, inst_block, res, source_idx, idx_ast);
+    }
 
     while (True) {
       ScopeEntry entry = stack_pop(&gen->scope_stack);
 
-      if (entry.kind == ScopeEntry_block_or_loop) {
+      if (entry.kind == ScopeEntry_block) {
         break;
       }
 
@@ -492,7 +515,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_set_data(builder, inst_param, sref_to_u32(sref_from_instruction(first_param_type + i)));
     }
 
-    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block_or_loop });
+    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
 
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
@@ -507,7 +530,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     while (True) {
       ScopeEntry entry = stack_pop(&gen->scope_stack);
 
-      if (entry.kind == ScopeEntry_block_or_loop) {
+      if (entry.kind == ScopeEntry_block) {
         break;
       }
 
@@ -760,7 +783,14 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     AstUnaryOp *unary = ast_data(ast, idx_ast);
     UnaryOpKind op = unary->op_kind;
 
-    SRef e = gen_code(gen, unary->value, type_destination);
+    SRef unary_type_destination = (SRef){0};
+    switch (op) {
+    case Negate: unary_type_destination = (SRef){0}; break;
+    case Not: unary_type_destination = sref_from_value(gen->common->val.bool); break;
+    default: Unreachable();
+    }
+
+    SRef e = gen_code(gen, unary->value, unary_type_destination);
 
     u8 sir_op;
     switch (op) {
@@ -778,13 +808,64 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_binary_op: {
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
+    if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
+      SRef lhs = gen_code(gen, binary->lhs, sref_from_value(gen->common->val.bool));
+
+      InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
+      InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, binary->lhs);
+      SIrCondbr *data = sir_builder_push_data(builder, condbr, SIrCondbr);
+
+      if (binary->op_kind == Logical_and) {
+        InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
+        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val.bool));
+
+        InstructionIndex inst_and = sir_builder_add(builder, SIR_bool_and, source_idx, idx_ast);
+        SIrBinary *data_and = sir_builder_push_data(builder, inst_and, SIrBinary);
+        *data_and = (SIrBinary){
+          .lhs = lhs,
+          .rhs = rhs,
+        };
+
+        sir_builder_end_block_with(builder, block_rhs, block, sref_from_instruction(inst_and), source_idx, binary->rhs);
+
+        InstructionIndex block_otherwise = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
+        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(gen->common->val.false), source_idx, binary->rhs);
+
+        *data = (SIrCondbr){
+          .cond = lhs,
+          .then = block_rhs,
+          .otherwise = block_otherwise,
+        };
+      } else if (binary->op_kind == Logical_or) {
+        InstructionIndex block_lhs_true = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
+        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(gen->common->val.true), source_idx, binary->rhs);
+
+        InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
+        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val.bool));
+
+        sir_builder_end_block_with(builder, block_rhs, block, rhs, source_idx, binary->rhs);
+
+        *data = (SIrCondbr){
+          .cond = lhs,
+          .then = block_lhs_true,
+          .otherwise = block_rhs,
+        };
+      } else {
+        Unreachable();
+      }
+
+      sir_builder_set_data(builder, block, sir_builder_offset(builder, block));
+
+      return sref_from_instruction(block);
+    }
+
     SRef lhs_type_destination, rhs_type_destination;
     binary_op_type_destinations(gen, binary->op_kind, type_destination, &lhs_type_destination, &rhs_type_destination);
 
     SRef lhs = gen_code(gen, binary->lhs, lhs_type_destination);
     SRef rhs = gen_code(gen, binary->rhs, rhs_type_destination);
 
-    if (binary_op_is_cmp(binary->op_kind)) {
+    if (binary_op_is_cmp(binary->op_kind) || sref_is_nil(type_destination)) {
       InstructionIndex inst_typeof_lhs = sir_builder_add(builder, SIR_typeof, source_idx, binary->lhs);
       sir_builder_set_data(builder, inst_typeof_lhs, sref_to_u32(lhs));
 
@@ -831,23 +912,23 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex body_block = sir_builder_add(builder, SIR_block, source_idx, ast_while->body);
 
-    stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_block_or_loop, .name = loop_label, .inst = loop }));
+    stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_loop, .name = loop_label, .inst = loop }));
     if (loop_label) {
       locals_insert(&gen->locals, loop_label, (LookupEntry){.kind = Lookup_block, .inst = loop});
     }
 
     SRef body = gen_code(gen, ast_while->body, (SRef){0});
+    Unused(body);
 
     ScopeEntry loop_entry = stack_pop(&gen->scope_stack);
-    Assert(loop_entry.kind == ScopeEntry_block_or_loop);
+    Assert(loop_entry.kind == ScopeEntry_loop);
     if (loop_entry.name) {
       b32 found = locals_remove(&gen->locals, loop_entry.name);
       Assert(found);
     }
-    Unused(body);
 
     InstructionIndex repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
-    sir_builder_set_data(builder, repeat, sref_to_u32(sref_from_instruction(loop)));
+    sir_builder_set_data(builder, repeat, loop);
 
     sir_builder_set_data(builder, body_block, sir_builder_offset(builder, body_block));
     sir_builder_set_data(builder, loop, sir_builder_offset(builder, loop));
@@ -889,9 +970,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     } else {
       b32 found = False;
 
-      for (u32 i = gen->scope_stack.len; i > 0; i--) {
-        ScopeEntry *entry = &gen->scope_stack.data[i - 1];
-        if (entry->kind == ScopeEntry_block_or_loop) {
+      for (u32 i = gen->scope_stack.len; i-- > 0;) {
+        ScopeEntry *entry = &gen->scope_stack.data[i];
+        if (entry->kind == ScopeEntry_loop) {
           target = entry->inst;
           found = True;
           break;

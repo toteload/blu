@@ -390,8 +390,22 @@ internal u32 step(Interpreter *in) {
     f->pc += 1;
   } break;
 
+  case IIR_not: {
+    void *val = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
+    *Cast(u8 *, local) = !*Cast(u8 *, val);
+    f->pc += 1;
+  } break;
+
   case IIR_bit_and: {
-    Todo();
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
+    u8 *lhs = resolve(in, f, bin->lhs);
+    u8 *rhs = resolve(in, f, bin->rhs);
+
+    for (u32 i = 0; i < size_info.size; i++) {
+      Cast(u8 *, local)[i] = lhs[i] & rhs[i];
+    }
+
+    f->pc += 1;
   } break;
 
   case IIR_bit_or: {

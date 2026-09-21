@@ -1,0 +1,13 @@
+mod main
+
+main: () i32 = || {
+  // Runtime operands, so each of these leaves a residual IIR_bit_and behind.
+  #debug(yes() and yes())
+  #debug(yes() and no())
+  #debug(no() and yes())
+  #debug(no() and no())
+  0
+}
+
+yes := ||: bool true
+no := ||: bool false

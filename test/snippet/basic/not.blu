@@ -1,0 +1,12 @@
+mod main
+
+main: () i32 = || {
+  // Comptime operands fold to the interned true/false values.
+  #debug(!true)
+  #debug(!false)
+  // A runtime operand leaves a residual IIR_not behind.
+  #debug(!runtime_true())
+  0
+}
+
+runtime_true := ||: bool true
