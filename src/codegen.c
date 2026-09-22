@@ -581,6 +581,29 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     return sref_from_value(gen->common->val.nil);
   } break;
 
+  case Ast_literal_u8_string: {
+    TokenIndex *tok = ast_data(ast, idx_ast);
+    String s = token_string(tokens, text, *tok);
+
+    // s is of the form `u8"x"` and for now we only support strings containing a single character,
+    // so no escape codes.
+    if (s.len - 4 > 1) {
+      Todo();
+    }
+
+    Value *v;
+    ValueIndex idx = values_alloc(gen->values, &v);
+    u8 *data = values_alloc_data_type(gen->values, u8);
+    *data = s.str[3];
+    *v = (Value){
+      .type = gen->common->type.u8,
+      .data_size = sizeof(u8),
+      .data = data,
+    };
+
+    return sir_builder_add_as(&gen->builder, type_destination, sref_from_value(idx), source_idx, idx_ast);
+  } break;
+
   case Ast_literal_int: {
     TokenIndex *tok = ast_data(ast, idx_ast);
     u64 value = parse_u64(token_string(tokens, text, *tok));

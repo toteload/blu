@@ -1,7 +1,7 @@
 mod main
 
 main: = ||: i32 {
-  text: []u8 = "L68 L30 R48 L5 R60 L55 L1 L99 R14 L82"
+  text: []u8 = "L68 L30 R48 L5 R60 L55 L1 L99 R14 L82 " // needs a space at the end
 
   count: i32 = 0
   pcount: i32 = 0
@@ -9,17 +9,15 @@ main: = ||: i32 {
 
   i: usize = 0
   while i < #len(text) {
-    sign: i32 = if text[i] == "L" do -1 else 1
+    sign: i32 = if text[i] == u8"L" do -1 else 1
 
     i += 1
 
-    n: i32 = cast(i32) text[i] - "0"
+    n: i32 = 0
 
-    i += 1
-
-    while text[i] >= "0" and text[i] <= "9" {
+    while text[i] >= u8"0" and text[i] <= u8"9" {
       n *= 10
-      n += cast(i32) text[i] - "0"
+      n += cast(i32) text[i] - u8"0"
       i += 1
     }
 
@@ -48,7 +46,7 @@ main: = ||: i32 {
     }
 
     while i < #len(text) {
-      if text[i] == "L" or text[i] == "R" {
+      if text[i] == u8"L" or text[i] == u8"R" {
         break
       }
 
@@ -56,6 +54,6 @@ main: = ||: i32 {
     }
   }
 
-  #debug(count)
-  #debug(pcount)
+  #debug(count) // should be 3
+  #debug(pcount) // should be 6
 }

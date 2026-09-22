@@ -102,10 +102,10 @@ void test_keywords_and_identifiers(TestResult *test, TokenizeContext *context) {
   Assert_kinds("if else for do break continue return",
     Tok_keyword_if, Tok_keyword_else, Tok_keyword_for, Tok_keyword_do,
     Tok_keyword_break, Tok_keyword_continue, Tok_keyword_return);
-  Assert_kinds("and or defer const cast bitcast as mod no_cache inline",
+  Assert_kinds("and or defer const cast bitcast as mod inline",
     Tok_keyword_and, Tok_keyword_or, Tok_keyword_defer, Tok_keyword_const,
     Tok_keyword_cast, Tok_keyword_bitcast, Tok_keyword_as, Tok_keyword_mod,
-    Tok_keyword_no_cache, Tok_keyword_inline);
+    Tok_keyword_inline);
   Assert_kinds("#debug",  Tok_builtin_debug);
   Assert_kinds("returns", Tok_identifier);   // keyword is a prefix, not a full match
 }

@@ -253,6 +253,36 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_token(Tok_cmp_gt);
   }
 
+  if (c == 'u' && (tokenizer->at + 1 < tokenizer->end) && tokenizer->at[0] == '8' && tokenizer->at[1] == '"') {
+    tokenizer->at += 2;
+
+    while (!is_at_end(tokenizer) && *tokenizer->at != '"') {
+      if (*tokenizer->at == '\\') {
+        tokenizer->at += 1;
+        if (is_at_end(tokenizer)) {
+          break;
+        }
+      }
+      tokenizer->at += 1;
+    }
+
+    if (is_at_end(tokenizer)) {
+      Message_error(
+        tokenizer->msg_sink,
+        (MessageLocation){ 
+          .kind = MessageLocation_byte_offset,
+          .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
+        },
+        string_lit("End of source encountered while parsing u8-string literal.")
+      );
+      return TokResult_error;
+    }
+
+    tokenizer->at += 1;
+
+    Return_token(Tok_literal_u8_string);
+  }
+
   if (c == '"') {
     while (!is_at_end(tokenizer) && *tokenizer->at != '"') {
       if (*tokenizer->at == '\\') {
@@ -327,7 +357,6 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("bitcast",  Tok_keyword_bitcast);
     Return_if_match("as",       Tok_keyword_as);
     Return_if_match("mod",      Tok_keyword_mod);
-    Return_if_match("no_cache", Tok_keyword_no_cache);
     Return_if_match("inline",   Tok_keyword_inline);
     // clang-format on
 
@@ -467,7 +496,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "==",       "!=",
   ">",       ">=",
   "<",       "<=",
-  "integer literal",  "string literal",
+  "integer literal",  "string literal", "u8-string literal",
   "{",   "}",
   "(",   ")",
   "[", "]",
@@ -477,7 +506,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "return",       "and",
   "or",           "defer",
   "const",        "cast",
-  "bitcast", "as", "mod", "no_cache", "inline",
+  "bitcast", "as", "mod", "inline",
   "identifier",   "label", "#debug",
   "#len",
   "line comment", "newline",

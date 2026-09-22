@@ -16,6 +16,7 @@ typedef enum {
   Ast_assign,
   Ast_literal_int,
   Ast_literal_string,
+  Ast_literal_u8_string,
   Ast_identifier,
   Ast_label,
   Ast_call,
@@ -215,8 +216,7 @@ typedef union {
   AstTypeArray       type_array;
   AstDeclaration     declaration;
   AstAssign          assign;
-  TokenIndex         literal_int;
-  TokenIndex         literal_string;
+  TokenIndex         literal;
   TokenIndex         identifier;
   AstCall            call;
   AstIndexData       index;

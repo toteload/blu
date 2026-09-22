@@ -464,7 +464,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_param:
     case IIR_alloc: break;
 
-    case IIR_not:
+    case IIR_bit_not:
     case IIR_int_cast:
     case IIR_load:
     case IIR_ret:

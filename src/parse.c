@@ -153,19 +153,16 @@ internal b32 parse_declaration(Parser *parser, AstIndex *out);
 internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out);
 internal b32 parse_type(Parser *parser, AstIndex *out);
 internal b32 parse_function(Parser *parser, AstIndex *out);
-internal b32 parse_cast(Parser *parser, AstIndex *out);
 internal b32 parse_as(Parser *parser, AstIndex *out);
 internal b32 parse_break(Parser *parser, AstIndex *out);
 internal b32 parse_label(Parser *parser, AstIndex *out);
 internal b32 parse_if_else(Parser *parser, AstIndex *out);
 internal b32 parse_base_expression(Parser *parser, AstIndex *out);
 internal b32 parse_expression(Parser *parser, AstIndex *out);
-internal b32 parse_literal_int(Parser *parser, AstIndex *out);
-internal b32 parse_literal_string(Parser *parser, AstIndex *out);
+internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind);
 internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out);
 internal b32 parse_identifier(Parser *parser, AstIndex *out);
 internal b32 parse_param(Parser *parser, AstIndex *out);
-internal b32 parse_builtin_print(Parser *parser, AstIndex *out);
 
 internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op);
 
@@ -432,7 +429,7 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
       *node_kind(parser, idx) = Ast_type_slice;
     } else if (tok == Tok_literal_int) {
       AstTypeArray *type_array = node_push_data(parser, AstTypeArray, idx);
-      Try(parse_literal_int(parser, &type_array->size));
+      Try(parse_literal(parser, &type_array->size, Ast_literal_int));
       Try(expect_token(parser, Tok_bracket_close));
       Try(parse_type(parser, &type_array->base));
 
@@ -516,38 +513,19 @@ internal b32 parse_declaration(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_literal_int(Parser *parser, AstIndex *out) {
+internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind) {
   AstIndex   idx   = node_alloc(parser);
   TokenIndex start = parser->at;
 
-  TokenIndex literal_int = parser->at;
+  TokenIndex literal = parser->at;
 
-  Try(expect_token(parser, Tok_literal_int));
-
-  TokenIndex *p = node_push_data(parser, TokenIndex, idx);
-  *p = literal_int;
-
-  *node_kind(parser, idx) = Ast_literal_int;
-  *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
-
-  *out = idx;
-
-  return True;
-}
-
-// NOTE: this function and the parse_literal_int function are basically the same.
-internal b32 parse_literal_string(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
-
-  TokenIndex literal_string = parser->at;
-
-  Try(expect_token(parser, Tok_literal_string));
+  u8 ignored;
+  next(parser, &ignored);
 
   TokenIndex *p = node_push_data(parser, TokenIndex, idx);
-  *p = literal_string;
+  *p = literal;
 
-  *node_kind(parser, idx) = Ast_literal_string;
+  *node_kind(parser, idx) = kind;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = idx;
@@ -770,8 +748,9 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     // clang-format off
   case Tok_keyword_while:  Try(parse_while(parser, 0, &base));       break;
   case Tok_keyword_if:     Try(parse_if_else(parser, &base));        break;
-  case Tok_literal_int:    Try(parse_literal_int(parser, &base));    break;
-  case Tok_literal_string: Try(parse_literal_string(parser, &base)); break;
+  case Tok_literal_int:    Try(parse_literal(parser, &base, Ast_literal_int));    break;
+  case Tok_literal_string: Try(parse_literal(parser, &base, Ast_literal_string)); break;
+  case Tok_literal_u8_string: Try(parse_literal(parser, &base, Ast_literal_u8_string)); break;
   case Tok_bar:            Try(parse_function(parser, &base));       break;
   case Tok_builtin_debug:  Try(parse_builtin(parser, Tok_builtin_debug, Builtin_debug, &base));  break;
   case Tok_builtin_len:    Try(parse_builtin(parser, Tok_builtin_len, Builtin_len, &base));  break;

@@ -390,7 +390,7 @@ internal u32 step(Interpreter *in) {
     f->pc += 1;
   } break;
 
-  case IIR_not: {
+  case IIR_bit_not: {
     void *val = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
     *Cast(u8 *, local) = !*Cast(u8 *, val);
     f->pc += 1;

@@ -1,11 +1,5 @@
 # Currently doing
 
-- [ ] Get `samples/aoc_2025_day_01.blu` to compile and run and get the right answer :)
-  - [x] IR_load needs to be updated to also take a type arg.
-  - [x] Introduce a split in the IR: IR for the specializer and IR for the interpreter.
-  - [x] Side quest: finish the stubs in the message printing for {tokenkind} etc.
-  - [ ] Add `.len()` method to slices and arrays.
-    - [ ] Needs compound identifiers (is compound the word here?).
 
 - [ ] Reuse deallocated values! And add generation check.
 
@@ -52,8 +46,14 @@
   - This means that the declaration only exists at compile time.
     All uses of the declaration are replaced with its value.
 
+
 ## General
 
+- [ ] Type casting and coercion information is kinda scattered.
+      There is `eval_unify`, `eval_coerce`, `is_type_castable_to` and `is_type_coercible_to`.
+      For example, if `is_type_coercible_to` then `eval_coerce` should succeed for the same types.
+      So these functions need to be kept in sync which is error prone/annoying.
+      See if this can be improved.
 - [ ] `test\basic\slice.blu`
   - Includes array type and string literal.
   - Includes coercion of sequence literals to typed slices.
@@ -94,9 +94,6 @@
       - I guess that would mean that enums are nominal. Does that make sense?
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
 - [ ] Add coercion of `bool` to integer types.
-- [ ] Add coercion of `[1]T`, `[1][1]T`, ... to `T`.
-  - This has the benefit of having ASCII character literals for free by using the string literals.
-    The type of `"A"` is `[1]u8`
 - [ ] Floating point type
 - [ ] Add flow typing
 

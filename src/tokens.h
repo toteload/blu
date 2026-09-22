@@ -38,6 +38,7 @@ typedef enum {
 
   Tok_literal_int,
   Tok_literal_string,
+  Tok_literal_u8_string,
 
   Tok_brace_open,
   Tok_brace_close,
@@ -63,7 +64,6 @@ typedef enum {
   Tok_keyword_as,
   Tok_keyword_mod,
 
-  Tok_keyword_no_cache,
   Tok_keyword_inline,
 
   Tok_identifier,

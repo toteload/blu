@@ -187,7 +187,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
   compiler->common.type.type = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil = types_add(&compiler->types, &(Type){.kind = Type_nil});
-  compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool});
+  compiler->common.type.bool = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
   compiler->common.type.usize = types_add(&compiler->types, &(Type){.kind = Type_usize, .data.integer = {.signedness = Unsigned, .bitwidth = 64}});
   compiler->common.type.u8 = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});

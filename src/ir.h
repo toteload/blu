@@ -254,7 +254,7 @@ typedef enum {
   IIR_int_mul,
   IIR_int_div,
   IIR_int_mod,
-  IIR_not, // contains IRef
+  IIR_bit_not, // contains IRef
   IIR_bit_and,
   IIR_bit_or,
   IIR_bit_xor,

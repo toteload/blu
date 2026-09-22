@@ -1716,7 +1716,7 @@ internal u32 step(Specializer *in, RunState *state) {
       store_inst_value(f, pc, iref_from_value(b ? in->common->val.false : in->common->val.true));
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_not);
+      InstructionIndex inst = iir_builder_add(builder, IIR_bit_not);
       iir_builder_set_data(builder, inst, iref_to_u32(res));
       iir_builder_set_type(builder, inst, type);
 

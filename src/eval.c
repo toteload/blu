@@ -279,16 +279,6 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
     return UnifyResult_ok;
   }
 
-  // A one-element array coerces to its element type, so unifying [1]T against anything else
-  // is the same as unifying T against it.
-  if (type_lhs->kind == Type_array && type_lhs->data.array.size == 1) {
-    return eval_unify(scratch, types, type_lhs->data.array.base_type, b, unified);
-  }
-
-  if (type_rhs->kind == Type_array && type_rhs->data.array.size == 1) {
-    return eval_unify(scratch, types, a, type_rhs->data.array.base_type, unified);
-  }
-
   if (type_lhs->kind == Type_slice && type_rhs->kind == Type_slice) {
     TypeIndex base_type;
     u32 err = eval_unify(scratch, types, type_lhs->data.slice.base_type, type_rhs->data.slice.base_type, &base_type);
