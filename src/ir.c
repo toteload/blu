@@ -173,11 +173,11 @@ void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk) {
 // Interpreter IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op) {
+InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   typelist_append(&builder->types, builder->scratch, 0);
-  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ 0, 0 });
+  sourcelist_append(&builder->ast_source, builder->scratch, source);
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;
 }
@@ -186,10 +186,6 @@ void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionIndex idx, u32 s
   void *p = arena_push(builder->scratch, size, align);
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .ptr = p };
   return p;
-}
-
-void iir_builder_set_source(IIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx) {
-  *sourcelist_ptr_at_unchecked(&builder->ast_source, idx) = (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx };
 }
 
 void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data) {

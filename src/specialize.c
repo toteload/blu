@@ -443,7 +443,7 @@ internal u32 step(Specializer *in, RunState *state) {
     u32 inst_count = sir_chunk_data(f->chunk, pc);
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block);
+    InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -464,7 +464,7 @@ internal u32 step(Specializer *in, RunState *state) {
     u32 inst_count = func->instruction_count;
 
     IIrBuilder *builder = push_ir_builder(in);
-    InstructionIndex inst_func = iir_builder_add(builder, IIR_func);
+    InstructionIndex inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[pc]);
 
     TypeIndex return_type;
     b32 ok = expect_some_type_value(in, f, func->return_type, &return_type);
@@ -482,7 +482,7 @@ internal u32 step(Specializer *in, RunState *state) {
         return Step_error;
       }
 
-      InstructionIndex inst_param = iir_builder_add(builder, IIR_param);
+      InstructionIndex inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc + 1 + i]);
       iir_builder_set_type(builder, inst_param, param_type);
 
       store_inst_value(f, pc + 1 + i, iref_from_instruction(inst_param));
@@ -658,7 +658,7 @@ internal u32 step(Specializer *in, RunState *state) {
         // TODO add different casts for when there are more than just integer types
 
         IIrBuilder *builder = get_builder(in);
-        InstructionIndex inst = iir_builder_add(builder, IIR_int_cast);
+        InstructionIndex inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
         iir_builder_set_data(builder, inst, iref_to_u32(ref));
         iir_builder_set_type(builder, inst, type_dst);
 
@@ -752,7 +752,7 @@ internal u32 step(Specializer *in, RunState *state) {
       store_inst_value(f, pc, iref_from_value(res));
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_int_cast);
+      InstructionIndex inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(ref));
       iir_builder_set_type(builder, inst, type_dst);
 
@@ -793,7 +793,7 @@ internal u32 step(Specializer *in, RunState *state) {
       f->inst_types[pc] = type_br;
 
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst_br = iir_builder_add(builder, IIR_br);
+      InstructionIndex inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
       IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
       *data_br = (IIrBr){
         .block = expect_residual_at_instruction_index(f, br->block),
@@ -917,7 +917,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_ret: {
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_ret);
+    InstructionIndex inst = iir_builder_add(builder, IIR_ret, f->chunk->sources[pc]);
 
     SRef ref_val = (SRef){sir_chunk_data(f->chunk, pc)};
     IRef val = resolve(f, ref_val);
@@ -1006,7 +1006,7 @@ internal u32 step(Specializer *in, RunState *state) {
     } else {
       IIrBuilder *builder = get_builder(in);
 
-      InstructionIndex inst_condbr = iir_builder_add(builder, IIR_condbr);
+      InstructionIndex inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
 
       store_inst_value(f, pc, iref_from_instruction(inst_condbr));
 
@@ -1020,7 +1020,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
     IIrBuilder *builder = get_builder(in);
 
-    InstructionIndex inst_call = iir_builder_add(builder, IIR_call);
+    InstructionIndex inst_call = iir_builder_add(builder, IIR_call, f->chunk->sources[pc]);
 
     IIrCall *data_call = iir_builder_push_data_raw(
       builder,
@@ -1096,7 +1096,7 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_len);
+    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_len, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst, in->common->type.usize);
     iir_builder_set_data(builder, inst, iref_to_u32(val));
 
@@ -1120,7 +1120,7 @@ internal u32 step(Specializer *in, RunState *state) {
     IRef val = resolve(f, ref);
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_debug);
+    InstructionIndex inst = iir_builder_add(builder, IIR_builtin_debug, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst, type);
     iir_builder_set_data(builder, inst, iref_to_u32(copy_if_value(in, val)));
 
@@ -1151,7 +1151,7 @@ internal u32 step(Specializer *in, RunState *state) {
       f->inst_types[pc] = t->data.pointer.base_type;
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_load);
+      InstructionIndex inst = iir_builder_add(builder, IIR_load, f->chunk->sources[pc]);
       TypeIndex type = iir_builder_get_type(builder, iref_to_instruction(val));
       iir_builder_set_type(builder, inst, type);
       iir_builder_set_data(builder, inst, iref_to_u32(val));
@@ -1177,7 +1177,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Todo();
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_store);
+      InstructionIndex inst = iir_builder_add(builder, IIR_store, f->chunk->sources[pc]);
       IIrStore *data = iir_builder_push_data(builder, inst, IIrStore);
 
       IRef val = resolve(f, store->value);
@@ -1203,7 +1203,7 @@ internal u32 step(Specializer *in, RunState *state) {
     Assert(ok);
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_alloc);
+    InstructionIndex inst = iir_builder_add(builder, IIR_alloc, f->chunk->sources[pc]);
 
     iir_builder_set_type(builder, inst, type);
 
@@ -1334,7 +1334,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Todo();
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_bit_and);
+      InstructionIndex inst = iir_builder_add(builder, IIR_bit_and, f->chunk->sources[pc]);
       IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
       *data = (IIrBinary){
         .lhs = copy_if_value(in, lhs),
@@ -1412,7 +1412,7 @@ internal u32 step(Specializer *in, RunState *state) {
     // clang-format on
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, iir_op);
+    InstructionIndex inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = copy_if_value(in, lhs),
@@ -1431,7 +1431,7 @@ internal u32 step(Specializer *in, RunState *state) {
     InstructionIndex loop = sref_to_instruction((SRef){sir_chunk_data(f->chunk, pc)});
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_repeat);
+    InstructionIndex inst = iir_builder_add(builder, IIR_repeat, f->chunk->sources[pc]);
     iir_builder_set_data(builder, inst, expect_residual_at_instruction_index(f, loop));
 
     store_inst_value(f, pc, iref_from_instruction(inst));
@@ -1491,7 +1491,7 @@ internal u32 step(Specializer *in, RunState *state) {
     // clang-format on
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, iir_op);
+    InstructionIndex inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = copy_if_value(in, lhs),
@@ -1585,7 +1585,7 @@ internal u32 step(Specializer *in, RunState *state) {
     }
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_index);
+    InstructionIndex inst = iir_builder_add(builder, IIR_index, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = copy_if_value(in, indexable),
@@ -1685,7 +1685,7 @@ internal u32 step(Specializer *in, RunState *state) {
     };
 
     IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub);
+    InstructionIndex inst = iir_builder_add(builder, IIR_int_sub, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
     *data = (IIrBinary){
       .lhs = iref_from_value(zero),
@@ -1716,7 +1716,7 @@ internal u32 step(Specializer *in, RunState *state) {
       store_inst_value(f, pc, iref_from_value(b ? in->common->val.false : in->common->val.true));
     } else {
       IIrBuilder *builder = get_builder(in);
-      InstructionIndex inst = iir_builder_add(builder, IIR_bit_not);
+      InstructionIndex inst = iir_builder_add(builder, IIR_bit_not, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(res));
       iir_builder_set_type(builder, inst, type);
 

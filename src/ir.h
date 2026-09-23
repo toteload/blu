@@ -335,7 +335,7 @@ typedef struct {
   InstDataList data;
 } IIrBuilder;
 
-InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op);
+InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source);
 InstructionIndex iir_builder_add_as(IIrBuilder *builder, SRef type_destination, SRef val);
 void iir_builder_end_block_with(IIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref);
 
@@ -344,7 +344,6 @@ void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionIndex idx, u32 s
 #define iir_builder_push_data(builder, idx, type)                                                  \
   iir_builder_push_data_raw(builder, idx, sizeof(type), Align_of(type))
 
-void iir_builder_set_source(IIrBuilder *builder, InstructionIndex idx, SourceIndex source_idx, AstIndex ast_idx);
 void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data);
 void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeIndex type);
 
