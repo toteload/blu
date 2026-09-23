@@ -40,6 +40,7 @@ typedef union {
   u8     token_kind;
   String string;
   TypeIndex type;
+  u64 u64;
 } MessageArg;
 
 typedef struct {

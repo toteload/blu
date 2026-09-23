@@ -19,6 +19,7 @@ enum FormatSpecKind {
   FormatSpec_token_kind,
   FormatSpec_string,
   FormatSpec_type,
+  FormatSpec_u64,
 };
 
 typedef struct {
@@ -50,6 +51,12 @@ internal b32 format_next_spec(String fmt, usize pos, FormatSpec *out) {
     }
 
     usize j = i + 1;
+
+    if (starts_with_at(fmt, j, string_lit("u64"))) {
+      out->kind = FormatSpec_u64;
+      out->end = j + 3;
+      return True;
+    }
 
     if (starts_with_at(fmt, j, string_lit("tokenkind"))) {
       out->kind = FormatSpec_token_kind;
@@ -105,6 +112,7 @@ void message_collect_args(String format, va_list vl, MessageArg *args, u32 arg_c
       args[i].string = va_arg(vl, String);
     } break;
     case FormatSpec_type: { args[i].type = va_arg(vl, TypeIndex); } break;
+    case FormatSpec_u64: { args[i].u64 = va_arg(vl, u64); } break;
     }
 
     i++;
@@ -140,6 +148,7 @@ String message_format(Arena *scratch, TypeInterner *types, Message *message) {
 
       buf[len++] = '%';
     } break;
+
     case FormatSpec_token_kind: {
       char const *s = token_kind_string(message->args[arg_i++].token_kind);
       u32 slen = strlen(s);
@@ -150,6 +159,7 @@ String message_format(Arena *scratch, TypeInterner *types, Message *message) {
       memcpy(buf + len, s, slen);
       len += slen;
     } break;
+
     case FormatSpec_string: {
       String s = message->args[arg_i++].string;
       if ((len + s.len) > bufsize) {
@@ -159,10 +169,22 @@ String message_format(Arena *scratch, TypeInterner *types, Message *message) {
       memcpy(buf + len, s.str, s.len);
       len += s.len;
     } break;
+
     case FormatSpec_type: {
       TypeIndex type = message->args[arg_i++].type;
       String s = write_type(scratch, types, type);
       len += s.len;
+    } break;
+
+    case FormatSpec_u64: {
+      char s[21];
+      u32 slen = Cast(u32, snprintf(s, sizeof(s), "%llu", Cast(u64, message->args[arg_i++].u64)));
+      if ((len + slen) > bufsize) {
+        arena_push_array(u8, scratch, slen);
+      }
+
+      memcpy(buf + len, s, slen);
+      len += slen;
     } break;
     }
   }

@@ -201,8 +201,8 @@ internal u32 step(Interpreter *in) {
       Message_error(
         in->msg_sink,
         (MessageLocation){ .kind = MessageLocation_unspecified, },
-        string_lit("Index is out of bounds")
-      );
+        string_lit("Index is out of bounds. index = %u64, bounds = 0 .. %u64"),
+        at, len);
       return Step_index_out_of_bounds;
     }
 

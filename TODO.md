@@ -29,15 +29,6 @@
 - **N6 — `read_file` uses `i32` for `ftell`** (2 GB cap) and `arena_init` doesn't check for `mmap`'s
   `MAP_FAILED` (`src/toteload.c:56`, `src/source_file.c:79`).
 
-### Types
-
-### Control flow
-
-### Comptime
-
-### Modules
-
-
 ## Comptime
 
 - [ ] Add `eval` keyword to evaluate expressions at compile time. (or just use `comptime` as the name)
