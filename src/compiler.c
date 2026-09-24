@@ -308,30 +308,6 @@ b32 lookup_identifier(
 
 // -------------------------------------------------------------------------------------------------
 
-#define MAX_RESOLVE_DEPTH 64
-
-typedef struct {
-  Declaration *decl;
-  RunState state;
-  u8 min_required_resolve_status;
-} ResolveEntry;
-
-typedef struct {
-  b32 ok;
-
-  Arena *scratch;
-  MessageSink *msg_sink;
-
-  // List of user defined declarations.
-  u32 user_declaration_count;
-  Declaration **user_declarations;
-
-  DeclarationInterner *decls;
-
-  Specializer *in;
-  Stack(ResolveEntry) resolve_stack;
-} Resolver;
-
 internal void
 push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
   ResolveEntry *entry = stack_push_ptr_unchecked(&resolver->resolve_stack);
