@@ -30,7 +30,6 @@
 - [ ] `break`/`continue`
 - [ ] Add `return` expression.
 - [ ] `for` loop
-- [ ] `while` loop
 - [ ] `match` expression.
   - Can match on integer values.
   - Can match on enums.

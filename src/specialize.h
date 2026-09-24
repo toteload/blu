@@ -7,15 +7,14 @@
 // For simplicity the maximum depths are a fixed number. This will likely change.
 #define MAX_SCOPE_DEPTH 64
 #define MAX_CALL_DEPTH 128
+#define MAX_NESTED_FUNCTION_DEPTH 16
 
 #define MAX_BUILDERS 64 // Arbitrary number.
 #define MAX_BREAKS_AND_RETURNS 16
 
 typedef enum {
-  Scope_chunk,
   Scope_block,
-  Scope_comptime_block,
-  Scope_func,
+  Scope_comptime,
 } ScopeKind;
 
 typedef struct {
@@ -24,8 +23,6 @@ typedef struct {
   InstructionIndex start;
   InstructionIndex end;
   InstructionIndex pc;
-
-  b32 is_decl_value;
 
   InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
   InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
@@ -36,12 +33,19 @@ typedef struct {
   } breaks_and_returns;
 } ScopeSpan;
 
+typedef struct {
+  u32 comptime_depth;
+  u32 scope_top;
+} EvalScope;
+
 typedef Stack(ScopeSpan) ScopeStack;
+typedef Stack(EvalScope) EvalStack;
 
 ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block);
 void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
 
 typedef struct {
+  ArenaSnapshot snapshot;
   DeclarationIndex decl_idx;
   SIrChunk *chunk;
 
@@ -49,13 +53,17 @@ typedef struct {
   TypeIndex *inst_types;
 
   ScopeStack scopes;
+  EvalStack eval_scopes;
+} Frame;
 
-  ArenaSnapshot snapshot;
-} CallFrame;
+always_inline b32 frame_is_comptime(Frame *frame) { return stack_peek_ptr(&frame->eval_scopes)->comptime_depth > 0; }
+void push_function_scope(Frame *frame, InstructionIndex start, u32 param_count, u32 instruction_count);
+void push_eval_scope(Frame *frame, InstructionIndex start, u32 instruction_count);
 
-ScopeSpan *push_scope(CallFrame *frame);
+ScopeSpan *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count);
+ScopeSpan pop_scope(Frame *frame);
 
-typedef Stack(CallFrame) CallStack;
+typedef Stack(Frame) CallStack;
 
 typedef struct {
   b8 requested_resolution;
@@ -63,10 +71,10 @@ typedef struct {
 } RunState;
 
 void runstate_init(RunState *state, Arena *arena);
-CallFrame *frame_push(RunState *state, Arena *arena, Declaration* decl);
+Frame *frame_push(RunState *state, Arena *arena, Declaration* decl);
 void frame_pop(RunState *state, Arena *arena, ValueStore *values);
-CallFrame *top_frame(RunState *state);
-ScopeSpan *get_func_scope(CallFrame *frame);
+Frame *top_frame(RunState *state);
+ScopeSpan *get_func_scope(Frame *frame);
 
 typedef struct {
   Arena               *perm;
@@ -79,7 +87,7 @@ typedef struct {
   ValueStore          *values;
   Common              *common;
 
-  Stack(IIrBuilder)     builders;
+  Stack(IIrBuilder) builders;
 } Specializer;
 
 typedef enum {
