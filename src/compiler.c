@@ -349,43 +349,40 @@ internal b32 resolve_entry(Resolver *resolver) {
   Declaration *decl = entry->decl;
   SIrChunk *chunk = &decl->data.decl.chunk;
 
-  u8 resolve_status = decl->resolve_status;
-
   if (!entry->state.requested_resolution) {
-    decl->resolve_status = (resolve_status + 1);
+    u8 resolve_status = decl->resolve_status;
 
-    CallFrame *frame = top_frame(&entry->state);
-    ScopeSpan *scope = push_scope(frame);
+    // clang-format off
+    switch (Cast(ResolveStatus, resolve_status)) {
+    case ResolveStatus_unresolved:    decl->resolve_status = ResolveStatus_resolving_type;  break;
+    case ResolveStatus_type_resolved: decl->resolve_status = ResolveStatus_resolving_value; break;
+    default: Panic();
+    }
+    // clang-format on
 
-    if (resolve_status < ResolveStatus_type_resolved) {
+    Frame *frame = top_frame(&entry->state);
+
+    if (resolve_status == ResolveStatus_unresolved) {
       InstructionIndex block = decl->data.decl.block_type;
       u32 count = sir_chunk_data(chunk, block);
-
-      *scope = (ScopeSpan){
-        .scope_kind = Scope_comptime_block,
-        .start = block,
-        .end = block + count,
-        .pc = block + 1,
-      };
-    } else {
+      push_eval_scope(frame, block, count);
+    } else if (resolve_status == ResolveStatus_type_resolved) {
       InstructionIndex block = decl->data.decl.block_val;
       u32 count = sir_chunk_data(chunk, block);
-
-      *scope = (ScopeSpan){
-        .scope_kind = Scope_comptime_block,
-        .start = block,
-        .end = block + count,
-        .pc = block + 1,
-      };
+      push_eval_scope(frame, block, count);
+    } else {
+      Panic();
     }
   }
 
   u32 err = run_toplevel_block(resolver->in, &entry->state);
 
   if (err == Run_ok) {
-    if (resolve_status < ResolveStatus_type_resolved) {
+    u8 resolve_status = decl->resolve_status;
+
+    if (resolve_status == ResolveStatus_resolving_type) {
       decl->resolve_status = ResolveStatus_type_resolved;
-      CallFrame *f = top_frame(&entry->state);
+      Frame *f = top_frame(&entry->state);
 
       IRef ref = f->inst_map[decl->data.decl.block_type];
 
@@ -402,15 +399,17 @@ internal b32 resolve_entry(Resolver *resolver) {
       Assert(type != 0);
 
       decl->data.decl.type = type;
-    } else {
+    } else if (resolve_status == ResolveStatus_resolving_value) {
       decl->resolve_status = ResolveStatus_fully_resolved;
 
-      CallFrame *f = top_frame(&entry->state);
+      Frame *f = top_frame(&entry->state);
 
       IRef ref = f->inst_map[decl->data.decl.block_val];
       Assert(iref_is_some_value(ref));
 
       decl->data.decl.val = values_copy(resolver->in->values, iref_to_value(ref));
+    } else {
+      Panic();
     }
 
     return True;
@@ -421,7 +420,7 @@ internal b32 resolve_entry(Resolver *resolver) {
   }
 
   if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
-    CallFrame *f = top_frame(&entry->state);
+    Frame *f = top_frame(&entry->state);
     ScopeSpan *s = stack_peek_ptr(&f->scopes);
     DeclarationIndex idx = sir_chunk_data(f->chunk, s->pc);
 
@@ -433,7 +432,7 @@ internal b32 resolve_entry(Resolver *resolver) {
       min_required_resolve_status = ResolveStatus_type_resolved;
       break;
     case Run_resolve_declaration_value:
-      min_required_resolve_status = ResolveStatus_fully_resolved;
+      min_required_resolve_status = ResolveStatus_stub_value;
       break;
     default:
       Unreachable();
@@ -481,9 +480,29 @@ b32 resolve_declarations(Resolver *resolver) {
       u8 resolve_status = entry->decl->resolve_status;
 
       if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(
-          &resolver->resolve_stack
-        ); // TODO: free callstack of entry? yeah, sounds like a good idea
+        stack_pop_unchecked(&resolver->resolve_stack); // TODO: free callstack of entry? yeah, sounds like a good idea
+
+        continue;
+      }
+
+      if ((resolve_status == ResolveStatus_type_resolved || resolve_status == ResolveStatus_resolving_value)
+          && entry->min_required_resolve_status == ResolveStatus_stub_value)
+      {
+        Value *v;
+        ValueIndex idx = values_alloc(resolver->in->values, &v);
+        ValueDeclarationStub *stub = values_alloc_data_type(resolver->in->values, ValueDeclarationStub);
+        *stub = (ValueDeclarationStub){ .idx = entry->decl->idx };
+        *v = (Value){
+          .type = 0,
+          .data_size = sizeof(ValueDeclarationStub),
+          .data = stub,
+        };
+
+        entry->decl->data.decl.val = idx;
+        entry->decl->resolve_status = ResolveStatus_stub_value;
+
+        stack_pop_unchecked(&resolver->resolve_stack); // TODO: free callstack of entry? yeah, sounds like a good idea
+
         continue;
       }
 
@@ -516,6 +535,7 @@ b32 resolve_declarations(Resolver *resolver) {
       }
 
       b32 ok = resolve_entry(resolver);
+
       if (!ok) {
         clear_resolve_stack_with_error(resolver);
       }

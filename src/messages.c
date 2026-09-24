@@ -23,15 +23,16 @@ enum FormatSpecKind {
 };
 
 typedef struct {
-  u8     kind;
-  usize  start; // index of the '%' in the format string
-  usize  end;   // index just past the directive
+  u8    kind;
+  usize start; // index of the '%' in the format string
+  usize end;   // index just past the directive
 } FormatSpec;
 
 internal b32 starts_with_at(String s, usize pos, String prefix) {
   if (pos + prefix.len > s.len) {
     return False;
   }
+
   return memcmp(s.str + pos, prefix.str, prefix.len) == 0;
 }
 

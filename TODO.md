@@ -1,8 +1,11 @@
 # Currently doing
 
+- [ ] Declaration resolution rework
 
+## Other
+
+- [ ] Add `return` expression.
 - [ ] Reuse deallocated values! And add generation check.
-
 - [ ] SIR code generation can be moved to `Source`.
 
 ## Some things to keep in mind
@@ -61,7 +64,6 @@
 - [ ] `break`/`continue`
 - [ ] Add `return` expression.
 - [ ] `for` loop
-- [ ] `while` loop
 - [ ] `match` expression.
   - Can match on integer values.
   - Can match on enums.

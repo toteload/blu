@@ -49,8 +49,6 @@ typedef struct {
 typedef enum {
   ResolveStatus_error,
   ResolveStatus_unresolved,
-  ResolveStatus_resolving_type,
-  ResolveStatus_type_resolved,
   ResolveStatus_resolving_value,
   ResolveStatus_stub_value,
   ResolveStatus_fully_resolved,
@@ -81,12 +79,9 @@ struct Declaration {
       Source  *source;
       u32      tree_idx;
 
-      SIrChunk  chunk;
+      SIrChunk chunk;
 
-      InstructionIndex block_type;
-      TypeIndex type; // will be set after the type of the declaration has been resolved
-
-      InstructionIndex block_val;
+      TypeIndex type;
       ValueIndex val; // will be set after the declaration has been fully resolved
     } decl;
   } data;
@@ -120,6 +115,19 @@ struct Declaration {
 #include "segment_list.h"
 
 typedef struct {
+  IIrChunk chunk;
+} ResidualFunction;
+
+#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 4
+#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME          ResidualFunctionList
+#define SEGMENTLIST_TYPE          ResidualFunction
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
   Arena arena;
   Arena scratch;
 
@@ -137,6 +145,8 @@ typedef struct {
 
   DeclarationInterner decls;
   DeclIdxList         user_decls;
+
+  ResidualFunctionList functions;
 } Compiler;
 
 void compiler_init(Compiler *compiler, CLIOptions *options);

@@ -4,7 +4,7 @@
 
 extern Allocator const cstd_allocator;
 
-internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref);
+internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref);
 
 ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block) {
   for (u32 i = 0; i < count; i++) {
@@ -35,11 +35,11 @@ internal void pop_ir_builder(Specializer *in) { stack_pop(&in->builders); }
 
 internal IIrBuilder *get_builder(Specializer *in) { return stack_peek_ptr(&in->builders); }
 
-internal always_inline void store_inst_value(CallFrame *f, InstructionIndex idx, IRef val) {
+internal always_inline void store_inst_value(Frame *f, InstructionIndex idx, IRef val) {
   f->inst_map[idx] = val;
 }
 
-internal always_inline void store_inst_type(CallFrame *f, InstructionIndex idx, TypeIndex type) {
+internal always_inline void store_inst_type(Frame *f, InstructionIndex idx, TypeIndex type) {
   f->inst_types[idx] = type;
 }
 
@@ -51,7 +51,7 @@ internal IRef copy_if_value(Specializer *sp, IRef ref) {
   }
 }
 
-internal always_inline TypeIndex get_sref_type(Specializer *spec, CallFrame *f, SRef ref) {
+internal always_inline TypeIndex get_sref_type(Specializer *spec, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
     Value *v = values_get(spec->values, sref_to_value(ref));
     return v->type;
@@ -64,27 +64,77 @@ void runstate_init(RunState *state, Arena *arena) {
   state->requested_resolution = False;
   stack_init(
     &state->call_stack,
-    arena_push_array(CallFrame, arena, MAX_CALL_DEPTH),
+    arena_push_array(Frame, arena, MAX_CALL_DEPTH),
     MAX_CALL_DEPTH
   );
 }
 
-CallFrame *top_frame(RunState *state) { return stack_peek_ptr(&state->call_stack); }
+Frame *top_frame(RunState *state) { return stack_peek_ptr(&state->call_stack); }
 
-ScopeSpan *get_func_scope(CallFrame *frame) {
-  for (u32 i = frame->scopes.len; i-- > 0;) {
-    ScopeSpan *s = &frame->scopes.data[i];
-    if (s->scope_kind == Scope_func) {
-      return s;
-    }
-  }
-
-  Unreachable();
+ScopeSpan *get_func_scope(Frame *frame) {
+  EvalScope *s = stack_peek_ptr(&frame->eval_scopes);
+  return &frame->scopes.data[s->scope_top];
 }
 
-ScopeSpan *push_scope(CallFrame *frame) { return stack_push_ptr(&frame->scopes); }
+void push_eval_scope(Frame *frame, InstructionIndex start, u32 instruction_count) {
+  Assert(stack_is_empty(&frame->eval_scopes));
+  Assert(stack_is_empty(&frame->scopes));
 
-internal b32 end_residual_block(IIrBuilder *builder, CallFrame *f, ScopeSpan *block) {
+  stack_push(&frame->eval_scopes, ((EvalScope){
+    .comptime_depth = 0,
+    .scope_top = 0,
+  }));
+
+  push_scope(frame, Scope_comptime, start, instruction_count);
+}
+
+void push_function_scope(Frame *frame, InstructionIndex start, u32 param_count, u32 instruction_count) {
+  stack_push(&frame->eval_scopes, ((EvalScope){
+    .comptime_depth = 0,
+    .scope_top = frame->scopes.len,
+  }));
+
+  stack_push(&frame->scopes, ((ScopeSpan){
+    .scope_kind = Scope_block,
+    .start = start,
+    .end = start + instruction_count,
+    .pc = start + 1 + param_count,
+  }));
+}
+
+ScopeSpan *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count) {
+  ScopeSpan *span = stack_push_ptr(&frame->scopes);
+
+  if (kind == Scope_comptime) {
+    stack_peek_ptr(&frame->eval_scopes)->comptime_depth++;
+  }
+
+  *span = (ScopeSpan){
+    .scope_kind = kind,
+    .start = start,
+    .end = start + count,
+    .pc = start + 1,
+  };
+
+  return span;
+}
+
+ScopeSpan pop_scope(Frame *frame) {
+  ScopeSpan *top = stack_peek_ptr(&frame->scopes);
+  if (top->scope_kind == Scope_comptime) {
+    stack_peek_ptr(&frame->eval_scopes)->comptime_depth--;
+  }
+
+  ScopeSpan res = stack_pop(&frame->scopes);
+
+  if (frame->scopes.len == stack_peek_ptr(&frame->eval_scopes)->scope_top) {
+    stack_pop(&frame->eval_scopes);
+  }
+  
+  return res;
+}
+
+internal b32 end_residual_block(IIrBuilder *builder, Frame *f, ScopeSpan *block) {
   iir_builder_set_data(builder, block->residual, iir_builder_offset(builder, block->residual));
 
   if (block->breaks_and_returns.len == 0) {
@@ -107,7 +157,7 @@ internal b32 end_residual_block(IIrBuilder *builder, CallFrame *f, ScopeSpan *bl
   return True;
 }
 
-internal b32 finalize_function(Specializer *in, CallFrame *f, ScopeSpan *func) {
+internal b32 finalize_function(Specializer *in, Frame *f, ScopeSpan *func) {
   IIrBuilder *builder = get_builder(in);
 
   while (True) {
@@ -123,7 +173,7 @@ internal b32 finalize_function(Specializer *in, CallFrame *f, ScopeSpan *func) {
       }
     }
 
-    stack_pop(&f->scopes);
+    pop_scope(f);
   }
 
   Assert(func->breaks_and_returns.len > 0);
@@ -135,11 +185,11 @@ internal b32 finalize_function(Specializer *in, CallFrame *f, ScopeSpan *func) {
   return True;
 }
 
-CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
+Frame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
   SIrChunk *chunk = &decl->data.decl.chunk;
 
-  CallFrame *f = stack_push_ptr(&state->call_stack);
-  *f = (CallFrame){
+  Frame *f = stack_push_ptr(&state->call_stack);
+  *f = (Frame){
     .decl_idx = decl->idx,
     .chunk = chunk,
     .inst_map = arena_push_array(IRef, arena, chunk->opcode_count),
@@ -151,22 +201,16 @@ CallFrame *frame_push(RunState *state, Arena *arena, Declaration *decl) {
   memset(f->inst_types, 0, chunk->opcode_count * sizeof(TypeIndex));
 
   stack_init(&f->scopes, arena_push_array(ScopeSpan, arena, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
+  stack_init(&f->eval_scopes, arena_push_array(u32, arena, MAX_NESTED_FUNCTION_DEPTH), MAX_NESTED_FUNCTION_DEPTH);
 
-  stack_push(
-    &f->scopes,
-    ((ScopeSpan){
-      .scope_kind = Scope_chunk,
-      .start = 0,
-      .end = f->chunk->opcode_count,
-      .pc = 0,
-    })
-  );
+  //push_scope(f, Scope_comptime, 0, f->chunk->opcode_count);
+  //stack_push(&f->eval_scopes, ((EvalScope){ .comptime_depth = 1, .scope_top = 0 }));
 
   return f;
 }
 
 void frame_pop(RunState *state, Arena *arena, ValueStore *values) {
-  CallFrame f = stack_pop(&state->call_stack);
+  Frame f = stack_pop(&state->call_stack);
 
   ScopeSpan span = f.scopes.data[0];
   for (u32 i = span.start; i < span.end; i++) {
@@ -178,7 +222,7 @@ void frame_pop(RunState *state, Arena *arena, ValueStore *values) {
   arena_scope_end(arena, f.snapshot);
 }
 
-internal void dealloc_scope_values(Specializer *in, CallFrame *f, ScopeSpan span) {
+internal void dealloc_scope_values(Specializer *in, Frame *f, ScopeSpan span) {
   // Do not dealloc the value stored at the block address
   for (u32 i = span.start + 1; i < span.end; i++) {
     if (iref_is_some_value(f->inst_map[i])) {
@@ -188,9 +232,9 @@ internal void dealloc_scope_values(Specializer *in, CallFrame *f, ScopeSpan span
   }
 }
 
-internal void pop_scopes_to(Specializer *in, CallFrame *f, InstructionIndex idx) {
+internal void pop_scopes_to(Specializer *in, Frame *f, InstructionIndex idx) {
   while (True) {
-    ScopeSpan span = stack_pop(&f->scopes);
+    ScopeSpan span = pop_scope(f);
 
     if (span.start == idx) {
       dealloc_scope_values(in, f, span);
@@ -205,7 +249,7 @@ internal void pop_scopes_to(Specializer *in, CallFrame *f, InstructionIndex idx)
 // for that instruction in the current frame.
 // The returned IrRef can be either a value or an instruction index that maps to a residual
 // instruction.
-internal IRef resolve(CallFrame *f, SRef ref) {
+internal IRef resolve(Frame *f, SRef ref) {
   if (sref_is_value(ref)) {
     return (IRef){sref_to_u32(ref)};
   }
@@ -214,7 +258,7 @@ internal IRef resolve(CallFrame *f, SRef ref) {
 }
 
 internal InstructionIndex
-expect_residual_at_instruction_index(CallFrame *f, InstructionIndex inst) {
+expect_residual_at_instruction_index(Frame *f, InstructionIndex inst) {
   IRef res = f->inst_map[inst];
 
   Assert(iref_is_instruction(res));
@@ -222,7 +266,7 @@ expect_residual_at_instruction_index(CallFrame *f, InstructionIndex inst) {
   return iref_to_instruction(res);
 }
 
-internal void pop_finished_scopes(Specializer *in, CallFrame *f, InstructionIndex end) {
+internal void pop_finished_scopes(Specializer *in, Frame *f, InstructionIndex end) {
   IIrBuilder *builder = get_builder(in);
   ScopeSpan last;
 
@@ -255,14 +299,14 @@ internal void pop_finished_scopes(Specializer *in, CallFrame *f, InstructionInde
       };
     }
 
-    last = stack_pop(&f->scopes);
+    last = pop_scope(f);
   }
 
   dealloc_scope_values(in, f, last);
 }
 
 internal b32
-expect_comptime_value_or_nil(Specializer *in, CallFrame *f, SRef ref, ValueIndex *out) {
+expect_comptime_value_or_nil(Specializer *in, Frame *f, SRef ref, ValueIndex *out) {
   IRef x = resolve(f, ref);
 
   if (iref_is_value(x)) {
@@ -285,7 +329,7 @@ expect_comptime_value_or_nil(Specializer *in, CallFrame *f, SRef ref, ValueIndex
   return False;
 }
 
-internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref, ValueIndex *out) {
+internal b32 expect_some_comptime_value(Specializer *in, Frame *f, SRef ref, ValueIndex *out) {
   ValueIndex idx;
   b32 ok = expect_comptime_value_or_nil(in, f, ref, &idx);
   if (!ok) {
@@ -312,7 +356,7 @@ internal b32 expect_some_comptime_value(Specializer *in, CallFrame *f, SRef ref,
   return True;
 }
 
-internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex val, TypeIndex *out) {
+internal b32 _get_value_expect_type(Specializer *in, Frame *f, ValueIndex val, TypeIndex *out) {
   Value *v = values_get(in->values, val);
 
   if (v->type != in->common->type.type) {
@@ -335,7 +379,7 @@ internal b32 _get_value_expect_type(Specializer *in, CallFrame *f, ValueIndex va
   return True;
 }
 
-internal b32 expect_some_type_value(Specializer *in, CallFrame *f, SRef ref, TypeIndex *out) {
+internal b32 expect_some_type_value(Specializer *in, Frame *f, SRef ref, TypeIndex *out) {
   ValueIndex val;
   b32 ok = expect_some_comptime_value(in, f, ref, &val);
   if (!ok) {
@@ -357,7 +401,7 @@ internal b32 expect_some_type_value(Specializer *in, CallFrame *f, SRef ref, Typ
   return True;
 }
 
-internal b32 expect_type_value_or_nil(Specializer *in, CallFrame *f, SRef ref, TypeIndex *out) {
+internal b32 expect_type_value_or_nil(Specializer *in, Frame *f, SRef ref, TypeIndex *out) {
   ValueIndex val;
   b32 ok = expect_comptime_value_or_nil(in, f, ref, &val);
   if (!ok) {
@@ -405,7 +449,7 @@ internal ValueIndex val_from_usize(Specializer *in, usize x) {
   return res;
 }
 
-internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref) {
+internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
     Value *v = values_get(in->values, sref_to_value(ref));
     return v->type;
@@ -421,7 +465,7 @@ internal TypeIndex ref_typeof(Specializer *in, CallFrame *f, SRef ref) {
 }
 
 internal u32 step(Specializer *in, RunState *state) {
-  CallFrame *f = top_frame(state);
+  Frame *f = top_frame(state);
   ScopeSpan *s = stack_peek_ptr(&f->scopes);
 
   InstructionIndex pc = s->pc;
@@ -436,25 +480,18 @@ internal u32 step(Specializer *in, RunState *state) {
 
   case SIR_loop:
   case SIR_block: {
-    if (s->scope_kind == Scope_comptime_block) {
-      Todo();
-    }
-
     u32 inst_count = sir_chunk_data(f->chunk, pc);
 
-    IIrBuilder *builder = get_builder(in);
-    InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
+    ScopeSpan *scope = push_scope(f, Scope_block, pc, inst_count);
 
-    store_inst_value(f, pc, iref_from_instruction(inst));
+    if (!frame_is_comptime(f)) {
+      IIrBuilder *builder = get_builder(in);
+      InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
 
-    ScopeSpan *scope = push_scope(f);
-    *scope = (ScopeSpan){
-      .scope_kind = Scope_block,
-      .start = pc,
-      .end = pc + inst_count,
-      .pc = pc + 1,
-      .residual = inst,
-    };
+      store_inst_value(f, pc, iref_from_instruction(inst));
+
+      scope->residual = inst;
+    }
 
     s->pc += inst_count;
   } break;
@@ -489,50 +526,9 @@ internal u32 step(Specializer *in, RunState *state) {
       f->inst_types[pc + 1 + i] = param_type;
     }
 
-    stack_push(
-      &f->scopes,
-      ((ScopeSpan){
-        .scope_kind = Scope_func,
-        .start = pc,
-        .end = pc + inst_count,
-        .pc = pc + 1 + func->param_count,
-      })
-    );
+    push_function_scope(f, pc, func->param_count, inst_count);
 
     s->pc += inst_count;
-  } break;
-
-  case SIR_lookup_decl_type: {
-    DeclarationIndex decl_idx = sir_chunk_data(f->chunk, pc);
-    Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
-
-    if (!state->requested_resolution) {
-      if (decl->kind == Declaration_decl) {
-        state->requested_resolution = True;
-        return Step_resolve_declaration_type;
-      }
-
-      Todo();
-    }
-
-    TypeIndex type = 0;
-    switch (Cast(DeclarationKind, decl->kind)) {
-    case Declaration_primitive: { Todo(); } break;
-    case Declaration_decl: {
-      state->requested_resolution = False;
-      type = decl->data.decl.type;
-    } break;
-    case Declaration_mod:
-    case Declaration_root:
-      Panic();
-    }
-
-    if (type != 0) {
-      ValueIndex v = val_from_type(in, type);
-      store_inst_value(f, pc, iref_from_value(v));
-    }
-
-    s->pc += 1;
   } break;
 
   case SIR_lookup_decl_value: {
@@ -778,7 +774,7 @@ internal u32 step(Specializer *in, RunState *state) {
   case SIR_br: {
     SIrBr *br = sir_chunk_extra(f->chunk, pc);
 
-    if (s->scope_kind == Scope_comptime_block) {
+    if (frame_is_comptime(f)) {
       ValueIndex val;
       b32 ok = expect_comptime_value_or_nil(in, f, br->value, &val);
       if (!ok) {
@@ -1004,7 +1000,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
       store_inst_value(f, func_scope->start, iref_from_value(vidx));
 
-      stack_pop(&f->scopes);
+      pop_scope(f);
 
       return Step_leave_scope;
     }
@@ -1768,10 +1764,10 @@ internal u32 step(Specializer *in, RunState *state) {
 }
 
 u32 run_toplevel_block(Specializer *in, RunState *state) {
-  CallFrame *base_frame = state->call_stack.data;
+  Frame *base_frame = state->call_stack.data;
 
   while (True) {
-    CallFrame *f = top_frame(state);
+    Frame *f = top_frame(state);
 
     u32 err = step(in, state);
 
@@ -1780,8 +1776,8 @@ u32 run_toplevel_block(Specializer *in, RunState *state) {
     }
 
     if (err == Step_leave_scope) {
-      u32 scope_depth = f->scopes.len;
-      if (f == base_frame && scope_depth == 1) {
+      u32 eval_depth = f->eval_scopes.len;
+      if (f == base_frame && eval_depth == 0) {
         return Run_ok;
       }
 
