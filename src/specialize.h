@@ -24,7 +24,7 @@ typedef struct {
   InstructionIndex end;
   InstructionIndex pc;
 
-  InstructionIndex residual; // if scope_kind == Scope_block then this is the block in residual code
+  InstructionIndex residual; // if scope_kind == Scope_block then this refers to the block in residual code
   InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
 
   struct {
@@ -67,6 +67,7 @@ typedef Stack(Frame) CallStack;
 
 typedef struct {
   b8 requested_resolution;
+  Stack(IIrBuilder) builders;
   CallStack call_stack;
 } RunState;
 
@@ -86,8 +87,6 @@ typedef struct {
   TypeInterner        *types;
   ValueStore          *values;
   Common              *common;
-
-  Stack(IIrBuilder) builders;
 } Specializer;
 
 typedef enum {
