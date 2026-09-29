@@ -102,8 +102,6 @@ typedef enum {
   SIR_builtin_len,    // contains SRef to an array or slice
   SIR_comptime_block,    // contains instruction count of block
   SIR_get_decl_value, // contains DeclarationIndex
-  SIR_set_decl_value, // 
-  SIR_update_decl_type, // 
   SIR_comptime_alloc,    // contains SRef to a type
   SIR_as,                // references SIrAs
   SIR_cast,           // references SIrCast
@@ -116,7 +114,7 @@ typedef enum {
 } SIrOpcode;
 // clang-format on
 
-// A SOP_func instruction is followed by `param_count` SOP_param instructions.
+// A SIR_func instruction is followed by `param_count` SIR_param instructions.
 typedef struct {
   u32 param_count;
   u32 instruction_count;
@@ -154,7 +152,7 @@ typedef struct {
 } SIrUnify;
 
 typedef struct {
-  SRef type_to;
+  SRef type_dst;
   SRef val;
 } SIrAs;
 

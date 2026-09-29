@@ -3,6 +3,7 @@
 #include "string_interner.h"
 #include "codegen.h"
 #include "specialize.h"
+#include "resolver.h"
 #include "interpret.h"
 #include "ir.h"
 #include "print.h"
@@ -27,29 +28,14 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define XXH_INLINE_ALL
-#include "xxhash.h"
-
-internal u32 hash_decl_key(void *context, DeclarationKey key) {
-  Unused(context);
-  return XXH32(&key, sizeof(DeclarationKey), 0);
-}
-
-internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
-  Unused(context);
-  return a.parent == b.parent && a.name == b.name;
-}
-
-#define INTERNER_NAME DeclarationInterner
-#define INTERNER_TYPE DeclarationKey
-#define INTERNER_INDEX_TYPE DeclarationIndex
-#define INTERNER_EXTRA_TYPE Declaration
-#define INTERNER_RESERVE_ZERO_INDEX
-#define INTERNER_FUNCTION_PREFIX decls
-#define INTERNER_HASH_FN hash_decl_key
-#define INTERNER_COMPARE_FN cmp_decl_key
-#define INTERNER_OUTPUT_DEFINITIONS
-#include "interner.h"
+#define SEGMENTLIST_NAME          ResidualFunctionList
+#define SEGMENTLIST_TYPE          ResidualFunction
+#define SEGMENTLIST_FUNCTION_PREFIX functions
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
 
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
@@ -141,6 +127,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   // Reserve 0 index to be nil value
   sources_push(&compiler->sources, &compiler->arena);
+  functions_push(&compiler->functions, &compiler->arena);
 
   strings_init(
     &compiler->strings,
@@ -258,6 +245,17 @@ Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
   return sources_ptr_at_unchecked(&compiler->sources, source_idx);
 }
 
+ResidualFunctionKey compiler_alloc_function(Compiler *compiler) {
+  u32 i = compiler->functions.len;
+  ResidualFunction *f = functions_push(&compiler->functions, &compiler->arena);
+  zero_struct(ResidualFunction, f);
+  return i;
+}
+
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key) {
+  return functions_ptr_at_unchecked(&compiler->functions, key);
+}
+
 void compiler_print_all_messages(Compiler *compiler) {
   for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
@@ -304,221 +302,6 @@ b32 lookup_identifier(
   }
 
   return False;
-}
-
-// -------------------------------------------------------------------------------------------------
-
-internal void
-push_resolve_entry(Resolver *resolver, Declaration *decl, u8 min_required_resolve_status) {
-  ResolveEntry *entry = stack_push_ptr_unchecked(&resolver->resolve_stack);
-
-  entry->decl = decl;
-  entry->min_required_resolve_status = min_required_resolve_status;
-
-  runstate_init(&entry->state, resolver->scratch);
-
-  frame_push(&entry->state, resolver->scratch, decl);
-}
-
-internal b32 resolve_entry(Resolver *resolver) {
-  ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-  Declaration *decl = entry->decl;
-  SIrChunk *chunk = &decl->data.decl.chunk;
-
-  if (!entry->state.requested_resolution) {
-    u8 resolve_status = decl->resolve_status;
-
-    // clang-format off
-    switch (Cast(ResolveStatus, resolve_status)) {
-    case ResolveStatus_unresolved:    decl->resolve_status = ResolveStatus_resolving_type;  break;
-    case ResolveStatus_type_resolved: decl->resolve_status = ResolveStatus_resolving_value; break;
-    default: Panic();
-    }
-    // clang-format on
-
-    Frame *frame = top_frame(&entry->state);
-
-    if (resolve_status == ResolveStatus_unresolved) {
-      InstructionIndex block = decl->data.decl.block_type;
-      u32 count = sir_chunk_data(chunk, block);
-      push_eval_scope(frame, block, count);
-    } else if (resolve_status == ResolveStatus_type_resolved) {
-      InstructionIndex block = decl->data.decl.block_val;
-      u32 count = sir_chunk_data(chunk, block);
-      push_eval_scope(frame, block, count);
-    } else {
-      Panic();
-    }
-  }
-
-  u32 err = run_toplevel_block(resolver->in, &entry->state);
-
-  if (err == Run_ok) {
-    u8 resolve_status = decl->resolve_status;
-
-    if (resolve_status == ResolveStatus_resolving_type) {
-      decl->resolve_status = ResolveStatus_type_resolved;
-      Frame *f = top_frame(&entry->state);
-
-      IRef ref = f->inst_map[decl->data.decl.block_type];
-
-      if (iref_is_nil(ref)) {
-        return True;
-      }
-
-      Value *v = values_get(resolver->in->values, iref_to_value(ref));
-
-      Assert(v->type == resolver->in->common->type.type);
-
-      TypeIndex type = *Cast(TypeIndex*,v->data);
-
-      Assert(type != 0);
-
-      decl->data.decl.type = type;
-    } else if (resolve_status == ResolveStatus_resolving_value) {
-      decl->resolve_status = ResolveStatus_fully_resolved;
-
-      Frame *f = top_frame(&entry->state);
-
-      IRef ref = f->inst_map[decl->data.decl.block_val];
-      Assert(iref_is_some_value(ref));
-
-      decl->data.decl.val = values_copy(resolver->in->values, iref_to_value(ref));
-    } else {
-      Panic();
-    }
-
-    return True;
-  }
-
-  if (err == Run_error) {
-    return False;
-  }
-
-  if (err == Run_resolve_declaration_type || err == Run_resolve_declaration_value) {
-    Frame *f = top_frame(&entry->state);
-    ScopeSpan *s = stack_peek_ptr(&f->scopes);
-    DeclarationIndex idx = sir_chunk_data(f->chunk, s->pc);
-
-    Declaration *decl_to_resolve = decls_extra_get_ptr(resolver->decls, idx);
-
-    u8 min_required_resolve_status;
-    switch (err) {
-    case Run_resolve_declaration_type:
-      min_required_resolve_status = ResolveStatus_type_resolved;
-      break;
-    case Run_resolve_declaration_value:
-      min_required_resolve_status = ResolveStatus_stub_value;
-      break;
-    default:
-      Unreachable();
-    }
-
-    push_resolve_entry(resolver, decl_to_resolve, min_required_resolve_status);
-
-    return True;
-  }
-
-  Unreachable();
-}
-
-internal void clear_resolve_stack_with_error(Resolver *resolver) {
-  resolver->ok = False;
-
-  while (!stack_is_empty(&resolver->resolve_stack)) {
-    ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-    entry->decl->resolve_status = ResolveStatus_error;
-    stack_pop_unchecked(&resolver->resolve_stack);
-  }
-}
-
-b32 resolve_declarations(Resolver *resolver) {
-  for (u32 i = 0; i < resolver->user_declaration_count; i++) {
-    {
-      Declaration *decl = resolver->user_declarations[i];
-
-      u8 resolve_status = decl->resolve_status;
-
-      if (resolve_status == ResolveStatus_fully_resolved || resolve_status == ResolveStatus_error) {
-        continue;
-      }
-
-      Assert(
-        resolve_status == ResolveStatus_unresolved || resolve_status == ResolveStatus_type_resolved
-      );
-
-      push_resolve_entry(resolver, decl, ResolveStatus_fully_resolved);
-    }
-
-    while (!stack_is_empty(&resolver->resolve_stack)) {
-      ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-
-      u8 resolve_status = entry->decl->resolve_status;
-
-      if (resolve_status >= entry->min_required_resolve_status) {
-        stack_pop_unchecked(&resolver->resolve_stack); // TODO: free callstack of entry? yeah, sounds like a good idea
-
-        continue;
-      }
-
-      if ((resolve_status == ResolveStatus_type_resolved || resolve_status == ResolveStatus_resolving_value)
-          && entry->min_required_resolve_status == ResolveStatus_stub_value)
-      {
-        Value *v;
-        ValueIndex idx = values_alloc(resolver->in->values, &v);
-        ValueDeclarationStub *stub = values_alloc_data_type(resolver->in->values, ValueDeclarationStub);
-        *stub = (ValueDeclarationStub){ .idx = entry->decl->idx };
-        *v = (Value){
-          .type = 0,
-          .data_size = sizeof(ValueDeclarationStub),
-          .data = stub,
-        };
-
-        entry->decl->data.decl.val = idx;
-        entry->decl->resolve_status = ResolveStatus_stub_value;
-
-        stack_pop_unchecked(&resolver->resolve_stack); // TODO: free callstack of entry? yeah, sounds like a good idea
-
-        continue;
-      }
-
-      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_type) {
-        Message_error(
-          resolver->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_unspecified,
-            .decl_idx = entry->decl->idx,
-          },
-          string_lit("Encountered circular declaration")
-        );
-
-        clear_resolve_stack_with_error(resolver);
-        break;
-      }
-
-      if (!entry->state.requested_resolution && resolve_status == ResolveStatus_resolving_value) {
-        Message_error(
-          resolver->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_unspecified,
-            .decl_idx = entry->decl->idx,
-          },
-          string_lit("Encountered circular declaration")
-        );
-
-        clear_resolve_stack_with_error(resolver);
-        break;
-      }
-
-      b32 ok = resolve_entry(resolver);
-
-      if (!ok) {
-        clear_resolve_stack_with_error(resolver);
-      }
-    }
-  }
-
-  return resolver->ok;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -723,33 +506,19 @@ b32 compile(Compiler *compiler) {
   }
 
   {
-    Specializer specializer = {
+    ResolveContext resolve_context = {
       .perm = &compiler->arena,
       .scratch = &compiler->scratch,
       .msg_sink = &compiler->msg_sink,
-      .declarations = &compiler->decls,
+      .decls = &compiler->decls,
       .types = &compiler->types,
       .values = &compiler->values,
       .common = &compiler->common,
+      .decls_to_resolve_count = compiler->user_decls.len,
+      .decls_to_resolve = user_decls,
     };
 
-    IIrBuilder *builders = arena_push_array(IIrBuilder, &compiler->scratch, MAX_BUILDERS);
-    stack_init(&specializer.builders, builders, MAX_BUILDERS);
-
-    Resolver resolver = {
-      .ok = True,
-      .scratch = &compiler->scratch,
-      .user_declaration_count = compiler->user_decls.len,
-      .user_declarations = user_decls,
-      .decls = &compiler->decls,
-      .in = &specializer,
-      .msg_sink = &compiler->msg_sink,
-    };
-
-    ResolveEntry *entries = arena_push_array(ResolveEntry, &compiler->scratch, MAX_RESOLVE_DEPTH);
-    stack_init(&resolver.resolve_stack, entries, MAX_RESOLVE_DEPTH);
-
-    b32 ok = resolve_declarations(&resolver);
+    b32 ok = resolve_declarations(&resolve_context);
 
     if (!ok) {
       return False;
@@ -822,7 +591,7 @@ b32 run_main(Compiler *compiler) {
   // TODO: make sure main has the correct type
 
   Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-  IIrChunk *chunk = &Cast(ValueFunc *, v->data)->chunk;
+  IIrChunk *chunk = &compiler_get_function(compiler, Cast(ValueFunc *, v->data)->function)->chunk;
 
   Interpreter in = {
     .scratch = &compiler->scratch,

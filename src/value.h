@@ -17,17 +17,13 @@ typedef struct {
 } ValueSlice;
 
 typedef struct {
-  IIrChunk chunk;
+  ResidualFunctionKey function;
 } ValueFunc;
 
 typedef struct {
   ValueIndex val;
   u32 offset;
 } ValuePointer;
-
-typedef struct {
-  DeclarationIndex idx;
-} ValueDeclarationStub;
 
 // -----------------------------------------------------------------------------
 

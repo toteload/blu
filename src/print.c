@@ -107,7 +107,7 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
   } break;
   case Type_function: {
     if (flags & PrintFlag_expand_function) {
-      ValueFunc *func = data;
+      ResidualFunction *func = compiler_get_function(compiler, Cast(ValueFunc*, data)->function);
       fprintf(out, "0x%p\n", data);
       print_iir_chunk(out, compiler, &func->chunk);
     } else {
@@ -362,15 +362,14 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       }
     } break;
 
-    case SIR_lookup_decl_type:
-    case SIR_lookup_decl_value: {
+    case SIR_get_decl_value: {
       fprintf(out, "decl=%u", data);
     } break;
 
     case SIR_as:
     case SIR_cast: {
       SIrAs *as = extra;
-      print_sref(out, compiler, as->type_to);
+      print_sref(out, compiler, as->type_dst);
       fputs(" ", out);
       print_sref(out, compiler, as->val);
     } break;

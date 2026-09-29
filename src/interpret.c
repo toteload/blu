@@ -153,8 +153,7 @@ internal u32 step(Interpreter *in) {
   case IIR_call: {
     IIrCall *call = iir_chunk_extra(f->chunk, pc);
     ValueFunc *func = resolve(in, f, call->func_ptr);
-
-    IIrChunk *chunk = &func->chunk;
+    IIrChunk *chunk = &compiler_get_function(in->compiler, func->function)->chunk;
 
     CallFrame2 *g = frame_push(in, chunk, f->inst_values[pc]);
 

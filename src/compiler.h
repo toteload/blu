@@ -7,94 +7,7 @@
 #include "value.h"
 #include "ir.h"
 #include "cli_options.h"
-
-typedef struct {
-  struct {
-    TypeIndex comptime_int;
-    TypeIndex type;
-    TypeIndex nil;
-    TypeIndex bool;
-    TypeIndex never;
-    TypeIndex u8;
-    TypeIndex i8;
-    TypeIndex i16;
-    TypeIndex i32;
-    TypeIndex i64;
-    TypeIndex usize;
-  } type;
-
-  struct {
-    ValueIndex type;
-    ValueIndex nil;
-    ValueIndex bool;
-    ValueIndex never;
-    ValueIndex i8;
-    ValueIndex i16;
-    ValueIndex i32;
-    ValueIndex i64;
-    ValueIndex u8;
-    ValueIndex comptime_int;
-    ValueIndex usize;
-
-    ValueIndex true;
-    ValueIndex false;
-  } val;
-} Common;
-
-typedef struct {
-  DeclarationIndex parent;
-  StringIndex      name;
-} DeclarationKey;
-
-typedef enum {
-  ResolveStatus_error,
-  ResolveStatus_unresolved,
-  ResolveStatus_resolving_value,
-  ResolveStatus_stub_value,
-  ResolveStatus_fully_resolved,
-} ResolveStatus;
-
-typedef enum {
-  Declaration_root,
-  Declaration_primitive,
-  Declaration_mod,
-  Declaration_decl,
-} DeclarationKind;
-
-struct Declaration {
-  DeclarationIndex idx;
-
-  u8 kind;
-  u8 resolve_status;
-
-  union {
-    ValueIndex primitive;
-
-    struct {
-      Source *source;
-      u32     tree_idx;
-    } mod;
-
-    struct {
-      Source  *source;
-      u32      tree_idx;
-
-      SIrChunk chunk;
-
-      TypeIndex type;
-      ValueIndex val; // will be set after the declaration has been fully resolved
-    } decl;
-  } data;
-};
-
-#define INTERNER_NAME       DeclarationInterner
-#define INTERNER_TYPE       DeclarationKey
-#define INTERNER_INDEX_TYPE DeclarationIndex
-#define INTERNER_EXTRA_TYPE Declaration
-#define INTERNER_FUNCTION_PREFIX decls
-#define INTERNER_OUTPUT_TYPES
-#define INTERNER_OUTPUT_DECLARATIONS
-#include "interner.h"
+#include "declaration_interner.h"
 
 #define SOURCELIST_MIN_SIZE_LOG2  4
 #define SOURCELIST_SEGMENT_COUNT  20
@@ -114,8 +27,20 @@ struct Declaration {
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+typedef enum {
+  ResidualFunctionStatus_nil,
+  ResidualFunctionStatus_building,
+  ResidualFunctionStatus_finished,
+} ResidualFunctionStatus;
+
 typedef struct {
+  u8 status;
+
+  IIrBuilder builder;
   IIrChunk chunk;
+
+  Declaration *decl;
+  InstructionIndex instruction;
 } ResidualFunction;
 
 #define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 4
@@ -154,6 +79,9 @@ void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
 Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx);
+
+ResidualFunctionKey compiler_alloc_function(Compiler *compiler);
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey function);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 

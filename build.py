@@ -126,6 +126,8 @@ def create_build_ninja():
         'ir.c',
         'print.c',
         'util.c',
+        'resolver.c',
+        'declaration_interner.c',
     ]
 
     outputs = []

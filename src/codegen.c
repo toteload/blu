@@ -160,7 +160,7 @@ internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
     gen->has_error = True;
   }
 
-  InstructionIndex inst = sir_builder_add(&gen->builder, SIR_lookup_decl_value, gen->source->idx, ast_idx);
+  InstructionIndex inst = sir_builder_add(&gen->builder, SIR_get_decl_value, gen->source->idx, ast_idx);
   sir_builder_set_data(&gen->builder, inst, decl);
 
   return (LookupEntry){ .kind = Lookup_decl, .inst = inst };
@@ -1084,13 +1084,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 }
 
 b32 generate_code(CodeGenContext *context, Declaration *decl) {
-  // NOTE: It is possible to output dependencies on other declarations for the pieces of code.
-  // However, these dependencies may contain false positives, because whether another declaration is
-  // actually used can depend on running a piece of comptime code.
-  // For example, `a := if buzz() { foo() } else { bar() }`.
-  // Whether `a` will use foo or bar depends on buzz(). But we can output both foo and bar and
-  // accept that one of them will be a false positive. This may still be useful in sorting jobs.
-
   Source *source = decl->data.decl.source;
 
   CodeGen gen;
@@ -1102,39 +1095,34 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   Assert(gen.source->ast.kinds[ast_idx_decl] == Ast_declaration);
 
   SIrBuilder *builder = &gen.builder;
+  InstructionIndex block_decl = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
 
-  InstructionIndex block_decl_type;
+  SRef decl_type;
   {
-    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
+    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_decl->type);
 
     SRef ref_decl_type = (SRef){0};
     if (ast_decl->type) {
       ref_decl_type = gen_code(&gen, ast_decl->type, sref_from_value(gen.common->val.type));
     }
 
-    sir_builder_end_block_with(builder, block, block, ref_decl_type, source->idx, ast_idx_decl);
-
-    block_decl_type = block;
+    sir_builder_end_block_with(builder, block, block, ref_decl_type, source->idx, ast_decl->type);
+    decl_type = sref_from_instruction(block);
   }
-
-  InstructionIndex block_decl_val;
+  
+  SRef decl_val;
   {
-    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
+    InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_decl->value);
 
-    InstructionIndex decl_type = sir_builder_add(builder, SIR_lookup_decl_type, source->idx, ast_idx_decl);
-    sir_builder_set_data(builder, decl_type, decl->idx);
-
-    SRef ref_decl_val = gen_code(&gen, ast_decl->value, sref_from_instruction(decl_type));
+    SRef ref_decl_val = gen_code(&gen, ast_decl->value, decl_type);
 
     sir_builder_end_block_with(builder, block, block, ref_decl_val, source->idx, ast_idx_decl);
-
-    block_decl_val = block;
+    decl_val = sref_from_instruction(block);
   }
 
-  sir_builder_flatten(builder, context->perm, &decl->data.decl.chunk);
+  sir_builder_end_block_with(builder, block_decl, block_decl, decl_val, source->idx, ast_idx_decl);
 
-  decl->data.decl.block_type = block_decl_type;
-  decl->data.decl.block_val = block_decl_val;
+  sir_builder_flatten(builder, context->perm, &decl->data.decl.chunk);
 
   codegen_deinit(&gen);
 
