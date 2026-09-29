@@ -54,7 +54,7 @@ SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, So
 
   SIrAs *data = sir_builder_push_data(builder, idx, SIrAs);
   *data = (SIrAs){
-    .type_to = type_destination,
+    .type_dst = type_destination,
     .val = val,
   };
 
