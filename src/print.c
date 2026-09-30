@@ -109,7 +109,7 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
     if (flags & PrintFlag_expand_function) {
       ResidualFunction *func = compiler_get_function(compiler, Cast(ValueFunc*, data)->function);
       fprintf(out, "0x%p\n", data);
-      print_iir_chunk(out, compiler, &func->chunk);
+      print_iir_chunk(out, compiler, &func->data.chunk);
     } else {
       fprintf(out, "0x%p", data);
     }

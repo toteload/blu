@@ -31,6 +31,7 @@ def add_test_suite(out):
         'messages.test.c',
         'eval.test.c',
         'symbol_map.test.c',
+        'queue.test.c',
     ]
 
     outputs = []
