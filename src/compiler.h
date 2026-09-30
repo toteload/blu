@@ -28,6 +28,7 @@
 #include "segment_list.h"
 
 typedef enum {
+  ResidualFunctionStatus_error,
   ResidualFunctionStatus_nil,
   ResidualFunctionStatus_building,
   ResidualFunctionStatus_finished,
@@ -36,8 +37,10 @@ typedef enum {
 typedef struct {
   u8 status;
 
-  IIrBuilder builder;
-  IIrChunk chunk;
+  union {
+    IIrBuilder builder;
+    IIrChunk chunk;
+  } data;
 
   Declaration *decl;
   InstructionIndex instruction;

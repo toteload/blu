@@ -30,6 +30,7 @@ def add_test_suite(out):
         'parse.test.c',
         'messages.test.c',
         'eval.test.c',
+        'queue.test.c',
     ]
 
     outputs = []

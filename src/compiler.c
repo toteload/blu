@@ -591,7 +591,7 @@ b32 run_main(Compiler *compiler) {
   // TODO: make sure main has the correct type
 
   Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-  IIrChunk *chunk = &compiler_get_function(compiler, Cast(ValueFunc *, v->data)->function)->chunk;
+  IIrChunk *chunk = &compiler_get_function(compiler, Cast(ValueFunc *, v->data)->function)->data.chunk;
 
   Interpreter in = {
     .scratch = &compiler->scratch,

@@ -142,7 +142,7 @@ internal b32 end_residual_block(IIrBuilder *builder, Frame *f, ScopeSpan *block)
 }
 
 internal b32 finalize_function(Specializer *in, SpecializerState *state, ScopeSpan *func) {
-  IIrBuilder *builder = &state->function->builder;
+  IIrBuilder *builder = &state->function->data.builder;
   Frame *f = &state->frame;
 
   while (True) {
@@ -215,7 +215,7 @@ expect_residual_at_instruction_index(Frame *f, InstructionIndex inst) {
 }
 
 internal void pop_finished_scopes(Specializer *in, SpecializerState *state, InstructionIndex end) {
-  IIrBuilder *builder = (state->function) ? &state->function->builder : Null;
+  IIrBuilder *builder = (state->function) ? &state->function->data.builder : Null;
   Frame *f = &state->frame;
 
   ScopeSpan last;
@@ -421,7 +421,7 @@ internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref) {
 
 internal u32 step(Specializer *in, SpecializerState *state) {
   Frame *f = &state->frame;
-  IIrBuilder *builder = (state->function) ? &state->function->builder : Null;
+  IIrBuilder *builder = (state->function) ? &state->function->data.builder : Null;
 
   ScopeSpan *s = stack_peek_ptr(&f->scopes);
 

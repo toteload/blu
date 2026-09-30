@@ -4,6 +4,12 @@
 
 #define MAX_RESOLVE_DEPTH 64
 
+#define QUEUE_NAME FunctionQueue
+#define QUEUE_TYPE ResidualFunctionKey
+#define QUEUE_MIN_SIZE_LOG2 4
+#define QUEUE_OUTPUT_TYPES
+#include "queue.h"
+
 typedef struct {
   SpecializerState state;
   ArenaSnapshot snapshot;
@@ -13,6 +19,7 @@ typedef struct {
   b32 ok;
   Specializer sp;
   Stack(ResolveEntry) resolve_stack;
+  FunctionQueue function_queue;
 } Resolver;
 
 internal void push_resolve_entry(Resolver *resolver, Declaration *decl) {
