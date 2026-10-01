@@ -4,9 +4,16 @@
 #include "blu.h"
 #include "compiler.h"
 
-// For simplicity the maximum depths are a fixed number. This will likely change.
-#define MAX_SCOPE_DEPTH 128
-#define MAX_BREAKS_AND_RETURNS 64
+#define BREAK_RETURN_LIST_MIN_SIZE_LOG_2 4
+#define BREAK_RETURN_LIST_SEGMENT_COUNT  12
+#define BREAK_RETURN_LIST_NAME BreakReturnList
+#define BREAK_RETURN_LIST_TYPE InstructionIndex
+#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#include "segment_list.h"
 
 typedef enum {
   Scope_block,
@@ -23,14 +30,22 @@ typedef struct {
   InstructionIndex residual; // if scope_kind == Scope_block then this refers to the block in residual code
   InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
 
-  struct {
-    u32 len;
-    InstructionIndex sources[MAX_BREAKS_AND_RETURNS];
-  } breaks_and_returns;
-} ScopeSpan;
+  BreakReturnList breaks_and_returns;
+} Scope;
 
-ScopeSpan *find_scope(ScopeSpan *spans, u32 count, InstructionIndex start_of_block);
-void scope_add_break_or_return(ScopeSpan *scope, InstructionIndex source);
+#define SCOPE_STACK_MIN_SIZE_LOG_2 4
+#define SCOPE_STACK_SEGMENT_COUNT  12
+#define SCOPE_STACK_NAME ScopeStack
+#define SCOPE_STACK_TYPE Scope
+#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#include "segment_list.h"
+
+Scope *find_scope(Scope *spans, u32 count, InstructionIndex start_of_block);
+void scope_add_break_or_return(Scope *scope, InstructionIndex source);
 
 typedef struct {
   SIrChunk *chunk;
@@ -39,13 +54,13 @@ typedef struct {
   TypeIndex *inst_types;
 
   u32 comptime_depth;
-  Stack(ScopeSpan) scopes;
+  ScopeStack scopes;
 } Frame;
 
 always_inline b32 frame_is_comptime(Frame *frame) { return frame->comptime_depth > 0; }
 
-ScopeSpan *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count);
-ScopeSpan pop_scope(Frame *frame);
+Scope *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count);
+Scope  pop_scope(Frame *frame);
 
 typedef struct {
   b8 requested_resolution;
@@ -75,7 +90,7 @@ typedef enum {
   Step_ok,
   Step_error,
   Step_resolve_declaration_value,
-  Step_resolve_function_body,
+  Step_register_function,
   Step_leave_scope,
 } StepResult;
 
@@ -86,8 +101,21 @@ typedef enum {
   // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
   // which needs to be resolved.
   Run_resolve_declaration_value = Step_resolve_declaration_value,
+  Run_register_function = Step_register_function,
+} RunResultCode;
+
+typedef struct {
+  u32 code;
+
+  // - decl is set if code is Run_resolve_declaration_value.
+  // - val is set and refering to an unresolved function if code is Run_register_function_body
+  // - val is set and refering to a complete value if code is Run_ok
+  union {
+    DeclarationIndex decl;
+    ValueIndex val;
+  } data;
 } RunResult;
 
-u32 run_toplevel_block(Specializer *in, SpecializerState *state);
+RunResult run_toplevel_block(Specializer *in, SpecializerState *state);
 
 #endif // SPECIALIZE_H

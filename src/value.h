@@ -11,19 +11,38 @@ typedef struct {
   void      *data;
 } Value;
 
+typedef enum {
+  ResidualFunctionStatus_nil,
+  ResidualFunctionStatus_building,
+  ResidualFunctionStatus_finished,
+  ResidualFunctionStatus_error,
+} ResidualFunctionStatus;
+
+typedef struct {
+  u8 status;
+
+  union {
+    IIrBuilder builder;
+    IIrChunk chunk;
+  } data;
+
+  DeclarationIndex decl;
+  InstructionIndex instruction;
+} ValueResidualFunction;
+
 typedef struct {
   usize  len;
   void  *data;
 } ValueSlice;
 
 typedef struct {
-  ResidualFunctionKey function;
-} ValueFunc;
-
-typedef struct {
   ValueIndex val;
   u32 offset;
 } ValuePointer;
+
+typedef struct {
+  DeclarationIndex idx;
+} ValueDeclarationStub;
 
 // -----------------------------------------------------------------------------
 

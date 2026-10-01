@@ -154,7 +154,6 @@ Remaining steps:
 - [ ] Specializer: implement `specializer_state_init_function` (function scope over the `SIR_func` range, captures available)
 - [ ] Resolver: allow function-body entries on the resolve stack, with cycle detection for both kinds
 - [ ] Resolver: after the declaration loop, specialize remaining bodies from `Compiler.functions`
-- [ ] Codegen: `capture_count` + capture list on `SIrFunc`, `SIR_capture i` for captured reads, captures propagated through nested functions
 - [ ] Reject captures of runtime values, and of values containing pointers or slices
 - [ ] Change `ValueSlice` to `{ val, offset, len }`
 - [ ] Check that each declaration's type is fully defined once it's resolved
