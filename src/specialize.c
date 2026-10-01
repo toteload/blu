@@ -462,7 +462,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
 
       Todo(); // Allocate residual function and set data for it.
 
-      return Step_resolve_function_body;
+      return Step_register_function_body;
     }
 
   } break;

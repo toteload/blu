@@ -27,29 +27,10 @@
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
-typedef enum {
-  ResidualFunctionStatus_error,
-  ResidualFunctionStatus_nil,
-  ResidualFunctionStatus_building,
-  ResidualFunctionStatus_finished,
-} ResidualFunctionStatus;
-
-typedef struct {
-  u8 status;
-
-  union {
-    IIrBuilder builder;
-    IIrChunk chunk;
-  } data;
-
-  Declaration *decl;
-  InstructionIndex instruction;
-} ResidualFunction;
-
-#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 4
-#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 20
+#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 8
+#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_NAME          ResidualFunctionList
-#define SEGMENTLIST_TYPE          ResidualFunction
+#define SEGMENTLIST_TYPE          ValueIndex
 #define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
@@ -83,14 +64,12 @@ void compiler_deinit(Compiler *compiler);
 void compiler_add_sourcefile(Compiler *compiler, String filename);
 Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx);
 
-ResidualFunctionKey compiler_alloc_function(Compiler *compiler);
-ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey function);
-
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 
 void compiler_print_all_messages(Compiler *compiler);
 
 b32 compile(Compiler *compiler);
+
 b32 run_main(Compiler *compiler);
 
 #endif // COMPILER_H
