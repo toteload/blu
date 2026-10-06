@@ -35,6 +35,7 @@ internal b32 cmp_type(void *context, Type *a, Type *b) {
   }
 
   switch (Cast(TypeKind, a->kind)) {
+  case Type_stub:
   case Type_nil:
   case Type_never:
   case Type_bool:
@@ -88,6 +89,7 @@ internal u32 push_type_data(Arena *arena, Type *x) {
   Push_data(x->kind);
 
   switch (Cast(TypeKind, x->kind)) {
+  case Type_stub:
   case Type_nil:
   case Type_never:
   case Type_bool:
@@ -137,6 +139,7 @@ internal u32 hash_type(void *context, Type *x) {
 
 u32 type_intern_byte_size(Type *type) {
   switch (Cast(TypeKind, type->kind)) {
+  case Type_stub:
   case Type_comptime_int:
   case Type_integer:
   case Type_bool:
@@ -163,6 +166,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
 
   switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int: Unreachable();
+  case Type_stub: Unreachable();
   case Type_bool:
     return (TypeSizeInfo){ .size = 1, .align = 1, .stride = 1 };
   case Type_nil:
@@ -195,7 +199,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   }
   case Type_function: {
     // A variable holding a function is stored as an 8-byte pointer to the actual code of the function.
-    return (TypeSizeInfo){ .size = sizeof(ValueFunc), .align = Align_of(ValueFunc), .stride = sizeof(ValueFunc) };
+    Todo();
   }
   }
 
@@ -314,6 +318,7 @@ String write_type(Arena *arena, TypeInterner *types, TypeIndex type) {
   switch (Cast(TypeKind, t->kind)) {
   case Type_comptime_int: return arena_copy_string(arena, string_lit("comptime_int"));
   case Type_bool: return arena_copy_string(arena, string_lit("bool"));
+  case Type_stub: return arena_copy_string(arena, string_lit("stub"));
   case Type_nil: return arena_copy_string(arena, string_lit("nil"));
   case Type_usize: return arena_copy_string(arena, string_lit("usize"));
   case Type_isize: return arena_copy_string(arena, string_lit("isize"));

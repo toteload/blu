@@ -11,13 +11,6 @@ typedef struct {
 } DeclarationKey;
 
 typedef enum {
-  ResolveStatus_error,
-  ResolveStatus_unresolved,
-  ResolveStatus_resolving_value,
-  ResolveStatus_fully_resolved,
-} ResolveStatus;
-
-typedef enum {
   Declaration_root,
   Declaration_primitive,
   Declaration_mod,
@@ -28,7 +21,6 @@ struct Declaration {
   DeclarationIndex idx;
 
   u8 kind;
-  u8 resolve_status;
 
   union {
     ValueIndex primitive;

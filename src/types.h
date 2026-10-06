@@ -4,6 +4,7 @@
 #include "blu.h"
 
 typedef enum {
+  Type_stub,
   Type_comptime_int,
   Type_usize, // pointer-width unsigned int
   Type_isize, // pointer-width signed int

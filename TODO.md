@@ -7,6 +7,7 @@
 - [ ] Add `return` expression.
 - [ ] Reuse deallocated values! And add generation check.
 - [ ] SIR code generation can be moved to `Source`.
+- [ ] ValueSlice should use ValuePointer instead of void*
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?

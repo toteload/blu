@@ -27,15 +27,6 @@
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
-#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 8
-#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 24
-#define SEGMENTLIST_NAME          ResidualFunctionList
-#define SEGMENTLIST_TYPE          ValueIndex
-#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
-#define SEGMENTLIST_OUTPUT_TYPES
-#include "segment_list.h"
-
 typedef struct {
   Arena arena;
   Arena scratch;
@@ -54,8 +45,6 @@ typedef struct {
 
   DeclarationInterner decls;
   DeclIdxList         user_decls;
-
-  ResidualFunctionList functions;
 } Compiler;
 
 void compiler_init(Compiler *compiler, CLIOptions *options);

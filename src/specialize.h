@@ -12,6 +12,7 @@
 #define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
 #define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
 
@@ -37,10 +38,11 @@ typedef struct {
 #define SCOPE_STACK_SEGMENT_COUNT  12
 #define SCOPE_STACK_NAME ScopeStack
 #define SCOPE_STACK_TYPE Scope
-#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
-#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
-#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
-#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_NAME SCOPE_STACK_NAME
+#define SEGMENTLIST_TYPE SCOPE_STACK_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 SCOPE_STACK_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT SCOPE_STACK_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
 
@@ -48,6 +50,7 @@ Scope *find_scope(Scope *spans, u32 count, InstructionIndex start_of_block);
 void scope_add_break_or_return(Scope *scope, InstructionIndex source);
 
 typedef struct {
+  DeclarationIndex decl;
   SIrChunk *chunk;
 
   IRef *inst_map;
@@ -64,15 +67,11 @@ Scope  pop_scope(Frame *frame);
 
 typedef struct {
   b8 requested_resolution;
-
+  IIrBuilder *builder;
   Frame frame;
-
-  Declaration *decl;
-  ResidualFunction *function; // optional, only set if specializing a function
 } SpecializerState;
 
 void specializer_state_init_decl(SpecializerState *state, Arena *arena, Declaration *decl);
-void specializer_state_init_function(SpecializerState *state, Arena *arena, ResidualFunction *function);
 
 typedef struct {
   Arena               *perm;
@@ -108,11 +107,15 @@ typedef struct {
   u32 code;
 
   // - decl is set if code is Run_resolve_declaration_value.
-  // - val is set and refering to an unresolved function if code is Run_register_function_body
   // - val is set and refering to a complete value if code is Run_ok
   union {
     DeclarationIndex decl;
+
     ValueIndex val;
+
+    struct {
+      ValueIndex stub;
+    } register_function;
   } data;
 } RunResult;
 

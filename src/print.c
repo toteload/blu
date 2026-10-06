@@ -17,6 +17,9 @@ void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
 
   Type *type = types_get(types, idx);
   switch (Cast(TypeKind, type->kind)) {
+  case Type_stub: {
+    fputs("stub", out);
+  } break;
   case Type_usize: {
     fputs("usize", out);
   } break;
@@ -161,6 +164,7 @@ internal void print_iref(FILE *out, Compiler *compiler, IRef ref) {
 
 internal char const* typekind_string(u8 kind) {
   switch (Cast(TypeKind, kind)) {
+  case Type_stub:         return "stub";
   case Type_comptime_int: return "comptime_int";
   case Type_integer:      return "integer";
   case Type_usize:      return "usize";
