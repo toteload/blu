@@ -16,7 +16,6 @@ typedef u32 StringIndex;      // Optional, 0 means nil
 typedef u32 ValueIndex;       // Optional, 0 means nil
 typedef u32 SourceIndex;      // Optional, 0 means nil
 typedef u32 DeclarationIndex; // Optional, 0 means nil or root
-typedef u32 ResidualFunctionKey; // Optional, 0 means nil
 
 typedef struct ValueStore ValueStore;
 typedef struct SourceAllocator SourceAllocator;
@@ -25,6 +24,7 @@ typedef struct Declaration Declaration;
 
 typedef struct {
   struct {
+    TypeIndex stub;
     TypeIndex comptime_int;
     TypeIndex type;
     TypeIndex nil;

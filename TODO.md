@@ -4,6 +4,8 @@
 - [ ] Add location information to interpreter error reporting
 - [ ] The symbol table doesn't work correctly for nested functions. you keep access to variables in the enclosing function.
 - [ ] Typecheck main.main before running it
+- [ ] SIR code generation can be moved to `Source`.
+- [ ] ValueSlice should use ValuePointer instead of void*
 
 ## Comptime
 

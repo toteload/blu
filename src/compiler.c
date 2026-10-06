@@ -28,15 +28,6 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define SEGMENTLIST_NAME          ResidualFunctionList
-#define SEGMENTLIST_TYPE          ResidualFunction
-#define SEGMENTLIST_FUNCTION_PREFIX functions
-#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
-#define SEGMENTLIST_LINKAGE internal
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
-
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   Unused(ctx);
@@ -146,7 +137,6 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   // Reserve 0 index to be nil value
   sources_push(&compiler->sources, &compiler->arena);
-  functions_push(&compiler->functions, &compiler->arena);
 
   strings_init(
     &compiler->strings,
@@ -182,6 +172,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   // clang-format off
 
+  compiler->common.type.stub  = types_add(&compiler->types, &(Type){.kind = Type_stub});
   compiler->common.type.type  = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil   = types_add(&compiler->types, &(Type){.kind = Type_nil});
   compiler->common.type._bool  = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
@@ -498,8 +489,8 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  Declaration **user_decls =
-    arena_push_array(Declaration *, &compiler->scratch, compiler->user_decls.len);
+  DeclarationIndex *user_decls =
+    arena_push_array(DeclarationIndex, &compiler->scratch, compiler->user_decls.len);
 
   {
     CodeGenContext context = {
@@ -515,9 +506,7 @@ b32 compile(Compiler *compiler) {
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      Declaration *decl =
-        decls_extra_get_ptr(&compiler->decls, user_decls_at_unchecked(&compiler->user_decls, i));
-      user_decls[i] = decl;
+      user_decls[i] = user_decls_at_unchecked(&compiler->user_decls, i);
 
       is_ok &= generate_code(&context, decl);
 

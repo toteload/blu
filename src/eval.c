@@ -146,6 +146,7 @@ internal b32 is_type_complete(TypeInterner *types, TypeIndex idx) {
   Type *t = types_get(types, idx);
 
   switch (Cast(TypeKind, t->kind)) {
+  case Type_stub:
   case Type_integer:
   case Type_bool:
   case Type_comptime_int:

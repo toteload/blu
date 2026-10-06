@@ -3,7 +3,7 @@
 
 #include "blu.h"
 #include "types.h"
-#include "ir.h"
+#include "resolver.h"
 
 typedef struct {
   TypeIndex  type;
@@ -11,38 +11,30 @@ typedef struct {
   void      *data;
 } Value;
 
-typedef enum {
-  ResidualFunctionStatus_nil,
-  ResidualFunctionStatus_building,
-  ResidualFunctionStatus_finished,
-  ResidualFunctionStatus_error,
-} ResidualFunctionStatus;
-
-typedef struct {
-  u8 status;
-
-  union {
-    IIrBuilder builder;
-    IIrChunk chunk;
-  } data;
-
-  DeclarationIndex decl;
-  InstructionIndex instruction;
-} ValueResidualFunction;
-
-typedef struct {
-  usize  len;
-  void  *data;
-} ValueSlice;
-
 typedef struct {
   ValueIndex val;
   u32 offset;
 } ValuePointer;
 
 typedef struct {
-  DeclarationIndex idx;
-} ValueDeclarationStub;
+  usize  len;
+  void  *data;
+} ValueSlice;
+
+typedef enum {
+  unresolved,
+  resolving,
+  fully_resolved,
+  error,
+} StubStatus;
+
+typedef struct {
+  u8 status;
+  DeclarationIndex decl;
+  InstructionIndex inst;
+  TypeIndex type;
+  ValueIndex idx; // only valid if fully resolved
+} ValueStub;
 
 // -----------------------------------------------------------------------------
 
