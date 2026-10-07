@@ -22,14 +22,14 @@ typedef struct {
 } ValueSlice;
 
 typedef enum {
-  unresolved,
-  resolving,
-  fully_resolved,
-  error,
-} StubStatus;
+  ResolveStatus_unresolved,
+  ResolveStatus_resolving,
+  ResolveStatus_fully_resolved,
+  ResolveStatus_error,
+} ResolveStatus;
 
 typedef struct {
-  u8 status;
+  u8 resolve_status;
   DeclarationIndex decl;
   InstructionIndex inst;
   TypeIndex type;

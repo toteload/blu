@@ -151,21 +151,22 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_call: {
-    IIrCall *call = iir_chunk_extra(f->chunk, pc);
-    ValueFunc *func = resolve(in, f, call->func_ptr);
-    IIrChunk *chunk = &compiler_get_function(in->compiler, func->function)->data.chunk;
+    Todo();
+    //IIrCall *call = iir_chunk_extra(f->chunk, pc);
+    //ValueFunc *func = resolve(in, f, call->func_ptr);
+    //IIrChunk *chunk = &compiler_get_function(in->compiler, func->function)->data.chunk;
 
-    CallFrame2 *g = frame_push(in, chunk, f->inst_values[pc]);
+    //CallFrame2 *g = frame_push(in, chunk, f->inst_values[pc]);
 
-    for (u32 i = 0; i < call->arg_count; i++) {
-      TypeSizeInfo param_size_info =
-        types_size_info_by_index(&in->compiler->types, iir_chunk_type(chunk, 1 + i));
+    //for (u32 i = 0; i < call->arg_count; i++) {
+    //  TypeSizeInfo param_size_info =
+    //    types_size_info_by_index(&in->compiler->types, iir_chunk_type(chunk, 1 + i));
 
-      void *slot = arena_push(in->scratch, param_size_info.size, param_size_info.align);
-      memcpy(slot, resolve(in, f, call->args[i]), param_size_info.size);
+    //  void *slot = arena_push(in->scratch, param_size_info.size, param_size_info.align);
+    //  memcpy(slot, resolve(in, f, call->args[i]), param_size_info.size);
 
-      g->inst_values[1 + i] = slot;
-    }
+    //  g->inst_values[1 + i] = slot;
+    //}
 
     f->pc += 1;
   } break;

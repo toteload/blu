@@ -46,8 +46,6 @@ SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE *Cat(SEGMENTLIST_FUNCTION_PREFIX, _peek_ptr
 SEGMENTLIST_LINKAGE SEGMENTLIST_TYPE  Cat(SEGMENTLIST_FUNCTION_PREFIX, _at_unchecked)(SEGMENTLIST_NAME *list, usize i);
 SEGMENTLIST_LINKAGE void              Cat(SEGMENTLIST_FUNCTION_PREFIX, _copy_to_array)(SEGMENTLIST_NAME *list, SEGMENTLIST_TYPE *out);
 
-internal always_inline b32 Cat(SEGMENTLIST_FUNCTION_PREFIX, _is_empty)(SEGMENTLIST_NAME *list);
-
 #undef SEGMENTLIST_OUTPUT_DECLARATIONS
 #endif // SEGMENTLIST_OUTPUT_DECLARATIONS
 
@@ -55,15 +53,15 @@ internal always_inline b32 Cat(SEGMENTLIST_FUNCTION_PREFIX, _is_empty)(SEGMENTLI
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
 
+internal always_inline b32 Cat(SEGMENTLIST_FUNCTION_PREFIX, _is_empty)(SEGMENTLIST_NAME *list) {
+  return list->len == 0;
+}
+
 #ifndef SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
 #define SEGMENTLIST_INTERNAL_FUNCTIONS_DEFINED
 
 // Without the toggle of this preprocessor block, the functions defined here would be defined twice
 // if you define two segment lists in the same translation unit leading to compile errors.
-
-internal always_inline b32 Cat(SEGMENTLIST_FUNCTION_PREFIX, _is_empty)(SEGMENTLIST_NAME *list) {
-  return list->len == 0;
-}
 
 internal usize segment_count_at_size(usize min_size_log2, usize size) {
   return bitwidth(((size - 1) >> min_size_log2) + 1);

@@ -236,17 +236,6 @@ Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
   return sources_ptr_at_unchecked(&compiler->sources, source_idx);
 }
 
-ResidualFunctionKey compiler_alloc_function(Compiler *compiler) {
-  u32 i = compiler->functions.len;
-  ResidualFunction *f = functions_push(&compiler->functions, &compiler->arena);
-  zero_struct(ResidualFunction, f);
-  return i;
-}
-
-ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key) {
-  return functions_ptr_at_unchecked(&compiler->functions, key);
-}
-
 void compiler_print_all_messages(Compiler *compiler) {
   for (u32 i = 1; i < compiler->sources.len; i++) {
     Source *source = sources_ptr_at_unchecked(&compiler->sources, i);
@@ -413,7 +402,6 @@ b32 compile(Compiler *compiler) {
           (Declaration){
             .idx = idx,
             .kind = Declaration_mod,
-            .resolve_status = ResolveStatus_fully_resolved,
             .data.mod = {.source = source, .tree_idx = offset},
           }
         );
@@ -449,7 +437,6 @@ b32 compile(Compiler *compiler) {
           (Declaration){
             .idx = idx,
             .kind = Declaration_decl,
-            .resolve_status = ResolveStatus_unresolved,
             .data.decl = {
               .source = source,
               .tree_idx = offset,
@@ -480,9 +467,22 @@ b32 compile(Compiler *compiler) {
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      user_decls[i] = user_decls_at_unchecked(&compiler->user_decls, i);
+      DeclarationIndex declidx = user_decls_at_unchecked(&compiler->user_decls, i);
 
+      user_decls[i] = declidx;
+
+      Declaration *decl = decls_extra_get_ptr(&compiler->decls, declidx);
       is_ok &= generate_code(&context, decl);
+
+      Value *v;
+      decl->data.decl.val = values_alloc(&compiler->values, &v);
+      ValueStub *data = values_alloc_data_type(&compiler->values, ValueStub);
+      *data = (ValueStub){ .decl = declidx, };
+      *v = (Value){
+        .type = compiler->common.type.stub,
+        .data_size = sizeof(ValueStub),
+        .data = data,
+      };
 
       if (compiler->options->print_sir) {
         print_sir_chunk(stdout, compiler, &decl->data.decl.chunk);
@@ -503,11 +503,9 @@ b32 compile(Compiler *compiler) {
       .types = &compiler->types,
       .values = &compiler->values,
       .common = &compiler->common,
-      .decls_to_resolve_count = compiler->user_decls.len,
-      .decls_to_resolve = user_decls,
     };
 
-    b32 ok = resolve_declarations(&resolve_context);
+    b32 ok = resolve_declarations(&resolve_context, compiler->user_decls.len, user_decls);
 
     if (!ok) {
       return False;
@@ -579,22 +577,21 @@ b32 run_main(Compiler *compiler) {
 
   // TODO: make sure main has the correct type
 
-  Value *v = values_get(&compiler->values, decl_main->data.decl.val);
-  IIrChunk *chunk = &compiler_get_function(compiler, Cast(ValueFunc *, v->data)->function)->data.chunk;
+  Todo();
 
-  Interpreter in = {
-    .scratch = &compiler->scratch,
-    .msg_sink = &compiler->msg_sink,
-    .compiler = compiler,
-  };
+  //Interpreter in = {
+  //  .scratch = &compiler->scratch,
+  //  .msg_sink = &compiler->msg_sink,
+  //  .compiler = compiler,
+  //};
 
-  stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
+  //stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
-  u8 buf[16];
-  u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
-  if (err) {
-    return False;
-  }
+  //u8 buf[16];
+  //u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
+  //if (err) {
+  //  return False;
+  //}
 
   return True;
 }

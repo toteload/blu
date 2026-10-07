@@ -24,17 +24,18 @@ extern Allocator const cstd_allocator;
 
 internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref);
 
-//Scope *find_scope(Scope *spans, u32 count, InstructionIndex start_of_block) {
-//  for (u32 i = 0; i < count; i++) {
-//    if (spans[i].start == start_of_block) {
-//      return spans + i;
-//    }
-//  }
-//
-//  Unreachable();
-//}
+Scope *find_scope(ScopeStack *scopes, InstructionIndex start_of_block) {
+  for (u32 i = 0; i < scopes->len; i++) {
+    Scope *s = scopes_ptr_at_unchecked(scopes, i);
+    if (s->start == start_of_block) {
+      return s;
+    }
+  }
 
-void scope_add_break_or_return(Scope *scope, InstructionIndex source) {
+  Panic();
+}
+
+internal void scope_add_break_or_return(Scope *scope, Arena *arena, InstructionIndex source) {
   breaks_append(&scope->breaks_and_returns, arena, source);
 }
 
@@ -63,8 +64,11 @@ internal always_inline TypeIndex get_sref_type(Specializer *spec, Frame *f, SRef
   return f->inst_types[sref_to_instruction(ref)];
 }
 
-internal void frame_init(Frame *f, Arena *arena, SIrChunk *chunk) {
+void frame_init(Frame *f, Arena *arena, Declaration *decl) {
+  SIrChunk *chunk = &decl->data.decl.chunk;
+
   *f = (Frame){
+    .decl = decl->idx,
     .chunk = chunk,
     .inst_map = arena_push_array(IRef, arena, chunk->opcode_count),
     .inst_types = arena_push_array(TypeIndex, arena, chunk->opcode_count),
@@ -74,20 +78,8 @@ internal void frame_init(Frame *f, Arena *arena, SIrChunk *chunk) {
   memset(f->inst_types, 0, chunk->opcode_count * sizeof(TypeIndex));
 }
 
-void specializer_state_init_decl(SpecializerState *state, Arena *arena, Declaration *decl) {
-  *state = (SpecializerState){
-    .requested_resolution = False,
-    .decl = decl,
-  };
-
-  SIrChunk *chunk = &decl->data.decl.chunk;
-
-  frame_init(&state->frame, arena, chunk);
-  push_scope(&state->frame, Scope_comptime, 0, chunk->opcode_count);
-}
-
-Scope *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count) {
-  Scope *span = scopes_push(&frame->scopes);
+Scope *push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionIndex start, u32 count) {
+  Scope *span = scopes_push(&frame->scopes, arena);
 
   if (kind == Scope_comptime) {
     frame->comptime_depth++;
@@ -124,10 +116,10 @@ internal b32 end_residual_block(IIrBuilder *builder, Frame *f, Scope *block) {
     return True;
   }
 
-  TypeIndex type = f->inst_types[block->breaks_and_returns.sources[0]];
+  TypeIndex type = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, 0)];
 
   for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
-    TypeIndex t = f->inst_types[block->breaks_and_returns.sources[i]];
+    TypeIndex t = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, i)];
     if (t != type) {
       Todo();
     }
@@ -141,7 +133,7 @@ internal b32 end_residual_block(IIrBuilder *builder, Frame *f, Scope *block) {
 }
 
 internal b32 finalize_function(Specializer *in, SpecializerState *state, Scope *func) {
-  IIrBuilder *builder = &state->function->data.builder;
+  IIrBuilder *builder = state->builder;
   Frame *f = &state->frame;
 
   while (True) {
@@ -214,7 +206,7 @@ expect_residual_at_instruction_index(Frame *f, InstructionIndex inst) {
 }
 
 internal void pop_finished_scopes(Specializer *in, SpecializerState *state, InstructionIndex end) {
-  IIrBuilder *builder = (state->function) ? &state->function->data.builder : Null;
+  IIrBuilder *builder = state->builder;
   Frame *f = &state->frame;
 
   Scope last;
@@ -270,7 +262,7 @@ expect_comptime_value_or_nil(Specializer *sp, SpecializerState *state, SRef ref,
     sp->msg_sink,
     (MessageLocation){
       .kind = MessageLocation_ir_instruction,
-      .decl_idx = state->decl->idx,
+      .decl_idx = state->frame.decl,
       .data.offset = s->pc,
     },
     string_lit("Value must be comptime known")
@@ -294,7 +286,7 @@ internal b32 expect_some_comptime_value(Specializer *sp, SpecializerState *state
       sp->msg_sink,
       (MessageLocation){
         .kind = MessageLocation_ir_instruction,
-        .decl_idx = state->decl->idx,
+        .decl_idx = state->frame.decl,
         .data.offset = s->pc,
       },
       string_lit("Value may not be omitted")
@@ -319,7 +311,7 @@ internal b32 _get_value_expect_type(Specializer *sp, SpecializerState *state, Va
       sp->msg_sink,
       (MessageLocation){
         .kind = MessageLocation_ir_instruction,
-        .decl_idx = state->decl->idx,
+        .decl_idx = state->frame.decl,
         .data.offset = s->pc,
       },
       string_lit("Expected a type, but got something else")
@@ -420,7 +412,7 @@ internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref) {
 
 internal u32 step(Specializer *in, SpecializerState *state) {
   Frame *f = &state->frame;
-  IIrBuilder *builder = (state->function) ? &state->function->data.builder : Null;
+  IIrBuilder *builder = state->builder;
 
   Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
 
@@ -432,7 +424,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
 
   case SIR_comptime_block: {
     u32 inst_count = sir_chunk_data(f->chunk, pc);
-    push_scope(f, Scope_comptime, pc, inst_count);
+    push_scope(f, in->scratch, Scope_comptime, pc, inst_count);
     s->pc += inst_count;
   } break;
 
@@ -440,7 +432,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
   case SIR_block: {
     u32 inst_count = sir_chunk_data(f->chunk, pc);
 
-    Scope *scope = push_scope(f, Scope_block, pc, inst_count);
+    Scope *scope = push_scope(f, in->scratch, Scope_block, pc, inst_count);
 
     if (!frame_is_comptime(f)) {
       InstructionIndex inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
@@ -454,16 +446,37 @@ internal u32 step(Specializer *in, SpecializerState *state) {
   } break;
 
   case SIR_func: {
-    Todo();
+    SIrFunc *func = sir_chunk_extra(f->chunk, pc);
 
-    if (!state->requested_resolution) {
-      state->requested_resolution = True;
-
-      Todo(); // Allocate residual function and set data for it.
-
-      return Step_register_function_body;
+    TypeIndex func_type;
+    b32 ok = expect_some_type_value(in, state, func->return_type, &func_type);
+    if (!ok) {
+      Todo();
     }
 
+    Value *v;
+    ValueIndex stub = values_alloc(in->values, &v);
+    ValueStub *data = values_alloc_data_type(in->values, ValueStub);
+    *data = (ValueStub){
+      .decl = f->decl,
+      .inst = pc,
+      .type = func_type,
+    };
+    *v = (Value){
+      .type = in->common->type.stub,
+      .data_size = sizeof(ValueStub),
+      .data = data,
+    };
+
+    store_inst_value(f, pc, iref_from_value(stub));
+
+    state->data.val = stub;
+
+    s->pc += func->instruction_count;
+
+    state->paused = True;
+
+    return Step_register_function;
   } break;
 
   //case SIR_func: {
@@ -511,6 +524,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
 
     if (!state->requested_resolution && decl->kind == Declaration_decl) {
       state->requested_resolution = True;
+      state->data.decl = decl_idx;
       return Step_resolve_declaration_value;
     }
 
@@ -586,7 +600,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
             in->msg_sink,
             (MessageLocation){
               .kind = MessageLocation_ir_instruction,
-              .decl_idx = state->decl->idx,
+              .decl_idx = state->frame.decl,
               .data.offset = s->pc,
             },
             string_lit("Value of comptime_int is out of range of destination type")
@@ -598,7 +612,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
             in->msg_sink,
             (MessageLocation){
               .kind = MessageLocation_ir_instruction,
-              .decl_idx = state->decl->idx,
+              .decl_idx = state->frame.decl,
               .data.offset = s->pc,
             },
             string_lit("Cannot coerce value of type %type to type %type"),
@@ -623,7 +637,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
             in->msg_sink,
             (MessageLocation){
               .kind = MessageLocation_ir_instruction,
-              .decl_idx = state->decl->idx,
+              .decl_idx = state->frame.decl,
               .data.offset = s->pc,
             },
             string_lit("Cannot coerce value of type %type to type %type"),
@@ -666,7 +680,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Cannot cast value of type %type to type %type"),
@@ -711,7 +725,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
           in->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = state->decl->idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Value does not fit in the destination type %type of the cast"),
@@ -760,7 +774,11 @@ internal u32 step(Specializer *in, SpecializerState *state) {
 
       pop_scopes_to(in, f, br->block);
 
-      return Step_leave_scope;
+      if (scopes_is_empty(&f->scopes)) {
+        Todo();
+      }
+
+      break;
     }
 
     if (s->scope_kind == Scope_block) {
@@ -776,8 +794,8 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         .value = copy_if_value(in, ref),
       };
 
-      Scope *block = find_scope(f->scopes.data, f->scopes.len, br->block);
-      scope_add_break_or_return(block, pc);
+      Scope *block = find_scope(&f->scopes, br->block);
+      scope_add_break_or_return(block, in->scratch, pc);
 
       Assert(s->end == pc + 1); // br may only appear at the end of a block
 
@@ -786,7 +804,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
 
       pop_finished_scopes(in, state, pc + 1);
 
-      return Step_leave_scope;
+      break;
     }
 
     Unreachable();
@@ -874,7 +892,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Unable to unify types"));
@@ -920,7 +938,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
     iir_builder_set_type(builder, inst, type_ret);
 
     Scope *func_scope = get_func_scope(f);
-    scope_add_break_or_return(func_scope, pc);
+    scope_add_break_or_return(func_scope, in->scratch, pc);
 
     if (pc + 1 == func_scope->end) {
       b32 ok = finalize_function(in, state, func_scope);
@@ -1044,7 +1062,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("#len expects an array or a slice, but got a value of type %type"),
@@ -1239,7 +1257,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Tried to get base type of type %type that is not a pointer, array or slice. This is likely a compiler bug"),
@@ -1338,7 +1356,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Type %type does not support operator"),
@@ -1476,7 +1494,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Cannot index a value of type %type, expected an array or a slice"),
@@ -1516,7 +1534,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
           in->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = state->decl->idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Index is out of bounds")
@@ -1568,7 +1586,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
         in->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ir_instruction,
-          .decl_idx = state->decl->idx,
+          .decl_idx = state->frame.decl,
           .data.offset = s->pc,
         },
         string_lit("Type %type does not support negation"),
@@ -1610,7 +1628,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
           in->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_ir_instruction,
-            .decl_idx = state->decl->idx,
+            .decl_idx = state->frame.decl,
             .data.offset = s->pc,
           },
           string_lit("Negating this value overflows its type %type"),
@@ -1702,24 +1720,40 @@ internal u32 step(Specializer *in, SpecializerState *state) {
   return Step_ok;
 }
 
-u32 run_toplevel_block(Specializer *in, SpecializerState *state) {
+RunResult run_toplevel_block(Specializer *in, SpecializerState *state) {
   while (True) {
-    u32 err = step(in, state);
+    StepResult res = step(in, state);
 
-    if (!err) {
-      continue;
-    }
-
-    if (err == Step_leave_scope) {
-      if (state->frame.scopes.len == 0) {
-        return Run_ok;
+    switch (res) {
+    case Step_ok: continue;
+    case Step_error: return (RunResult){ .code = Run_error, };
+    case Step_leave_scope: {
+      if (scopes_is_empty(&state->frame.scopes)) {
+        return (RunResult){
+          .code = Run_ok,
+          .data.val = state->data.val,
+        };
       }
 
       continue;
     }
+    case Step_resolve_declaration_value: {
+      return (RunResult){
+        .code = Run_resolve_declaration_value,
+        .data.decl = state->data.decl,
+      };
+    }
+    case Step_register_function: {
+      return (RunResult){
+        .code = Run_register_function,
+        .data.stub = state->data.val,
+      };
+    }
+    }
 
-    return err;
+    Unreachable();
   }
 
   Unreachable();
 }
+
