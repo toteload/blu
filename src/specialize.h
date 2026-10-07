@@ -46,9 +46,6 @@ typedef struct {
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
 
-Scope *find_scope(Scope *spans, u32 count, InstructionIndex start_of_block);
-void scope_add_break_or_return(Scope *scope, InstructionIndex source);
-
 typedef struct {
   DeclarationIndex decl;
   SIrChunk *chunk;
@@ -60,18 +57,21 @@ typedef struct {
   ScopeStack scopes;
 } Frame;
 
+void frame_init(Frame *frame, Arena *arena, Declaration *decl);
+
 always_inline b32 frame_is_comptime(Frame *frame) { return frame->comptime_depth > 0; }
 
-Scope *push_scope(Frame *frame, ScopeKind kind, InstructionIndex start, u32 count);
+Scope *push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionIndex start, u32 count);
 Scope  pop_scope(Frame *frame);
 
 typedef struct {
-  b8 requested_resolution;
   IIrBuilder *builder;
+  union {
+    ValueIndex val;
+    DeclarationIndex decl;
+  } data;
   Frame frame;
 } SpecializerState;
-
-void specializer_state_init_decl(SpecializerState *state, Arena *arena, Declaration *decl);
 
 typedef struct {
   Arena               *perm;
@@ -106,19 +106,19 @@ typedef enum {
 typedef struct {
   u32 code;
 
-  // - decl is set if code is Run_resolve_declaration_value.
-  // - val is set and refering to a complete value if code is Run_ok
+  // Run_ok                        - val ...
+  // Run_error                     - none
+  // Run_resolve_declaration_value - decl is the declaration that needs to be resolved
+  // Run_register_function         - stub is the value of the function just encountered
+
   union {
-    DeclarationIndex decl;
-
     ValueIndex val;
-
-    struct {
-      ValueIndex stub;
-    } register_function;
+    DeclarationIndex decl;
+    ValueIndex stub;
   } data;
 } RunResult;
 
-RunResult run_toplevel_block(Specializer *in, SpecializerState *state);
+RunResult run_toplevel_block(Specializer *sp, SpecializerState *state);
 
 #endif // SPECIALIZE_H
+

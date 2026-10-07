@@ -32,68 +32,80 @@ typedef struct {
   ResolveStack deferred_stack;
 } Resolver;
 
+internal always_inline ValueStub *get_stub(ResolveContext *ctx, ValueIndex val) {
+  Value *v = values_get(ctx->values, val);
+  return Cast(ValueStub*, v->data);
+}
+
 internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, DeclarationIndex decl) {
-  Declaration *d = decls_get(ctx->decls, decl);
+  Declaration *d = decls_extra_get_ptr(ctx->decls, decl);
 
   ResolveEntry *entry = resolve_stack_push(stack, ctx->scratch);
 
   entry->kind = ResolveEntryKind_declaration;
   entry->stub = d->data.decl.val;
 
-  specializer_state_init(&entry->state, ctx->scratch);
-  frame_init(&entry->state.frame, ctx->scratch, d->data.decl.chunk);
-  push_scope(&entry->state.frame, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
+  zero_struct(SpecializerState, &entry->state);
+  frame_init(&entry->state.frame, ctx->scratch, d);
+  push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
 
 internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *stack, ValueIndex stub) {
   Value *v = values_get(ctx->values, stub);
-  ValueStub *stub = v->data;
+  ValueStub *s = Cast(ValueStub*, v->data);
+
+  Declaration *d = decls_extra_get_ptr(ctx->decls, s->decl);
 
   ResolveEntry *entry = resolve_stack_push(stack, ctx->scratch);
 
-  
+  entry->kind = ResolveEntryKind_function;
+  entry->stub = stub;
 
-  Todo();
+  zero_struct(SpecializerState, &entry->state);
+
+  frame_init(&entry->state.frame, ctx->scratch, d);
+
+  SIrFunc *func = sir_chunk_extra(&d->data.decl.chunk, s->inst);
+
+  push_scope(&entry->state.frame, ctx->scratch, Scope_block, s->inst, func->instruction_count);
 }
 
-internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver) {
-  ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
+internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Specializer *sp) {
+  ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
+  Value *vstub = values_get(ctx->values, entry->stub);
+  ValueStub *stub = Cast(ValueStub*, vstub->data);
+  Declaration *decl = decls_extra_get_ptr(ctx->decls, stub->decl);
 
-  switch (Cast(ResolveEntryKind, entry->source.kind)) {
+  switch (Cast(ResolveEntryKind, entry->kind)) {
   case ResolveEntryKind_declaration: {
-    Todo();
-    Declaration *decl = decls_get(ctx->decls, entry->source.decl);
     Frame *f = &entry->state.frame;
+    if (!entry->state.requested_resolution) {
+      Assert(stub->resolve_status == ResolveStatus_unresolved);
+      stub->resolve_status = ResolveStatus_resolving;
+    }
   } break;
   case ResolveEntryKind_function: {
     Todo();
   } break;
-  case ResolveEntryKind_type: {
-    Todo();
-  } break;
   }
 
-  if (!entry->state.requested_resolution) {
-    Assert(decl->resolve_status == ResolveStatus_unresolved);
-    decl->resolve_status = ResolveStatus_resolving_value;
-  }
-
-  RunResult res = run_toplevel_block(&resolver->sp, &entry->state);
+  RunResult res = run_toplevel_block(sp, &entry->state);
 
   switch (Cast(RunResultCode, res.code)) {
   case Run_error:
     return False;
   case Run_ok: {
-    decl->data.decl.val = res.data.val;
-    decl->resolve_status = ResolveStatus_fully_resolved;
+    resolve_stack_pop(&resolver->primary_stack);
+    stub->resolve_status = ResolveStatus_fully_resolved;
+    stub->idx = res.data.val;
     return True;
   }
   case Run_resolve_declaration_value: {
-    push_resolve_decl_entry(resolver, res.data.decl);
+    push_resolve_decl_entry(ctx, &resolver->primary_stack, res.data.decl);
     return True;
   }
   case Run_register_function: {
-    push_resolve_function_entry(&resolver->deferred_stack, res.data.register_function.stub);
+    push_resolve_function_entry(ctx, &resolver->deferred_stack, res.data.stub);
     return True;
   }
   }
@@ -101,51 +113,48 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver) {
   Unreachable();
 }
 
-internal void clear_resolver_with_error(Resolver *resolver) {
-  while (!stack_is_empty(&resolver->resolve_stack)) {
-    ResolveEntry *entry = stack_peek_ptr_unchecked(&resolver->resolve_stack);
-    entry->state.decl->resolve_status = ResolveStatus_error;
-    pop_resolve_entry(resolver);
+internal void clear_resolve_stack_with_error(ResolveContext *ctx, ResolveStack *stack) {
+  while (!resolve_stack_is_empty(stack)) {
+    ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(stack);
+    ValueStub *stub = get_stub(ctx, entry->stub);
+    stub->resolve_status = ResolveStatus_error;
+    resolve_stack_pop(stack);
   }
 }
 
-internal b32 resolve_primary_stack(Resolver *resolver) {
-  while (!resolve_stack_is_empty(&resolver->resolve_stack)) {
-    ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->resolve_stack);
+internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, Specializer *sp) {
+  while (!resolve_stack_is_empty(&resolver->primary_stack)) {
+    ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
+    ValueStub *stub = get_stub(ctx, entry->stub);
 
-    switch (entry->state.decl->resolve_status) {
+    switch (stub->resolve_status) {
     case ResolveStatus_unresolved: break;
-    case ResolveStatus_resolving_value: {
+    case ResolveStatus_resolving: {
       if (!entry->state.requested_resolution) {
         Message_error(
           ctx->msg_sink,
           (MessageLocation){
             .kind = MessageLocation_unspecified,
-            .decl_idx = entry->state.decl->idx,
+            .decl_idx = stub->decl,
           },
           string_lit("Encountered circular declaration")
         );
 
-        clear_resolve_stack_with_error(resolver);
+        clear_resolve_stack_with_error(ctx, &resolver->primary_stack);
 
         return False;
       }
 
       break;
     }
-    case ResolveStatus_fully_resolved: {
-      resolve_stack_pop(&resolver->resolve_stack);
-      continue;
-    }
-    case ResolveStatus_error: {
-      clear_resolve_stack_with_error(resolver);
-      return False;
-    }
+    case ResolveStatus_fully_resolved: Panic(); // This should never happen
+    case ResolveStatus_error: Panic(); // This should never happen
     }
 
-    b32 ok = try_resolve_entry(&resolver);
+    b32 ok = try_resolve_entry(ctx, resolver, sp);
+
     if (!ok) {
-      clear_resolve_stack_with_error(resolver);
+      clear_resolve_stack_with_error(ctx, &resolver->primary_stack);
       return False;
     }
   }
@@ -166,37 +175,46 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
     .common = ctx->common,
   };
 
-  for (u32 i = 0; i < ctx->decls_to_resolve_count; i++) {
-    Declaration *decl = decls_get(ctx->decls, decls_to_resolve[i]);
+  b32 all_ok = True;
 
-    if (decl->resolve_status != ResolveStatus_unresolved) {
+  for (u32 i = 0; i < decls_to_resolve_count; i++) {
+    DeclarationIndex decl_idx = decls_to_resolve[i];
+    Declaration *decl = decls_extra_get_ptr(ctx->decls, decl_idx);
+    ValueStub *stub = get_stub(ctx, decl->data.decl.val);
+
+    Assert(stub->resolve_status != ResolveStatus_resolving);
+
+    if (stub->resolve_status == ResolveStatus_error || stub->resolve_status == ResolveStatus_fully_resolved) {
       continue;
     }
 
     ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
 
-    push_resolve_decl_entry(&resolver, decl);
+    push_resolve_decl_entry(ctx, &resolver.primary_stack, decl_idx);
 
-    b32 ok = resolve_primary_stack(&resolver);
+    b32 ok = try_resolve_primary_stack(ctx, &resolver, &sp);
     if (!ok) {
+      all_ok = False;
       Todo();
     }
 
     while (!resolve_stack_is_empty(&resolver.deferred_stack)) {
       ResolveEntry entry = resolve_stack_pop(&resolver.deferred_stack);
-      resolve_stack_append(&resolver.primary_stack, entry);
+      resolve_stack_append(&resolver.primary_stack, ctx->scratch, entry);
 
-      b32 ok = resolve_primary_stack(&resolver);
+      b32 ok = try_resolve_primary_stack(ctx, &resolver, &sp);
       if (!ok) {
+        all_ok = False;
         Todo();
       }
     }
 
-    zero_struct(ResolveStack, &resolver.resolve_stack);
-    zero_struct(FunctionStack, &resolver.function_stack);
+    zero_struct(ResolveStack, &resolver.primary_stack);
+    zero_struct(ResolveStack, &resolver.deferred_stack);
 
     arena_scope_end(ctx->scratch, snapshot);
   }
 
-  return resolver.ok;
+  return all_ok;
 }
+
