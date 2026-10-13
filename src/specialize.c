@@ -410,6 +410,31 @@ internal TypeIndex ref_typeof(Specializer *in, Frame *f, SRef ref) {
   return type;
 }
 
+internal ValueIndex create_value_pointer(Specializer *sp, ValueIndex idx) {
+  TypeIndex type_ptr;
+  {
+    Value *v = values_get(sp->values, idx);
+    type_ptr = types_add_pointer(sp->types, v->type);
+  }
+
+  Value *v;
+  ValueIndex res = values_alloc(sp->values, &v);
+  ValuePointer *data = values_alloc_data_type(sp->values, ValuePointer);
+
+  *data = (ValuePointer){
+    .val = idx,
+    .offset = 0,
+  };
+
+  *v = (Value){
+    .type = type_ptr,
+    .data = data,
+    .data_size = sizeof(ValuePointer),
+  };
+
+  return res;
+}
+
 internal u32 step(Specializer *in, SpecializerState *state) {
   Frame *f = &state->frame;
   IIrBuilder *builder = state->builder;
@@ -462,6 +487,7 @@ internal u32 step(Specializer *in, SpecializerState *state) {
       .inst = pc,
       .type = func_type,
     };
+
     *v = (Value){
       .type = in->common->type.stub,
       .data_size = sizeof(ValueStub),
@@ -473,8 +499,6 @@ internal u32 step(Specializer *in, SpecializerState *state) {
     state->data.val = stub;
 
     s->pc += func->instruction_count;
-
-    state->paused = True;
 
     return Step_register_function;
   } break;
@@ -518,48 +542,21 @@ internal u32 step(Specializer *in, SpecializerState *state) {
     DeclarationIndex decl_idx = sir_chunk_data(f->chunk, pc);
     Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
 
-    if (decl->kind == Declaration_mod) {
-      Todo();
-    }
+    s->pc += 1;
 
-    if (!state->requested_resolution && decl->kind == Declaration_decl) {
-      state->requested_resolution = True;
+    switch (Cast(DeclarationKind, decl->kind)) {
+    case Declaration_root: Panic(); break;
+    case Declaration_mod: { Todo(); } break;
+    case Declaration_primitive: {
+      ValueIndex val = decl->data.primitive;
+      ValueIndex ptr = create_value_pointer(in, val);
+      store_inst_value(f, pc, iref_from_value(ptr));
+    } break;
+    case Declaration_decl: {
       state->data.decl = decl_idx;
       return Step_resolve_declaration_value;
+    } break;
     }
-
-    ValueIndex val;
-    if (decl->kind == Declaration_primitive) {
-      val = decl->data.primitive;
-    } else {
-      state->requested_resolution = False;
-      val = decl->data.decl.val;
-    }
-
-    TypeIndex type;
-    {
-      Value *v = values_get(in->values, val);
-      type = types_add_pointer(in->types, v->type);
-    }
-
-    Value *v;
-    ValueIndex ptr = values_alloc(in->values, &v);
-    ValuePointer *data = values_alloc_data_type(in->values, ValuePointer);
-
-    *data = (ValuePointer){
-      .val = val,
-      .offset = 0,
-    };
-
-    *v = (Value){
-      .type = type,
-      .data = data,
-      .data_size = sizeof(ValuePointer),
-    };
-
-    store_inst_value(f, pc, iref_from_value(ptr));
-
-    s->pc += 1;
   } break;
 
   case SIR_as: {

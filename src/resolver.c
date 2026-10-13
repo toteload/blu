@@ -9,6 +9,7 @@ typedef enum {
 
 typedef struct {
   u8 kind;
+  u8 is_paused;
   ValueIndex stub;
   SpecializerState state;
 } ResolveEntry;
@@ -43,6 +44,7 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
   ResolveEntry *entry = resolve_stack_push(stack, ctx->scratch);
 
   entry->kind = ResolveEntryKind_declaration;
+  entry->is_paused = False;
   entry->stub = d->data.decl.val;
 
   zero_struct(SpecializerState, &entry->state);
@@ -59,6 +61,7 @@ internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *sta
   ResolveEntry *entry = resolve_stack_push(stack, ctx->scratch);
 
   entry->kind = ResolveEntryKind_function;
+  entry->is_paused = False;
   entry->stub = stub;
 
   zero_struct(SpecializerState, &entry->state);
@@ -76,17 +79,17 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
   ValueStub *stub = Cast(ValueStub*, vstub->data);
   Declaration *decl = decls_extra_get_ptr(ctx->decls, stub->decl);
 
-  switch (Cast(ResolveEntryKind, entry->kind)) {
-  case ResolveEntryKind_declaration: {
-    Frame *f = &entry->state.frame;
-    if (!entry->state.requested_resolution) {
+  if (entry->is_paused) {
+    // this is a continuation of a previously paused entry.
+    Todo();
+  } else {
+    switch (Cast(ResolveEntryKind, entry->kind)) {
+    case ResolveEntryKind_declaration: {
       Assert(stub->resolve_status == ResolveStatus_unresolved);
       stub->resolve_status = ResolveStatus_resolving;
+    } break;
+    case ResolveEntryKind_function: break;
     }
-  } break;
-  case ResolveEntryKind_function: {
-    Todo();
-  } break;
   }
 
   RunResult res = run_toplevel_block(sp, &entry->state);
@@ -102,6 +105,7 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
   }
   case Run_resolve_declaration_value: {
     push_resolve_decl_entry(ctx, &resolver->primary_stack, res.data.decl);
+    entry->is_paused = True;
     return True;
   }
   case Run_register_function: {
@@ -130,7 +134,7 @@ internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, 
     switch (stub->resolve_status) {
     case ResolveStatus_unresolved: break;
     case ResolveStatus_resolving: {
-      if (!entry->state.requested_resolution) {
+      if (!entry->is_paused) {
         Message_error(
           ctx->msg_sink,
           (MessageLocation){
@@ -195,7 +199,6 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
     b32 ok = try_resolve_primary_stack(ctx, &resolver, &sp);
     if (!ok) {
       all_ok = False;
-      Todo();
     }
 
     while (!resolve_stack_is_empty(&resolver.deferred_stack)) {
@@ -205,7 +208,6 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
       b32 ok = try_resolve_primary_stack(ctx, &resolver, &sp);
       if (!ok) {
         all_ok = False;
-        Todo();
       }
     }
 

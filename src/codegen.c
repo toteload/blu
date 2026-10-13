@@ -491,7 +491,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
-    SRef function_type;
+    SRef inst_function_type;
     {
       SRef ref_ret_type = {0};
       if (func->return_type) {
@@ -538,19 +538,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         .type_rhs = sref_from_instruction(inst_type),
       };
 
-      function_type = sref_from_instruction(inst_unify);
-    }
-
-    InstructionIndex inst_return_type = sir_builder_add(builder, SIR_return_type, source_idx, idx_ast);
-    sir_builder_set_data(builder, inst_return_type, sref_to_u32(function_type));
-
-    for (u32 i = 0; i < func->count; i++) {
-      InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, func->params[i]);
-      SIrParamType *param_type = sir_builder_push_data(builder, inst_param_type, SIrParamType);
-      *param_type = (SIrParamType){
-        .function_type = function_type,
-        .param_index = i,
-      };
+      inst_function_type = sref_from_instruction(inst_unify);
     }
 
     InstructionIndex inst_func = sir_builder_add(builder, SIR_func, source_idx, idx_ast);
@@ -562,7 +550,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     for (u32 i = 0; i < func->count; i++) {
       InstructionIndex inst_param = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
-      sir_builder_set_data(builder, inst_param, sref_to_u32(sref_from_instruction(first_param_type + i)));
+      sir_builder_set_data(builder, inst_param, 0); // TODO ?
     }
 
     stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
@@ -596,7 +584,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     *data_func = (SIrFunc){
       .param_count = func->count,
       .instruction_count = func_instruction_count,
-      .return_type = sref_from_instruction(inst_return_type),
+      .type_function = sref_from_instruction(function_type),
     };
 
     return sref_from_instruction(inst_func);
