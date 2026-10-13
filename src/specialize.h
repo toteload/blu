@@ -96,9 +96,6 @@ typedef enum {
 typedef enum {
   Run_ok,
   Run_error = Step_error,
-
-  // The pc of the callframe will be on a lookup instruction with the DeclarationIndex
-  // which needs to be resolved.
   Run_resolve_declaration_value = Step_resolve_declaration_value,
   Run_register_function = Step_register_function,
 } RunResultCode;
@@ -119,6 +116,7 @@ typedef struct {
 } RunResult;
 
 RunResult run_toplevel_block(Specializer *sp, SpecializerState *state);
+void specializer_resolve_decl(SpecializerState *state, ValueIndex decl_val);
 
 #endif // SPECIALIZE_H
 

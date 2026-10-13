@@ -118,7 +118,7 @@ typedef enum {
 typedef struct {
   u32 param_count;
   u32 instruction_count;
-  SRef return_type;
+  SRef type_function;
 } SIrFunc;
 
 typedef struct {
