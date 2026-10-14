@@ -65,12 +65,12 @@ Scope *push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionIndex s
 Scope  pop_scope(Frame *frame);
 
 typedef struct {
+  Frame frame;
   IIrBuilder *builder;
   union {
     ValueIndex val;
     DeclarationIndex decl;
   } data;
-  Frame frame;
 } SpecializerState;
 
 typedef struct {

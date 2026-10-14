@@ -109,8 +109,7 @@ typedef enum {
   SIR_type,              // references SIrType
   SIR_typeof,            // contains SRef
   SIR_base_type,         // contains SRef
-  SIR_return_type,       // contains SRef
-  SIR_param_type,        // references SIrParamType
+  SIR_return_type,       // contains nothing. Refers to the return type of the current function.
 } SIrOpcode;
 // clang-format on
 
