@@ -491,14 +491,26 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_function: {
     AstFunction *func = ast_data(ast, idx_ast);
 
+    InstructionIndex inst_func = sir_builder_add(builder, SIR_func, source_idx, idx_ast);
+    SIrFunc *data_func = sir_builder_push_data(builder, inst_func, SIrFunc);
+    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+
+    for (u32 i = 0; i < func->count; i++) {
+      AstParam *ast_param = ast_data(ast, func->params[i]);
+
+      if (ast_param->type) {
+        param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+      } else {
+        param_types[i] = (SRef){0};
+      }
+    }
+
     SRef inst_function_type;
     {
       SRef ref_ret_type = {0};
       if (func->return_type) {
         ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
       }
-
-      SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
 
       // Output param type expressions
       for (u32 i = 0; i < func->count; i++) {
@@ -540,9 +552,6 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
       inst_function_type = sref_from_instruction(inst_unify);
     }
-
-    InstructionIndex inst_func = sir_builder_add(builder, SIR_func, source_idx, idx_ast);
-    SIrFunc *data_func = sir_builder_push_data(builder, inst_func, SIrFunc);
 
     InstructionIndex first_param_type = inst_return_type + 1;
 

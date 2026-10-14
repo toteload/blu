@@ -278,8 +278,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     switch (op) {
     case SIR_func: {
       SIrFunc *func = extra;
-      fprintf(out, "param_count=%u instruction_count=%u return_type=", func->param_count, func->instruction_count);
-      print_sref(out, compiler, func->return_type);
+      fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
 
@@ -334,12 +333,6 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
 
     case SIR_repeat: {
       fprintf(out, "%%%u", data);
-    } break;
-
-    case SIR_param_type: {
-      SIrParamType *p = extra;
-      print_sref(out, compiler, p->function_type);
-      fprintf(out, " %u", p->param_index);
     } break;
 
     case SIR_param:
