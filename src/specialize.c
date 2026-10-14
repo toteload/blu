@@ -473,30 +473,32 @@ internal u32 step(Specializer *in, SpecializerState *state) {
   case SIR_func: {
     SIrFunc *func = sir_chunk_extra(f->chunk, pc);
 
-    TypeIndex func_type;
-    b32 ok = expect_some_type_value(in, state, func->return_type, &func_type);
-    if (!ok) {
-      Todo();
-    }
+    Todo();
 
-    Value *v;
-    ValueIndex stub = values_alloc(in->values, &v);
-    ValueStub *data = values_alloc_data_type(in->values, ValueStub);
-    *data = (ValueStub){
-      .decl = f->decl,
-      .inst = pc,
-      .type = func_type,
-    };
+    //TypeIndex func_type;
+    //b32 ok = expect_some_type_value(in, state, func->return_type, &func_type);
+    //if (!ok) {
+    //  Todo();
+    //}
 
-    *v = (Value){
-      .type = in->common->type.stub,
-      .data_size = sizeof(ValueStub),
-      .data = data,
-    };
+    //Value *v;
+    //ValueIndex stub = values_alloc(in->values, &v);
+    //ValueStub *data = values_alloc_data_type(in->values, ValueStub);
+    //*data = (ValueStub){
+    //  .decl = f->decl,
+    //  .inst = pc,
+    //  .type = func_type,
+    //};
 
-    store_inst_value(f, pc, iref_from_value(stub));
+    //*v = (Value){
+    //  .type = in->common->type.stub,
+    //  .data_size = sizeof(ValueStub),
+    //  .data = data,
+    //};
 
-    state->data.val = stub;
+    //store_inst_value(f, pc, iref_from_value(stub));
+
+    //state->data.val = stub;
 
     s->pc += func->instruction_count;
 
@@ -952,15 +954,6 @@ internal u32 step(Specializer *in, SpecializerState *state) {
       Type *type = arena_push_type_function(in->scratch, param_count);
       type->kind = Type_function;
       type->data.function.param_count = param_count;
-
-      ok = expect_some_type_value(in, state, ir_func->return_type, &type->data.function.return_type);
-      if (!ok) {
-        Todo();
-      }
-
-      for (u32 i = 0; i < param_count; i++) {
-        type->data.function.param_types[i] = f->inst_types[func_scope->start + 1 + i];
-      }
 
       Todo();
 
@@ -1696,22 +1689,6 @@ internal u32 step(Specializer *in, SpecializerState *state) {
       store_inst_value(f, pc, iref_from_instruction(inst));
     }
 
-    s->pc += 1;
-  } break;
-
-  case SIR_param_type: {
-    SIrParamType *param_type = sir_chunk_extra(f->chunk, pc);
-
-    TypeIndex idx;
-    b32 ok = expect_some_type_value(in, state, param_type->function_type, &idx);
-    Assert(ok);
-
-    Type *t = types_get(in->types, idx);
-    Assert(t->kind == Type_function);
-    Assert(param_type->param_index < t->data.function.param_count);
-
-    ValueIndex v = val_from_type(in, t->data.function.param_types[param_type->param_index]);
-    store_inst_value(f, pc, iref_from_value(v));
     s->pc += 1;
   } break;
   }

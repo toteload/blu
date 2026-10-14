@@ -64,10 +64,35 @@ typedef union {
 #define REF_FUNCTION_PREFIX sref
 #include "ref.h"
 
+#define BITMAKS_INLINE_BLOCK_IS_BLOCK (Cast(u32, 1) << 31)
+
+// if MSB is set, then this is an inline block and it holds the number of instructions of the block.
+// the instructions are immediately after this instruction.
+// if MSB is not set, then this is a ValueIndex
+typedef struct { u32 x; } InlineBlock;
+
+always_inline b32 inline_block_is_value(InlineBlock b) {
+  return (b.x & BITMAKS_INLINE_BLOCK_IS_BLOCK) == 0;
+}
+
+always_inline b32 inline_block_instruction_count(InlineBlock b) {
+  if (inline_block_is_value(b)) {
+    return 0;
+  }
+
+  return b.x & ~BITMAKS_INLINE_BLOCK_IS_BLOCK;
+}
+
+always_inline ValueIndex inline_block_to_value(InlineBlock b) { return b.x; }
+
+always_inline InlineBlock inline_block_from_value(ValueIndex v) {
+  return (InlineBlock){ v };
+}
+
 // clang-format off
 typedef enum {
   SIR_func,              // references SIrFunc
-  SIR_param,             // contains SRef to a type
+  SIR_param, // contains InlineBlock
   SIR_alloc,             // contains SRef to a type
   SIR_load,
   SIR_store,             // references SIrStore
@@ -109,15 +134,15 @@ typedef enum {
   SIR_type,              // references SIrType
   SIR_typeof,            // contains SRef
   SIR_base_type,         // contains SRef
-  SIR_return_type,       // contains nothing. Refers to the return type of the current function.
+  SIR_return_type, // contains InlineBlock
 } SIrOpcode;
 // clang-format on
 
 // A SIR_func instruction is followed by `param_count` SIR_param instructions.
 typedef struct {
+  SRef type_destination;
   u32 param_count;
   u32 instruction_count;
-  SRef type_function;
 } SIrFunc;
 
 typedef struct {
@@ -127,8 +152,8 @@ typedef struct {
 
 typedef struct {
   SRef cond;
-  InstructionIndex then;
-  InstructionIndex otherwise;
+  InlineBlock then;
+  InlineBlock otherwise;
 } SIrCondbr;
 
 typedef struct {
