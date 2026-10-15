@@ -53,7 +53,9 @@ internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
-  Unused(ctx, old_byte_size, align);
+  Unused(ctx, old_byte_size);
+
+  Assert(align <= Align_of(max_align_t));
 
   if (!is_null(p) && new_byte_size == 0) {
     free(p);
