@@ -38,6 +38,7 @@ typedef struct HASHMAP_NAME {
   HASHMAP_BUCKET_NAME *buckets;
   u32 mask;
   u32 item_count;
+  u32 tombstone_count;
 } HASHMAP_NAME;
 
 #ifndef HASHMAP_H
@@ -94,7 +95,6 @@ HASHMAP_LINKAGE b32                  Cat(HASHMAP_FUNCTION_PREFIX, _remove)(HASHM
 #define Mask_fingerprint  0xfffffffc
 
 #define Min_map_size     4
-#define Max_search_depth 32
 #define Index_not_found  UINT32_MAX
 #define Max_load_factor  0.8
 
@@ -110,9 +110,9 @@ internal always_inline u32 read_fingerprint(u32 x)     { return x & Mask_fingerp
 #endif // HASHMAP_INTERNAL_FUNCTIONS_DEFINED
 
 internal void Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(HASHMAP_NAME *map);
+internal void Cat(HASHMAP_FUNCTION_PREFIX, __rehash_in_place)(HASHMAP_NAME *map);
 internal u32  Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key);
 internal u32  Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map, u32 hash, HASHMAP_KEY_TYPE key);
-internal b32  Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem, u32 cap, u32 size);
 
 HASHMAP_LINKAGE 
 void Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *options) {
@@ -127,12 +127,13 @@ void Cat(HASHMAP_FUNCTION_PREFIX, _init)(HASHMAP_NAME *map, HashMapOptions *opti
 
   memset(meta, 0, size * sizeof(u32));
 
-  map->allocator  = options->allocator;
-  map->buckets    = buckets;
-  map->meta       = meta;
-  map->context    = options->context;
-  map->mask       = size - 1;
-  map->item_count = 0;
+  map->allocator       = options->allocator;
+  map->buckets         = buckets;
+  map->meta            = meta;
+  map->context         = options->context;
+  map->mask            = size - 1;
+  map->item_count      = 0;
+  map->tombstone_count = 0;
 }
 
 HASHMAP_LINKAGE 
@@ -153,27 +154,25 @@ u32 Cat(HASHMAP_FUNCTION_PREFIX, _cap)(HASHMAP_NAME *map) {
 
 HASHMAP_LINKAGE 
 HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX, _insert_key_and_get_bucket)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key, b32 *was_occupied) {
-  // This load factor check has a potential weakness, because it doesn't take tombstones into account.
-  // If you repeatedly insert and remove the same keys, then you could end up with chains of tombstones.
-  // As a consequence you could end up with occupied buckets at the end of long chains resulting in slow lookups.
-  // Although I am not sure how likely this scenario is to occur.
-
   u32 cap = Cat(HASHMAP_FUNCTION_PREFIX, _cap)(map);
-  if (map->item_count > cap * Max_load_factor) {
-    Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(map);
+  if (map->item_count + map->tombstone_count + 1 > cap * Max_load_factor) {
+    if (map->item_count * 2 < cap) {
+      Cat(HASHMAP_FUNCTION_PREFIX, __rehash_in_place)(map);
+    } else {
+      Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(map);
+    }
   }
 
   u32 hash = HASHMAP_HASH_FN(map->context, key);
   u32 idx = Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(map, hash, key);
 
-  while (idx == Index_not_found) {
-    Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(map);
-    idx = Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(map, hash, key);
-  }
-
   b32 is_occupied = slot_is_occupied(map->meta[idx]);
 
   if (!is_occupied) {
+    if (slot_is_tombstone(map->meta[idx])) {
+      map->tombstone_count -= 1;
+    }
+
     map->item_count += 1;
     map->meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
     map->buckets[idx].key = key;
@@ -192,7 +191,8 @@ HASHMAP_BUCKET_NAME *Cat(HASHMAP_FUNCTION_PREFIX , _remove_key_and_get_bucket)(H
     return Null;
   }
 
-  map->item_count -= 1;
+  map->item_count      -= 1;
+  map->tombstone_count += 1;
 
   map->meta[idx] = Mask_is_tombstone;
 
@@ -229,126 +229,53 @@ internal void Cat(HASHMAP_FUNCTION_PREFIX, __grow_and_rehash)(HASHMAP_NAME *map)
   u32 cap = Cat(HASHMAP_FUNCTION_PREFIX, _cap)(map);
   u32 size = cap * 2;
 
-  while (True) {
-    if (size == 0) { Panic(); }
+  usize slot_size = sizeof(u32) + sizeof(HASHMAP_BUCKET_NAME);
 
-    usize new_byte_size = size * (sizeof(u32) + sizeof(HASHMAP_BUCKET_NAME));
-
-    void *mem = Alloc(map->allocator, new_byte_size, Align_of(HASHMAP_BUCKET_NAME));
-
-    b32 ok = Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(map, mem, cap, size);
-    if (ok) {
-      usize old_byte_size = cap * (sizeof(u32) + sizeof(HASHMAP_BUCKET_NAME));
-
-      Free(map->allocator, map->buckets, old_byte_size);
-
-      HASHMAP_BUCKET_NAME *buckets = mem;
-      u32 *meta = Cast(u32*, buckets + size);
-
-      map->mask    = size - 1;
-      map->meta    = meta;
-      map->buckets = buckets;
-
-      break;
-    }
-
-    Free(map->allocator, mem, new_byte_size);
-
-    size *= 2;
-  }
-}
-
-internal b32 Cat(HASHMAP_FUNCTION_PREFIX, __rehash)(HASHMAP_NAME *map, void *mem, u32 cap, u32 size) {
-  HASHMAP_BUCKET_NAME *buckets = mem;
+  HASHMAP_BUCKET_NAME *buckets = Realloc(map->allocator, map->buckets, cap * slot_size, size * slot_size, Align_of(HASHMAP_BUCKET_NAME));
   u32 *meta = Cast(u32*, buckets + size);
 
-  memcpy(buckets, map->buckets, cap * sizeof(HASHMAP_BUCKET_NAME));
-  memcpy(meta, map->meta, cap * sizeof(u32));
-  memset(meta + cap, 0, (size - cap) * sizeof(u32));
+  memmove(meta, buckets + cap, cap * sizeof(u32));
+  memset(meta + cap, 0, cap * sizeof(u32));
 
-  // Mark occupied slots as stale and remove tombstones.
-  for (u32 i = 0; i < cap; i++) {
-    if (slot_is_occupied(meta[i])) {
-      meta[i] |= Mask_is_stale;
-    } else if (slot_is_tombstone(meta[i])) {
-      meta[i] = 0;
+  map->buckets = buckets;
+  map->meta    = meta;
+  map->mask    = size - 1;
+
+  Cat(HASHMAP_FUNCTION_PREFIX, __rehash_in_place)(map);
+}
+
+internal void Cat(HASHMAP_FUNCTION_PREFIX, __rehash_in_place)(HASHMAP_NAME *map) {
+  u32 *meta = map->meta;
+  HASHMAP_BUCKET_NAME *buckets = map->buckets;
+  u32 mask = map->mask;
+
+  for (u32 i = 0; i <= mask; i++) {
+    meta[i] = slot_is_occupied(meta[i]) ? Mask_is_stale : 0;
+  }
+
+  for (u32 i = 0; i <= mask; i++) {
+    while (slot_is_stale(meta[i])) {
+      u32 hash = HASHMAP_HASH_FN(map->context, buckets[i].key);
+      u32 idx = hash & mask;
+
+      while (!slot_is_empty(meta[idx]) && !slot_is_stale(meta[idx])) {
+        idx = (idx + 1) & mask;
+      }
+
+      if (idx == i) {
+        meta[i] = read_fingerprint(hash) | Mask_is_occupied;
+      } else if (slot_is_empty(meta[idx])) {
+        meta[idx]    = read_fingerprint(hash) | Mask_is_occupied;
+        buckets[idx] = buckets[i];
+        meta[i]      = 0;
+      } else {
+        meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
+        Swap(HASHMAP_BUCKET_NAME, buckets[i], buckets[idx]);
+      }
     }
   }
 
-  u32 mask = size - 1;
-
-  for (u32 i = 0; i < cap; i++) {
-    if (!slot_is_stale(meta[i])) {
-      continue;
-    }
-
-    HASHMAP_BUCKET_NAME bi = buckets[i];
-
-    u32 hash = HASHMAP_HASH_FN(map->context, bi.key);
-    u32 start = hash & mask;
-
-    u32 idx = Index_not_found;
-    for (u32 k = 0; k < Max_search_depth; k++) {
-      u32 j = (start + k) & mask;
-      if (slot_is_empty(meta[j]) || slot_is_stale(meta[j])) {
-        idx = j;
-        break;
-      }
-    }
-
-    if (idx == Index_not_found) {
-      return False;
-    }
-
-    if (i == idx) {
-      meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
-      continue;
-    }
-
-    meta[i] = 0;
-
-    if (slot_is_empty(meta[idx])) {
-      meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
-      buckets[idx] = bi;
-      continue;
-    }
-
-    if (slot_is_stale(meta[idx])) {
-      meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
-      Swap(HASHMAP_BUCKET_NAME, bi, buckets[idx]);
-    }
-
-    for (u32 j = 0; j < cap; j++) {
-      u32 hash = HASHMAP_HASH_FN(map->context, bi.key);
-      u32 start = hash & mask;
-
-      for (u32 k = 0; k < Max_search_depth; k++) {
-        u32 idx = (start + k) & mask;
-
-        if (slot_is_empty(meta[idx])) {
-          meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
-          buckets[idx] = bi;
-          goto next;
-        }
-
-        if (slot_is_stale(meta[idx])) {
-          meta[idx] = read_fingerprint(hash) | Mask_is_occupied;
-          Swap(HASHMAP_BUCKET_NAME, bi, buckets[idx]);
-          goto place_next_bucket_in_chain;
-        }
-      }
-
-      return False;
-
-    place_next_bucket_in_chain:
-      continue;
-    }
-
-  next:
-    continue;
-  }
-
-  return True;
+  map->tombstone_count = 0;
 }
 
 internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *map, HASHMAP_KEY_TYPE key) {
@@ -356,9 +283,7 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *m
   u32 fingerprint = read_fingerprint(hash);
   u32 start_idx = hash & map->mask;
 
-  for (u32 i = 0; i < Max_search_depth; i++) {
-    u32 idx = (start_idx + i) & map->mask;
-
+  for (u32 idx = start_idx; ; idx = (idx + 1) & map->mask) {
     if (slot_is_empty(map->meta[idx])) {
       return Index_not_found;
     }
@@ -369,8 +294,6 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_occupied_index)(HASHMAP_NAME *m
       }
     }
   }
-
-  return Index_not_found;
 }
 
 internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map, u32 hash, HASHMAP_KEY_TYPE key) {
@@ -379,9 +302,7 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
 
   u32 tombstone_idx = Index_not_found;
 
-  for (u32 i = 0; i < Max_search_depth; i++) {
-    u32 idx = (start_idx + i) & map->mask;
-
+  for (u32 idx = start_idx; ; idx = (idx + 1) & map->mask) {
     if (slot_is_empty(map->meta[idx])) {
       if (tombstone_idx != Index_not_found) {
         return tombstone_idx;
@@ -400,8 +321,6 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
       }
     }
   }
-
-  return tombstone_idx;
 }
 
 #undef HASHMAP_OUTPUT_DEFINITIONS
@@ -422,6 +341,5 @@ internal u32 Cat(HASHMAP_FUNCTION_PREFIX, __find_insert_index)(HASHMAP_NAME *map
 #undef Mask_is_stale
 #undef Mask_fingerprint
 #undef Min_map_size
-#undef Max_search_depth
 #undef Index_not_found
 #undef Max_load_factor

@@ -121,7 +121,8 @@ void *arena_push(Arena *arena, usize size, u32 align) {
 
   u32 page_size = vmem_page_size();
   usize commit_size_needed = Cast(usize, ptr_diff(at_after_alloc, arena->commit_end));
-  usize x = Max(Default_commit_growth_size, commit_size_needed);
+  usize mem_remaining = Cast(usize, ptr_diff(arena->reserve_end, arena->commit_end));
+  usize x = Min(Max(Default_commit_growth_size, commit_size_needed), mem_remaining);
   usize commit_size = round_up_to_power_of_two(x, page_size);
 
   b32 ok = vmem_commit(arena->commit_end, commit_size);
