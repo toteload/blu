@@ -227,7 +227,8 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
       TypeIndex param_type;
       err = eval_unify(scratch, types, type_lhs->data.function.param_types[i], type_rhs->data.function.param_types[i], &param_type);
       if (err) {
-        break;
+        arena_scope_end(scratch, snapshot);
+        return err;
       }
 
       f->data.function.param_types[i] = param_type;

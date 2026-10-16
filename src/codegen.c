@@ -733,7 +733,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_type_array: {
     AstTypeArray *array = ast_data(ast, idx_ast);
 
-    SRef array_size = gen_comptime_code(gen, array->base, sref_from_value(gen->common->val.usize));
+    SRef array_size = gen_comptime_code(gen, array->size, sref_from_value(gen->common->val.usize));
 
     SRef base_type = gen_code(gen, array->base, sref_from_value(gen->common->val.type));
 
@@ -741,7 +741,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + 2 * sizeof(SRef), Align_of(SIrType));
     data->kind = Type_array;
     data->arg_count = 2;
-    data->args[1] = array_size;
+    data->args[0] = array_size;
     data->args[1] = base_type;
     return sref_from_instruction(inst);
   } break;

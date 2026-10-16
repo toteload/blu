@@ -1,25 +1,11 @@
 # Currently doing
 
-
 - [ ] Reuse deallocated values! And add generation check.
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
   Just all the ones that match and if they have overlap it's an error?
 - Are anonymous structs nominal or structural?
-
-## Bugs/issues found by Claude (may be out of date)
-
-# Low / nits
-
-- **N4 — `segment_list` `_copy_to_array` does `memcpy(dst, NULL, 0)`** (`src/segment_list.h:142`)
-  when `len` lands exactly on a segment boundary (the last segment pointer is still `NULL`).
-  Harmless in practice but technically UB.
-- **N5 — little-endian assumption** in `read_unsigned_integer_extend` / `eval_cast_int`
-  (`src/eval.c:24-29`) and the 8-byte-pointer assumptions in `types_size_info`. Fine for current
-  targets; worth a comment.
-- **N6 — `read_file` uses `i32` for `ftell`** (2 GB cap) and `arena_init` doesn't check for `mmap`'s
-  `MAP_FAILED` (`src/toteload.c:56`, `src/source_file.c:79`).
 
 ## Comptime
 
@@ -32,11 +18,6 @@
 
 ## General
 
-- [ ] Type casting and coercion information is kinda scattered.
-      There is `eval_unify`, `eval_coerce`, `is_type_castable_to` and `is_type_coercible_to`.
-      For example, if `is_type_coercible_to` then `eval_coerce` should succeed for the same types.
-      So these functions need to be kept in sync which is error prone/annoying.
-      See if this can be improved.
 - [ ] `test\basic\slice.blu`
   - Includes array type and string literal.
   - Includes coercion of sequence literals to typed slices.
@@ -98,9 +79,6 @@
 
 
 ## Errors
-
-Maybe not implement this in the language itself.
-Maybe DO implement this in the language itself.
 
 - [ ] Add error type and add syntax for functions to return errors.
 - [ ] Add `try` and `catch`.

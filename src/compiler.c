@@ -53,16 +53,33 @@ internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
-  Unused(ctx, old_byte_size);
+  Unused(ctx);
 
-  Assert(align <= Align_of(max_align_t));
-
-  if (!is_null(p) && new_byte_size == 0) {
-    free(p);
+  if (new_byte_size == 0) {
+    if (!is_null(p)) {
+      free(Cast(void **, p)[-1]);
+    }
     return Null;
   }
 
-  return realloc(p, new_byte_size);
+  Assert(align != 0 && is_zero_or_power_of_two(align));
+
+  usize a = Max(Cast(usize, align), Align_of(void *));
+  u8 *raw = malloc(sizeof(void *) + a - 1 + new_byte_size);
+  if (is_null(raw)) {
+    return Null;
+  }
+
+  uintptr_t addr = (Cast(uintptr_t, raw) + sizeof(void *) + a - 1) & ~Cast(uintptr_t, a - 1);
+  void **aligned = Cast(void **, addr);
+  aligned[-1] = raw;
+
+  if (!is_null(p)) {
+    memcpy(aligned, p, Min(old_byte_size, new_byte_size));
+    free(Cast(void **, p)[-1]);
+  }
+
+  return aligned;
 }
 
 Allocator const cstd_allocator = {

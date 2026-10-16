@@ -865,8 +865,10 @@ internal u32 step(Specializer *in, RunState *state) {
       );
     } break;
 
+    case Type_array: Todo();
+
     default:
-      Panic(); Unreachable();
+      Panic();
     }
 
     ValueIndex v = val_from_type(in, t);
