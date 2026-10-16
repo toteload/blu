@@ -209,39 +209,43 @@ TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx) {
   return types_size_info(types, type);
 }
 
-b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from) {
+u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from) {
   if (to == from) {
-    return True;
+    return Coercion_identical_types;
   }
 
   Type *type_to = types_get(types, to);
   Type *type_from = types_get(types, from);
 
   if (type_from->kind == Type_comptime_int) {
-    if (type_to->kind == Type_integer || type_to->kind == Type_usize) {
-      return True;
+    if (type_to->kind == Type_integer || type_to->kind == Type_usize || type_to->kind == Type_isize) {
+      return Coercion_comptime_int_to_intlike;
     }
 
-    return False;
+    return Coercion_invalid;
   }
 
   if (type_from->kind == Type_integer && type_to->kind == Type_integer) {
-    if (type_from->data.integer.signedness == type_to->data.integer.signedness) {
-      return type_from->data.integer.bitwidth <= type_to->data.integer.bitwidth;
-    } else {
-      return False;
+    if (type_from->data.integer.signedness == type_to->data.integer.signedness && type_from->data.integer.bitwidth <= type_to->data.integer.bitwidth) {
+      return Coercion_int_widen;
     }
+
+    return Coercion_invalid;
   }
 
   if (type_from->kind == Type_bool && type_to->kind == Type_integer) {
-    return True;
+    return Coercion_bool_to_int;
   }
 
   if (type_from->kind == Type_array && type_to->kind == Type_slice) {
-    return type_from->data.array.base_type == type_to->data.slice.base_type;
+    if (type_from->data.array.base_type == type_to->data.slice.base_type) {
+      return Coercion_array_to_slice;
+    }
+
+    return Coercion_invalid;
   }
 
-  return False;
+  return Coercion_invalid;
 }
 
 internal b32 is_type_int_like(Type *t) {

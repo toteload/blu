@@ -229,7 +229,7 @@ void test_eval_unify(TestResult *test, void *user) {
   arena_deinit(&scratch);
 }
 
-void test_is_type_coercible_to(TestResult *test, void *user) {
+void test_classify_type_coercion(TestResult *test, void *user) {
   Unused(user);
 
   Arena arena;
@@ -247,12 +247,12 @@ void test_is_type_coercible_to(TestResult *test, void *user) {
   TypeIndex t_fn_i32  = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
   TypeIndex t_fn_bool = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
 
-  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_i32), True);
-  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_comptime_int), True);
-  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_i32), True);
-  Test_assert_eq(is_type_coercible_to(&types, t_fn_i32, t_fn_bool), False);
-  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_bool), True);
-  Test_assert_eq(is_type_coercible_to(&types, t_i32, t_u8), False);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_i32), Coercion_identical_types);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime_int_to_intlike);
+  Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_i32), Coercion_identical_types);
+  Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_bool), Coercion_invalid);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_bool), Coercion_bool_to_int);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_u8), Coercion_invalid);
 
   arena_deinit(&arena);
   arena_deinit(&scratch);
@@ -267,7 +267,7 @@ void register_eval_tests(TestRunner *runner) {
   EvalTest(test_eval_int_mul_safe);
   EvalTest(test_eval_int_div_safe);
   EvalTest(test_eval_unify);
-  EvalTest(test_is_type_coercible_to);
+  EvalTest(test_classify_type_coercion);
 
 #undef EvalTest
 }

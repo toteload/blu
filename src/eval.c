@@ -314,7 +314,16 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, Ty
 }
 
 u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res) {
-  if (dst == val->type) {
+  TypeIndex type_from = val->type;
+
+  u32 coercion = classify_type_coercion(types, dst, type_from);
+
+  Type *type_dst = types_get(types, dst);
+  Type *type_val = types_get(types, val->type);
+
+  switch (Cast(CoercionResult, coercion)) {
+  case Coercion_invalid: return CoerceResult_invalid_coercion_types;
+  case Coercion_identical_types: {
     Value *p;
     ValueIndex idx = values_alloc(values, &p);
 
@@ -331,11 +340,9 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     *res = idx;
     return CoerceResult_ok;
   }
-
-  Type *type_dst = types_get(types, dst);
-  Type *type_val = types_get(types, val->type);
-
-  if (type_val->kind == Type_comptime_int && (type_dst->kind == Type_integer || type_dst->kind == Type_usize || type_dst->kind == Type_isize)) {
+  case Coercion_bool_to_int: Todo();
+  case Coercion_int_widen: Todo();
+  case Coercion_comptime_int_to_intlike: {
     TypeInteger comptime_int = {
       .signedness = Signed,
       .bitwidth   = sizeof(ComptimeInt) * 8,
@@ -362,12 +369,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
 
     return CoerceResult_ok;
   }
-
-  if (type_val->kind == Type_array && type_dst->kind == Type_slice) {
-    if (type_val->data.array.base_type != type_dst->data.slice.base_type) {
-      return CoerceResult_invalid_coercion_types;
-    }
-
+  case Coercion_array_to_slice: {
     Value *p;
     ValueIndex idx = values_alloc(values, &p);
 
@@ -386,57 +388,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     *res = idx;
     return CoerceResult_ok;
   }
-
-  // A one-element array holds exactly its element, so coercing it to the element type is a
-  // reinterpretation of the same bytes.
-  if (type_val->kind == Type_array && type_val->data.array.size == 1) {
-    TypeIndex base_type = type_val->data.array.base_type;
-
-    Value element = {
-      .type = base_type,
-      .data = val->data,
-      .data_size = types_size_info_by_index(types, base_type).size,
-    };
-
-    return eval_coerce(types, values, dst, &element, res);
   }
-
-  if (type_val->kind == Type_function && type_dst->kind == Type_function) {
-    u32 param_count = type_val->data.function.param_count;
-    if (param_count != type_dst->data.function.param_count) {
-      return CoerceResult_invalid_coercion_types;
-    }
-
-    TypeIndex return_type = type_val->data.function.return_type;
-
-    if (return_type && return_type != type_dst->data.function.return_type) {
-      return CoerceResult_invalid_coercion_types;
-    }
-
-    for (u32 i = 0; i < param_count; i++) {
-      TypeIndex param_type = type_val->data.function.param_types[i];
-      if (param_type && param_type != type_dst->data.function.param_types[i]) {
-        return CoerceResult_invalid_coercion_types;
-      }
-    }
-
-    Value *p;
-    ValueIndex idx = values_alloc(values, &p);
-
-    u32 size = sizeof(ValueFunc);
-    void *data = values_alloc_data(values, size, Align_of(ValueFunc));
-    memcpy(data, val->data, size);
-    *p = (Value){
-      .type = dst,
-      .data = data,
-      .data_size = size,
-    };
-
-    *res = idx;
-    return CoerceResult_ok;
-  }
-
-  return CoerceResult_invalid_coercion_types;
 }
 
 u32 eval_int_mod_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {

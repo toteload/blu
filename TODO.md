@@ -12,14 +12,6 @@
 
 # Low / nits
 
-- **N2 — `arena_push` can commit past the reservation** (`src/toteload.c:108-117`): near the end of
-  the reserved range it commits `Max(512KiB, needed)` rounded up, without clamping to `reserve_end`,
-  so `vmem_commit` could run past the mapping and trip the `Assert`. Only reachable with near-full
-  arenas.
-- **N3 — hashmap rehash can theoretically drop a bucket** (`src/hashmap.h:321-349`): if the chained
-  relocation `for j` loop runs `cap` iterations without placing the displaced bucket, it falls
-  through to `next` and the in-hand bucket is lost. Very low probability, but silent data loss
-  rather than a `return False` retry.
 - **N4 — `segment_list` `_copy_to_array` does `memcpy(dst, NULL, 0)`** (`src/segment_list.h:142`)
   when `len` lands exactly on a segment boundary (the last segment pointer is still `NULL`).
   Harmless in practice but technically UB.

@@ -93,7 +93,16 @@ u32 type_intern_byte_size(Type *type);
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
 TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);
 
-b32 is_type_coercible_to(TypeInterner *types, TypeIndex to, TypeIndex from);
+typedef enum {
+  Coercion_invalid,
+  Coercion_identical_types,
+  Coercion_comptime_int_to_intlike,
+  Coercion_int_widen,
+  Coercion_bool_to_int,
+  Coercion_array_to_slice,
+} CoercionResult;
+
+u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from);
 
 // An explicit cast. Allows everything a coercion allows, plus narrowing and signedness changes
 // between integer types, which truncate.

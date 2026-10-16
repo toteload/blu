@@ -639,7 +639,7 @@ internal u32 step(Specializer *in, RunState *state) {
       TypeIndex from = ref_typeof(in, f, as->val);
 
       if (type_dst != from) {
-        if (!is_type_coercible_to(in->types, type_dst, from)) {
+        if (classify_type_coercion(in->types, type_dst, from) == Coercion_invalid) {
           Message_error(
             in->msg_sink,
             (MessageLocation){
