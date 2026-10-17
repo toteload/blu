@@ -164,9 +164,14 @@ typedef struct String {
 
 String string_from_cstr(char const *s);
 
+typedef enum {
+  PARSE_U64_OK,
+  PARSE_U64_OVERFLOW,
+} ParseU64Result;
+
 // Parses a decimal integer literal.
-// Assumes the string contains only digits.
-u64 parse_u64(String s);
+// Assumes the string contains only digits and contains at least 1 digit.
+u32 parse_u64(String s, u64 *out);
 
 always_inline b32 string_eq(String a, String b) {
   if (a.len != b.len) {

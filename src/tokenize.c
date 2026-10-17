@@ -2,32 +2,32 @@
 #include "tokens.h"
 #include "source_file.h"
 
-#define SEGMENTLIST_NAME            KindList
-#define SEGMENTLIST_TYPE            u8
+#define SEGMENTLIST_NAME KindList
+#define SEGMENTLIST_TYPE u8
 #define SEGMENTLIST_FUNCTION_PREFIX kindlist
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_MIN_SIZE_LOG2   8
-#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_MIN_SIZE_LOG2 8
+#define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define SEGMENTLIST_NAME            SpanList
-#define SEGMENTLIST_TYPE            SpanU32
+#define SEGMENTLIST_NAME SpanList
+#define SEGMENTLIST_TYPE SpanU32
 #define SEGMENTLIST_FUNCTION_PREFIX spanlist
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_MIN_SIZE_LOG2   8
-#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_MIN_SIZE_LOG2 8
+#define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
-#define SEGMENTLIST_NAME            OffsetList
-#define SEGMENTLIST_TYPE            u32
+#define SEGMENTLIST_NAME OffsetList
+#define SEGMENTLIST_TYPE u32
 #define SEGMENTLIST_FUNCTION_PREFIX lines
-#define SEGMENTLIST_LINKAGE         internal
-#define SEGMENTLIST_MIN_SIZE_LOG2   8
-#define SEGMENTLIST_SEGMENT_COUNT   24
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_MIN_SIZE_LOG2 8
+#define SEGMENTLIST_SEGMENT_COUNT 24
 #define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
@@ -52,9 +52,7 @@ internal b32 is_alpha(u8 c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <=
 internal b32 is_identifier_start(u8 c) { return c == '_' || is_alpha(c); }
 internal b32 is_identifier_rest(u8 c) { return is_identifier_start(c) || is_numeric(c); }
 
-internal b32 is_at_end(Tokenizer *tokenizer) {
-  return tokenizer->at == tokenizer->end;
-}
+internal b32 is_at_end(Tokenizer *tokenizer) { return tokenizer->at == tokenizer->end; }
 
 internal void skip_whitespace(Tokenizer *tokenizer) {
   while (!is_at_end(tokenizer) && is_whitespace_except_newline(*tokenizer->at)) {
@@ -70,14 +68,17 @@ internal void step_until_new_line(Tokenizer *tokenizer) {
 
 #define Return_token(Kind)                                                                         \
   {                                                                                                \
-    *kind       = Kind;                                                                            \
+    *kind = Kind;                                                                                  \
     span->start = Cast(u32, token_start - tokenizer->start);                                       \
-    span->end   = Cast(u32, tokenizer->at - tokenizer->start);                                     \
+    span->end = Cast(u32, tokenizer->at - tokenizer->start);                                       \
     return TokResult_ok;                                                                           \
   }
 
 #define Return_if_match(s, Kind)                                                                   \
-  if (string_eq(string_lit(s), (String){.str = token_start, .len = Cast(usize, tokenizer->at - token_start)})) { \
+  if (string_eq(                                                                                   \
+        string_lit(s),                                                                             \
+        (String){.str = token_start, .len = Cast(usize, tokenizer->at - token_start)}              \
+      )) {                                                                                         \
     Return_token(Kind);                                                                            \
   }
 
@@ -88,7 +89,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     return TokResult_end;
   }
 
-  u8        c           = *tokenizer->at;
+  u8 c = *tokenizer->at;
   u8 const *token_start = tokenizer->at;
 
   tokenizer->at++;
@@ -112,8 +113,13 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
   // clang-format on
 
   if (c == '/') {
-    if (is_at_end(tokenizer) || *tokenizer->at != '/') {
+    if (is_at_end(tokenizer) || (*tokenizer->at != '/' && *tokenizer->at != '=')) {
       Return_token(Tok_slash);
+    }
+
+    if (*tokenizer->at == '=') {
+      tokenizer->at += 1;
+      Return_token(Tok_slash_equals);
     }
 
     tokenizer->at += 1;
@@ -132,7 +138,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     if (is_at_end(tokenizer)) {
       Message_error(
         tokenizer->msg_sink,
-        (MessageLocation){ 
+        (MessageLocation){
           .kind = MessageLocation_byte_offset,
           .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
         },
@@ -144,7 +150,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     if (!is_identifier_start(*tokenizer->at)) {
       Message_error(
         tokenizer->msg_sink,
-        (MessageLocation){ 
+        (MessageLocation){
           .kind = MessageLocation_byte_offset,
           .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
         },
@@ -253,7 +259,8 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_token(Tok_cmp_gt);
   }
 
-  if (c == 'u' && (tokenizer->at + 1 < tokenizer->end) && tokenizer->at[0] == '8' && tokenizer->at[1] == '"') {
+  if (c == 'u' && (tokenizer->at + 1 < tokenizer->end) && tokenizer->at[0] == '8' &&
+      tokenizer->at[1] == '"') {
     tokenizer->at += 2;
 
     while (!is_at_end(tokenizer) && *tokenizer->at != '"') {
@@ -269,7 +276,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     if (is_at_end(tokenizer)) {
       Message_error(
         tokenizer->msg_sink,
-        (MessageLocation){ 
+        (MessageLocation){
           .kind = MessageLocation_byte_offset,
           .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
         },
@@ -297,7 +304,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     if (is_at_end(tokenizer)) {
       Message_error(
         tokenizer->msg_sink,
-        (MessageLocation){ 
+        (MessageLocation){
           .kind = MessageLocation_byte_offset,
           .data.offset = Cast(u32, tokenizer->end - tokenizer->start),
         },
@@ -381,7 +388,7 @@ LineInfo tokens_find_line_info(String text, Tokens *tokens, u32 byte_offset) {
   for (u32 i = 1; i < len; i++) {
     u32 offset = tokens->lines[i];
     if (offset > byte_offset) {
-      u32 offset_prev = tokens->lines[i-1];
+      u32 offset_prev = tokens->lines[i - 1];
       return (LineInfo){
         .line = i,
         .offset_start_of_line = offset_prev,
@@ -400,24 +407,20 @@ LineInfo tokens_find_line_info(String text, Tokens *tokens, u32 byte_offset) {
 
   return (LineInfo){
     .line = len,
-    .offset_start_of_line = tokens->lines[len-1],
-    .line_len = offset - tokens->lines[len-1],
+    .offset_start_of_line = tokens->lines[len - 1],
+    .line_len = offset - tokens->lines[len - 1],
   };
 }
 
-u8 tokens_kind(Tokens *tokens, TokenIndex idx) {
-  return tokens->kinds[idx];
-}
+u8 tokens_kind(Tokens *tokens, TokenIndex idx) { return tokens->kinds[idx]; }
 
-SpanU32 tokens_span(Tokens *tokens, TokenIndex idx) {
-  return tokens->spans[idx];
-}
+SpanU32 tokens_span(Tokens *tokens, TokenIndex idx) { return tokens->spans[idx]; }
 
 b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   Tokenizer tokenizer = {
-    .start    = text.str,
-    .end      = ptr_offset(text.str, text.len),
-    .at       = text.str,
+    .start = text.str,
+    .end = ptr_offset(text.str, text.len),
+    .at = text.str,
     .msg_sink = context->msg_sink,
   };
 
@@ -452,10 +455,10 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
     spanlist_append(&spanlist, context->scratch, span);
   }
 
-  u32 tok_count  = kindlist.len;
+  u32 tok_count = kindlist.len;
   u32 line_count = linelist.len;
 
-  u8      *kinds = arena_push_array(u8,      context->arena, tok_count);
+  u8 *kinds = arena_push_array(u8, context->arena, tok_count);
   SpanU32 *spans = arena_push_array(SpanU32, context->arena, tok_count);
 
   kindlist_copy_to_array(&kindlist, kinds);
@@ -465,7 +468,7 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
   lines_copy_to_array(&linelist, lines);
 
   *tokens = (Tokens){
-    .tok_count  = tok_count,
+    .tok_count = tok_count,
     .line_count = line_count,
     .kinds = kinds,
     .spans = spans,
@@ -479,37 +482,69 @@ b32 tokenize(TokenizeContext *context, String text, Tokens *tokens) {
 
 String token_string(Tokens *tokens, String text, TokenIndex tok) {
   SpanU32 span = tokens->spans[tok];
-  return (String){ .str = text.str + span.start, .len = span.end - span.start };
+  return (String){.str = text.str + span.start, .len = span.end - span.start};
 }
 
 char const *token_kind_string_literals[Tok_kind_max] = {
-  ":",        ";",
-  ",",        ".",
-  "=",       "-",
-  "+",         "*",
-  "/",        "%",
+  ":",
+  ",",
+  ".",
+  "=",
+  "-",
+  "+",
+  "*",
+  "/",
+  "%",
   "-=",
-  "+=", "*=", "%=",  "!",
-  "&",    "|",
-  "^",        "~",
-  "<<",   ">>",
-  "==",       "!=",
-  ">",       ">=",
-  "<",       "<=",
-  "integer literal",  "string literal", "u8-string literal",
-  "{",   "}",
-  "(",   ")",
-  "[", "]",
-  "if",           "else",
-  "for",          "while", "do",
-  "break",        "continue",
-  "return",       "and",
-  "or",           "defer",
-  "const",        "cast",
-  "bitcast", "as", "mod", "inline",
-  "identifier",   "label", "#debug",
+  "+=",
+  "*=",
+  "/=",
+  "%=",
+  "!",
+  "&",
+  "|",
+  "^",
+  "~",
+  "<<",
+  ">>",
+  "==",
+  "!=",
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "integer literal",
+  "string literal",
+  "u8-string literal",
+  "{",
+  "}",
+  "(",
+  ")",
+  "[",
+  "]",
+  "if",
+  "else",
+  "for",
+  "while",
+  "do",
+  "break",
+  "continue",
+  "return",
+  "and",
+  "or",
+  "defer",
+  "const",
+  "cast",
+  "bitcast",
+  "as",
+  "mod",
+  "inline",
+  "identifier",
+  "label",
+  "#debug",
   "#len",
-  "line comment", "newline",
+  "line comment",
+  "newline",
 };
 
 char const *token_kind_string(u8 kind) {

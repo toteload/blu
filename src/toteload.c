@@ -13,13 +13,20 @@ String string_from_cstr(char const *s) {
   };
 }
 
-u64 parse_u64(String s) {
+u32 parse_u64(String s, u64 *out) {
   u64 value = 0;
   for (usize i = 0; i < s.len; i++) {
-    value = value * 10 + (s.str[i] - '0');
+    u64 digit = s.str[i] - '0';
+    if (value > (UINT64_MAX - digit) / 10) {
+      return PARSE_U64_OVERFLOW;
+    }
+
+    value = value * 10 + digit;
   }
 
-  return value;
+  *out = value;
+
+  return PARSE_U64_OK;
 }
 
 #ifdef TTLD_OS_WINDOWS

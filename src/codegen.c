@@ -606,9 +606,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_literal_int: {
     TokenIndex *tok = ast_data(ast, idx_ast);
-    u64 value = parse_u64(token_string(tokens, text, *tok));
-
-    if (value > Cast(u64, INT64_MAX)) {
+    u64 value;
+    u32 err = parse_u64(token_string(tokens, text, *tok), &value);
+    if (err == PARSE_U64_OVERFLOW) {
       Todo();
     }
 

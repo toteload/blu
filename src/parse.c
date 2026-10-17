@@ -270,18 +270,28 @@ typedef b32 (*ParseItemFn)(Parser *parser, AstIndex *out);
 internal b32 parse_comma_separated_items_until(
   Parser *parser, AstIndexList *items, ParseItemFn parse, u8 terminator
 ) {
+  u8  tok;
+  b32 has_next = peek(parser, &tok);
+  if (!has_next || tok == terminator) {
+    return True;
+  }
+
+  consume_if_match(parser, Tok_comma);
+
   while (True) {
-    consume_if_match(parser, Tok_comma);
+    AstIndex *item = list_push(items, parser->scratch);
+    Try(parse(parser, item));
 
-    u8  tok;
-    b32 has_next = peek(parser, &tok);
+    b32 has_comma = consume_if_match(parser, Tok_comma);
 
+    has_next = peek(parser, &tok);
     if (!has_next || tok == terminator) {
       break;
     }
 
-    AstIndex *item = list_push(items, parser->scratch);
-    Try(parse(parser, item));
+    if (!has_comma) {
+      Todo(); // There is another argument but there was no comma.
+    }
   }
 
   return True;
@@ -427,16 +437,13 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
       Try(parse_type(parser, &type_slice->base));
 
       *node_kind(parser, idx) = Ast_type_slice;
-    } else if (tok == Tok_literal_int) {
+    } else {
       AstTypeArray *type_array = node_push_data(parser, AstTypeArray, idx);
-      Try(parse_literal(parser, &type_array->size, Ast_literal_int));
+      Try(parse_expression(parser, &type_array->size));
       Try(expect_token(parser, Tok_bracket_close));
       Try(parse_type(parser, &type_array->base));
 
       *node_kind(parser, idx) = Ast_type_array;
-    } else {
-      // TODO: you could put any expression between the brackets really
-      Panic();
     }
   } break;
   case Tok_paren_open: {
@@ -463,6 +470,9 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     *p = identifier;
 
     *node_kind(parser, idx) = Ast_identifier;
+  } break;
+  case Tok_star: {
+    Todo(); // pointer
   } break;
   default:
     Message_error(
@@ -678,7 +688,7 @@ internal b32 parse_break(Parser *parser, AstIndex *out) {
   }
 
   Try(peek(parser, &tok));
-  if (tok != Tok_brace_close) {
+  if (tok != Tok_brace_close && tok != Tok_keyword_else) {
     Try(parse_expression(parser, &data->value));
   }
 
@@ -920,7 +930,8 @@ internal const u8 op_precedence_group[Binary_and_assign_op_count] = {
   30, 30, // bit shift left, bit shift right
   40, 40, 40, // bit and, bit or, bit xor
   50, 50, 50, 50, 50, 50, // ==, !=, >, >=, <, <=
-  60, 60, // and, or
+  60, // and
+  70, // or
   100, 100, 100, 100, 100, 100, // =, *=, /=, %=, -=, +=
 };
 // clang-format on

@@ -6,7 +6,6 @@
 
 typedef enum {
   Tok_colon,
-  Tok_semicolon,
   Tok_comma,
   Tok_dot,
 
@@ -20,6 +19,7 @@ typedef enum {
   Tok_minus_equals,
   Tok_plus_equals,
   Tok_star_equals,
+  Tok_slash_equals,
   Tok_percent_equals,
 
   Tok_exclamation,
