@@ -238,8 +238,8 @@ internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef ty
   switch (op) {
   case Logical_or:
   case Logical_and: {
-    lhs = sref_from_value(gen->common->val.bool);
-    rhs = sref_from_value(gen->common->val.bool);
+    lhs = sref_from_value(gen->common->val._bool);
+    rhs = sref_from_value(gen->common->val._bool);
   } break;
 
   case Cmp_equal:
@@ -422,7 +422,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
     InstructionIndex cond_block = sir_builder_add(builder, SIR_block, source_idx, if_else->cond);
-    SRef cond_val = gen_code(gen, if_else->cond, sref_from_value(gen->common->val.bool));
+    SRef cond_val = gen_code(gen, if_else->cond, sref_from_value(gen->common->val._bool));
     sir_builder_end_block_with(builder, cond_block, cond_block, cond_val, source_idx, if_else->cond);
     SRef cond = sref_from_instruction(cond_block);
 
@@ -809,7 +809,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef unary_type_destination = (SRef){0};
     switch (op) {
     case Negate: unary_type_destination = (SRef){0}; break;
-    case Not: unary_type_destination = sref_from_value(gen->common->val.bool); break;
+    case Not: unary_type_destination = sref_from_value(gen->common->val._bool); break;
     default: Unreachable();
     }
 
@@ -832,7 +832,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
     if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
-      SRef lhs = gen_code(gen, binary->lhs, sref_from_value(gen->common->val.bool));
+      SRef lhs = gen_code(gen, binary->lhs, sref_from_value(gen->common->val._bool));
 
       InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
       InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, binary->lhs);
@@ -840,7 +840,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
       if (binary->op_kind == Logical_and) {
         InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val.bool));
+        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val._bool));
 
         InstructionIndex inst_and = sir_builder_add(builder, SIR_bool_and, source_idx, idx_ast);
         SIrBinary *data_and = sir_builder_push_data(builder, inst_and, SIrBinary);
@@ -852,7 +852,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         sir_builder_end_block_with(builder, block_rhs, block, sref_from_instruction(inst_and), source_idx, binary->rhs);
 
         InstructionIndex block_otherwise = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(gen->common->val.false), source_idx, binary->rhs);
+        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(gen->common->val._false), source_idx, binary->rhs);
 
         *data = (SIrCondbr){
           .cond = lhs,
@@ -861,10 +861,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         };
       } else if (binary->op_kind == Logical_or) {
         InstructionIndex block_lhs_true = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(gen->common->val.true), source_idx, binary->rhs);
+        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(gen->common->val._true), source_idx, binary->rhs);
 
         InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val.bool));
+        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val._bool));
 
         sir_builder_end_block_with(builder, block_rhs, block, rhs, source_idx, binary->rhs);
 
@@ -918,7 +918,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex loop = sir_builder_add(builder, SIR_loop, source_idx, idx_ast);
 
-    SRef cond_val = gen_code(gen, ast_while->cond, sref_from_value(gen->common->val.bool));
+    SRef cond_val = gen_code(gen, ast_while->cond, sref_from_value(gen->common->val._bool));
 
     InstructionIndex inst_condbr = sir_builder_add(builder, SIR_condbr, source_idx, ast_while->cond);
 

@@ -205,7 +205,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   compiler->common.type.type  = types_add(&compiler->types, &(Type){.kind = Type_type});
   compiler->common.type.nil   = types_add(&compiler->types, &(Type){.kind = Type_nil});
-  compiler->common.type.bool  = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
+  compiler->common.type._bool  = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
   compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
 
   compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
@@ -221,7 +221,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   compiler->common.val.comptime_int = add_type_value(compiler, compiler->common.type.comptime_int);
   compiler->common.val.type         = add_type_value(compiler, compiler->common.type.type);
   compiler->common.val.nil          = add_type_value(compiler, compiler->common.type.nil);
-  compiler->common.val.bool         = add_type_value(compiler, compiler->common.type.bool);
+  compiler->common.val._bool         = add_type_value(compiler, compiler->common.type._bool);
   compiler->common.val.never        = add_type_value(compiler, compiler->common.type.never);
   compiler->common.val.i8           = add_type_value(compiler, compiler->common.type.i8);
   compiler->common.val.i16          = add_type_value(compiler, compiler->common.type.i16);
@@ -234,33 +234,33 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   {
     Value *v;
-    compiler->common.val.true = values_alloc(&compiler->values, &v);
+    compiler->common.val._true = values_alloc(&compiler->values, &v);
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 1;
     *v = (Value){
-      .type = compiler->common.type.bool,
+      .type = compiler->common.type._bool,
       .data_size = 1,
       .data = data,
     };
-    add_primitive(compiler, string_lit("true"), compiler->common.val.true);
+    add_primitive(compiler, string_lit("true"), compiler->common.val._true);
   }
 
   {
     Value *v;
-    compiler->common.val.false = values_alloc(&compiler->values, &v);
+    compiler->common.val._false = values_alloc(&compiler->values, &v);
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 0;
     *v = (Value){
-      .type = compiler->common.type.bool,
+      .type = compiler->common.type._bool,
       .data_size = 1,
       .data = data,
     };
-    add_primitive(compiler, string_lit("false"), compiler->common.val.false);
+    add_primitive(compiler, string_lit("false"), compiler->common.val._false);
   }
 
   add_primitive(compiler, string_lit("type"), compiler->common.val.type);
   add_primitive(compiler, string_lit("nil"), compiler->common.val.nil);
-  add_primitive(compiler, string_lit("bool"), compiler->common.val.bool);
+  add_primitive(compiler, string_lit("bool"), compiler->common.val._bool);
   add_primitive(compiler, string_lit("never"), compiler->common.val.never);
   add_primitive(compiler, string_lit("i8"), compiler->common.val.i8);
   add_primitive(compiler, string_lit("i16"), compiler->common.val.i16);

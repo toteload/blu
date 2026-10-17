@@ -84,7 +84,7 @@ def create_build_ninja():
                   '-Werror=incompatible-pointer-types',
                   #'-O2 -S -mllvm --x86-asm-syntax=intel',
                   '-fansi-escape-codes -fcolor-diagnostics',
-                  '-std=c11',
+                  '-std=c23',
                   '-march=native',
                   '-DTTLD_DEBUG',
                   '-g',

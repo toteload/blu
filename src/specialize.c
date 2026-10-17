@@ -1325,7 +1325,7 @@ internal u32 step(Specializer *in, RunState *state) {
     TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
     TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
 
-    if (type_lhs != type_rhs || type_lhs != in->common->type.bool) {
+    if (type_lhs != type_rhs || type_lhs != in->common->type._bool) {
       Todo();
     }
 
@@ -1343,10 +1343,10 @@ internal u32 step(Specializer *in, RunState *state) {
         .rhs = copy_if_value(in, rhs),
       };
 
-      iir_builder_set_type(builder, inst, in->common->type.bool);
+      iir_builder_set_type(builder, inst, in->common->type._bool);
 
       store_inst_value(f, pc, iref_from_instruction(inst));
-      store_inst_type(f, pc, in->common->type.bool);
+      store_inst_type(f, pc, in->common->type._bool);
 
       s->pc += 1;
     }
@@ -1469,7 +1469,7 @@ internal u32 step(Specializer *in, RunState *state) {
       Todo();
     }
 
-    store_inst_type(f, pc, in->common->type.bool);
+    store_inst_type(f, pc, in->common->type._bool);
 
     IRef lhs = resolve(f, bin->lhs);
     IRef rhs = resolve(f, bin->rhs);
@@ -1500,7 +1500,7 @@ internal u32 step(Specializer *in, RunState *state) {
       .rhs = copy_if_value(in, rhs),
     };
 
-    iir_builder_set_type(builder, inst, in->common->type.bool);
+    iir_builder_set_type(builder, inst, in->common->type._bool);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
@@ -1705,7 +1705,7 @@ internal u32 step(Specializer *in, RunState *state) {
     SRef val = (SRef){sir_chunk_data(f->chunk, pc)};
     TypeIndex type = get_sref_type(in, f, val);
 
-    if (type != in->common->type.bool) {
+    if (type != in->common->type._bool) {
       Todo();
     }
 
@@ -1715,7 +1715,7 @@ internal u32 step(Specializer *in, RunState *state) {
 
     if (iref_is_some_value(res)) {
       b32 b = *Cast(u8 *, values_get(in->values, iref_to_value(res))->data);
-      store_inst_value(f, pc, iref_from_value(b ? in->common->val.false : in->common->val.true));
+      store_inst_value(f, pc, iref_from_value(b ? in->common->val._false : in->common->val._true));
     } else {
       IIrBuilder *builder = get_builder(in);
       InstructionIndex inst = iir_builder_add(builder, IIR_bit_not, f->chunk->sources[pc]);
