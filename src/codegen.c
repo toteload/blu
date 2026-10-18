@@ -271,8 +271,6 @@ internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef ty
     lhs = type_destination;
     rhs = type_destination;
   } break;
-
-  case BinaryOpKind_count: Unreachable();
   }
 
   *lhs_type_destination = lhs;
@@ -301,7 +299,6 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   case Bit_and: Todo(); break;
   case Bit_or: Todo(); break;
   case Bit_xor: Todo(); break;
-  case BinaryOpKind_count: Unreachable();
   }
   // clang-format off
 
@@ -324,6 +321,22 @@ SRef gen_comptime_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   SRef ref = gen_code(gen, idx_ast, type_destination);
   sir_builder_end_block_with(builder, inst_block, inst_block, ref, source_idx, idx_ast);
   return sref_from_instruction(inst_block);
+}
+
+BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
+  switch (kind) {
+  case Assign_normal: Panic();
+  case Assign_mul: return Mul;
+  case Assign_div: return Div;
+  case Assign_mod: return Mod;
+  case Assign_sub: return Sub;
+  case Assign_add: return Add;
+  case Assign_bit_shift_left: return Bit_shift_left;
+  case Assign_bit_shift_right: return Bit_shift_right;
+  case Assign_bit_and: return Bit_and;
+  case Assign_bit_xor: return Bit_xor;
+  case Assign_bit_or: return Bit_or;
+  }
 }
 
 SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
@@ -809,8 +822,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef unary_type_destination = (SRef){0};
     switch (op) {
     case Negate: unary_type_destination = (SRef){0}; break;
-    case Not: unary_type_destination = sref_from_value(gen->common->val._bool); break;
-    default: Unreachable();
+    case Logical_not: unary_type_destination = sref_from_value(gen->common->val._bool); break;
+    case Bit_not: Todo(); break;
     }
 
     SRef e = gen_code(gen, unary->value, unary_type_destination);
@@ -818,8 +831,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     u8 sir_op;
     switch (op) {
     case Negate: sir_op = SIR_negate; break;
-    case Not: sir_op = SIR_not; break;
-    default: Unreachable();
+    case Logical_not: sir_op = SIR_not; break;
+    case Bit_not: Todo(); break;
     }
 
     InstructionIndex inst = sir_builder_add(builder, sir_op, source_idx, idx_ast);

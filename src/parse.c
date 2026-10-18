@@ -3,8 +3,6 @@
 #include "tokens.h"
 #include "source_file.h"
 
-#define Binary_and_assign_op_count (BinaryOpKind_count + AssignKind_count)
-
 #define SEGMENTLIST_NAME            AstIndexList
 #define SEGMENTLIST_TYPE            AstIndex
 #define SEGMENTLIST_FUNCTION_PREFIX list
@@ -214,7 +212,7 @@ internal b32 expect_token(Parser *parser, u8 expected_token_kind) {
   return True;
 }
 
-internal b32 peek(Parser *parser, u8 *token_kind) {
+internal b32 _peek(Parser *parser, u8 *token_kind) {
   if (is_parser_past_end(parser)) {
     return False;
   }
@@ -224,8 +222,9 @@ internal b32 peek(Parser *parser, u8 *token_kind) {
   return True;
 }
 
+// Same as `_peek`, but also logs an error message.
 internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
-  b32 has_peeked = peek(parser, token_kind);
+  b32 has_peeked = _peek(parser, token_kind);
   if (!has_peeked) {
     Message_error(
       parser->msg_sink,
@@ -255,7 +254,7 @@ internal b32 peek2(Parser *parser, u8 *token_kind) {
 
 internal b32 consume_if_match(Parser *parser, u8 token_kind_match) {
   u8 tok;
-  Try(peek(parser, &tok));
+  Try(_peek(parser, &tok));
 
   if (tok == token_kind_match) {
     next(parser, &tok);
@@ -267,16 +266,17 @@ internal b32 consume_if_match(Parser *parser, u8 token_kind_match) {
 
 typedef b32 (*ParseItemFn)(Parser *parser, AstIndex *out);
 
+// Allows for an optional trailing comma
 internal b32 parse_comma_separated_items_until(
   Parser *parser, AstIndexList *items, ParseItemFn parse, u8 terminator
 ) {
-  u8  tok;
-  b32 has_next = peek(parser, &tok);
-  if (!has_next || tok == terminator) {
+  u8 tok;
+  Try(peek_or_error(parser, &tok));
+
+  if (tok == terminator) {
+    next(parser, &tok);
     return True;
   }
-
-  consume_if_match(parser, Tok_comma);
 
   while (True) {
     AstIndex *item = list_push(items, parser->scratch);
@@ -284,17 +284,18 @@ internal b32 parse_comma_separated_items_until(
 
     b32 has_comma = consume_if_match(parser, Tok_comma);
 
-    has_next = peek(parser, &tok);
-    if (!has_next || tok == terminator) {
-      break;
+    Try(peek_or_error(parser, &tok));
+
+    if (tok == terminator) {
+      next(parser, &tok);
+      return True;
     }
 
     if (!has_comma) {
-      Todo(); // There is another argument but there was no comma.
+      Todo(); // There is another argument (or something else) but there was no comma.
+      return False;
     }
   }
-
-  return True;
 }
 
 internal b32 parse_source(Parser *parser, AstIndex *out) {
@@ -334,7 +335,7 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
 
   while (!is_parser_past_end(parser)) {
     u8 tok;
-    peek(parser, &tok);
+    _peek(parser, &tok);
     if (tok == Tok_keyword_mod) {
       break;
     }
@@ -386,7 +387,7 @@ internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
 
   while (!is_parser_past_end(parser)) {
     u8 tok;
-    Try(peek(parser, &tok));
+    _peek(parser, &tok);
     if (tok == Tok_brace_close) {
       break;
     }
@@ -407,7 +408,7 @@ internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
 
 internal b32 parse_type(Parser *parser, AstIndex *out) {
   u8 tok;
-  Try(peek(parser, &tok));
+  Try(peek_or_error(parser, &tok));
 
   if (tok == Tok_brace_open) {
     u8 ignored;
@@ -428,7 +429,7 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     u8 ignored;
     next(parser, &ignored);
 
-    Try(peek(parser, &tok));
+    Try(peek_or_error(parser, &tok));
 
     if (tok == Tok_bracket_close) {
       next(parser, &ignored);
@@ -454,7 +455,6 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     zero_struct(AstTypeFunctionTmp, type_function);
 
     Try(parse_comma_separated_items_until(parser, &type_function->param_types, parse_type, Tok_paren_close));
-    Try(expect_token(parser, Tok_paren_close));
 
     Try(parse_type(parser, &type_function->base.return_type));
 
@@ -574,7 +574,6 @@ internal b32 parse_function(Parser *parser, AstIndex *out) {
 
   Try(expect_token(parser, Tok_bar));
   Try(parse_comma_separated_items_until(parser, &function->params, parse_param, Tok_bar));
-  Try(expect_token(parser, Tok_bar));
 
   if (consume_if_match(parser, Tok_colon)) {
     Try(parse_type(parser, &function->base.return_type));
@@ -631,7 +630,7 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   }
 
   u8 tok;
-  Try(peek(parser, &tok));
+  Try(peek_or_error(parser, &tok));
   if (tok != Tok_keyword_else) {
     if (has_do) {
       Message_error(
@@ -682,12 +681,12 @@ internal b32 parse_break(Parser *parser, AstIndex *out) {
   *data = (AstBreak){ 0 };
 
   u8 tok;
-  Try(peek(parser, &tok));
+  Try(peek_or_error(parser, &tok));
   if (tok == Tok_label) {
     Try(parse_label(parser, &data->label));
   }
 
-  Try(peek(parser, &tok));
+  Try(peek_or_error(parser, &tok));
   if (tok != Tok_brace_close && tok != Tok_keyword_else) {
     Try(parse_expression(parser, &data->value));
   }
@@ -740,18 +739,7 @@ internal b32 parse_identifier(Parser *parser, AstIndex *out) {
 
 internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   u8  tok;
-  b32 has_next_token = peek(parser, &tok);
-  if (!has_next_token) {
-    Message_error(
-      parser->msg_sink,
-      (MessageLocation){ 
-        .kind = MessageLocation_byte_offset,
-        .data.offset = parser->tokens->lines[parser->tokens->line_count-1],
-      },
-      string_lit("Encountered unexpected end of source while trying to parse base expression")
-    );
-    return False;
-  }
+  Try(peek_or_error(parser, &tok));
 
   AstIndex base;
   switch (tok) {
@@ -772,7 +760,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     AstIndex label;
     Try(parse_label(parser, &label));
 
-    Try(peek(parser, &tok));
+    Try(peek_or_error(parser, &tok));
     // clang-format off
     switch (tok) {
     case Tok_brace_open:    Try(parse_block(parser, label, &base)); break;
@@ -785,7 +773,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   case Tok_dot: {
     u8 ignored;
     next(parser, &ignored);
-    Try(peek(parser, &tok));
+    Try(peek_or_error(parser, &tok));
     switch (tok) {
     default:
       Message_error(
@@ -845,8 +833,9 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
     // clang-format off
     switch (tok) {
-    case Tok_exclamation: unary_op->op_kind = Not;    break;
-    case Tok_minus:       unary_op->op_kind = Negate; break;
+    case Tok_exclamation: unary_op->op_kind = Logical_not; break;
+    case Tok_tilde:       unary_op->op_kind = Bit_not;     break;
+    case Tok_minus:       unary_op->op_kind = Negate;      break;
 
     default: { Unreachable(); } break;
     }
@@ -871,7 +860,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
   while (!is_parser_past_end(parser)) {
     u8 tok;
-    peek(parser, &tok);
+    _peek(parser, &tok);
 
     if (tok == Tok_bracket_open) {
       AstIndex   ast_index = node_alloc(parser);
@@ -905,7 +894,6 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
       call->base.callee = base;
       call->args        = (AstIndexList){0};
       Try(parse_comma_separated_items_until(parser, &call->args, parse_expression, Tok_paren_close));
-      Try(expect_token(parser, Tok_paren_close));
 
       *node_kind(parser, ast_index) = Ast_call;
       *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
@@ -923,34 +911,68 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   return True;
 }
 
-// clang-format off
-internal const u8 op_precedence_group[Binary_and_assign_op_count] = {
-  10, 10, 10, // mul, div, mod
-  20, 20, // sub, add
-  30, 30, // bit shift left, bit shift right
-  40, 40, 40, // bit and, bit or, bit xor
-  50, 50, 50, 50, 50, 50, // ==, !=, >, >=, <, <=
-  60, // and
-  70, // or
-  100, 100, 100, 100, 100, 100, // =, *=, /=, %=, -=, +=
+typedef enum {
+#define X(name, _0, _1, _2, _3) P_##name,
+#include "x_binops.h"
+#undef X
+} ParserBinaryOp;
+
+typedef enum {
+  ASSOC_INVALID,
+  ASSOC_LEFT,
+  ASSOC_LEFT_IF_SAME_OP,
+} Associativity;
+
+internal const u8 op_assoc[] = {
+#define X(name, kind, _0, _1, assoc) [P_##name] = assoc,
+#include "x_binops.h"
+#undef X
 };
-// clang-format on
+
+enum {
+#define WHEN_OP(...) __VA_ARGS__
+#define WHEN_ASSIGN(...)
+#define X(name, kind, _1, _2, _3) WHEN_##kind(P_IGNORE__##name,)
+#include "x_binops.h"
+  BINARY_OP_KIND_COUNT,
+#undef X
+};
+
+internal const u8 op_precedence[] = {
+#define X(name, _kind, _0, precedence, _1) [P_##name] = precedence,
+#include "x_binops.h"
+#undef X
+};
 
 enum Precedence {
   Prec_left,
   Prec_right,
+  Prec_ambiguous,
+  Prec_invalid,
 };
 
-internal enum Precedence determine_precedence(u32 lhs, u32 rhs) {
-  u8 left_group  = op_precedence_group[lhs];
-  u8 right_group = op_precedence_group[rhs];
+internal enum Precedence determine_precedence(u32 op_lhs, u32 op_rhs) {
+  u8 left_group  = op_precedence[op_lhs];
+  u8 right_group = op_precedence[op_rhs];
 
-  if (left_group <= right_group) {
+  if (left_group < right_group) {
     return Prec_left;
   }
 
-  return Prec_right;
+  if (left_group > right_group) {
+    return Prec_right;
+  }
+
+  switch (Cast(Associativity, op_assoc[op_lhs])) {
+  case ASSOC_INVALID: return Prec_invalid;
+  case ASSOC_LEFT: return Prec_left;
+  case ASSOC_LEFT_IF_SAME_OP: return (op_lhs == op_rhs) ? Prec_left : Prec_ambiguous;
+  }
+
+  return Prec_invalid;
 }
+
+#define BINARY_OP_INVALID UINT32_MAX
 
 internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
   AstIndex lhs;
@@ -958,47 +980,47 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
 
   while (True) {
     u8  tok;
-    b32 has_peeked = peek(parser, &tok);
+    b32 has_peeked = _peek(parser, &tok);
     if (!has_peeked) {
       *out = lhs;
       return True;
     }
 
-    u8 op = Binary_and_assign_op_count;
+    u32 op = BINARY_OP_INVALID;
 
     // clang-format off
     switch (tok) {
-    case Tok_minus:       op = Sub;               break;
-    case Tok_plus:        op = Add;               break;
-    case Tok_star:        op = Mul;               break;
-    case Tok_slash:       op = Div;               break;
-    case Tok_percent:     op = Mod;               break;
-    case Tok_cmp_eq:      op = Cmp_equal;         break;
-    case Tok_cmp_ne:      op = Cmp_not_equal;     break;
-    case Tok_cmp_gt:      op = Cmp_greater_than;  break;
-    case Tok_cmp_ge:      op = Cmp_greater_equal; break;
-    case Tok_cmp_lt:      op = Cmp_less_than;     break;
-    case Tok_cmp_le:      op = Cmp_less_equal;    break;
-    case Tok_keyword_and: op = Logical_and;       break;
-    case Tok_keyword_or:  op = Logical_or;        break;
-    case Tok_ampersand:   op = Bit_and;           break;
-    case Tok_bar:         op = Bit_or;            break;
-    case Tok_caret:       op = Bit_xor;           break;
-    case Tok_left_shift:  op = Bit_shift_left;    break;
-    case Tok_right_shift: op = Bit_shift_right;   break;
+    case Tok_minus:       op = P_Sub;               break;
+    case Tok_plus:        op = P_Add;               break;
+    case Tok_star:        op = P_Mul;               break;
+    case Tok_slash:       op = P_Div;               break;
+    case Tok_percent:     op = P_Mod;               break;
+    case Tok_cmp_eq:      op = P_Cmp_equal;         break;
+    case Tok_cmp_ne:      op = P_Cmp_not_equal;     break;
+    case Tok_cmp_gt:      op = P_Cmp_greater_than;  break;
+    case Tok_cmp_ge:      op = P_Cmp_greater_equal; break;
+    case Tok_cmp_lt:      op = P_Cmp_less_than;     break;
+    case Tok_cmp_le:      op = P_Cmp_less_equal;    break;
+    case Tok_keyword_and: op = P_Logical_and;       break;
+    case Tok_keyword_or:  op = P_Logical_or;        break;
+    case Tok_ampersand:   op = P_Bit_and;           break;
+    case Tok_bar:         op = P_Bit_or;            break;
+    case Tok_tilde:       op = P_Bit_xor;           break;
+    case Tok_left_shift:  op = P_Bit_shift_left;    break;
+    case Tok_right_shift: op = P_Bit_shift_right;   break;
 
-    case Tok_equals:         op = BinaryOpKind_count + Assign_normal; break;
-    case Tok_minus_equals:   op = BinaryOpKind_count + Assign_sub;    break;
-    case Tok_plus_equals:    op = BinaryOpKind_count + Assign_add;    break;
-    case Tok_star_equals:    op = BinaryOpKind_count + Assign_mul;    break;
-    case Tok_percent_equals: op = BinaryOpKind_count + Assign_mod;    break;
+    case Tok_equals:         op = P_Assign_normal; break;
+    case Tok_minus_equals:   op = P_Assign_sub;    break;
+    case Tok_plus_equals:    op = P_Assign_add;    break;
+    case Tok_star_equals:    op = P_Assign_mul;    break;
+    case Tok_percent_equals: op = P_Assign_mod;    break;
 
     default: { *out = lhs; return True; }
     }
     // clang-format on
 
     enum Precedence precedence = Prec_right;
-    if (prev_op != Binary_and_assign_op_count) {
+    if (prev_op != BINARY_OP_INVALID) {
       precedence = determine_precedence(prev_op, op);
     }
 
@@ -1016,10 +1038,10 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
     AstIndex rhs;
     Try(parse_expression_impl(parser, &rhs, op));
 
-    if (op >= BinaryOpKind_count) {
+    if (op >= BINARY_OP_KIND_COUNT) {
       AstAssign *assign = node_push_data(parser, AstAssign, ast_index);
 
-      assign->kind  = op - BinaryOpKind_count;
+      assign->kind  = op - BINARY_OP_KIND_COUNT;
       assign->lhs   = lhs;
       assign->value = rhs;
 
@@ -1045,7 +1067,7 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
 }
 
 internal b32 parse_expression(Parser *parser, AstIndex *out) {
-  return parse_expression_impl(parser, out, Binary_and_assign_op_count);
+  return parse_expression_impl(parser, out, BINARY_OP_INVALID);
 }
 
 void *ast_data(AstNodes *ast, AstIndex idx) {

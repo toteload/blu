@@ -286,7 +286,7 @@ b32 check_can_type_add(Type *t) {
 }
 
 b32 check_can_type_cmp(Type *t) {
-  return is_type_int_like(t);
+  return is_type_int_like(t) || t->kind == Type_bool;
 }
 
 internal String arena_printf(Arena *arena, char const *format, ...) {

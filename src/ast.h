@@ -41,64 +41,30 @@ typedef enum {
 } BuiltinKind;
 
 typedef enum {
-  Mul,
-  Div,
-  Mod,
-
-  Sub,
-  Add,
-
-  Bit_shift_left,
-  Bit_shift_right,
-
-  Bit_and,
-  Bit_or,
-  Bit_xor,
-
-  Cmp_equal,
-  Cmp_not_equal,
-  Cmp_greater_than,
-  Cmp_greater_equal,
-  Cmp_less_than,
-  Cmp_less_equal,
-
-  Logical_and,
-  Logical_or,
-
-  BinaryOpKind_count,
+#define WHEN_ASSIGN(...)
+#define WHEN_OP(...) __VA_ARGS__
+#define X(name, kind, _0, _1, _2) WHEN_##kind(name,)
+#include "x_binops.h"
+#undef X
+#undef WHEN_OP
+#undef WHEN_ASSIGN
 } BinaryOpKind;
 
 typedef enum {
-  Assign_normal,
-  Assign_mul,
-  Assign_div,
-  Assign_mod,
-  Assign_sub,
-  Assign_add,
-
-  AssignKind_count,
+#define WHEN_ASSIGN(...) __VA_ARGS__
+#define WHEN_OP(...)
+#define X(name, kind, _0, _1, _2) WHEN_##kind(name,)
+#include "x_binops.h"
+#undef X
+#undef WHEN_OP
+#undef WHEN_ASSIGN
 } AssignKind;
-
-always_inline BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind assign_kind) {
-  switch (assign_kind) {
-  case Assign_normal:
-  case AssignKind_count:
-    Panic();
-  default: return assign_kind - 1;
-  }
-}
 
 typedef enum {
   Negate,
-  Not,
-
-  UnaryOpKind_max,
+  Logical_not,
+  Bit_not,
 } UnaryOpKind;
-
-enum AttributeFlag {
-  Attribute_comptime = 1 << 0,
-  Attribute_no_cache = 1 << 1,
-};
 
 typedef struct {
   u8 kind;

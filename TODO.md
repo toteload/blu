@@ -1,6 +1,11 @@
-# Currently doing
+- [ ] Add user error reporting on failure for SIR_unify in specialize.c
+- [ ] Compile time evaluation of binary operators in specialize.c
+- [ ] Complete eval_coerce: Coercion_bool_to_int and Coercion_int_widen
+- [ ] Report error if literal int is too big in codegen.c
+- [ ] Make chained assignment a parse error
+- [ ] Make chained comparison a parse error
 
-- [ ] Reuse deallocated values! And add generation check.
+- [ ] Add compile time function calls
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
