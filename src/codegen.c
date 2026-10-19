@@ -30,27 +30,9 @@ internal b32 cmp_string_index(void *context, StringIndex a, StringIndex b) {
   return a == b;
 }
 
-typedef enum {
-  Lookup_param,
-  Lookup_local,
-  Lookup_decl,
-  Lookup_block,
-  Lookup_loop,
-} LookupKind;
-
-typedef struct {
-  u8 kind;
-  u32 parent_block_idx;
-
-  // A param can be referenced directly. (not sure if this is handy...)
-  // A local must be loaded first.
-  // A decl must be loaded first.
-  InstructionIndex inst;
-} LookupEntry;
-
 #define HASHMAP_NAME            LocalsMap
 #define HASHMAP_KEY_TYPE        StringIndex
-#define HASHMAP_VALUE_TYPE      LookupEntry
+#define HASHMAP_VALUE_TYPE      u32
 #define HASHMAP_FUNCTION_PREFIX locals
 #define HASHMAP_HASH_FN         hash_string_index
 #define HASHMAP_KEY_COMPARE_FN  cmp_string_index
@@ -58,13 +40,13 @@ typedef struct {
 #define HASHMAP_OUTPUT_DEFINITIONS
 #include "hashmap.h"
 
-#define Max_scope_entries 256
-
 typedef enum {
   ScopeEntry_root,
-  ScopeEntry_local,
   ScopeEntry_block,
   ScopeEntry_loop,
+  ScopeEntry_function,
+  ScopeEntry_local,
+  ScopeEntry_param,
 } ScopeEntryKind;
 
 // - local
@@ -127,6 +109,36 @@ typedef struct {
   DeclarationIndex *mods;
 } CodeGen;
 
+internal StringIndex ast_node_to_string_index(CodeGen *gen, AstNodes *ast, AstIndex idx) {
+  if (!idx) {
+    return 0;
+  }
+
+  TokenIndex label = ast_data(ast, idx)->token_index;
+  String str = token_string(tokens, text, label);
+  return strings_add(gen->strings, str);
+}
+
+typedef struct {
+  u32 offset;
+} ScopeKey;
+
+internal b32  push_scope(CodeGen *gen, ScopeEntryKind kind, InstructionIndex inst, StringIndex label, ScopeKey *key);
+internal b32  push_local(CodeGen *gen, StringIndex name, InstructionIndex inst);
+internal void pop_scope(CodeGen *gen, ScopeKey key);
+
+// Looks for a LookupEntry matching the provided name that is either a param, local, block or loop. 
+// Reports an error if name could not be found.
+internal LookupEntry *find_local(CodeGen *gen, StringIndex name);
+
+internal ScopeEntry *get_enclosing_loop(CodeGen *gen, AstIndex at) {
+  if (!gen->parent_loop_idx) {
+    Todo(); // there is no enclosing loop
+  }
+
+  return scopes_ptr_at_unchecked(&gen->scope_stack, gen->parent_loop_idx);
+}
+
 void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tree_idx) {
   *gen = (CodeGen){
     .perm = context->perm,
@@ -139,16 +151,17 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
     .types = context->types,
     .source = source,
     .builder = (SIrBuilder){.scratch = context->scratch},
+    .scope_stack = {},
+    .parent_loop_idx = 0,
+    .parent_block_idx = 0,
   };
 
   locals_init(&gen->locals, &(HashMapOptions){
     .allocator = context->gpa,
-    .initial_size = 8,
+    .initial_size = 32,
   });
 
   gen->scope_scratch = arena_scope_begin(context->scratch);
-
-  stack_init(&gen->scope_stack, arena_push_array(ScopeEntry, context->scratch, Max_scope_entries), Max_scope_entries);
 
   DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, Max_module_depth);
   u32 i = source->decls[tree_idx].parent;
@@ -163,6 +176,8 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
 
   gen->mod_depth = offset;
   gen->mods = mods;
+
+  scopes_append(&gen->scope_stack, gen->scratch, (ScopeEntry){ .kind = ScopeEntry_root, });
 }
 
 void codegen_deinit(CodeGen *gen) {
@@ -170,46 +185,11 @@ void codegen_deinit(CodeGen *gen) {
   arena_scope_end(gen->scratch, gen->scope_scratch);
 }
 
-internal u32 push_scope(CodeGen *gen, u8 kind, InstructionIndex block, StringIndex label) {
-  u32 offset = gen->scopes.len;
-
-  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
-    .kind = kind,
-    .parent_loop_idx = gen->parent_loop_idx,
-    .parent_block_idx = gen->parent_block_idx,
-    .name = label,
-    .inst = block,
-  });
-
-  gen->parent_block_idx = offset;
-
-  return offset;
-}
-
-internal u32 push_loop(CodeGen *gen, u8 kind, InstructionIndex block, StringIndex label) {
-  u32 offset = gen->scopes.len;
-
-  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
-    .kind = kind,
-    .parent_loop_idx = gen->parent_loop_idx,
-    .parent_block_idx = gen->parent_block_idx,
-    .name = label,
-    .inst = block,
-  });
-
-  gen->parent_loop_idx = offset;
-  gen->parent_block_idx = offset;
-
-  return offset;
-}
-
-internal b32 add_binding(CodeGen *gen, StringIndex name, u8 kind, InstructionIndex inst) {
+internal b32 add_binding(CodeGen *gen, StringIndex name, LookupKind kind, InstructionIndex inst) {
   b32 was_occupied = False;
   LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&gen->locals, name, &was_occupied);
   if (was_occupied) {
     Todo();
-
-    return False;
   }
 
   bucket->val = (LookupEntry){
@@ -219,6 +199,30 @@ internal b32 add_binding(CodeGen *gen, StringIndex name, u8 kind, InstructionInd
   };
 
   return True;
+}
+
+internal b32 push_scope(CodeGen *gen, ScopeEntryKind kind, InstructionIndex inst, StringIndex label, ScopeKey *key) {
+  u32 offset = gen->scopes.len;
+
+  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
+    .kind = kind,
+    .parent_loop_idx = gen->parent_loop_idx,
+    .parent_block_idx = gen->parent_block_idx,
+    .name = label,
+    .inst = inst,
+  });
+
+  gen->parent_block_idx = offset;
+
+  if (kind == ScopeEntry_loop) {
+    gen->parent_loop_idx = offset;
+  }
+
+  if (label) {
+    Todo();
+  }
+
+  return offset;
 }
 
 internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
@@ -482,17 +486,13 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    StringIndex block_label = 0;
-    if (block->label) {
-      TokenIndex label_tok = ast_data(ast, block->label)->token_index;
-      block_label = strings_add(gen->strings, token_string(tokens, text, label_tok));
-      b32 ok = add_binding(gen, block_label, Lookup_block, inst_block);
-      if (!ok) {
-        Todo();
-      }
-    }
+    StringIndex block_label = ast_label_to_string_index(block->label);
 
-    u32 offset = push_scope(gen, ScopeEntry_block, inst_block, block_label);
+    ScopeKey scope;
+    b32 ok = push_scope(gen, ScopeEntry_block, inst_block, block_label, &scope);
+    if (!ok) {
+      Todo();
+    }
 
     for (u32 i = 0; i < count-1; i++) {
       gen_code(gen, block->items[i], (SRef){0});
@@ -506,16 +506,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_end_block_with(builder, inst_block, inst_block, res, source_idx, idx_ast);
     }
 
-    while () {
-      ScopeEntry entry = stack_pop(&gen->scope_stack);
-
-      if (entry.kind == ScopeEntry_block) {
-        break;
-      }
-
-      b32 found = locals_remove(&gen->locals, entry.name);
-      Assert(found);
-    }
+    pop_scope(gen, scope);
 
     return sref_from_instruction(inst_block);
   } break;
@@ -621,28 +612,20 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_set_data(builder, inst_param, sref_to_u32(sref_from_instruction(first_param_type + i)));
     }
 
-    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
+    ScopeKey scope = push_scope(gen, ScopeEntry_function, inst_func, 0);
 
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
       StringIndex str = strings_add(gen->strings, token_string(tokens, text, ast_param->name));
 
+      Todo();
       stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
       locals_insert(&gen->locals, str, (LookupEntry){.kind = Lookup_param, .inst = first_param + i});
     }
 
     SRef inst_body = gen_code(gen, func->body, sref_from_instruction(inst_return_type));
 
-    while (True) {
-      ScopeEntry entry = stack_pop(&gen->scope_stack);
-
-      if (entry.kind == ScopeEntry_block) {
-        break;
-      }
-
-      b32 found = locals_remove(&gen->locals, entry.name);
-      Assert(found);
-    }
+    pop_scope(gen, scope);
 
     InstructionIndex inst_ret = sir_builder_add(&gen->builder, SIR_ret, source_idx, func->body);
     sir_builder_set_data(&gen->builder, inst_ret, sref_to_u32(inst_body));
@@ -663,7 +646,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     Assert(decl->type);
 
-    StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, decl->name));
+    StringIndex str = ast_node_to_string_index(gen, ast, decl->name);
 
     SRef ref_type = sref_from_value(gen->common->val.type);
 
@@ -672,14 +655,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex inst_var = sir_builder_add(builder, SIR_alloc, source_idx, idx_ast);
     sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
 
-    stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
-
-    b32 was_occupied = False;
-    LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&gen->locals, str, &was_occupied);
-    if (was_occupied) {
-      Todo(); intentional_error
-    } else {
-      bucket->val = (LookupEntry){ .kind = Lookup_local, .inst = inst_var};
+    b32 ok = push_local(gen, str, inst_var);
+    if (!ok) {
+      Todo();
     }
 
     SRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
@@ -1049,28 +1027,18 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex exit_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
     sir_builder_end_block_with(builder, exit_block, loop, (SRef){0}, source_idx, idx_ast);
 
-    StringIndex loop_label = 0;
-    if (ast_while->label) {
-      TokenIndex *label_tok = ast_data(ast, ast_while->label);
-      loop_label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
-    }
+    StringIndex loop_label = ast_node_to_string_index(gen, ast, ast_while->label);
 
     InstructionIndex body_block = sir_builder_add(builder, SIR_block, source_idx, ast_while->body);
 
-    stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_loop, .name = loop_label, .inst = loop }));
-    if (loop_label) {
-      locals_insert(&gen->locals, loop_label, (LookupEntry){.kind = Lookup_block, .inst = loop});
+    ScopeKey scope;
+    b32 ok = push_scope(gen, ScopeEntry_loop, loop, loop_label, &scope);
+    if (!ok) {
+      Todo();
     }
 
     SRef body = gen_code(gen, ast_while->body, (SRef){0});
     Unused(body);
-
-    ScopeEntry loop_entry = stack_pop(&gen->scope_stack);
-    Assert(loop_entry.kind == ScopeEntry_loop);
-    if (loop_entry.name) {
-      b32 found = locals_remove(&gen->locals, loop_entry.name);
-      Assert(found);
-    }
 
     InstructionIndex repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
     sir_builder_set_data(builder, repeat, loop);
@@ -1084,6 +1052,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       .otherwise = exit_block,
     };
 
+    pop_scope(gen, scope);
+
     return sref_from_instruction(loop);
   } break;
 
@@ -1096,47 +1066,19 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       TokenIndex *label_tok = ast_data(ast, b->label);
       StringIndex label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
 
-      LookupEntry *found = locals_find(&gen->locals, label);
+      LookupEntry *found = find_local(gen, label);
       if (!found) {
-        Message_error(
-          gen->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_ast_index,
-            .source_idx = source_idx,
-            .data.ast_index = idx_ast,
-          },
-          string_lit("Could not find enclosing loop with this label.")
-        );
-        gen->has_error = True;
-        return sref_from_value(gen->common->val.nil);
+        Todo();
       }
 
       target = found->inst;
     } else {
-      b32 found = False;
-
-      for (u32 i = gen->scope_stack.len; i-- > 0;) {
-        ScopeEntry *entry = &gen->scope_stack.data[i];
-        if (entry->kind == ScopeEntry_loop) {
-          target = entry->inst;
-          found = True;
-          break;
-        }
+      ScopeEntry *entry = get_enclosing_loop(gen, idx_ast);
+      if (!entry) {
+        Todo();
       }
 
-      if (!found) {
-        Message_error(
-          gen->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_ast_index,
-            .source_idx = source_idx,
-            .data.ast_index = idx_ast,
-          },
-          string_lit("'break' used outside of a loop.")
-        );
-        gen->has_error = True;
-        return sref_from_value(gen->common->val.nil);
-      }
+      target = entry->inst;
     }
 
     SRef value = b->value ? gen_code(gen, b->value, (SRef){0}) : (SRef){0};
