@@ -182,8 +182,7 @@ typedef union {
   AstTypeArray       type_array;
   AstDeclaration     declaration;
   AstAssign          assign;
-  TokenIndex         literal;
-  TokenIndex         identifier;
+  TokenIndex         token_index;
   AstCall            call;
   AstIndexData       index;
   AstUnaryOp         unary_op;
@@ -212,7 +211,7 @@ typedef struct {
   void      *extra;
 } AstNodes;
 
-void *ast_data(AstNodes *ast, AstIndex idx);
+AstNodeData *ast_data(AstNodes *ast, AstIndex idx);
 
 String ast_kind_string(u8 kind);
 

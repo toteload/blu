@@ -35,14 +35,16 @@ typedef enum {
   Lookup_local,
   Lookup_decl,
   Lookup_block,
+  Lookup_loop,
 } LookupKind;
 
 typedef struct {
   u8 kind;
+  u32 parent_block_idx;
 
-  // A param can be referenced directly.
+  // A param can be referenced directly. (not sure if this is handy...)
   // A local must be loaded first.
-  // A decl ???
+  // A decl must be loaded first.
   InstructionIndex inst;
 } LookupEntry;
 
@@ -59,16 +61,43 @@ typedef struct {
 #define Max_scope_entries 256
 
 typedef enum {
+  ScopeEntry_root,
   ScopeEntry_local,
   ScopeEntry_block,
   ScopeEntry_loop,
 } ScopeEntryKind;
 
+// - local
+//   - `name` is the name of the local
+//   - `inst` is unused
+// - block
+//   - `name` (optional) label of the block
+//   - `inst` instruction index of the SIR_block instruction 
+// - loop
+//   - `name` (optional) label of the block
+//   - `inst` instruction index of the SIR_loop instruction
 typedef struct {
   u8 kind;
+  u32 parent_loop_idx;
+  u32 parent_block_idx; // position in the stack of the parent
   StringIndex name;
-  InstructionIndex inst; // valid when kind == ScopeEntry_block or ScopeEntry_loop
+  InstructionIndex inst;
 } ScopeEntry;
+
+#define SCOPE_ENTRY_STACK_NAME ScopeEntryStack
+#define SCOPE_ENTRY_STACK_TYPE ScopeEntry
+#define SCOPE_ENTRY_STACK_MIN_SIZE_LOG2 8
+#define SCOPE_ENTRY_STACK_SEGMENT_COUNT 16
+#define SEGMENTLIST_NAME SCOPE_ENTRY_STACK_NAME
+#define SEGMENTLIST_TYPE SCOPE_ENTRY_STACK_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 SCOPE_ENTRY_STACK_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT SCOPE_ENTRY_STACK_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_FUNCTION_PREFIX scopes
+#define SEGMENTLIST_OUTPUT_TYPES
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
 
 typedef struct {
   b32 has_error;
@@ -89,7 +118,9 @@ typedef struct {
 
   LocalsMap locals;
 
-  Stack(ScopeEntry) scope_stack;
+  u32 parent_loop_idx;
+  u32 parent_block_idx;
+  ScopeEntryStack scope_stack;
 
   // the module stack that the current declaration is in
   u32 mod_depth;
@@ -137,6 +168,57 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
 void codegen_deinit(CodeGen *gen) {
   locals_deinit(&gen->locals);
   arena_scope_end(gen->scratch, gen->scope_scratch);
+}
+
+internal u32 push_scope(CodeGen *gen, u8 kind, InstructionIndex block, StringIndex label) {
+  u32 offset = gen->scopes.len;
+
+  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
+    .kind = kind,
+    .parent_loop_idx = gen->parent_loop_idx,
+    .parent_block_idx = gen->parent_block_idx,
+    .name = label,
+    .inst = block,
+  });
+
+  gen->parent_block_idx = offset;
+
+  return offset;
+}
+
+internal u32 push_loop(CodeGen *gen, u8 kind, InstructionIndex block, StringIndex label) {
+  u32 offset = gen->scopes.len;
+
+  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
+    .kind = kind,
+    .parent_loop_idx = gen->parent_loop_idx,
+    .parent_block_idx = gen->parent_block_idx,
+    .name = label,
+    .inst = block,
+  });
+
+  gen->parent_loop_idx = offset;
+  gen->parent_block_idx = offset;
+
+  return offset;
+}
+
+internal b32 add_binding(CodeGen *gen, StringIndex name, u8 kind, InstructionIndex inst) {
+  b32 was_occupied = False;
+  LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&gen->locals, name, &was_occupied);
+  if (was_occupied) {
+    Todo();
+
+    return False;
+  }
+
+  bucket->val = (LookupEntry){
+    .kind = kind,
+    .parent_block_idx = gen->parent_block_idx,
+    .inst = inst,
+  };
+
+  return True;
 }
 
 internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
@@ -283,6 +365,7 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   switch (op) {
   case Logical_and: Panic();
   case Logical_or: Panic();
+
   case Mul: sir_op = SIR_mul; break;
   case Div: sir_op = SIR_div; break;
   case Mod: sir_op = SIR_mod; break;
@@ -294,11 +377,11 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   case Cmp_greater_equal: sir_op = SIR_cmp_ge; break;
   case Cmp_less_than: sir_op = SIR_cmp_lt; break;
   case Cmp_less_equal: sir_op = SIR_cmp_le; break;
-  case Bit_shift_left: Todo(); break;
-  case Bit_shift_right: Todo(); break;
-  case Bit_and: Todo(); break;
-  case Bit_or: Todo(); break;
-  case Bit_xor: Todo(); break;
+  case Bit_shift_left: sir_op = SIR_bitshift_left; break;
+  case Bit_shift_right: sir_op = SIR_bitshift_right; break;
+  case Bit_and: sir_op = SIR_bit_and; break;
+  case Bit_xor: sir_op = SIR_bit_xor; break;
+  case Bit_or: sir_op = SIR_bit_or; break;
   }
   // clang-format off
 
@@ -323,7 +406,7 @@ SRef gen_comptime_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   return sref_from_instruction(inst_block);
 }
 
-BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
+internal BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
   switch (kind) {
   case Assign_normal: Panic();
   case Assign_mul: return Mul;
@@ -384,7 +467,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       inst = inst_load;
     } break;
     case Lookup_param: { inst = entry.inst; } break;
-    case Lookup_block: Unreachable();
+    case Lookup_block: Panic();
     }
 
     return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst), source_idx, idx_ast);
@@ -399,7 +482,17 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    stack_push(&gen->scope_stack, (ScopeEntry){ .kind = ScopeEntry_block });
+    StringIndex block_label = 0;
+    if (block->label) {
+      TokenIndex label_tok = ast_data(ast, block->label)->token_index;
+      block_label = strings_add(gen->strings, token_string(tokens, text, label_tok));
+      b32 ok = add_binding(gen, block_label, Lookup_block, inst_block);
+      if (!ok) {
+        Todo();
+      }
+    }
+
+    u32 offset = push_scope(gen, ScopeEntry_block, inst_block, block_label);
 
     for (u32 i = 0; i < count-1; i++) {
       gen_code(gen, block->items[i], (SRef){0});
@@ -413,7 +506,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_end_block_with(builder, inst_block, inst_block, res, source_idx, idx_ast);
     }
 
-    while (True) {
+    while () {
       ScopeEntry entry = stack_pop(&gen->scope_stack);
 
       if (entry.kind == ScopeEntry_block) {
@@ -580,7 +673,14 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
 
     stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
-    locals_insert(&gen->locals, str, (LookupEntry){ .kind = Lookup_local, .inst = inst_var});
+
+    b32 was_occupied = False;
+    LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&gen->locals, str, &was_occupied);
+    if (was_occupied) {
+      Todo(); intentional_error
+    } else {
+      bucket->val = (LookupEntry){ .kind = Lookup_local, .inst = inst_var};
+    }
 
     SRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
 
@@ -622,7 +722,16 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     u64 value;
     u32 err = parse_u64(token_string(tokens, text, *tok), &value);
     if (err == PARSE_U64_OVERFLOW) {
-      Todo();
+      Message_error(
+        gen->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ast_index,
+          .source_idx = source_idx,
+          .data.ast_index = idx_ast,
+        },
+        string_lit("Integer literal does not fit in u64."));
+      gen->has_error = True;
+      return sref_from_value(gen->common->val.nil);
     }
 
     Value *v;
@@ -1118,13 +1227,6 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 }
 
 b32 generate_code(CodeGenContext *context, Declaration *decl) {
-  // NOTE: It is possible to output dependencies on other declarations for the pieces of code.
-  // However, these dependencies may contain false positives, because whether another declaration is
-  // actually used can depend on running a piece of comptime code.
-  // For example, `a := if buzz() { foo() } else { bar() }`.
-  // Whether `a` will use foo or bar depends on buzz(). But we can output both foo and bar and
-  // accept that one of them will be a false positive. This may still be useful in sorting jobs.
-
   Source *source = decl->data.decl.source;
 
   CodeGen gen;

@@ -643,6 +643,7 @@ b32 compile(Compiler *compiler) {
           Declaration val = decls_get_extra(&compiler->decls, idx);
           if (val.kind != Declaration_mod) {
             is_ok = False;
+
             Message_error(
               &compiler->msg_sink,
               (MessageLocation){
@@ -652,7 +653,12 @@ b32 compile(Compiler *compiler) {
               },
               string_lit("Declaration already exists.")
             );
-            goto next_iter;
+
+            offset += decl->child_count;
+
+            stack_pop_unchecked(&stack);
+
+            continue;
           }
         }
 
@@ -668,8 +674,9 @@ b32 compile(Compiler *compiler) {
             .kind = Declaration_mod,
             .resolve_status = ResolveStatus_fully_resolved,
             .data.mod = {.source = source, .tree_idx = offset},
-          }
-        );
+          });
+
+        offset += 1;
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
         DeclarationIndex idx = decls_add_checked(
@@ -680,6 +687,7 @@ b32 compile(Compiler *compiler) {
 
         if (already_exists) {
           is_ok = False;
+
           Message_error(
             &compiler->msg_sink,
             (MessageLocation){
@@ -689,7 +697,8 @@ b32 compile(Compiler *compiler) {
             },
             string_lit("Declaration already exists.")
           );
-          goto next_iter;
+
+          continue;
         }
 
         user_decls_append(&compiler->user_decls, &compiler->arena, idx);
@@ -707,12 +716,10 @@ b32 compile(Compiler *compiler) {
               .source = source,
               .tree_idx = offset,
             },
-          }
-        );
-      }
+          });
 
-    next_iter:
-      offset += 1;
+        offset += 1;
+      }
     }
   }
 

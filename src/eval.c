@@ -341,8 +341,36 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *v
     *res = idx;
     return CoerceResult_ok;
   }
-  case Coercion_bool_to_int: Todo();
-  case Coercion_int_widen: Todo();
+  case Coercion_bool_to_int: {
+    Value *p;
+    ValueIndex idx = values_alloc(values, &p);
+
+    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    void *data = values_alloc_data(values, size_info.size, size_info.align);
+    memset(data, 0, size_info.size);
+    *Cast(u8*,data) = *Cast(u8*, val->data);
+
+    *res = idx;
+
+    return CoerceResult_ok;
+  }
+  case Coercion_int_widen: {
+    Value *p;
+    ValueIndex idx = values_alloc(values, &p);
+
+    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    void *data = values_alloc_data(values, size_info.size, size_info.align);
+
+    TypeInteger int_src = types_get(types, val->type)->data.integer;
+    TypeInteger int_dst = types_get(types, dst)->data.integer;
+
+    u32 err = eval_cast_int(int_src, val->data, int_dst, data);
+    Assert(err == CastResult_ok);
+
+    *res = idx;
+
+    return CoerceResult_ok;
+  }
   case Coercion_comptime_int_to_intlike: {
     TypeInteger comptime_int = {
       .signedness = Signed,

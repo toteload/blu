@@ -756,7 +756,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   case Tok_brace_open:     Try(parse_block(parser, 0, &base));       break;
     // clang-format on
 
-  case Tok_label: { 
+  case Tok_label: {
     AstIndex label;
     Try(parse_label(parser, &label));
 
@@ -765,7 +765,16 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     switch (tok) {
     case Tok_brace_open:    Try(parse_block(parser, label, &base)); break;
     case Tok_keyword_while: Try(parse_while(parser, label, &base)); break;
-    default: Unreachable();
+    default: {
+      Message_error(
+        parser->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_token_index,
+          .data.token_index = parser->at,
+        },
+        string_lit("Unexpected token '%tokenkind' encountered after label."));
+      return False;
+    }
     }
     // clang-format on
   } break;

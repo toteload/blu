@@ -14,27 +14,6 @@ Exit code `0xC0000374` is `STATUS_HEAP_CORRUPTION` and `0xC0000005` is an access
 
 ---
 
-## Critical
-
-### C2. `!` on a comptime bool frees the shared `true`/`false` values → heap corruption (Verified)
-
-- `src/specialize.c:1716` stores `in->common->val.false` / `val.true` directly into `inst_map`.
-- When the enclosing block ends, `dealloc_scope_values` (`specialize.c:181`) calls `values_dealloc` on every value in `inst_map`.
-  That frees the payload of the global `true`/`false` primitives.
-- Any later use of `true`/`false` reads freed memory, and a second `!` frees it again.
-- Repro: two functions each containing `#debug(!true)` → exit `0xC0000374`.
-- Fix: store `values_copy(...)` of the common value, like other instructions do.
-
-### C3. `cast(T) x` where `x` already has type `T` aliases a value → double free (Verified)
-
-- `src/specialize.c:707-708`: `if (type_dst == type_src) { store_inst_value(f, pc, ref); ... }`
-- This stores the operand's `ValueIndex` a second time without `copy_if_value`.
-- Both `inst_map` slots get freed by `dealloc_scope_values`.
-- Repro: `#debug(cast(i32) cast(i32) 5)` → exit `0xC0000374`.
-- General rule worth checking everywhere: any comptime `IRef` written to `inst_map` must be owned by that slot.
-
----
-
 ## High
 
 ### H4. Shadowing or redeclaring a local crashes codegen (Verified)
@@ -67,34 +46,8 @@ Exit code `0xC0000374` is `STATUS_HEAP_CORRUPTION` and `0xC0000005` is an access
 
 ### M4. Top-level declarations crash on many ordinary initialisers (Verified)
 
-- `x : i32 = add(1, 2)`: `SIR_call` always emits residual IIR, but there is no builder at top level.
-  Result: `Assertion failed: !((&in->builders)->len == 0)` (`specialize.c:36`).
 - `b : bool = true and false`: any block, `if`, `and`/`or`, or `while` hits `SIR_block` inside a `Scope_eval_block` → `Todo` at `specialize.c:440`.
 - `x : i32 = { 5 }` panics in codegen: `gen_code_for_declaration_type` has `Ast_block: Todo()` (`codegen.c:1046`).
-
-### M5. Locals with inferred type assert (Verified)
-
-- `src/codegen.c:558`: `Assert(decl->type)`.
-- The parser accepts `x := 5` (`parse.c:498-502`), so this is user-reachable: `Assertion failed: decl->type`.
-- Either support inference via `typeof`, or report "local declarations need a type" from the parser or codegen.
-
-### M7. Parseable-but-unimplemented constructs panic instead of erroring (Verified unless noted)
-
-The user sees `TODO: panic …` instead of a diagnostic for:
-
-- Bitwise operators `& | ^ << >>`: `codegen.c:299-303` (`a & 1` → panic at `codegen.c:301`).
-- Assignment to a parameter: `codegen.c:201`. Assignment to a global or an index expression: `codegen.c:205`, `212` (Inspection).
-- Escapes in string literals: `util.c:6` (`"a\n"`). Multi-character or escaped `u8"…"`: `codegen.c:591` (Inspection).
-
-### M8. `Unreachable()` on user-reachable paths is undefined behaviour (Verified)
-
-- `Unreachable()` is `__builtin_unreachable()`, so reaching it is UB, not a crash.
-- `parse.c:770`: a label followed by anything other than `{` or `while`.
-  Repro: `::foo 5` produced the nonsense message `Expected token 'while' but got token 'integer literal'`, because the optimiser fell through into the `while` case.
-- Other user-reachable cases (Inspection):
-  - `find_scope`'s fallthrough (`specialize.c:16`).
-  - The default branch of `read_int_sign_extend` for odd bit widths.
-- For anything input-driven, use `Panic()` or a diagnostic instead.
 
 ### M10. Integer cast/coercion paths read `data.integer` from non-integer types (Inspection)
 
@@ -104,22 +57,6 @@ The user sees `TODO: panic …` instead of a diagnostic for:
 - Array→slice reads the array's `base_type` bytes as `signedness`/`bitwidth`.
 - The same assumption appears in `eval_coerce` for `usize`/`isize` destinations (`eval.c:354`).
 - No `isize` value with integer data is ever created, so an `isize` would reach `Unreachable()`.
-
-### M11. Error recovery in the declaration-map walk misattributes children (Inspection)
-
-- `compiler.c:625-638`: if a `mod` name collides with a non-module (for example `mod i32`), the code does `goto next_iter` without skipping the module's `child_count` entries.
-  Those children are then consumed as if they were direct children of the root, with `parent = 0`.
-- Codegen still runs for all `user_decls` after `is_ok = False` (`compiler.c:702-729`).
-  That can produce cascading spurious errors.
-- Check `is_ok` before codegen, and skip `decl->child_count` entries on a failed module.
-
-### M12. Closures and `break` cross function boundaries silently (Inspection)
-
-- A nested function literal can see the enclosing function's locals and parameters through `gen->locals`.
-  Their instruction indices refer to the outer function's builder, so the inner function's IIR references the wrong instructions.
-- The unlabelled `break` search (`codegen.c:996-1003`) walks past the function's `ScopeEntry_block`.
-  A `break` inside a lambda inside a loop therefore targets the outer loop.
-- Both should be rejected with an error until closures are designed.
 
 ---
 
@@ -134,7 +71,6 @@ The user sees `TODO: panic …` instead of a diagnostic for:
     `%.*s` then receives a negative precision and reads past the text buffer until a NUL.
 - **Unterminated string or label errors point to the wrong place** (Verified): they use `tokenizer->end` as the offset (`tokenize.c:250`, `262`, `387`, `415`), but the line lookup returns the line where the string started.
   The repro printed `3:26` on a 16-character line, followed by the rest of the file.
-- **Runtime errors from the interpreter carry no location** (`interpret.c:147-424`, all `MessageLocation_unspecified`), even though `905c890` added `sources` to IIR chunks.
 - **`message_format`'s `bufsize` is never updated** (`messages.c:207`).
   Every size check is therefore always true, and the function works only because each `arena_push` is contiguous with `buf`.
   Either track the size or drop the checks.

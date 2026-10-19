@@ -68,10 +68,11 @@ typedef Message* MessagePtr;
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
 
-// Format args support normal printf conversions plus two custom ones:
+// Format args support:
 // - %tokenkind (u8 representing TokenKind)
 // - %string    (String)
 // - %type      (TypeIndex)
+// - %u64       (u64)
 #define Message_error(psink, ...) (psink)->add_message((psink)->user, Severity_Error, __VA_ARGS__)
 
 u32 message_format_arg_count(String fmt);

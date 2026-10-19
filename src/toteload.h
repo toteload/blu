@@ -140,7 +140,11 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 void ttld_panic_handler(char const *func, char const *file, i32 line);
 
 #ifdef TTLD_COMPILER_CLANG
+#ifdef TTLD_SAFE
+#define Unreachable() PanicMsg("Reach unreachable code")
+#else
 #define Unreachable() __builtin_unreachable()
+#endif
 #else
 #error "unimplemented: Unreachable"
 #endif

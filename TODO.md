@@ -1,11 +1,8 @@
 - [ ] Add user error reporting on failure for SIR_unify in specialize.c
 - [ ] Compile time evaluation of binary operators in specialize.c
-- [ ] Complete eval_coerce: Coercion_bool_to_int and Coercion_int_widen
-- [ ] Report error if literal int is too big in codegen.c
-- [ ] Make chained assignment a parse error
-- [ ] Make chained comparison a parse error
-
+- [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `cast Ast_declaration` in codegen.c
 - [ ] Add compile time function calls
+- [ ] Add location information to interpreter error reporting
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?
