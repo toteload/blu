@@ -1,1 +1,3 @@
-[error] int_sub_safe overflow
+[error] test/snippet/error/negate_overflow.blu:6:10: int_sub_safe overflow
+    6 |   #debug(-n)
+      |          ^

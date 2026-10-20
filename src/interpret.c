@@ -84,6 +84,19 @@ typedef enum {
   Step_illegal_opcode,
 } StepResult;
 
+internal MessageLocation inst_location(CallFrame2 *f, InstructionIndex pc) {
+  AstAndSourceIndex src = f->chunk->sources[pc];
+  if (!src.ast_idx) {
+    return (MessageLocation){ .kind = MessageLocation_unspecified, };
+  }
+
+  return (MessageLocation){
+    .kind = MessageLocation_ast_index,
+    .source_idx = src.source_idx,
+    .data.ast_index = src.ast_idx,
+  };
+}
+
 internal u32 step(Interpreter *in) {
   CallFrame2 *f = stack_peek_ptr(&in->call_stack);
   InstructionIndex pc = f->pc;
@@ -102,7 +115,7 @@ internal u32 step(Interpreter *in) {
   case IIR_func: {
     Message_error(
       in->msg_sink,
-      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      inst_location(f, pc),
       string_lit("Stepped into IIR_func instruction which is only allowed to be called")
     );
     return Step_illegal_opcode;
@@ -111,7 +124,7 @@ internal u32 step(Interpreter *in) {
   case IIR_param: {
     Message_error(
       in->msg_sink,
-      (MessageLocation){ .kind = MessageLocation_unspecified, },
+      inst_location(f, pc),
       string_lit("Stepped into IIR_param instruction which should be set by caller")
     );
     return Step_illegal_opcode;
@@ -200,7 +213,7 @@ internal u32 step(Interpreter *in) {
     if (at >= len) {
       Message_error(
         in->msg_sink,
-        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        inst_location(f, pc),
         string_lit("Index is out of bounds. index = %u64, bounds = 0 .. %u64"),
         at, len);
       return Step_index_out_of_bounds;
@@ -266,7 +279,7 @@ internal u32 step(Interpreter *in) {
     if (err) {
       Message_error(
         in->msg_sink,
-        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        inst_location(f, pc),
         string_lit("Value does not fit in the destination type of the cast")
       );
       return Step_integer_overflow;
@@ -285,7 +298,7 @@ internal u32 step(Interpreter *in) {
     if (!ok) {
       Message_error(
         in->msg_sink,
-        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        inst_location(f, pc),
         string_lit("int_add_safe overflow")
       );
       return Step_integer_overflow;
@@ -304,7 +317,7 @@ internal u32 step(Interpreter *in) {
     if (!ok) {
       Message_error(
         in->msg_sink,
-        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        inst_location(f, pc),
         string_lit("int_sub_safe overflow")
       );
       return Step_integer_overflow;
@@ -323,7 +336,7 @@ internal u32 step(Interpreter *in) {
     if (!ok) {
       Message_error(
         in->msg_sink,
-        (MessageLocation){ .kind = MessageLocation_unspecified, },
+        inst_location(f, pc),
         string_lit("int_mul_safe overflow")
       );
       return Step_integer_overflow;
@@ -343,7 +356,7 @@ internal u32 step(Interpreter *in) {
       if (err == IntDivSafe_zero_division) {
         Message_error(
           in->msg_sink,
-          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          inst_location(f, pc),
           string_lit("int_div_safe zero division")
         );
 
@@ -353,7 +366,7 @@ internal u32 step(Interpreter *in) {
       if (err == IntDivSafe_overflow) {
         Message_error(
           in->msg_sink,
-          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          inst_location(f, pc),
           string_lit("int_div_safe overflow")
         );
 
@@ -377,7 +390,7 @@ internal u32 step(Interpreter *in) {
       if (err == IntDivSafe_zero_division) {
         Message_error(
           in->msg_sink,
-          (MessageLocation){ .kind = MessageLocation_unspecified, },
+          inst_location(f, pc),
           string_lit("int_mod_safe zero division")
         );
 

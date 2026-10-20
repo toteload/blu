@@ -1,1 +1,3 @@
-[error] int_mod_safe zero division
+[error] test/snippet/error/mod_zero_div.blu:6:14: int_mod_safe zero division
+    6 |   r: i32 = a % z
+      |              ^

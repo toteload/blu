@@ -1,1 +1,3 @@
-[error] Index is out of bounds
+[error] test/snippet/error/index_out_of_bounds_runtime.blu:6:11: Index is out of bounds. index = 9, bounds = 0 .. 2
+    6 |   #debug(s[i])
+      |           ^
