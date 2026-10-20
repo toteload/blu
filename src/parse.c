@@ -1195,13 +1195,13 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
   return ok;
 }
 
-String ast_string[] = {
+const String ast_string[] = {
 #define X(k,d,s) [k] = string_lit(s),
 #include "x_ast_kinds.h"
 #undef X
 };
 
-String ast_kind_string(u8 kind) {
+String ast_kind_string(AstKind kind) {
   if (kind >= Ast_kind_max) {
     return string_lit("<illegal-ast-kind>");
   }

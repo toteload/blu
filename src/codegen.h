@@ -7,6 +7,7 @@ typedef struct {
   Arena *perm; // The generated code is stored in this arena
   Arena *scratch;
   Allocator gpa;
+
   Common         *common;
   MessageSink    *msg_sink;
   StringInterner *strings;

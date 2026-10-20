@@ -126,6 +126,7 @@ def create_build_ninja():
         'ir.c',
         'print.c',
         'util.c',
+        'symbol_map.c',
     ]
 
     outputs = []

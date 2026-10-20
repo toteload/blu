@@ -3,7 +3,7 @@
 
 #include "toteload.h"
 
-#define Max_module_depth 8
+#define MAX_MODULE_DEPTH 16 
 
 #define AstIndex_source 1
 

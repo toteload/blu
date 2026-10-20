@@ -7,169 +7,55 @@
 #include "compiler.h"
 #include "codegen.h"
 #include "ir.h"
-
-// https://github.com/skeeto/hash-prospector/issues/19
-// score: 0.10734781817103507
-internal u32 lowbias32(u32 x) {
-    x ^= x >> 16;
-    x *= 0x21f0aaad;
-    x ^= x >> 15;
-    x *= 0xf35a2d97;
-    x ^= x >> 15;
-
-    return x;
-}
-
-internal u32 hash_string_index(void *context, StringIndex s) {
-  Unused(context);
-  return lowbias32(s);
-}
-
-internal b32 cmp_string_index(void *context, StringIndex a, StringIndex b) {
-  Unused(context);
-  return a == b;
-}
-
-#define HASHMAP_NAME            LocalsMap
-#define HASHMAP_KEY_TYPE        StringIndex
-#define HASHMAP_VALUE_TYPE      u32
-#define HASHMAP_FUNCTION_PREFIX locals
-#define HASHMAP_HASH_FN         hash_string_index
-#define HASHMAP_KEY_COMPARE_FN  cmp_string_index
-#define HASHMAP_OUTPUT_TYPES
-#define HASHMAP_OUTPUT_DEFINITIONS
-#include "hashmap.h"
-
-typedef enum {
-  ScopeEntry_root,
-  ScopeEntry_block,
-  ScopeEntry_loop,
-  ScopeEntry_function,
-  ScopeEntry_local,
-  ScopeEntry_param,
-} ScopeEntryKind;
-
-// - local
-//   - `name` is the name of the local
-//   - `inst` is unused
-// - block
-//   - `name` (optional) label of the block
-//   - `inst` instruction index of the SIR_block instruction 
-// - loop
-//   - `name` (optional) label of the block
-//   - `inst` instruction index of the SIR_loop instruction
-typedef struct {
-  u8 kind;
-  u32 parent_loop_idx;
-  u32 parent_block_idx; // position in the stack of the parent
-  StringIndex name;
-  InstructionIndex inst;
-} ScopeEntry;
-
-#define SCOPE_ENTRY_STACK_NAME ScopeEntryStack
-#define SCOPE_ENTRY_STACK_TYPE ScopeEntry
-#define SCOPE_ENTRY_STACK_MIN_SIZE_LOG2 8
-#define SCOPE_ENTRY_STACK_SEGMENT_COUNT 16
-#define SEGMENTLIST_NAME SCOPE_ENTRY_STACK_NAME
-#define SEGMENTLIST_TYPE SCOPE_ENTRY_STACK_TYPE
-#define SEGMENTLIST_MIN_SIZE_LOG2 SCOPE_ENTRY_STACK_MIN_SIZE_LOG2
-#define SEGMENTLIST_SEGMENT_COUNT SCOPE_ENTRY_STACK_SEGMENT_COUNT
-#define SEGMENTLIST_LINKAGE internal
-#define SEGMENTLIST_FUNCTION_PREFIX scopes
-#define SEGMENTLIST_OUTPUT_TYPES
-#define SEGMENTLIST_OUTPUT_DECLARATIONS
-#define SEGMENTLIST_OUTPUT_DEFINITIONS
-#include "segment_list.h"
+#include "symbol_map.h"
 
 typedef struct {
   b32 has_error;
-  SIrBuilder builder;
   ArenaSnapshot scope_scratch;
 
-  Arena *perm;
-  Arena *scratch;
-
-  Common *common;
-  MessageSink *msg_sink;
-  StringInterner *strings;
-  DeclarationInterner *decls;
-  ValueStore *values;
-  TypeInterner *types;
+  SIrBuilder builder;
+  SymbolMap syms;
 
   Source *source;
-
-  LocalsMap locals;
-
-  u32 parent_loop_idx;
-  u32 parent_block_idx;
-  ScopeEntryStack scope_stack;
 
   // the module stack that the current declaration is in
   u32 mod_depth;
   DeclarationIndex *mods;
 } CodeGen;
 
-internal StringIndex ast_node_to_string_index(CodeGen *gen, AstNodes *ast, AstIndex idx) {
+internal StringIndex intern_ast_node_string(CodeGenContext *ctx, Source *source, AstIndex idx) {
   if (!idx) {
     return 0;
   }
 
-  TokenIndex label = ast_data(ast, idx)->token_index;
-  String str = token_string(tokens, text, label);
-  return strings_add(gen->strings, str);
+
+  TokenIndex *label = ast_data(&source->ast, idx);
+  String str = token_string(&source->tokens, source->text, *label);
+  return strings_add(ctx->strings, str);
 }
 
-typedef struct {
-  u32 offset;
-} ScopeKey;
-
-internal b32  push_scope(CodeGen *gen, ScopeEntryKind kind, InstructionIndex inst, StringIndex label, ScopeKey *key);
-internal b32  push_local(CodeGen *gen, StringIndex name, InstructionIndex inst);
-internal void pop_scope(CodeGen *gen, ScopeKey key);
-
-// Looks for a LookupEntry matching the provided name that is either a param, local, block or loop. 
-// Reports an error if name could not be found.
-internal LookupEntry *find_local(CodeGen *gen, StringIndex name);
-
-internal ScopeEntry *get_enclosing_loop(CodeGen *gen, AstIndex at) {
-  if (!gen->parent_loop_idx) {
-    Todo(); // there is no enclosing loop
-  }
-
-  return scopes_ptr_at_unchecked(&gen->scope_stack, gen->parent_loop_idx);
-}
-
-void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tree_idx) {
+b32 codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tree_idx) {
   *gen = (CodeGen){
-    .perm = context->perm,
-    .scratch = context->scratch,
-    .common = context->common,
-    .strings = context->strings,
-    .msg_sink = context->msg_sink,
-    .decls = context->decls,
-    .values = context->values,
-    .types = context->types,
-    .source = source,
+    .has_error = False,
+    .scope_scratch = arena_scope_begin(context->scratch),
     .builder = (SIrBuilder){.scratch = context->scratch},
-    .scope_stack = {},
-    .parent_loop_idx = 0,
-    .parent_block_idx = 0,
+    .source = source,
   };
 
-  locals_init(&gen->locals, &(HashMapOptions){
-    .allocator = context->gpa,
-    .initial_size = 32,
-  });
+  symbols_init(&gen->syms, context->gpa, context->scratch);
 
-  gen->scope_scratch = arena_scope_begin(context->scratch);
-
-  DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, Max_module_depth);
+  DeclarationIndex *mods = arena_push_array(DeclarationIndex, context->scratch, MAX_MODULE_DEPTH);
   u32 i = source->decls[tree_idx].parent;
   u32 offset = 0;
   Assert(source->decls[0].kind == SourceDeclaration_root);
-  while (i) {
+  while (i && offset < (MAX_MODULE_DEPTH - 1)) {
     mods[offset++] = source->decl_idxs[i];
     i = source->decls[i].parent;
+  }
+
+  if (i != 0) {
+    Todo(); // max module depth exceeded.
+    return False;
   }
 
   mods[offset++] = source->decl_idxs[0];
@@ -177,79 +63,59 @@ void codegen_init(CodeGen *gen, CodeGenContext *context, Source *source, u32 tre
   gen->mod_depth = offset;
   gen->mods = mods;
 
-  scopes_append(&gen->scope_stack, gen->scratch, (ScopeEntry){ .kind = ScopeEntry_root, });
-}
-
-void codegen_deinit(CodeGen *gen) {
-  locals_deinit(&gen->locals);
-  arena_scope_end(gen->scratch, gen->scope_scratch);
-}
-
-internal b32 add_binding(CodeGen *gen, StringIndex name, LookupKind kind, InstructionIndex inst) {
-  b32 was_occupied = False;
-  LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&gen->locals, name, &was_occupied);
-  if (was_occupied) {
-    Todo();
-  }
-
-  bucket->val = (LookupEntry){
-    .kind = kind,
-    .parent_block_idx = gen->parent_block_idx,
-    .inst = inst,
-  };
-
   return True;
 }
 
-internal b32 push_scope(CodeGen *gen, ScopeEntryKind kind, InstructionIndex inst, StringIndex label, ScopeKey *key) {
-  u32 offset = gen->scopes.len;
-
-  scopes_append(&gen->scopes, gen->scratch, (ScopeEntry){
-    .kind = kind,
-    .parent_loop_idx = gen->parent_loop_idx,
-    .parent_block_idx = gen->parent_block_idx,
-    .name = label,
-    .inst = inst,
-  });
-
-  gen->parent_block_idx = offset;
-
-  if (kind == ScopeEntry_loop) {
-    gen->parent_loop_idx = offset;
-  }
-
-  if (label) {
-    Todo();
-  }
-
-  return offset;
+void codegen_deinit(CodeGen *gen, CodeGenContext *ctx) {
+  symbols_deinit(&gen->syms);
+  arena_scope_end(ctx->scratch, gen->scope_scratch);
 }
 
-internal LookupEntry lookup(CodeGen *gen, StringIndex str, AstIndex ast_idx) {
-  LookupEntry *entry = locals_find(&gen->locals, str); 
+typedef enum {
+  LOOKUP_PARAM,
+  LOOKUP_LOCAL,
+  LOOKUP_DECL,
+} LookupResultKind;
+
+typedef struct {
+  u32 kind;
+  union {
+    InstructionIndex inst;
+    DeclarationIndex decl_idx;
+  } data;
+} LookupResult;
+
+// - Assumes that `name` is not a label
+internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, StringIndex name, LookupResult *res) {
+  ScopeEntry *entry = symbols_find(&gen->syms, name); 
   if (entry) {
-    return *entry;
+    *res = (LookupResult){
+      .kind = (entry->kind == ScopeEntry_param) ? LOOKUP_PARAM : LOOKUP_LOCAL,
+      .data.inst = entry->inst,
+    };
+
+    return True;
   }
 
   DeclarationIndex decl = 0;
-  b32 found = lookup_identifier(gen->decls, gen->mods, gen->mod_depth, str, &decl);
+  b32 found = lookup_identifier(ctx->decls, gen->mods, gen->mod_depth, name, &decl);
   if (!found) {
-    Message_error(
-      gen->msg_sink,
-      (MessageLocation){
-        .kind = MessageLocation_ast_index,
-        .source_idx = gen->source->idx,
-        .data.ast_index = ast_idx,
-      },
-      string_lit("Could not find identifier.")
-    );
-    gen->has_error = True;
+    return False;
+    //Message_error(
+    //  ctx->msg_sink,
+    //  (MessageLocation){
+    //    .kind = MessageLocation_ast_index,
+    //    .source_idx = gen->source->idx,
+    //    .data.ast_index = ast_idx,
+    //  },
+    //  string_lit("Could not find identifier.")
+    //);
+    //gen->has_error = True;
   }
 
-  InstructionIndex inst = sir_builder_add(&gen->builder, SIR_lookup_decl_value, gen->source->idx, ast_idx);
-  sir_builder_set_data(&gen->builder, inst, decl);
+  *res = (LookupResult){ .kind = LOOKUP_DECL, .data.decl_idx = decl };
 
-  return (LookupEntry){ .kind = Lookup_decl, .inst = inst };
+  return True;
 }
 
 b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
@@ -270,30 +136,28 @@ b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
   }
 }
 
-SRef gen_code_for_ptr(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
+SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
   AstNodes *ast = &gen->source->ast;
   AstKind kind = ast->kinds[idx_ast];
-
-  SourceIndex source_idx = gen->source->idx;
 
   switch (kind) {
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
-    StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, *name));
+    StringIndex str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, *name));
 
-    LookupEntry entry = lookup(gen, str, idx_ast);
-
-    if (entry.kind == Lookup_param) {
-      Todo(); // cannot take pointer to param
+    LookupResult res;
+    b32 ok = lookup(gen, ctx, str, &res);
+    if (!ok) {
+      Todo();
     }
 
-    if (entry.kind == Lookup_decl) {
-      Todo(); // not sure what this should mean
-              // at the moment it is unclear to me whether lookup_decl_value should return a pointer or not.
-              // it probably should
+    switch (Cast(LookupResultKind, res.kind)) {
+    case LOOKUP_PARAM: Todo(); // cannot take pointer to a param
+    case LOOKUP_DECL: Todo();
+    case LOOKUP_LOCAL: Todo();
     }
 
-    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(entry.inst), source_idx, idx_ast);
+    //return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(entry.inst), source_idx, idx_ast);
   } break;
   default: Todo();
   }
@@ -317,15 +181,15 @@ internal b32 binary_op_is_cmp(BinaryOpKind op) {
   }
 }
 
-internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef type_destination, SRef *lhs_type_destination, SRef *rhs_type_destination) {
+internal void binary_op_type_destinations(CodeGenContext *ctx, BinaryOpKind op, SRef type_destination, SRef *lhs_type_destination, SRef *rhs_type_destination) {
   SRef lhs;
   SRef rhs;
 
   switch (op) {
   case Logical_or:
   case Logical_and: {
-    lhs = sref_from_value(gen->common->val._bool);
-    rhs = sref_from_value(gen->common->val._bool);
+    lhs = sref_from_value(ctx->common->val._bool);
+    rhs = sref_from_value(ctx->common->val._bool);
   } break;
 
   case Cmp_equal:
@@ -343,7 +207,7 @@ internal void binary_op_type_destinations(CodeGen *gen, BinaryOpKind op, SRef ty
     lhs = type_destination;
 
     // TODO: for now the rhs can be a usize, but at some point it should become log2(bitwidth(lhs))
-    rhs = sref_from_value(gen->common->val.usize);
+    rhs = sref_from_value(ctx->common->val.usize);
   } break;
 
   case Mul:
@@ -399,13 +263,13 @@ internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKi
   return inst;
 }
 
-SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination);
+SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination);
 
-SRef gen_comptime_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
+SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
   SIrBuilder *builder = &gen->builder;
   SourceIndex source_idx = gen->source->idx;
   InstructionIndex inst_block = sir_builder_add(builder, SIR_comptime_block, source_idx, idx_ast);
-  SRef ref = gen_code(gen, idx_ast, type_destination);
+  SRef ref = gen_code(gen, ctx, idx_ast, type_destination);
   sir_builder_end_block_with(builder, inst_block, inst_block, ref, source_idx, idx_ast);
   return sref_from_instruction(inst_block);
 }
@@ -426,12 +290,14 @@ internal BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
   }
 }
 
-SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
+SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
   String text = gen->source->text;
   Tokens *tokens = &gen->source->tokens;
   AstNodes *ast = &gen->source->ast;
   SIrBuilder *builder = &gen->builder;
   SourceIndex source_idx = gen->source->idx;
+  SymbolMap *syms = &gen->syms;
+  Source *source = gen->source;
 
   AstKind kind = ast->kinds[idx_ast];
   switch (kind) {
@@ -443,8 +309,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_cast: {
     AstCast *cast = ast_data(ast, idx_ast);
 
-    SRef ref_type = gen_code(gen, cast->type, sref_from_value(gen->common->val.type));
-    SRef ref_val = gen_code(gen, cast->value, (SRef){0});
+    SRef ref_type = gen_code(gen, ctx, cast->type, sref_from_value(ctx->common->val.type));
+    SRef ref_val = gen_code(gen, ctx, cast->value, (SRef){0});
 
     InstructionIndex inst = sir_builder_add(builder, SIR_cast, source_idx, idx_ast);
     SIrCast *data = sir_builder_push_data(builder, inst, SIrCast);
@@ -458,20 +324,33 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_identifier: {
     TokenIndex *name = ast_data(ast, idx_ast);
-    StringIndex str = strings_add(gen->strings, token_string(&gen->source->tokens, gen->source->text, *name));
+    String s = token_string(&gen->source->tokens, gen->source->text, *name);
+    StringIndex str = strings_add(ctx->strings, s);
 
-    LookupEntry entry = lookup(gen, str, idx_ast);
+    LookupResult res;
+    b32 ok = lookup(gen, ctx, str, &res);
+    if (!ok) {
+      Todo();
+    }
 
     InstructionIndex inst;
-    switch (Cast(LookupKind, entry.kind)) {
-    case Lookup_decl:
-    case Lookup_local: {
+    switch (Cast(LookupResultKind, res.kind)) {
+    case LOOKUP_DECL: {
+      InstructionIndex inst_lookup_decl = sir_builder_add(builder, SIR_lookup_decl_value, source_idx, idx_ast);
+      sir_builder_set_data(builder, inst_lookup_decl, res.data.decl_idx);
+
       InstructionIndex inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
-      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(entry.inst)));
+      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(inst_lookup_decl)));
+
       inst = inst_load;
     } break;
-    case Lookup_param: { inst = entry.inst; } break;
-    case Lookup_block: Panic();
+    case LOOKUP_LOCAL: {
+      InstructionIndex inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
+      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(res.data.inst)));
+
+      inst = inst_load;
+    } break;
+    case LOOKUP_PARAM: { inst = res.data.inst; } break;
     }
 
     return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst), source_idx, idx_ast);
@@ -481,24 +360,28 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     AstBlock *block = ast_data(ast, idx_ast);
     u32 count = block->count;
     if (count == 0) {
-      return sref_from_value(gen->common->val.nil);
+      return sref_from_value(ctx->common->val.nil);
     }
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    StringIndex block_label = ast_label_to_string_index(block->label);
+    StringIndex block_label = intern_ast_node_string(ctx, gen->source, block->label);
 
-    ScopeKey scope;
-    b32 ok = push_scope(gen, ScopeEntry_block, inst_block, block_label, &scope);
-    if (!ok) {
-      Todo();
+    ScopeKey scope_key;
+    {
+      SymbolsPushScopeResult res = symbols_push_scope(&gen->syms, ScopeEntry_block, inst_block, block_label);
+      if (res.err != SYMBOLS_OK) {
+        Todo();
+      }
+
+      scope_key = res.data.scope_key;
     }
 
     for (u32 i = 0; i < count-1; i++) {
-      gen_code(gen, block->items[i], (SRef){0});
+      gen_code(gen, ctx, block->items[i], (SRef){0});
     }
 
-    SRef res = gen_code(gen, block->items[count-1], type_destination);
+    SRef res = gen_code(gen, ctx, block->items[count-1], type_destination);
 
     if (sref_is_terminator_instruction(builder, res)) {
       sir_builder_set_data(builder, inst_block, sir_builder_offset(builder, inst_block));
@@ -506,7 +389,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_end_block_with(builder, inst_block, inst_block, res, source_idx, idx_ast);
     }
 
-    pop_scope(gen, scope);
+    symbols_pop_scope(&gen->syms, scope_key);
 
     return sref_from_instruction(inst_block);
   } break;
@@ -519,14 +402,14 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
     InstructionIndex cond_block = sir_builder_add(builder, SIR_block, source_idx, if_else->cond);
-    SRef cond_val = gen_code(gen, if_else->cond, sref_from_value(gen->common->val._bool));
+    SRef cond_val = gen_code(gen, ctx, if_else->cond, sref_from_value(ctx->common->val._bool));
     sir_builder_end_block_with(builder, cond_block, cond_block, cond_val, source_idx, if_else->cond);
     SRef cond = sref_from_instruction(cond_block);
 
     InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, if_else->cond);
 
     InstructionIndex then_block = sir_builder_add(builder, SIR_block, source_idx, if_else->then);
-    SRef then_val = gen_code(gen, if_else->then, type_destination);
+    SRef then_val = gen_code(gen, ctx, if_else->then, type_destination);
     sir_builder_end_block_with(builder, then_block, block, then_val, source_idx, if_else->then);
 
     SIrCondbr *data_condbr = sir_builder_push_data(builder, condbr, SIrCondbr);
@@ -535,7 +418,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef else_val = (SRef){0};
 
     if (if_else->otherwise) {
-      else_val = gen_code(gen, if_else->otherwise, type_destination);
+      else_val = gen_code(gen, ctx, if_else->otherwise, type_destination);
     }
 
     sir_builder_end_block_with(builder, else_block, block, else_val, source_idx, idx_ast_else);
@@ -553,12 +436,12 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_type_function: {
     AstTypeFunction *func = ast_data(ast, idx_ast);
-    SRef ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
+    SRef ref_ret_type = gen_code(gen, ctx, func->return_type, sref_from_value(ctx->common->val.type));
 
-    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+    SRef *param_types = arena_push_array(SRef, ctx->scratch, func->count);
 
     for (u32 i = 0; i < func->count; i++) {
-      param_types[i] = gen_code(gen, func->param_types[i], sref_from_value(gen->common->val.type));
+      param_types[i] = gen_code(gen, ctx, func->param_types[i], sref_from_value(ctx->common->val.type));
     }
 
     InstructionIndex inst_type = sir_builder_add(&gen->builder, SIR_type, source_idx, idx_ast);
@@ -612,20 +495,21 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       sir_builder_set_data(builder, inst_param, sref_to_u32(sref_from_instruction(first_param_type + i)));
     }
 
-    ScopeKey scope = push_scope(gen, ScopeEntry_function, inst_func, 0);
+    ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_function, inst_func, 0).data.scope_key;
 
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
-      StringIndex str = strings_add(gen->strings, token_string(tokens, text, ast_param->name));
+      StringIndex str = strings_add(ctx->strings, token_string(tokens, text, ast_param->name));
 
-      Todo();
-      stack_push(&gen->scope_stack, ((ScopeEntry){ .kind = ScopeEntry_local, .name = str }));
-      locals_insert(&gen->locals, str, (LookupEntry){.kind = Lookup_param, .inst = first_param + i});
+      SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_param, str, first_param + i);
+      if (res.err != SYMBOLS_OK) {
+        Todo();
+      }
     }
 
-    SRef inst_body = gen_code(gen, func->body, sref_from_instruction(inst_return_type));
+    SRef inst_body = gen_code(gen, ctx, func->body, sref_from_instruction(inst_return_type));
 
-    pop_scope(gen, scope);
+    symbols_pop_scope(syms, scope);
 
     InstructionIndex inst_ret = sir_builder_add(&gen->builder, SIR_ret, source_idx, func->body);
     sir_builder_set_data(&gen->builder, inst_ret, sref_to_u32(inst_body));
@@ -646,21 +530,21 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     Assert(decl->type);
 
-    StringIndex str = ast_node_to_string_index(gen, ast, decl->name);
+    StringIndex str = intern_ast_node_string(ctx, gen->source, decl->name);
 
-    SRef ref_type = sref_from_value(gen->common->val.type);
+    SRef ref_type = sref_from_value(ctx->common->val.type);
 
-    SRef ref_decl_type = gen_code(gen, decl->type, ref_type);
+    SRef ref_decl_type = gen_code(gen, ctx, decl->type, ref_type);
 
     InstructionIndex inst_var = sir_builder_add(builder, SIR_alloc, source_idx, idx_ast);
     sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
 
-    b32 ok = push_local(gen, str, inst_var);
-    if (!ok) {
+    SymbolsPushLocalResult res = symbols_push_local(syms, ScopeEntry_local, str, inst_var);
+    if (res.err != SYMBOLS_OK) {
       Todo();
     }
 
-    SRef ref_decl_val = gen_code(gen, decl->value, ref_decl_type);
+    SRef ref_decl_val = gen_code(gen, ctx, decl->value, ref_decl_type);
 
     InstructionIndex inst_store = sir_builder_add(builder, SIR_store, source_idx, decl->value);
     SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
@@ -669,7 +553,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       .value = ref_decl_val,
     };
 
-    return sref_from_value(gen->common->val.nil);
+    return sref_from_value(ctx->common->val.nil);
   } break;
 
   case Ast_literal_u8_string: {
@@ -683,11 +567,11 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     }
 
     Value *v;
-    ValueIndex idx = values_alloc(gen->values, &v);
-    u8 *data = values_alloc_data_type(gen->values, u8);
+    ValueIndex idx = values_alloc(ctx->values, &v);
+    u8 *data = values_alloc_data_type(ctx->values, u8);
     *data = s.str[3];
     *v = (Value){
-      .type = gen->common->type.u8,
+      .type = ctx->common->type.u8,
       .data_size = sizeof(u8),
       .data = data,
     };
@@ -701,7 +585,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     u32 err = parse_u64(token_string(tokens, text, *tok), &value);
     if (err == PARSE_U64_OVERFLOW) {
       Message_error(
-        gen->msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ast_index,
           .source_idx = source_idx,
@@ -709,15 +593,15 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         },
         string_lit("Integer literal does not fit in u64."));
       gen->has_error = True;
-      return sref_from_value(gen->common->val.nil);
+      return sref_from_value(ctx->common->val.nil);
     }
 
     Value *v;
-    ValueIndex idx = values_alloc(gen->values, &v);
-    ComptimeInt *data = values_alloc_data(gen->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
+    ValueIndex idx = values_alloc(ctx->values, &v);
+    ComptimeInt *data = values_alloc_data(ctx->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
     *data = Cast(i64, value);
     *v = (Value){
-      .type = gen->common->type.comptime_int,
+      .type = ctx->common->type.comptime_int,
       .data_size = sizeof(ComptimeInt),
       .data = data,
     };
@@ -728,9 +612,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_call: {
     AstCall *ast_call = ast_data(ast, idx_ast);
 
-    SRef callee = gen_code(gen, ast_call->callee, (SRef){0});
+    SRef callee = gen_code(gen, ctx, ast_call->callee, (SRef){0});
 
-    SRef *args = arena_push_array(SRef, gen->scratch, ast_call->count);
+    SRef *args = arena_push_array(SRef, ctx->scratch, ast_call->count);
 
     if (ast_call->count > 0) {
       InstructionIndex callee_type = sir_builder_add(builder, SIR_typeof, source_idx, ast_call->callee);
@@ -743,7 +627,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
           .function_type = sref_from_instruction(callee_type),
           .param_index = i,
         };
-        args[i] = gen_code(gen, ast_call->args[i], sref_from_instruction(inst_param_type));
+        args[i] = gen_code(gen, ctx, ast_call->args[i], sref_from_instruction(inst_param_type));
       }
     }
 
@@ -772,7 +656,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     switch (Cast(BuiltinKind, builtin->kind)) {
     case Builtin_debug: {
       AstIndex e = builtin->args[0];
-      SRef val = gen_code(gen, e, type_destination);
+      SRef val = gen_code(gen, ctx, e, type_destination);
 
       InstructionIndex inst_debug = sir_builder_add(builder, SIR_builtin_debug, source_idx, idx_ast);
       sir_builder_set_data(builder, inst_debug, sref_to_u32(val));
@@ -781,7 +665,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     } break;
 
     case Builtin_len: {
-      SRef val = gen_code(gen, builtin->args[0], (SRef){0});
+      SRef val = gen_code(gen, ctx, builtin->args[0], (SRef){0});
 
       InstructionIndex inst_len = sir_builder_add(builder, SIR_builtin_len, source_idx, idx_ast);
       sir_builder_set_data(builder, inst_len, sref_to_u32(val));
@@ -796,20 +680,20 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     
     String s = token_string(&gen->source->tokens, gen->source->text, *name);
 
-    void *data = values_alloc_data(gen->values, s.len, 1);
+    void *data = values_alloc_data(ctx->values, s.len, 1);
     u32 len;
     decode_string_literal(s, data, &len);
 
-    TypeIndex type = types_add(gen->types, &(Type){
+    TypeIndex type = types_add(ctx->types, &(Type){
       .kind = Type_array,
       .data.array = {
-        .base_type = gen->common->type.u8,
+        .base_type = ctx->common->type.u8,
         .size = len,
       },
     });
 
     Value *v;
-    ValueIndex idx = values_alloc(gen->values, &v);
+    ValueIndex idx = values_alloc(ctx->values, &v);
     *v = (Value){
       .type = type,
       .data = data,
@@ -821,7 +705,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_type_slice: {
     AstTypeSlice *slice = ast_data(ast, idx_ast);
-    SRef base_type = gen_code(gen, slice->base, sref_from_value(gen->common->val.type));
+    SRef base_type = gen_code(gen, ctx, slice->base, sref_from_value(ctx->common->val.type));
     InstructionIndex inst = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + sizeof(SRef), Align_of(SIrType));
     data->kind = Type_slice;
@@ -833,9 +717,9 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_type_array: {
     AstTypeArray *array = ast_data(ast, idx_ast);
 
-    SRef array_size = gen_comptime_code(gen, array->size, sref_from_value(gen->common->val.usize));
+    SRef array_size = gen_comptime_code(gen, ctx, array->size, sref_from_value(ctx->common->val.usize));
 
-    SRef base_type = gen_code(gen, array->base, sref_from_value(gen->common->val.type));
+    SRef base_type = gen_code(gen, ctx, array->base, sref_from_value(ctx->common->val.type));
 
     InstructionIndex inst = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + 2 * sizeof(SRef), Align_of(SIrType));
@@ -849,7 +733,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
   case Ast_assign: { 
     AstAssign *assign = ast_data(ast, idx_ast);
 
-    SRef lhs_ptr = gen_code_for_ptr(gen, assign->lhs, (SRef){0});
+    SRef lhs_ptr = gen_code_for_ptr(gen, ctx, assign->lhs, (SRef){0});
 
     InstructionIndex inst_typeof_lhs = sir_builder_add(builder, SIR_typeof, source_idx, assign->lhs);
     sir_builder_set_data(builder, inst_typeof_lhs, sref_to_u32(lhs_ptr));
@@ -863,18 +747,18 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       BinaryOpKind binop = compound_assign_kind_to_binary_op_kind(kind);
 
       SRef lhs_type_destination, rhs_type_destination;
-      binary_op_type_destinations(gen, binop, sref_from_instruction(inst_basetype), &lhs_type_destination, &rhs_type_destination);
+      binary_op_type_destinations(ctx, binop, sref_from_instruction(inst_basetype), &lhs_type_destination, &rhs_type_destination);
 
       InstructionIndex lhs = sir_builder_add(builder, SIR_load, source_idx, assign->lhs);
       sir_builder_set_data(builder, lhs, sref_to_u32(lhs_ptr));
 
       SRef lhs_val = sir_builder_add_as(&gen->builder, lhs_type_destination, sref_from_instruction(lhs), source_idx, idx_ast);
 
-      SRef rhs = gen_code(gen, assign->value, rhs_type_destination);
+      SRef rhs = gen_code(gen, ctx, assign->value, rhs_type_destination);
 
       value = sref_from_instruction(gen_code_for_binary_op(&gen->builder, binop, lhs_val, rhs, source_idx, idx_ast));
     } else {
-      value = gen_code(gen, assign->value, sref_from_instruction(inst_basetype));
+      value = gen_code(gen, ctx, assign->value, sref_from_instruction(inst_basetype));
     }
 
     InstructionIndex inst_store = sir_builder_add(builder, SIR_store, source_idx, idx_ast);
@@ -889,8 +773,8 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
   case Ast_index: {
     AstIndexData *index = ast_data(ast, idx_ast);
-    SRef indexable = gen_code(gen, index->indexable, (SRef){0});
-    SRef index_at = gen_code(gen, index->index_at, sref_from_value(gen->common->val.usize));
+    SRef indexable = gen_code(gen, ctx, index->indexable, (SRef){0});
+    SRef index_at = gen_code(gen, ctx, index->index_at, sref_from_value(ctx->common->val.usize));
 
     InstructionIndex inst = sir_builder_add(builder, SIR_index, source_idx, idx_ast);
     SIrBinary *data = sir_builder_push_data(builder, inst, SIrBinary);
@@ -909,11 +793,11 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     SRef unary_type_destination = (SRef){0};
     switch (op) {
     case Negate: unary_type_destination = (SRef){0}; break;
-    case Logical_not: unary_type_destination = sref_from_value(gen->common->val._bool); break;
+    case Logical_not: unary_type_destination = sref_from_value(ctx->common->val._bool); break;
     case Bit_not: Todo(); break;
     }
 
-    SRef e = gen_code(gen, unary->value, unary_type_destination);
+    SRef e = gen_code(gen, ctx, unary->value, unary_type_destination);
 
     u8 sir_op;
     switch (op) {
@@ -932,7 +816,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
     if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
-      SRef lhs = gen_code(gen, binary->lhs, sref_from_value(gen->common->val._bool));
+      SRef lhs = gen_code(gen, ctx, binary->lhs, sref_from_value(ctx->common->val._bool));
 
       InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
       InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, binary->lhs);
@@ -940,7 +824,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
       if (binary->op_kind == Logical_and) {
         InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val._bool));
+        SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
 
         InstructionIndex inst_and = sir_builder_add(builder, SIR_bool_and, source_idx, idx_ast);
         SIrBinary *data_and = sir_builder_push_data(builder, inst_and, SIrBinary);
@@ -952,7 +836,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         sir_builder_end_block_with(builder, block_rhs, block, sref_from_instruction(inst_and), source_idx, binary->rhs);
 
         InstructionIndex block_otherwise = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(gen->common->val._false), source_idx, binary->rhs);
+        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(ctx->common->val._false), source_idx, binary->rhs);
 
         *data = (SIrCondbr){
           .cond = lhs,
@@ -961,10 +845,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
         };
       } else if (binary->op_kind == Logical_or) {
         InstructionIndex block_lhs_true = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(gen->common->val._true), source_idx, binary->rhs);
+        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(ctx->common->val._true), source_idx, binary->rhs);
 
         InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, binary->rhs, sref_from_value(gen->common->val._bool));
+        SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
 
         sir_builder_end_block_with(builder, block_rhs, block, rhs, source_idx, binary->rhs);
 
@@ -983,10 +867,10 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     }
 
     SRef lhs_type_destination, rhs_type_destination;
-    binary_op_type_destinations(gen, binary->op_kind, type_destination, &lhs_type_destination, &rhs_type_destination);
+    binary_op_type_destinations(ctx, binary->op_kind, type_destination, &lhs_type_destination, &rhs_type_destination);
 
-    SRef lhs = gen_code(gen, binary->lhs, lhs_type_destination);
-    SRef rhs = gen_code(gen, binary->rhs, rhs_type_destination);
+    SRef lhs = gen_code(gen, ctx, binary->lhs, lhs_type_destination);
+    SRef rhs = gen_code(gen, ctx, binary->rhs, rhs_type_destination);
 
     if (binary_op_is_cmp(binary->op_kind) || sref_is_nil(type_destination)) {
       InstructionIndex inst_typeof_lhs = sir_builder_add(builder, SIR_typeof, source_idx, binary->lhs);
@@ -1018,7 +902,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
     InstructionIndex loop = sir_builder_add(builder, SIR_loop, source_idx, idx_ast);
 
-    SRef cond_val = gen_code(gen, ast_while->cond, sref_from_value(gen->common->val._bool));
+    SRef cond_val = gen_code(gen, ctx, ast_while->cond, sref_from_value(ctx->common->val._bool));
 
     InstructionIndex inst_condbr = sir_builder_add(builder, SIR_condbr, source_idx, ast_while->cond);
 
@@ -1027,17 +911,21 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex exit_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
     sir_builder_end_block_with(builder, exit_block, loop, (SRef){0}, source_idx, idx_ast);
 
-    StringIndex loop_label = ast_node_to_string_index(gen, ast, ast_while->label);
+    StringIndex loop_label = intern_ast_node_string(ctx, gen->source, ast_while->label);
 
     InstructionIndex body_block = sir_builder_add(builder, SIR_block, source_idx, ast_while->body);
 
-    ScopeKey scope;
-    b32 ok = push_scope(gen, ScopeEntry_loop, loop, loop_label, &scope);
-    if (!ok) {
-      Todo();
+    ScopeKey scope_key;
+    {
+      SymbolsPushScopeResult res = symbols_push_scope(syms, ScopeEntry_loop, loop, loop_label);
+      if (res.err != SYMBOLS_OK) {
+        Todo();
+      }
+
+      scope_key = res.data.scope_key;
     }
 
-    SRef body = gen_code(gen, ast_while->body, (SRef){0});
+    SRef body = gen_code(gen, ctx, ast_while->body, (SRef){0});
     Unused(body);
 
     InstructionIndex repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
@@ -1052,7 +940,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       .otherwise = exit_block,
     };
 
-    pop_scope(gen, scope);
+    symbols_pop_scope(syms, scope_key);
 
     return sref_from_instruction(loop);
   } break;
@@ -1063,17 +951,15 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
     InstructionIndex target;
 
     if (b->label) {
-      TokenIndex *label_tok = ast_data(ast, b->label);
-      StringIndex label = strings_add(gen->strings, token_string(tokens, text, *label_tok));
-
-      LookupEntry *found = find_local(gen, label);
-      if (!found) {
+      StringIndex label = intern_ast_node_string(ctx, source, b->label);
+      ScopeEntry *entry = symbols_find(syms, label);
+      if (!entry) {
         Todo();
       }
 
-      target = found->inst;
+      target = entry->inst;
     } else {
-      ScopeEntry *entry = get_enclosing_loop(gen, idx_ast);
+      ScopeEntry *entry = symbols_get_enclosing_loop(syms);
       if (!entry) {
         Todo();
       }
@@ -1081,7 +967,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
       target = entry->inst;
     }
 
-    SRef value = b->value ? gen_code(gen, b->value, (SRef){0}) : (SRef){0};
+    SRef value = b->value ? gen_code(gen, ctx, b->value, (SRef){0}) : (SRef){0};
 
     InstructionIndex br = sir_builder_add(builder, SIR_br, source_idx, idx_ast);
     SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
@@ -1099,7 +985,7 @@ SRef gen_code(CodeGen *gen, AstIndex idx_ast, SRef type_destination) {
 
 // For some constructions a part of the declaration type is allowed to live in the value.
 // This function is for adding type checking code for those constructs.
-SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared_type) {
+SRef gen_code_for_declaration_type(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef declared_type) {
   AstNodes *ast = &gen->source->ast;
   SIrBuilder *builder = &gen->builder;
   SourceIndex source_idx = gen->source->idx;
@@ -1115,10 +1001,10 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 
     SRef ref_ret_type = {0};
     if (func->return_type) {
-      ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
+      ref_ret_type = gen_code(gen, ctx, func->return_type, sref_from_value(ctx->common->val.type));
     }
 
-    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+    SRef *param_types = arena_push_array(SRef, ctx->scratch, func->count);
 
     // Output param type expressions
     for (u32 i = 0; i < func->count; i++) {
@@ -1126,7 +1012,7 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
 
       param_types[i] = (SRef){0};
       if (ast_param->type) {
-        param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+        param_types[i] = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
       }
     }
 
@@ -1168,11 +1054,14 @@ SRef gen_code_for_declaration_type(CodeGen *gen, AstIndex idx_ast, SRef declared
   Unreachable();
 }
 
-b32 generate_code(CodeGenContext *context, Declaration *decl) {
+b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
   Source *source = decl->data.decl.source;
 
   CodeGen gen;
-  codegen_init(&gen, context, source, decl->data.decl.tree_idx);
+  b32 ok = codegen_init(&gen, ctx, source, decl->data.decl.tree_idx);
+  if (!ok) {
+    Todo();
+  }
 
   AstIndex ast_idx_decl = source->decls[decl->data.decl.tree_idx].node;
   AstDeclaration *ast_decl = ast_data(&source->ast, ast_idx_decl);
@@ -1187,14 +1076,14 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
     SRef ref_decl_type = {0};
     if (ast_decl->type) {
-      ref_decl_type = gen_code(&gen, ast_decl->type, sref_from_value(gen.common->val.type));
+      ref_decl_type = gen_code(&gen, ctx, ast_decl->type, sref_from_value(ctx->common->val.type));
     }
 
-    SRef ref_decl_type_of_val = gen_code_for_declaration_type(&gen, ast_decl->value, ref_decl_type);
+    SRef ref_decl_type_of_val = gen_code_for_declaration_type(&gen, ctx, ast_decl->value, ref_decl_type);
 
     if (sref_is_nil(ref_decl_type_of_val)) {
       Message_error(
-        gen.msg_sink,
+        ctx->msg_sink,
         (MessageLocation){
           .kind = MessageLocation_ast_index,
           .source_idx = gen.source->idx,
@@ -1217,19 +1106,19 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
     InstructionIndex decl_type = sir_builder_add(builder, SIR_lookup_decl_type, source->idx, ast_idx_decl);
     sir_builder_set_data(builder, decl_type, decl->idx);
 
-    SRef ref_decl_val = gen_code(&gen, ast_decl->value, sref_from_instruction(decl_type));
+    SRef ref_decl_val = gen_code(&gen, ctx, ast_decl->value, sref_from_instruction(decl_type));
 
     sir_builder_end_block_with(builder, block, block, ref_decl_val, source->idx, ast_idx_decl);
 
     block_decl_val = block;
   }
 
-  sir_builder_flatten(builder, context->perm, &decl->data.decl.chunk);
+  sir_builder_flatten(builder, ctx->perm, &decl->data.decl.chunk);
 
   decl->data.decl.block_type = block_decl_type;
   decl->data.decl.block_val = block_decl_val;
 
-  codegen_deinit(&gen);
+  codegen_deinit(&gen, ctx);
 
   return !gen.has_error;
 }

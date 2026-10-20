@@ -14,11 +14,11 @@ typedef enum {
   Ast_builtin,
   Ast_declaration,
   Ast_assign,
-  Ast_literal_int,
-  Ast_literal_string,
-  Ast_literal_u8_string,
-  Ast_identifier,
-  Ast_label,
+  Ast_literal_int, // TokenIndex
+  Ast_literal_string, // TokenIndex
+  Ast_literal_u8_string, // TokenIndex
+  Ast_identifier, // TokenIndex
+  Ast_label, // TokenIndex
   Ast_call,
   Ast_index,
   Ast_unary_op,
@@ -211,9 +211,9 @@ typedef struct {
   void      *extra;
 } AstNodes;
 
-AstNodeData *ast_data(AstNodes *ast, AstIndex idx);
+void *ast_data(AstNodes *ast, AstIndex idx);
 
-String ast_kind_string(u8 kind);
+String ast_kind_string(AstKind kind);
 
 b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast);
 
