@@ -153,13 +153,13 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef 
 
     switch (Cast(LookupResultKind, res.kind)) {
     case LOOKUP_PARAM: Todo(); // cannot take pointer to a param
-    case LOOKUP_DECL: Todo();
+    case LOOKUP_DECL:  Todo();
     case LOOKUP_LOCAL: Todo();
     }
 
     //return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(entry.inst), source_idx, idx_ast);
   } break;
-  default: Todo();
+  default: Panic();
   }
 
   Unreachable();

@@ -77,6 +77,15 @@ internal b32 add_symbol(SymbolMap *syms, StringIndex name, u32 idx, u32 *occupie
 SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, InstructionIndex inst, StringIndex label) {
   u32 offset = syms->stack.len;
 
+  u32 occupied_idx;
+  if (label && !add_symbol(syms, label, offset, &occupied_idx)) {
+    ScopeEntry *existing = scopes_ptr_at_unchecked(&syms->stack, occupied_idx);
+    return (SymbolsPushScopeResult){
+      .err = SYMBOLS_ERR_FOUND_EXISTING_SYMBOL,
+      .data.inst = existing->inst,
+    };
+  }
+
   scopes_append(&syms->stack, syms->scratch, (ScopeEntry){
     .kind = kind,
     .parent_loop_idx = syms->parent_loop_idx,
@@ -89,15 +98,6 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
 
   if (kind == ScopeEntry_loop) {
     syms->parent_loop_idx = offset;
-  }
-
-  u32 occupied_idx;
-  if (label && !add_symbol(syms, label, offset, &occupied_idx)) {
-    ScopeEntry *existing = scopes_ptr_at_unchecked(&syms->stack, occupied_idx);
-    return (SymbolsPushScopeResult){
-      .err = SYMBOLS_ERR_FOUND_EXISTING_SYMBOL,
-      .data.inst = existing->inst,
-    };
   }
 
   return (SymbolsPushScopeResult){
@@ -132,10 +132,11 @@ SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, 
 }
 
 void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
-  while (syms->stack.len < key.offset - 1) {
+  while (syms->stack.len > key.offset + 1) {
     ScopeEntry entry = scopes_pop(&syms->stack);
 
     switch (Cast(ScopeEntryKind, entry.kind)) {
+      case ScopeEntry_param:
       case ScopeEntry_local: {
         locals_remove(&syms->locals, entry.name);
       } break;
@@ -147,7 +148,6 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
       } break;
       case ScopeEntry_root:
       case ScopeEntry_function:
-      case ScopeEntry_param:
         Panic();
     }
   }
@@ -156,6 +156,10 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
 
   syms->parent_loop_idx = entry.parent_loop_idx;
   syms->parent_block_idx = entry.parent_block_idx;
+
+  if (entry.name) {
+    locals_remove(&syms->locals, entry.name);
+  }
 }
 
 ScopeEntry *symbols_find(SymbolMap *syms, StringIndex name) {

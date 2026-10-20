@@ -30,6 +30,7 @@ def add_test_suite(out):
         'parse.test.c',
         'messages.test.c',
         'eval.test.c',
+        'symbol_map.test.c',
     ]
 
     outputs = []
@@ -40,6 +41,7 @@ def add_test_suite(out):
     outputs.append(outd('eval.c.o'))
     outputs.append(outd('types.c.o'))
     outputs.append(outd('value.c.o'))
+    outputs.append(outd('symbol_map.c.o'))
 
     for f in inputs:
         fout = outd(f'{f}.o')
