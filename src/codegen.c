@@ -23,7 +23,7 @@ typedef struct {
   DeclarationIndex *mods;
 } CodeGen;
 
-internal StringIndex intern_ast_node_string(CodeGenContext *ctx, Source *source, AstIndex idx) {
+internal StringIndex intern_ast_label_string(CodeGenContext *ctx, Source *source, AstIndex idx) {
   if (!idx) {
     return 0;
   }
@@ -151,13 +151,14 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef 
       Todo();
     }
 
+    InstructionIndex inst;
     switch (Cast(LookupResultKind, res.kind)) {
     case LOOKUP_PARAM: Todo(); // cannot take pointer to a param
     case LOOKUP_DECL:  Todo();
-    case LOOKUP_LOCAL: Todo();
+    case LOOKUP_LOCAL: inst = res.data.inst; break;
     }
 
-    //return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(entry.inst), source_idx, idx_ast);
+    return sir_builder_add_as(&gen->builder, type_destination, sref_from_instruction(inst), gen->source->idx, idx_ast);
   } break;
   default: Panic();
   }
@@ -365,7 +366,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionIndex inst_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    StringIndex block_label = intern_ast_node_string(ctx, gen->source, block->label);
+    StringIndex block_label = intern_ast_label_string(ctx, gen->source, block->label);
 
     ScopeKey scope_key;
     {
@@ -530,7 +531,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     Assert(decl->type);
 
-    StringIndex str = intern_ast_node_string(ctx, gen->source, decl->name);
+    StringIndex str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, decl->name));
 
     SRef ref_type = sref_from_value(ctx->common->val.type);
 
@@ -541,7 +542,16 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     SymbolsPushLocalResult res = symbols_push_local(syms, ScopeEntry_local, str, inst_var);
     if (res.err != SYMBOLS_OK) {
-      Todo();
+      gen->has_error = True;
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ast_index,
+          .source_idx = source_idx,
+          .data.ast_index = idx_ast,
+        },
+        string_lit("Variable has already been declared")
+      );
     }
 
     SRef ref_decl_val = gen_code(gen, ctx, decl->value, ref_decl_type);
@@ -911,7 +921,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     InstructionIndex exit_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
     sir_builder_end_block_with(builder, exit_block, loop, (SRef){0}, source_idx, idx_ast);
 
-    StringIndex loop_label = intern_ast_node_string(ctx, gen->source, ast_while->label);
+    StringIndex loop_label = intern_ast_label_string(ctx, gen->source, ast_while->label);
 
     InstructionIndex body_block = sir_builder_add(builder, SIR_block, source_idx, ast_while->body);
 
@@ -951,7 +961,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     InstructionIndex target;
 
     if (b->label) {
-      StringIndex label = intern_ast_node_string(ctx, source, b->label);
+      StringIndex label = intern_ast_label_string(ctx, source, b->label);
       ScopeEntry *entry = symbols_find(syms, label);
       if (!entry) {
         Todo();

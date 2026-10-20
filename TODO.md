@@ -1,8 +1,8 @@
 - [ ] Add user error reporting on failure for SIR_unify in specialize.c
 - [ ] Compile time evaluation of binary operators in specialize.c
-- [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `cast Ast_declaration` in codegen.c
-- [ ] Add compile time function calls
+- [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `case Ast_declaration` in codegen.c
 - [ ] Add location information to interpreter error reporting
+- [ ] The symbol table doesn't work correctly for nested functions. you keep access to variables in the enclosing function.
 
 ## Some things to keep in mind
 - If a type has multiple method sets that are active, which ones are actually used?

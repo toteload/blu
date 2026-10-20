@@ -16,16 +16,6 @@ Exit code `0xC0000374` is `STATUS_HEAP_CORRUPTION` and `0xC0000005` is an access
 
 ## High
 
-### H4. Shadowing or redeclaring a local crashes codegen (Verified)
-
-- Locals are kept in a single `LocalsMap` keyed by name (`codegen.c:570`, `525`).
-  `locals_insert` overwrites an existing binding, and scope exit calls `locals_remove` once per scope entry, then `Assert(found)` (`codegen.c:410-411`, `537-538`).
-- Two `x: i32 = …` in the same block: the second remove fails → `Assertion failed: found, file src/codegen.c, line 411`.
-- Inner block shadowing an outer `x`: same assert, because the inner remove deletes the outer binding.
-  Without the assert, later uses of `x` would silently resolve to a global with the same name, or fail lookup.
-- A parameter shadowed by a local has the same problem.
-- Fix: keep a stack of previous bindings per name, or store the shadowed entry in the `ScopeEntry` and restore it on pop.
-
 ### H5. `run_main` trusts that `main.main` is a function (Verified)
 
 - `src/compiler.c:830-846` casts `v->data` to `ValueFunc*` without checking the type (there is a `TODO`).
