@@ -28,7 +28,7 @@ typedef struct {
     TypeIndex comptime_int;
     TypeIndex type;
     TypeIndex nil;
-    TypeIndex bool;
+    TypeIndex _bool;
     TypeIndex never;
     TypeIndex u8;
     TypeIndex i8;
@@ -41,7 +41,7 @@ typedef struct {
   struct {
     ValueIndex type;
     ValueIndex nil;
-    ValueIndex bool;
+    ValueIndex _bool;
     ValueIndex never;
     ValueIndex i8;
     ValueIndex i16;
@@ -51,8 +51,8 @@ typedef struct {
     ValueIndex comptime_int;
     ValueIndex usize;
 
-    ValueIndex true;
-    ValueIndex false;
+    ValueIndex _true;
+    ValueIndex _false;
   } val;
 } Common;
 

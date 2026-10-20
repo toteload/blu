@@ -337,7 +337,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     InstructionIndex inst;
     switch (Cast(LookupResultKind, res.kind)) {
     case LOOKUP_DECL: {
-      InstructionIndex inst_lookup_decl = sir_builder_add(builder, SIR_lookup_decl_value, source_idx, idx_ast);
+      InstructionIndex inst_lookup_decl = sir_builder_add(builder, SIR_get_decl_value, source_idx, idx_ast);
       sir_builder_set_data(builder, inst_lookup_decl, res.data.decl_idx);
 
       InstructionIndex inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
@@ -474,13 +474,13 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionIndex inst_func = sir_builder_add(builder, SIR_func, source_idx, idx_ast);
     SIrFunc *data_func = sir_builder_push_data(builder, inst_func, SIrFunc);
-    SRef *param_types = arena_push_array(SRef, gen->scratch, func->count);
+    SRef *param_types = arena_push_array(SRef, ctx->scratch, func->count);
 
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
 
       if (ast_param->type) {
-        param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+        param_types[i] = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
       } else {
         param_types[i] = (SRef){0};
       }
@@ -490,7 +490,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     {
       SRef ref_ret_type = {0};
       if (func->return_type) {
-        ref_ret_type = gen_code(gen, func->return_type, sref_from_value(gen->common->val.type));
+        ref_ret_type = gen_code(gen, ctx, func->return_type, sref_from_value(ctx->common->val.type));
       }
 
       // Output param type expressions
@@ -499,7 +499,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
         param_types[i] = (SRef){0};
         if (ast_param->type) {
-          param_types[i] = gen_code(gen, ast_param->type, sref_from_value(gen->common->val.type));
+          param_types[i] = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
         }
       }
 
@@ -1040,7 +1040,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   Unreachable();
 }
 
-b32 generate_code(CodeGenContext *context, Declaration *decl) {
+b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
   Source *source = decl->data.decl.source;
 
   CodeGen gen;
@@ -1074,7 +1074,7 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
   {
     InstructionIndex block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_decl->value);
 
-    SRef ref_decl_val = gen_code(&gen, ast_decl->value, decl_type);
+    SRef ref_decl_val = gen_code(&gen, ctx, ast_decl->value, decl_type);
 
     sir_builder_end_block_with(builder, block, block, ref_decl_val, source->idx, ast_idx_decl);
     decl_val = sref_from_instruction(block);
@@ -1082,7 +1082,7 @@ b32 generate_code(CodeGenContext *context, Declaration *decl) {
 
   sir_builder_end_block_with(builder, block_decl, block_decl, decl_val, source->idx, ast_idx_decl);
 
-  sir_builder_flatten(builder, context->perm, &decl->data.decl.chunk);
+  sir_builder_flatten(builder, ctx->perm, &decl->data.decl.chunk);
 
   codegen_deinit(&gen, ctx);
 
