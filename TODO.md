@@ -1,7 +1,12 @@
+- [ ] Get project compiling again.
+- [ ] Test new SIR code layout of if/else
+- [ ] Test new SIR code layout of while
+- [ ] Test new SIR code layout of functions
+- [ ] Finish resolution rewrite.
+
 - [ ] Add user error reporting on failure for SIR_unify in specialize.c
 - [ ] Compile time evaluation of binary operators in specialize.c
 - [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `case Ast_declaration` in codegen.c
-- [ ] Add location information to interpreter error reporting
 - [ ] The symbol table doesn't work correctly for nested functions. you keep access to variables in the enclosing function.
 - [ ] Typecheck main.main before running it
 - [ ] SIR code generation can be moved to `Source`.
@@ -134,6 +139,3 @@
 - `arena_init` doesn't check for `NULL`/`MAP_FAILED`.
 - `read_file` uses `i32` for `ftell` (`source_file.c:290`).
   Note: these last two were in the `TODO.md` section deleted in the working tree, so they are no longer tracked anywhere.
-
-- [ ] Bounds checking
-- [ ] Integer overflow checks

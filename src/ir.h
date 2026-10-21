@@ -64,35 +64,11 @@ typedef union {
 #define REF_FUNCTION_PREFIX sref
 #include "ref.h"
 
-#define BITMAKS_INLINE_BLOCK_IS_BLOCK (Cast(u32, 1) << 31)
-
-// if MSB is set, then this is an inline block and it holds the number of instructions of the block.
-// the instructions are immediately after this instruction.
-// if MSB is not set, then this is a ValueIndex
-typedef struct { u32 x; } InlineBlock;
-
-always_inline b32 inline_block_is_value(InlineBlock b) {
-  return (b.x & BITMAKS_INLINE_BLOCK_IS_BLOCK) == 0;
-}
-
-always_inline b32 inline_block_instruction_count(InlineBlock b) {
-  if (inline_block_is_value(b)) {
-    return 0;
-  }
-
-  return b.x & ~BITMAKS_INLINE_BLOCK_IS_BLOCK;
-}
-
-always_inline ValueIndex inline_block_to_value(InlineBlock b) { return b.x; }
-
-always_inline InlineBlock inline_block_from_value(ValueIndex v) {
-  return (InlineBlock){ v };
-}
-
 // clang-format off
 typedef enum {
   SIR_func,              // references SIrFunc
-  SIR_param, // contains InlineBlock
+  SIR_param,             // contains instruction count
+  SIR_return_type,       // contains instruction count
   SIR_alloc,             // contains SRef to a type
   SIR_load,
   SIR_store,             // references SIrStore
@@ -103,7 +79,8 @@ typedef enum {
   SIR_repeat,            // contains InstructionIndex of loop block to repeat
   SIR_ret,               // contains SRef to value to return
   SIR_call,              // references SIrCall
-  SIR_bool_and, // references SIrBinary
+  SIR_logical_and,       // references SIrLogicalAndOr
+  SIR_logical_or,        // references SIrLogicalAndOr
   SIR_mul,               // references SIrBinary
   SIR_div,               // references SIrBinary
   SIR_mod,               // references SIrBinary
@@ -124,21 +101,30 @@ typedef enum {
   SIR_negate,            // contains SRef
   SIR_not,               // contains SRef
   SIR_builtin_debug,     // contains SRef
-  SIR_builtin_len,    // contains SRef to an array or slice
+  SIR_builtin_len,       // contains SRef to an array or slice
   SIR_comptime_block,    // contains instruction count of block
-  SIR_get_decl_value, // contains DeclarationIndex
+  SIR_get_decl_value,    // contains DeclarationIndex
   SIR_comptime_alloc,    // contains SRef to a type
   SIR_as,                // references SIrAs
-  SIR_cast,           // references SIrCast
+  SIR_cast,              // references SIrCast
   SIR_unify,             // references SIrUnify
   SIR_type,              // references SIrType
   SIR_typeof,            // contains SRef
   SIR_base_type,         // contains SRef
-  SIR_return_type, // contains InlineBlock
+  SIR_typeof_param,      // references SIrTypeofParam
 } SIrOpcode;
 // clang-format on
 
-// A SIR_func instruction is followed by `param_count` SIR_param instructions.
+// A logical and/or is wrapped by a block, referenced by `block`.
+// `lhs` refers to the LHS value of the operator.
+// The RHS of the operator is immediately after this instruction.
+typedef struct {
+  InstructionIndex block;
+  SRef lhs;
+} SIrLogicalAndOr;
+
+// A SIR_func instruction is followed by a SIR_return_type instruction and
+// `param_count` SIR_param instructions.
 typedef struct {
   SRef type_destination;
   u32 param_count;
@@ -152,8 +138,7 @@ typedef struct {
 
 typedef struct {
   SRef cond;
-  InlineBlock then;
-  InlineBlock otherwise;
+  InstructionIndex otherwise;
 } SIrCondbr;
 
 typedef struct {
@@ -194,7 +179,7 @@ typedef struct {
 typedef struct {
   SRef function_type;
   u32 param_index;
-} SIrParamType;
+} SIrTypeofParam;
 
 typedef struct {
   SRef lhs;

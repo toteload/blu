@@ -1290,8 +1290,9 @@ internal u32 step(Specializer *in, SpecializerState *state) {
     Todo();
   } break;
 
-  case SIR_bool_and: {
-    SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
+  case SIR_logical_or:
+  case SIR_logical_and: {
+    SIrLogicalAndOr *data = sir_chunk_extra(f->chunk, pc);
 
     TypeIndex type_lhs = get_sref_type(in, f, bin->lhs);
     TypeIndex type_rhs = get_sref_type(in, f, bin->rhs);
@@ -1301,6 +1302,8 @@ internal u32 step(Specializer *in, SpecializerState *state) {
     }
 
     IRef lhs = resolve(f, bin->lhs);
+    
+
     IRef rhs = resolve(f, bin->rhs);
 
     if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {

@@ -276,6 +276,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     void *extra = sir_chunk_extra(chunk, i);
 
     switch (op) {
+    case SIR_typeof_param: Todo();
     case SIR_func: {
       SIrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
@@ -286,11 +287,14 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       SIrCondbr *cond_br = extra;
       fputs("cond=", out);
       print_sref(out, compiler, cond_br->cond);
-      fprintf(out, " then=%%%u otherwise=%%%u", cond_br->then, cond_br->otherwise);
+      fprintf(out, " otherwise=%%%u", cond_br->otherwise);
     } break;
 
+    case SIR_logical_and:
+    case SIR_logical_or:
+      Todo();
+
     case SIR_index:
-    case SIR_bool_and:
     case SIR_mul:
     case SIR_div:
     case SIR_mod:

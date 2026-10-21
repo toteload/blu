@@ -101,16 +101,6 @@ internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, StringIndex name, LookupR
   b32 found = lookup_identifier(ctx->decls, gen->mods, gen->mod_depth, name, &decl);
   if (!found) {
     return False;
-    //Message_error(
-    //  ctx->msg_sink,
-    //  (MessageLocation){
-    //    .kind = MessageLocation_ast_index,
-    //    .source_idx = gen->source->idx,
-    //    .data.ast_index = ast_idx,
-    //  },
-    //  string_lit("Could not find identifier.")
-    //);
-    //gen->has_error = True;
   }
 
   *res = (LookupResult){ .kind = LOOKUP_DECL, .data.decl_idx = decl };
@@ -132,7 +122,7 @@ b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
   case SIR_ret:
     return True;
   default:
-    return False;
+  return False;
   }
 }
 
@@ -398,36 +388,37 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_if_else: {
     AstIfElse *if_else = ast_data(ast, idx_ast);
 
-    AstIndex idx_ast_else = if_else->otherwise ? if_else->otherwise : idx_ast;
-
     InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
 
-    InstructionIndex cond_block = sir_builder_add(builder, SIR_block, source_idx, if_else->cond);
     SRef cond_val = gen_code(gen, ctx, if_else->cond, sref_from_value(ctx->common->val._bool));
-    sir_builder_end_block_with(builder, cond_block, cond_block, cond_val, source_idx, if_else->cond);
-    SRef cond = sref_from_instruction(cond_block);
 
     InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, if_else->cond);
+    SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
 
-    InstructionIndex then_block = sir_builder_add(builder, SIR_block, source_idx, if_else->then);
     SRef then_val = gen_code(gen, ctx, if_else->then, type_destination);
-    sir_builder_end_block_with(builder, then_block, block, then_val, source_idx, if_else->then);
 
-    SIrCondbr *data_condbr = sir_builder_push_data(builder, condbr, SIrCondbr);
+    InstructionIndex then_br = sir_builder_add(builder, SIR_br, source_idx, if_else->then);
+    SIrBr *then_data = sir_builder_push_data(builder, then_br, SIrBr);
+    *then_data = (SIrBr){
+      .block = block,
+      .value = then_val,
+    };
 
-    InstructionIndex else_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast_else);
     SRef else_val = (SRef){0};
-
     if (if_else->otherwise) {
       else_val = gen_code(gen, ctx, if_else->otherwise, type_destination);
     }
 
-    sir_builder_end_block_with(builder, else_block, block, else_val, source_idx, idx_ast_else);
+    InstructionIndex else_br_inst = sir_builder_add(builder, SIR_br, source_idx, if_else->otherwise);
+    SIrBr *else_br_data = sir_builder_push_data(builder, else_br_inst, SIrBr);
+    *else_br_data = (SIrBr){
+      .block = block,
+      .value = else_val,
+    };
 
-    *data_condbr = (SIrCondbr){
-      .cond = cond,
-      .then = then_block,
-      .otherwise = else_block,
+    *condbr_data = (SIrCondbr){
+      .cond = cond_val,
+      .otherwise = else_br_inst,
     };
 
     sir_builder_set_data(builder, block, sir_builder_offset(builder, block));
@@ -474,88 +465,39 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionIndex inst_func = sir_builder_add(builder, SIR_func, source_idx, idx_ast);
     SIrFunc *data_func = sir_builder_push_data(builder, inst_func, SIrFunc);
-    SRef *param_types = arena_push_array(SRef, ctx->scratch, func->count);
 
-    for (u32 i = 0; i < func->count; i++) {
-      AstParam *ast_param = ast_data(ast, func->params[i]);
-
-      if (ast_param->type) {
-        param_types[i] = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
-      } else {
-        param_types[i] = (SRef){0};
-      }
-    }
-
-    SRef inst_function_type;
+    InstructionIndex return_type_inst;
     {
-      SRef ref_ret_type = {0};
+      SRef return_type_ref = {};
+      return_type_inst = sir_builder_add(builder, SIR_return_type, source_idx, func->return_type);
       if (func->return_type) {
-        ref_ret_type = gen_code(gen, ctx, func->return_type, sref_from_value(ctx->common->val.type));
+        return_type_ref = gen_code(gen, ctx, func->return_type, sref_from_value(ctx->common->val.type));
       }
-
-      // Output param type expressions
-      for (u32 i = 0; i < func->count; i++) {
-        AstParam *ast_param = ast_data(ast, func->params[i]);
-
-        param_types[i] = (SRef){0};
-        if (ast_param->type) {
-          param_types[i] = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
-        }
-      }
-
-      InstructionIndex inst_type = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
-
-      u32 arg_count = func->count + 1; // parameters + return type
-
-      SIrType *data_type = sir_builder_push_data_raw(
-        &gen->builder,
-        inst_type,
-        sizeof(SIrType) + arg_count * sizeof(SRef),
-        Align_of(SIrType)
-      );
-      *data_type = (SIrType){
-        .kind = Type_function,
-        .arg_count = arg_count,
-      };
-
-      data_type->args[0] = ref_ret_type;
-
-      for (u32 i = 0; i < func->count; i++) {
-        data_type->args[1 + i] = param_types[i];
-      }
-
-      InstructionIndex inst_unify = sir_builder_add(builder, SIR_unify, source_idx, idx_ast);
-      SIrUnify *data_unify = sir_builder_push_data(builder, inst_unify, SIrUnify);
-      *data_unify = (SIrUnify){
-        .type_lhs = type_destination,
-        .type_rhs = sref_from_instruction(inst_type),
-      };
-
-      inst_function_type = sref_from_instruction(inst_unify);
+      sir_builder_end_block_with(builder, return_type_inst, return_type_inst, return_type_ref, source_idx, func->return_type);
     }
-
-    InstructionIndex first_param_type = inst_return_type + 1;
-
-    InstructionIndex first_param = inst_func + 1;
-
-    for (u32 i = 0; i < func->count; i++) {
-      InstructionIndex inst_param = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
-      sir_builder_set_data(builder, inst_param, 0); // TODO ?
-    }
-
-    ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_function, inst_func, 0).data.scope_key;
 
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
-      StringIndex str = strings_add(ctx->strings, token_string(tokens, text, ast_param->name));
 
-      SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_param, str, first_param + i);
+      InstructionIndex param_inst = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
+
+      SRef param_type = {};
+      if (ast_param->type) {
+        param_type = gen_code(gen, ctx, ast_param->type, sref_from_value(ctx->common->val.type));
+      }
+
+      sir_builder_end_block_with(builder, param_inst, param_inst, param_type, source_idx, ast_param->type);
+
+      StringIndex str = strings_add(ctx->strings, token_string(tokens, text, ast_param->name));
+      SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_param, str, param_inst);
       if (res.err != SYMBOLS_OK) {
         Todo();
       }
     }
 
-    SRef inst_body = gen_code(gen, ctx, func->body, sref_from_instruction(inst_return_type));
+    ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_function, inst_func, 0).data.scope_key;
+
+    SRef inst_body = gen_code(gen, ctx, func->body, sref_from_instruction(return_type_inst));
 
     symbols_pop_scope(syms, scope);
 
@@ -565,9 +507,9 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     u32 func_instruction_count = sir_builder_offset(&gen->builder, inst_func);
 
     *data_func = (SIrFunc){
+      .type_destination = type_destination,
       .param_count = func->count,
       .instruction_count = func_instruction_count,
-      .type_function = sref_from_instruction(function_type),
     };
 
     return sref_from_instruction(inst_func);
@@ -678,9 +620,9 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       sir_builder_set_data(builder, callee_type, sref_to_u32(callee));
 
       for (u32 i = 0; i < ast_call->count; i++) {
-        InstructionIndex inst_param_type = sir_builder_add(builder, SIR_param_type, source_idx, ast_call->args[i]);
-        SIrParamType *data = sir_builder_push_data(builder, inst_param_type, SIrParamType);
-        *data = (SIrParamType){
+        InstructionIndex inst_param_type = sir_builder_add(builder, SIR_typeof_param, source_idx, ast_call->args[i]);
+        SIrTypeofParam *data = sir_builder_push_data(builder, inst_param_type, SIrTypeofParam);
+        *data = (SIrTypeofParam){
           .function_type = sref_from_instruction(callee_type),
           .param_index = i,
         };
@@ -874,51 +816,20 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
       SRef lhs = gen_code(gen, ctx, binary->lhs, sref_from_value(ctx->common->val._bool));
-
       InstructionIndex block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-      InstructionIndex condbr = sir_builder_add(builder, SIR_condbr, source_idx, binary->lhs);
-      SIrCondbr *data = sir_builder_push_data(builder, condbr, SIrCondbr);
 
-      if (binary->op_kind == Logical_and) {
-        InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
+      u8 op = (binary->op_kind == Logical_and) ? SIR_logical_and : SIR_logical_or;
 
-        InstructionIndex inst_and = sir_builder_add(builder, SIR_bool_and, source_idx, idx_ast);
-        SIrBinary *data_and = sir_builder_push_data(builder, inst_and, SIrBinary);
-        *data_and = (SIrBinary){
-          .lhs = lhs,
-          .rhs = rhs,
-        };
+      InstructionIndex inst = sir_builder_add(builder, op, source_idx, idx_ast);
+      SIrLogicalAndOr *data = sir_builder_push_data(builder, inst, SIrLogicalAndOr);
+      *data = (SIrLogicalAndOr){
+        .block = block,
+        .lhs = lhs,
+      };
 
-        sir_builder_end_block_with(builder, block_rhs, block, sref_from_instruction(inst_and), source_idx, binary->rhs);
+      SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
 
-        InstructionIndex block_otherwise = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_otherwise, block, sref_from_value(ctx->common->val._false), source_idx, binary->rhs);
-
-        *data = (SIrCondbr){
-          .cond = lhs,
-          .then = block_rhs,
-          .otherwise = block_otherwise,
-        };
-      } else if (binary->op_kind == Logical_or) {
-        InstructionIndex block_lhs_true = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-        sir_builder_end_block_with(builder, block_lhs_true, block, sref_from_value(ctx->common->val._true), source_idx, binary->rhs);
-
-        InstructionIndex block_rhs = sir_builder_add(builder, SIR_block, source_idx, binary->rhs);
-        SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
-
-        sir_builder_end_block_with(builder, block_rhs, block, rhs, source_idx, binary->rhs);
-
-        *data = (SIrCondbr){
-          .cond = lhs,
-          .then = block_lhs_true,
-          .otherwise = block_rhs,
-        };
-      } else {
-        Unreachable();
-      }
-
-      sir_builder_set_data(builder, block, sir_builder_offset(builder, block));
+      sir_builder_end_block_with(builder, block, block, rhs, source_idx, binary->rhs);
 
       return sref_from_instruction(block);
     }
@@ -961,19 +872,12 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     SRef cond_val = gen_code(gen, ctx, ast_while->cond, sref_from_value(ctx->common->val._bool));
 
-    InstructionIndex inst_condbr = sir_builder_add(builder, SIR_condbr, source_idx, ast_while->cond);
-
-    SIrCondbr *data_condbr = sir_builder_push_data(builder, inst_condbr, SIrCondbr);
-
-    InstructionIndex exit_block = sir_builder_add(builder, SIR_block, source_idx, idx_ast);
-    sir_builder_end_block_with(builder, exit_block, loop, (SRef){0}, source_idx, idx_ast);
-
-    StringIndex loop_label = intern_ast_label_string(ctx, gen->source, ast_while->label);
-
-    InstructionIndex body_block = sir_builder_add(builder, SIR_block, source_idx, ast_while->body);
+    InstructionIndex condbr_inst = sir_builder_add(builder, SIR_condbr, source_idx, ast_while->cond);
+    SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr_inst, SIrCondbr);
 
     ScopeKey scope_key;
     {
+      StringIndex loop_label = intern_ast_label_string(ctx, gen->source, ast_while->label);
       SymbolsPushScopeResult res = symbols_push_scope(syms, ScopeEntry_loop, loop, loop_label);
       if (res.err != SYMBOLS_OK) {
         Todo();
@@ -985,16 +889,21 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     SRef body = gen_code(gen, ctx, ast_while->body, (SRef){0});
     Unused(body);
 
-    InstructionIndex repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
-    sir_builder_set_data(builder, repeat, loop);
+    InstructionIndex repeat_inst = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
+    sir_builder_set_data(builder, repeat_inst, loop);
 
-    sir_builder_set_data(builder, body_block, sir_builder_offset(builder, body_block));
+    InstructionIndex exit_br_inst = sir_builder_add(builder, SIR_br, source_idx, ast_while->cond);
+    SIrBr *exit_br_data = sir_builder_push_data(builder, exit_br_inst, SIrBr);
+    *exit_br_data = (SIrBr){
+      .block = loop,
+      .value = (SRef){0},
+    };
+
     sir_builder_set_data(builder, loop, sir_builder_offset(builder, loop));
 
-    *data_condbr = (SIrCondbr){
+    *condbr_data = (SIrCondbr){
       .cond = cond_val,
-      .then = body_block,
-      .otherwise = exit_block,
+      .otherwise = exit_br_inst,
     };
 
     symbols_pop_scope(syms, scope_key);
