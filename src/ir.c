@@ -192,7 +192,7 @@ void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
-void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeIndex type) {
+void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeKey type) {
   *typelist_ptr_at_unchecked(&builder->types, idx) = type;
 }
 
@@ -204,7 +204,7 @@ u32 iir_builder_get_data(IIrBuilder *builder, InstructionIndex idx) {
   return datalist_at_unchecked(&builder->data, idx).data;
 }
 
-TypeIndex iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx) {
+TypeKey iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx) {
   return typelist_at_unchecked(&builder->types, idx);
 }
 
@@ -250,7 +250,7 @@ void iir_builder_flatten(IIrBuilder *builder, Arena *arena, IIrChunk *chunk) {
   u8  *opcodes = arena_push_array(u8,  arena, count);
   AstAndSourceIndex *sources = arena_push_array(AstAndSourceIndex, arena, count);
   u32 *data    = arena_push_array(u32, arena, count);
-  TypeIndex *types = arena_push_array(TypeIndex, arena, count);
+  TypeKey *types = arena_push_array(TypeKey, arena, count);
 
   opcodelist_copy_to_array(&builder->kinds, opcodes);
   sourcelist_copy_to_array(&builder->ast_source, sources);

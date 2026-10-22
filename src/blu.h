@@ -10,8 +10,20 @@
 typedef u32 TokenIndex;       // Offset, not optional
 typedef u32 InstructionIndex; // Offset, not optional
 
+#define KEY_NAME TypeKey
+#define KEY_FUNCTION_PREFIX type_key
+#include "key.h"
+
+#define key_is_nil(K) _Generic((K), \
+  TypeKey : type_key_is_nil)(K)
+
+#define key_is_some(K) _Generic((K), \
+  TypeKey : type_key_is_some)(K)
+
+#define key_eq(K,M) _Generic((K), \
+  TypeKey : type_key_eq)(K,M)
+
 typedef u32 AstIndex;         // Optional, 0 means nil
-typedef u32 TypeIndex;        // Optional, 0 means nil
 typedef u32 StringIndex;      // Optional, 0 means nil
 typedef u32 ValueIndex;       // Optional, 0 means nil
 typedef u32 SourceIndex;      // Optional, 0 means nil
@@ -23,21 +35,6 @@ typedef struct Source Source;
 typedef struct Declaration Declaration;
 
 typedef struct {
-  struct {
-    TypeIndex stub;
-    TypeIndex comptime_int;
-    TypeIndex type;
-    TypeIndex nil;
-    TypeIndex _bool;
-    TypeIndex never;
-    TypeIndex u8;
-    TypeIndex i8;
-    TypeIndex i16;
-    TypeIndex i32;
-    TypeIndex i64;
-    TypeIndex usize;
-  } type;
-
   struct {
     ValueIndex type;
     ValueIndex nil;

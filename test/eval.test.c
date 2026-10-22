@@ -175,22 +175,22 @@ void test_eval_unify(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
-  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeKey t_i32          = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed, .bitwidth = 32 } });
+  TypeKey t_comptime_int = types_intern(&types, &(Type){ .kind = Type_comptime_int });
+  TypeKey t_bool         = types_intern(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_arr_i32_3      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
-  TypeIndex t_arr_comptime_3 = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
-  TypeIndex t_arr_i32_4      = types_add(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
+  TypeKey t_arr_i32_3      = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 3 } });
+  TypeKey t_arr_comptime_3 = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_comptime_int, .size = 3 } });
+  TypeKey t_arr_i32_4      = types_intern(&types, &(Type){ .kind = Type_array, .data.array = { .base_type = t_i32, .size = 4 } });
 
-  TypeIndex t_slice_i32        = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
-  TypeIndex t_slice_comptime   = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
-  TypeIndex t_slice_incomplete = types_add(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
+  TypeKey t_slice_i32        = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_i32 } });
+  TypeKey t_slice_comptime   = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
+  TypeKey t_slice_incomplete = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
 
-  TypeIndex t_ptr_i32      = types_add_pointer(&types, t_i32);
-  TypeIndex t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
+  TypeKey t_ptr_i32      = types_add_pointer(&types, t_i32);
+  TypeKey t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
 
-  TypeIndex unified;
+  TypeKey unified;
   u32 err;
 
   // Identical array types unify trivially.
@@ -212,7 +212,7 @@ void test_eval_unify(TestResult *test, void *user) {
   Test_assert_eq(err, UnifyResult_ok);
   Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32);
 
-  // A slice whose base type is still unknown (TypeIndex 0) is itself incomplete.
+  // A slice whose base type is still unknown (TypeKey 0) is itself incomplete.
   err = eval_unify(&scratch, &types, 0, t_slice_incomplete, &unified);
   Test_assert_eq(err, UnifyResult_type_is_incomplete);
 
@@ -239,13 +239,13 @@ void test_classify_type_coercion(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  TypeIndex t_i32          = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 32 } });
-  TypeIndex t_u8           = types_add(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
-  TypeIndex t_comptime_int = types_add(&types, &(Type){ .kind = Type_comptime_int });
-  TypeIndex t_bool         = types_add(&types, &(Type){ .kind = Type_bool });
+  TypeKey t_i32          = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 32 } });
+  TypeKey t_u8           = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+  TypeKey t_comptime_int = types_intern(&types, &(Type){ .kind = Type_comptime_int });
+  TypeKey t_bool         = types_intern(&types, &(Type){ .kind = Type_bool });
 
-  TypeIndex t_fn_i32  = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
-  TypeIndex t_fn_bool = types_add(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
+  TypeKey t_fn_i32  = types_intern(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_i32,  .param_count = 0 } });
+  TypeKey t_fn_bool = types_intern(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
 
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_i32), Coercion_identical_types);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime_int_to_intlike);

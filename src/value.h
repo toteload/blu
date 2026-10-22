@@ -6,7 +6,7 @@
 #include "resolver.h"
 
 typedef struct {
-  TypeIndex  type;
+  TypeKey  type;
   u32        data_size;
   void      *data;
 } Value;
@@ -32,7 +32,7 @@ typedef struct {
   u8 resolve_status;
   DeclarationIndex decl;
   InstructionIndex inst;
-  TypeIndex type;
+  TypeKey type;
   ValueIndex idx; // only valid if fully resolved
 } ValueStub;
 

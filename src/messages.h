@@ -39,7 +39,7 @@ typedef struct {
 typedef union {
   u8     token_kind;
   String string;
-  TypeIndex type;
+  TypeKey type;
   u64 u64;
 } MessageArg;
 
@@ -71,7 +71,7 @@ typedef Message* MessagePtr;
 // Format args support:
 // - %tokenkind (u8 representing TokenKind)
 // - %string    (String)
-// - %type      (TypeIndex)
+// - %type      (TypeKey)
 // - %u64       (u64)
 #define Message_error(psink, ...) (psink)->add_message((psink)->user, Severity_Error, __VA_ARGS__)
 

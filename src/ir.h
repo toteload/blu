@@ -22,7 +22,7 @@ typedef struct {
 #define TYPE_LIST_MIN_SIZE_LOG_2 8
 #define TYPE_LIST_SEGMENT_COUNT 24
 #define TYPE_LIST_NAME TypeList
-#define TYPE_LIST_TYPE TypeIndex
+#define TYPE_LIST_TYPE TypeKey
 #define SEGMENTLIST_NAME TYPE_LIST_NAME
 #define SEGMENTLIST_TYPE TYPE_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 TYPE_LIST_MIN_SIZE_LOG_2
@@ -314,7 +314,7 @@ typedef struct {
   u32 opcode_count;
   u8 *opcodes;
   u32 *data;
-  TypeIndex *types;
+  TypeKey *types;
   AstAndSourceIndex *sources;
   void *extra;
 } IIrChunk;
@@ -323,7 +323,7 @@ always_inline u8 iir_chunk_op(IIrChunk *chunk, InstructionIndex idx) {
   return chunk->opcodes[idx];
 }
 
-always_inline TypeIndex iir_chunk_type(IIrChunk *chunk, InstructionIndex idx) {
+always_inline TypeKey iir_chunk_type(IIrChunk *chunk, InstructionIndex idx) {
   return chunk->types[idx];
 }
 
@@ -356,11 +356,11 @@ void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionIndex idx, u32 s
   iir_builder_push_data_raw(builder, idx, sizeof(type), Align_of(type))
 
 void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data);
-void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeIndex type);
+void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeKey type);
 
 u8 iir_builder_get_opcode(IIrBuilder *builder, InstructionIndex idx);
 u32 iir_builder_get_data(IIrBuilder *builder, InstructionIndex idx);
-TypeIndex iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx);
+TypeKey iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx);
 
 u32 iir_builder_offset(IIrBuilder *builder, InstructionIndex idx);
 void iir_builder_flatten(IIrBuilder *builder, Arena *arena, IIrChunk *chunk);

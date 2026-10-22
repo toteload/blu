@@ -21,7 +21,7 @@ typedef enum {
   UnifyResult_type_is_incomplete,
 } UnifyResult;
 
-u32 eval_unify(Arena *scratch, TypeInterner *types, TypeIndex a, TypeIndex b, TypeIndex *unified);
+u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKey *unified);
 
 enum CoerceResult {
   CoerceResult_ok,
@@ -29,7 +29,7 @@ enum CoerceResult {
   CoerceResult_comptime_int_value_out_of_range,
 };
 
-u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeIndex dst, Value *val, ValueIndex *res);
+u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueIndex *res);
 
 // Returns False if the addition overflowed.
 b32 eval_int_add_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);

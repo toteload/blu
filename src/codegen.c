@@ -570,7 +570,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     u8 *data = values_alloc_data_type(ctx->values, u8);
     *data = s.str[3];
     *v = (Value){
-      .type = ctx->common->type.u8,
+      .type = ctx->types->t_u8,
       .data_size = sizeof(u8),
       .data = data,
     };
@@ -600,7 +600,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     ComptimeInt *data = values_alloc_data(ctx->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
     *data = Cast(i64, value);
     *v = (Value){
-      .type = ctx->common->type.comptime_int,
+      .type = ctx->types->t_comptime_int,
       .data_size = sizeof(ComptimeInt),
       .data = data,
     };
@@ -683,10 +683,10 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     u32 len;
     decode_string_literal(s, data, &len);
 
-    TypeIndex type = types_add(ctx->types, &(Type){
+    TypeKey type = types_intern(ctx->types, &(Type){
       .kind = Type_array,
       .data.array = {
-        .base_type = ctx->common->type.u8,
+        .base_type = ctx->types->t_u8,
         .size = len,
       },
     });

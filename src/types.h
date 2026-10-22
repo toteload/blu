@@ -39,22 +39,22 @@ typedef struct {
 } TypeInteger;
 
 typedef struct {
-  TypeIndex base_type;
+  TypeKey base_type;
 } TypeSlice;
 
 typedef struct {
-  TypeIndex base_type;
+  TypeKey base_type;
   u64 size;
 } TypeArray;
 
 typedef struct {
-  TypeIndex return_type;
+  TypeKey return_type;
   u32 param_count;
-  TypeIndex param_types[];
+  TypeKey param_types[];
 } TypeFunction;
 
 typedef struct {
-  TypeIndex base_type;
+  TypeKey base_type;
 } TypePointer;
 
 typedef struct {
@@ -74,17 +74,38 @@ typedef struct {
 
 typedef Type *TypePtr;
 
-#define INTERNER_NAME            TypeInterner
-#define INTERNER_TYPE            TypePtr
-#define INTERNER_INDEX_TYPE      TypeIndex
-#define INTERNER_FUNCTION_PREFIX types
+#define INTERNER_NAME       TypeInternerAux
+#define INTERNER_TYPE       TypePtr
+#define INTERNER_INDEX_TYPE u32
 #define INTERNER_OUTPUT_TYPES
-#define INTERNER_OUTPUT_DECLARATIONS
 #include "interner.h"
 
-TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type);
+typedef struct {
+  TypeInternerAux _interner;
 
-#define arena_push_type_function(arena,param_count) arena_push(arena, sizeof(Type) + (param_count) *sizeof(TypeIndex), Align_of(Type))
+  TypeKey t_stub;
+  TypeKey t_comptime_int;
+  TypeKey t_type;
+  TypeKey t_nil;
+  TypeKey t_bool;
+  TypeKey t_never;
+  TypeKey t_u8;
+  TypeKey t_i8;
+  TypeKey t_i16;
+  TypeKey t_i32;
+  TypeKey t_i64;
+  TypeKey t_usize;
+} TypeInterner;
+
+void types_init(TypeInterner *types);
+void types_deinit(TypeInterner *types);
+
+TypeKey types_intern(TypeInterner *types, Type *t);
+Type *types_get(TypeInterner *types, TypeKey key);
+
+TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type);
+
+#define arena_push_type_function(arena,param_count) arena_push(arena, sizeof(Type) + (param_count) *sizeof(TypeKey), Align_of(Type))
 
 // Types are variable in size. This functions returns the actual size in bytes for a given type.
 // This is NOT the runtime size. For example, if you pass an array type to this funcion it will
@@ -92,7 +113,7 @@ TypeIndex types_add_pointer(TypeInterner *types, TypeIndex base_type);
 u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
-TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeIndex idx);
+TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeKey idx);
 
 typedef enum {
   Coercion_invalid,
@@ -103,17 +124,19 @@ typedef enum {
   Coercion_array_to_slice,
 } CoercionResult;
 
-u32 classify_type_coercion(TypeInterner *types, TypeIndex to, TypeIndex from);
+u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from);
 
 // An explicit cast. Allows everything a coercion allows, plus narrowing and signedness changes
 // between integer types, which truncate.
-b32 is_type_castable_to(TypeInterner *types, TypeIndex to, TypeIndex from);
+b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from);
+
+b8 is_type_comptime(TypeInterner *types, TypeKey t);
 
 // An add is always between two values of the same type.
 b32 check_can_type_add(Type *t);
 
 b32 check_can_type_cmp(Type *t);
 
-String write_type(Arena *arena, TypeInterner *types, TypeIndex type);
+String write_type(Arena *arena, TypeInterner *types, TypeKey type);
 
 #endif // TYPES_H

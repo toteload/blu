@@ -54,7 +54,7 @@ internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionIndex block)
   }));
 }
 
-internal TypeIndex ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
+internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
   if (iref_is_value(ref)) {
     return values_get(&in->compiler->values, iref_to_value(ref))->type;
   }
@@ -104,8 +104,8 @@ internal u32 step(Interpreter *in) {
 
   void *local;
   TypeSizeInfo size_info;
-  TypeIndex type = iir_chunk_type(f->chunk, pc);
-  if (type) {
+  TypeKey type = iir_chunk_type(f->chunk, pc);
+  if (key_is_some(type)) {
     size_info = types_size_info_by_index(&in->compiler->types, type);
     local = arena_push(in->scratch, size_info.size, size_info.align);
     f->inst_values[pc] = local;
@@ -145,7 +145,7 @@ internal u32 step(Interpreter *in) {
 
   case IIR_br: {
     IIrBr *br = iir_chunk_extra(f->chunk, pc);
-    if (type) {
+    if (key_is_some(type)) {
       memcpy(f->inst_values[br->block], resolve(in, f, br->value), size_info.size);
     }
     scopes_pop_to(in, f, br->block);
@@ -269,8 +269,8 @@ internal u32 step(Interpreter *in) {
 
     void *val = resolve(in, f, ref);
 
-    TypeIndex dst_type = type;
-    TypeIndex from_type = iir_chunk_type(f->chunk, iref_to_instruction(ref));
+    TypeKey dst_type = type;
+    TypeKey from_type = iir_chunk_type(f->chunk, iref_to_instruction(ref));
 
     Type *t = types_get(&in->compiler->types, from_type);
     Type *v = types_get(&in->compiler->types, dst_type);

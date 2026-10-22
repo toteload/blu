@@ -11,9 +11,9 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk);
 
 #define PrintFlag_expand_function (1 << 0)
 
-void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, void *data);
+void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, void *data);
 
-void print_type(FILE *out, TypeInterner *types, TypeIndex idx);
+void print_type(FILE *out, TypeInterner *types, TypeKey idx);
 void print_tokens(Tokens *tokens, String text);
 void print_ast_nodes(AstNodes *nodes, Tokens *tokens, String text);
 

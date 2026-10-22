@@ -87,14 +87,14 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
 }
 
-internal ValueIndex add_type_value(Compiler *compiler, TypeIndex t) {
+internal ValueIndex add_type_value(Compiler *compiler, TypeKey t) {
   Value *v;
   ValueIndex res = values_alloc(&compiler->values, &v);
-  TypeIndex *data = values_alloc_data_type(&compiler->values, TypeIndex);
+  TypeKey *data = values_alloc_data_type(&compiler->values, TypeKey);
   *data = t;
   *v = (Value){
-    .type = compiler->common.type.type,
-    .data_size = sizeof(TypeIndex),
+    .type = compiler->types.t_type,
+    .data_size = sizeof(TypeKey),
     .data = data,
   };
   return res;
@@ -171,35 +171,17 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     });
 
   // clang-format off
-
-  compiler->common.type.stub  = types_add(&compiler->types, &(Type){.kind = Type_stub});
-  compiler->common.type.type  = types_add(&compiler->types, &(Type){.kind = Type_type});
-  compiler->common.type.nil   = types_add(&compiler->types, &(Type){.kind = Type_nil});
-  compiler->common.type._bool  = types_add(&compiler->types, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
-  compiler->common.type.never = types_add(&compiler->types, &(Type){.kind = Type_never});
-
-  compiler->common.type.comptime_int = types_add(&compiler->types, &(Type){.kind = Type_comptime_int});
-
-  compiler->common.type.usize = types_add(&compiler->types, &(Type){.kind = Type_usize, .data.integer = {.signedness = Unsigned, .bitwidth = 64}});
-  compiler->common.type.u8    = types_add( &compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
-
-  compiler->common.type.i8  = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
-  compiler->common.type.i16 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}});
-  compiler->common.type.i32 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
-  compiler->common.type.i64 = types_add(&compiler->types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}});
-
-  compiler->common.val.comptime_int = add_type_value(compiler, compiler->common.type.comptime_int);
-  compiler->common.val.type         = add_type_value(compiler, compiler->common.type.type);
-  compiler->common.val.nil          = add_type_value(compiler, compiler->common.type.nil);
-  compiler->common.val._bool         = add_type_value(compiler, compiler->common.type._bool);
-  compiler->common.val.never        = add_type_value(compiler, compiler->common.type.never);
-  compiler->common.val.i8           = add_type_value(compiler, compiler->common.type.i8);
-  compiler->common.val.i16          = add_type_value(compiler, compiler->common.type.i16);
-  compiler->common.val.i32          = add_type_value(compiler, compiler->common.type.i32);
-  compiler->common.val.i64          = add_type_value(compiler, compiler->common.type.i64);
-  compiler->common.val.u8           = add_type_value(compiler, compiler->common.type.u8);
-  compiler->common.val.usize        = add_type_value(compiler, compiler->common.type.usize);
-
+  compiler->common.val.comptime_int = add_type_value(compiler, compiler->types.t_comptime_int);
+  compiler->common.val.type         = add_type_value(compiler, compiler->types.t_type);
+  compiler->common.val.nil          = add_type_value(compiler, compiler->types.t_nil);
+  compiler->common.val._bool        = add_type_value(compiler, compiler->types.t_bool);
+  compiler->common.val.never        = add_type_value(compiler, compiler->types.t_never);
+  compiler->common.val.i8           = add_type_value(compiler, compiler->types.t_i8);
+  compiler->common.val.i16          = add_type_value(compiler, compiler->types.t_i16);
+  compiler->common.val.i32          = add_type_value(compiler, compiler->types.t_i32);
+  compiler->common.val.i64          = add_type_value(compiler, compiler->types.t_i64);
+  compiler->common.val.u8           = add_type_value(compiler, compiler->types.t_u8);
+  compiler->common.val.usize        = add_type_value(compiler, compiler->types.t_usize);
   // clang-format on
 
   {

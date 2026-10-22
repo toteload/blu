@@ -9,8 +9,8 @@
 #include "source_file.h"
 #include "print.h"
 
-void print_type(FILE *out, TypeInterner *types, TypeIndex idx) {
-  if (idx == 0) {
+void print_type(FILE *out, TypeInterner *types, TypeKey idx) {
+  if (key_is_nil(idx)) {
     fputc('?', out);
     return;
   }
@@ -96,7 +96,7 @@ internal char const *resolve_status_string(ResolveStatus status) {
   }
 }
 
-void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, void *data) {
+void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, void *data) {
   print_type(out, &compiler->types, type);
   fputs(" ", out);
   Type *t = types_get(&compiler->types, type);
@@ -119,7 +119,7 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeIndex type, v
     fputs((*Cast(u8 *, data)) ? "true" : "false", out);
   } break;
   case Type_type: {
-    print_type(out, &compiler->types, *Cast(TypeIndex *, data));
+    print_type(out, &compiler->types, *Cast(TypeKey *, data));
   } break;
   case Type_function: {
     if (flags & PrintFlag_expand_function) {

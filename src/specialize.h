@@ -51,7 +51,7 @@ typedef struct {
   SIrChunk *chunk;
 
   IRef *inst_map;
-  TypeIndex *inst_types;
+  TypeKey *inst_types;
 
   u32 comptime_depth;
   ScopeStack scopes;
