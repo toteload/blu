@@ -21,7 +21,7 @@
 #define DECLIDXLIST_MIN_SIZE_LOG2 4
 #define DECLIDXLIST_SEGMENT_COUNT 20
 #define SEGMENTLIST_NAME          DeclIdxList
-#define SEGMENTLIST_TYPE          DeclarationIndex
+#define SEGMENTLIST_TYPE          DeclarationKey
 #define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
@@ -73,7 +73,7 @@ Source *compiler_get_source(Compiler *compiler, SourceKey source_idx);
 ResidualFunctionKey compiler_add_function(Compiler *compiler, IIrChunk chunk);
 ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
 
-b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
+b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationKey *mods, u32 mod_count, StringKey name, DeclarationKey *out);
 
 void compiler_print_all_messages(Compiler *compiler);
 

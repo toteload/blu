@@ -138,14 +138,14 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   Tokens *tokens = &source->tokens;
   String text = source->text;
 
-  Assert(ast->kinds[AstIndex_source] == Ast_source);
+  Assert(ast->kinds[AST_INDEX_SOURCE] == Ast_source);
 
-  AstSource *s = ast_data(ast, AstIndex_source);
+  AstSource *s = ast_data(ast, AST_INDEX_SOURCE);
 
   SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
   *decls = (SourceDeclaration){
     .kind = SourceDeclaration_root,
-    .name = 0,
+    .name = {0},
     .child_count = s->count,
     .parent = 0,
     .node = 0,
@@ -161,7 +161,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
     AstModSection *mod_section = ast_data(ast, item);
 
     String mod_name = token_string(tokens, text, mod_section->name);
-    StringIndex name = strings_add(strings, mod_name);
+    StringKey name = strings_add(strings, mod_name);
 
     u32 mod_index = count;
 
@@ -184,7 +184,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
       AstDeclaration *ast_decl = ast_data(ast, decl_idx);
 
       String decl_name = token_string(tokens, text, ast_decl->name);
-      StringIndex name = strings_add(strings, decl_name);
+      StringKey name = strings_add(strings, decl_name);
 
       SourceDeclaration *decl = arena_push_one(SourceDeclaration, &source->arena);
       *decl = (SourceDeclaration){
@@ -199,7 +199,7 @@ void source_index_declarations(Source *source, StringInterner *strings) {
 
   source->decl_tree_size = count;
   source->decls          = decls;
-  source->decl_idxs      = arena_push_array(DeclarationIndex, &source->arena, count);
+  source->decl_idxs      = arena_push_array(DeclarationKey, &source->arena, count);
 }
 
 void source_print_all_messages(Source *source, TypeInterner *types, Arena *scratch) {

@@ -16,8 +16,8 @@ typedef struct {
   u8 kind;
   u32 parent_loop_idx;
   u32 parent_block_idx;
-  StringIndex name;
-  InstructionIndex inst;
+  StringKey name;
+  InstructionOffset inst;
 } ScopeEntry;
 
 #define SCOPE_ENTRY_STACK_NAME ScopeEntryStack
@@ -32,7 +32,7 @@ typedef struct {
 #include "segment_list.h"
 
 #define HASHMAP_NAME            LocalsMap
-#define HASHMAP_KEY_TYPE        StringIndex
+#define HASHMAP_KEY_TYPE        StringKey
 #define HASHMAP_VALUE_TYPE      u32
 #define HASHMAP_FUNCTION_PREFIX locals
 #define HASHMAP_OUTPUT_TYPES
@@ -64,26 +64,26 @@ typedef struct {
   u32 err;
   union {
     ScopeKey scope_key;
-    InstructionIndex inst;
+    InstructionOffset inst;
   } data;
 } SymbolsPushScopeResult;
 
 // - Fails if you push a scope with a label that is already in the symbol table.
 // - kind should be block, loop, or function
-SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, InstructionIndex inst, StringIndex label);
+SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, InstructionOffset inst, StringKey label);
 
 typedef struct {
   u32 err;
-  InstructionIndex inst;
+  InstructionOffset inst;
 } SymbolsPushLocalResult;
 
 // - Fails if you add a name that is already in the symbol table.
 // - kind should be param or local
-SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringIndex name, InstructionIndex inst);
+SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, InstructionOffset inst);
 
 void symbols_pop_scope(SymbolMap *syms, ScopeKey key);
 
-ScopeEntry *symbols_find(SymbolMap *syms, StringIndex name);
+ScopeEntry *symbols_find(SymbolMap *syms, StringKey name);
 ScopeEntry *symbols_get_enclosing_loop(SymbolMap *syms);
 
 #endif // SYMBOL_MAP_H

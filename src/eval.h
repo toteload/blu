@@ -29,7 +29,7 @@ enum CoerceResult {
   CoerceResult_comptime_int_value_out_of_range,
 };
 
-u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueIndex *res);
+u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueKey *res);
 
 // Returns False if the addition overflowed.
 b32 eval_int_add_safe(TypeInteger int_type, void *lhs, void *rhs, void *res);

@@ -20,7 +20,7 @@
 #include "segment_list.h"
 
 #define SEGMENTLIST_NAME DeclIdxList
-#define SEGMENTLIST_TYPE DeclarationIndex
+#define SEGMENTLIST_TYPE DeclarationKey
 #define SEGMENTLIST_FUNCTION_PREFIX user_decls
 #define SEGMENTLIST_MIN_SIZE_LOG2 DECLIDXLIST_MIN_SIZE_LOG2
 #define SEGMENTLIST_SEGMENT_COUNT DECLIDXLIST_SEGMENT_COUNT
@@ -96,9 +96,9 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
 }
 
-internal ValueIndex add_type_value(Compiler *compiler, TypeKey t) {
+internal ValueKey add_type_value(Compiler *compiler, TypeKey t) {
   Value *v;
-  ValueIndex res = values_alloc(&compiler->values, &v);
+  ValueKey res = values_alloc(&compiler->values, &v);
   TypeKey *data = values_alloc_data_type(&compiler->values, TypeKey);
   *data = t;
   *v = (Value){
@@ -109,10 +109,10 @@ internal ValueIndex add_type_value(Compiler *compiler, TypeKey t) {
   return res;
 }
 
-internal void add_primitive(Compiler *compiler, String name, ValueIndex val) {
-  DeclarationIndex idx = decls_add(
+internal void add_primitive(Compiler *compiler, String name, ValueKey val) {
+  DeclarationKey idx = decls_add(
     &compiler->decls,
-    (DeclarationKey){.parent = 0, .name = strings_add(&compiler->strings, name)});
+    (DeclarationPath){.parent = {0}, .name = strings_add(&compiler->strings, name)});
 
   decls_set_extra(
     &compiler->decls,
@@ -269,7 +269,7 @@ void compiler_print_all_messages(Compiler *compiler) {
     Source *source = Null;
     Declaration *decl = Null;
 
-    if (msg->location.decl_idx) {
+    if (key_is_some(msg->location.decl_idx)) {
       decl = decls_extra_get_ptr(&compiler->decls, msg->location.decl_idx);
     }
 
@@ -283,18 +283,18 @@ void compiler_print_all_messages(Compiler *compiler) {
 
 b32 lookup_identifier(
   DeclarationInterner *decl_keys,
-  DeclarationIndex *mods,
+  DeclarationKey *mods,
   u32 mod_count,
-  StringIndex name,
-  DeclarationIndex *out
+  StringKey name,
+  DeclarationKey *out
 ) {
   for (u32 i = 0; i < mod_count; i++) {
-    DeclarationKey key = {
+    DeclarationPath key = {
       .parent = mods[i],
       .name = name,
     };
 
-    DeclarationIndex idx;
+    DeclarationKey idx;
     b32 found = decls_find(decl_keys, key, &idx);
     if (found) {
       *out = idx;
@@ -308,7 +308,7 @@ b32 lookup_identifier(
 // -------------------------------------------------------------------------------------------------
 
 typedef struct {
-  DeclarationIndex mod;
+  DeclarationKey mod;
   u32 n;
 } DeclFrame;
 
@@ -370,9 +370,9 @@ b32 compile(Compiler *compiler) {
     DeclFrame stackmem[4];
     Stack(DeclFrame) stack;
     stack_init(&stack, stackmem, 4);
-    stack_push(&stack, ((DeclFrame){.mod = 0, .n = source->decls[0].child_count}));
+    stack_push(&stack, ((DeclFrame){.mod = {0}, .n = source->decls[0].child_count}));
 
-    source->decl_idxs[0] = 0;
+    source->decl_idxs[0] = (DeclarationKey){0};
 
     u32 offset = 1;
 
@@ -390,9 +390,9 @@ b32 compile(Compiler *compiler) {
 
       if (decl->kind == SourceDeclaration_mod) {
         b32 already_exists;
-        DeclarationIndex idx = decls_add_checked(
+        DeclarationKey idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){.parent = top->mod, .name = decl->name},
+          (DeclarationPath){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -435,9 +435,9 @@ b32 compile(Compiler *compiler) {
         offset += 1;
       } else if (decl->kind == SourceDeclaration_declaration) {
         b32 already_exists;
-        DeclarationIndex idx = decls_add_checked(
+        DeclarationKey idx = decls_add_checked(
           &compiler->decls,
-          (DeclarationKey){.parent = top->mod, .name = decl->name},
+          (DeclarationPath){.parent = top->mod, .name = decl->name},
           &already_exists
         );
 
@@ -478,8 +478,8 @@ b32 compile(Compiler *compiler) {
     }
   }
 
-  DeclarationIndex *user_decls =
-    arena_push_array(DeclarationIndex, &compiler->scratch, compiler->user_decls.len);
+  DeclarationKey *user_decls =
+    arena_push_array(DeclarationKey, &compiler->scratch, compiler->user_decls.len);
 
   {
     CodeGenContext context = {
@@ -495,7 +495,7 @@ b32 compile(Compiler *compiler) {
     };
 
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      DeclarationIndex declidx = user_decls_at_unchecked(&compiler->user_decls, i);
+      DeclarationKey declidx = user_decls_at_unchecked(&compiler->user_decls, i);
 
       user_decls[i] = declidx;
 
@@ -543,12 +543,12 @@ b32 compile(Compiler *compiler) {
 
   if (compiler->options->print_iir) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
-      DeclarationIndex idx = user_decls_at_unchecked(&compiler->user_decls, i);
-      DeclarationKey key = decls_get(&compiler->decls, idx);
+      DeclarationKey idx = user_decls_at_unchecked(&compiler->user_decls, i);
+      DeclarationPath key = decls_get(&compiler->decls, idx);
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
       String name = strings_get(&compiler->strings, key.name);
 
-      ValueIndex val = decl->data.decl.val;
+      ValueKey val = decl->data.decl.val;
 
       printf("%.*s : ", Cast(int, name.len), name.str);
       print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
@@ -563,10 +563,10 @@ b32 compile(Compiler *compiler) {
 }
 
 b32 run_main(Compiler *compiler) {
-  DeclarationIndex mod_main;
+  DeclarationKey mod_main;
   b32 ok = lookup_identifier(
     &compiler->decls,
-    (DeclarationIndex[]){0},
+    (DeclarationKey[]){0},
     1,
     strings_add(&compiler->strings, string_lit("main")),
     &mod_main
@@ -583,10 +583,10 @@ b32 run_main(Compiler *compiler) {
     return False;
   }
 
-  DeclarationIndex fn_main;
+  DeclarationKey fn_main;
   ok = lookup_identifier(
     &compiler->decls,
-    (DeclarationIndex[]){mod_main},
+    (DeclarationKey[]){mod_main},
     1,
     strings_add(&compiler->strings, string_lit("main")),
     &fn_main
@@ -617,7 +617,7 @@ b32 run_main(Compiler *compiler) {
   //stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
   //u8 buf[16];
-  //u32 err = interpreter_call(&in, chunk, (ValueIndex[]){0}, 0, &buf);
+  //u32 err = interpreter_call(&in, chunk, (ValueKey[]){0}, 0, &buf);
   //if (err) {
   //  return False;
   //}

@@ -7,7 +7,7 @@
 #define BREAK_RETURN_LIST_MIN_SIZE_LOG_2 4
 #define BREAK_RETURN_LIST_SEGMENT_COUNT  12
 #define BREAK_RETURN_LIST_NAME BreakReturnList
-#define BREAK_RETURN_LIST_TYPE InstructionIndex
+#define BREAK_RETURN_LIST_TYPE InstructionOffset
 #define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
 #define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
@@ -24,12 +24,12 @@ typedef enum {
 typedef struct {
   u8 scope_kind;
 
-  InstructionIndex start;
-  InstructionIndex end;
-  InstructionIndex pc;
+  InstructionOffset start;
+  InstructionOffset end;
+  InstructionOffset pc;
 
-  InstructionIndex residual; // if scope_kind == Scope_block then this refers to the block in residual code
-  InstructionIndex condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
+  InstructionOffset residual; // if scope_kind == Scope_block then this refers to the block in residual code
+  InstructionOffset condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
 
   BreakReturnList breaks_and_returns;
 } Scope;
@@ -47,7 +47,7 @@ typedef struct {
 #include "segment_list.h"
 
 typedef struct {
-  DeclarationIndex decl;
+  DeclarationKey decl;
   SIrChunk *chunk;
 
   IRef *inst_map;
@@ -61,15 +61,15 @@ void frame_init(Frame *frame, Arena *arena, Declaration *decl);
 
 always_inline b32 frame_is_comptime(Frame *frame) { return frame->comptime_depth > 0; }
 
-Scope *push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionIndex start, u32 count);
+Scope *push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionOffset start, u32 count);
 Scope  pop_scope(Frame *frame);
 
 typedef struct {
   Frame frame;
   IIrBuilder builder;
   union {
-    ValueIndex val;
-    DeclarationIndex decl;
+    ValueKey val;
+    DeclarationKey decl;
   } data;
 } Specializer;
 
@@ -110,14 +110,14 @@ typedef struct {
   // Run_register_function         - stub is the value of the function just encountered
 
   union {
-    ValueIndex val;
-    DeclarationIndex decl;
-    ValueIndex stub;
+    ValueKey val;
+    DeclarationKey decl;
+    ValueKey stub;
   } data;
 } RunResult;
 
 RunResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
-void specializer_resolve_decl(Specializer *state, ValueIndex decl_val);
+void specializer_resolve_decl(Specializer *state, ValueKey decl_val);
 
 #endif // SPECIALIZE_H
 

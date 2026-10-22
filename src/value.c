@@ -18,10 +18,10 @@ void values_init(ValueStore *values, ValueStoreOptions *options) {
   list_push(&values->list, values->arena); // Reserve nil entry
 }
 
-ValueIndex values_alloc(ValueStore *values, Value **out) {
+ValueKey values_alloc(ValueStore *values, Value **out) {
   u32 idx = values->list.len;
   *out = list_push(&values->list, values->arena);
-  return idx;
+  return (ValueKey){idx};
 }
 
 void *values_alloc_data(ValueStore *values, u32 size, u32 align) {
@@ -32,20 +32,20 @@ void values_dealloc_data(ValueStore *values, void *data, u32 size) {
   Free(values->payload_allocator, data, size);
 }
 
-void values_dealloc(ValueStore *values, ValueIndex idx) {
+void values_dealloc(ValueStore *values, ValueKey idx) {
   Value *p = values_get(values, idx);
   if (p->data_size > 0) {
     Free(values->payload_allocator, p->data, p->data_size);
   }
 }
 
-Value *values_get(ValueStore *values, ValueIndex idx) {
-  return list_ptr_at_unchecked(&values->list, idx);
+Value *values_get(ValueStore *values, ValueKey idx) {
+  return list_ptr_at_unchecked(&values->list, idx.x);
 }
 
-ValueIndex values_copy(ValueStore *values, ValueIndex val) {
+ValueKey values_copy(ValueStore *values, ValueKey val) {
   Value *v;
-  ValueIndex res = values_alloc(values, &v);
+  ValueKey res = values_alloc(values, &v);
   {
     Value *s = values_get(values, val);
     u32 align = 16; // TODO: not the nicest solution as this could be too small.

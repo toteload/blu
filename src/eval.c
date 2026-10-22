@@ -315,7 +315,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKe
   return UnifyResult_types_cannot_be_unified;
 }
 
-u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueIndex *res) {
+u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val, ValueKey *res) {
   TypeKey type_from = val->type;
 
   u32 coercion = classify_type_coercion(types, dst, type_from);
@@ -327,7 +327,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
   case Coercion_invalid: return CoerceResult_invalid_coercion_types;
   case Coercion_identical_types: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
@@ -344,7 +344,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
   }
   case Coercion_bool_to_int: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
@@ -357,7 +357,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
   }
   case Coercion_int_widen: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     TypeSizeInfo size_info = types_size_info_by_index(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
@@ -388,7 +388,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     }
 
     Value *v;
-    ValueIndex idx = values_alloc(values, &v);
+    ValueKey idx = values_alloc(values, &v);
     *v = (Value){
       .type = dst,
       .data = data,
@@ -401,7 +401,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
   }
   case Coercion_array_to_slice: {
     Value *p;
-    ValueIndex idx = values_alloc(values, &p);
+    ValueKey idx = values_alloc(values, &p);
 
     u32 size = sizeof(ValueSlice);
     ValueSlice *data = values_alloc_data(values, size, Align_of(ValueSlice));

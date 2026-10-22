@@ -7,8 +7,8 @@
 #include "compiler.h"
 
 typedef struct {
-  InstructionIndex start;
-  InstructionIndex end;
+  InstructionOffset start;
+  InstructionOffset end;
   ArenaSnapshot snapshot;
 } ScopeSpan2;
 
@@ -19,7 +19,7 @@ typedef struct {
   IIrChunk *chunk;
   void **inst_values;
   ScopeStack2 scope_stack;
-  InstructionIndex pc;
+  InstructionOffset pc;
 } CallFrame2;
 
 typedef Stack(CallFrame2) CallStack2;
@@ -39,6 +39,6 @@ typedef enum {
   Interpret_illegal_opcode,
 } InterpretResult;
 
-u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out);
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueKey *args, u32 arg_count, void *out);
 
 #endif // INTERPRET_H

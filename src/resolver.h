@@ -15,6 +15,6 @@ typedef struct {
   Compiler *compiler;
 } ResolveContext;
 
-b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationIndex *decls_to_resolve);
+b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationKey *decls_to_resolve);
 
 #endif // RESOLVER_H

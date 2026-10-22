@@ -37,8 +37,8 @@
 // Specializer IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx) {
-  InstructionIndex idx = builder->kinds.len;
+InstructionOffset sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx) {
+  InstructionOffset idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx });
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
@@ -50,7 +50,7 @@ SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, So
     return val;
   }
 
-  InstructionIndex idx = sir_builder_add(builder, SIR_as, source_idx, ast_idx);
+  InstructionOffset idx = sir_builder_add(builder, SIR_as, source_idx, ast_idx);
 
   SIrAs *data = sir_builder_push_data(builder, idx, SIrAs);
   *data = (SIrAs){
@@ -61,22 +61,22 @@ SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, So
   return sref_from_instruction(idx);
 }
 
-void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 size, u32 align) {
+void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionOffset idx, u32 size, u32 align) {
   void *p = arena_push(builder->scratch, size, align);
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .ptr = p };
   return p;
 }
 
-void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data) {
+void sir_builder_set_data(SIrBuilder *builder, InstructionOffset idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
-u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionIndex idx) {
+u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionOffset idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
 }
 
-InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceKey source_idx, AstIndex ast_idx) {
-  InstructionIndex br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
+InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOffset block, InstructionOffset target, SRef ref, SourceKey source_idx, AstIndex ast_idx) {
+  InstructionOffset br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
 
   SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
   *data = (SIrBr){
@@ -90,7 +90,7 @@ InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionInde
   return br;
 }
 
-u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex start) {
+u32 sir_builder_offset(SIrBuilder *builder, InstructionOffset start) {
   u32 at = builder->kinds.len;
   return at - start;
 }
@@ -127,7 +127,7 @@ internal u32 sir_extra_payload_align(u8 op) {
   }
 }
 
-internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionIndex i, u32 size, u32 align) {
+internal void *flatten_push_data(void *extra_base, Arena *arena, u32 *data, InstructionOffset i, u32 size, u32 align) {
   void *p = arena_push(arena, size, align);
   u32 offset = ptr_diff(p, extra_base);
   data[i] = offset;
@@ -146,7 +146,7 @@ void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk) {
 
   void *extra = arena->at;
 
-  for (InstructionIndex i = 0; i < count; i++) {
+  for (InstructionOffset i = 0; i < count; i++) {
     u8 op = opcodes[i];
     InstData entry = datalist_at_unchecked(&builder->data, i);
 
@@ -173,8 +173,8 @@ void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk) {
 // Interpreter IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source) {
-  InstructionIndex idx = builder->kinds.len;
+InstructionOffset iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source) {
+  InstructionOffset idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   typelist_append(&builder->types, builder->scratch, (TypeKey){0});
   sourcelist_append(&builder->ast_source, builder->scratch, source);
@@ -182,33 +182,33 @@ InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex s
   return idx;
 }
 
-void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionIndex idx, u32 size, u32 align) {
+void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionOffset idx, u32 size, u32 align) {
   void *p = arena_push(builder->scratch, size, align);
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .ptr = p };
   return p;
 }
 
-void iir_builder_set_data(IIrBuilder *builder, InstructionIndex idx, u32 data) {
+void iir_builder_set_data(IIrBuilder *builder, InstructionOffset idx, u32 data) {
   *datalist_ptr_at_unchecked(&builder->data, idx) = (InstData){ .data = data };
 }
 
-void iir_builder_set_type(IIrBuilder *builder, InstructionIndex idx, TypeKey type) {
+void iir_builder_set_type(IIrBuilder *builder, InstructionOffset idx, TypeKey type) {
   *typelist_ptr_at_unchecked(&builder->types, idx) = type;
 }
 
-u8 iir_builder_get_opcode(IIrBuilder *builder, InstructionIndex idx) {
+u8 iir_builder_get_opcode(IIrBuilder *builder, InstructionOffset idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
 }
 
-u32 iir_builder_get_data(IIrBuilder *builder, InstructionIndex idx) {
+u32 iir_builder_get_data(IIrBuilder *builder, InstructionOffset idx) {
   return datalist_at_unchecked(&builder->data, idx).data;
 }
 
-TypeKey iir_builder_get_type(IIrBuilder *builder, InstructionIndex idx) {
+TypeKey iir_builder_get_type(IIrBuilder *builder, InstructionOffset idx) {
   return typelist_at_unchecked(&builder->types, idx);
 }
 
-u32 iir_builder_offset(IIrBuilder *builder, InstructionIndex start) {
+u32 iir_builder_offset(IIrBuilder *builder, InstructionOffset start) {
   u32 at = builder->kinds.len;
   return at - start;
 }
@@ -258,7 +258,7 @@ void iir_builder_flatten(IIrBuilder *builder, Arena *arena, IIrChunk *chunk) {
 
   void *extra = arena->at;
 
-  for (InstructionIndex i = 0; i < count; i++) {
+  for (InstructionOffset i = 0; i < count; i++) {
     u8 op = opcodes[i];
     InstData entry = datalist_at_unchecked(&builder->data, i);
 

@@ -28,20 +28,20 @@ always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_nil)(REF_NAME r) {
   return r.x == 0;
 }
 
-always_inline ValueIndex Cat(REF_FUNCTION_PREFIX, _to_value)(REF_NAME r) {
-  return r.x;
+always_inline ValueKey Cat(REF_FUNCTION_PREFIX, _to_value)(REF_NAME r) {
+  return (ValueKey){r.x};
 }
 
-always_inline ValueIndex Cat(REF_FUNCTION_PREFIX, _to_instruction)(REF_NAME r) {
+always_inline InstructionOffset Cat(REF_FUNCTION_PREFIX, _to_instruction)(REF_NAME r) {
   return r.x & ~BITMASK_REF_IS_INSTRUCTION_INDEX;
 }
 
-always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_instruction)(InstructionIndex idx) {
+always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_instruction)(InstructionOffset idx) {
   return (REF_NAME){idx | BITMASK_REF_IS_INSTRUCTION_INDEX};
 }
 
-always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_value)(ValueIndex idx) {
-  return (REF_NAME){idx};
+always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_value)(ValueKey idx) {
+  return (REF_NAME){idx.x};
 }
 
 always_inline u32 Cat(REF_FUNCTION_PREFIX, _to_u32)(REF_NAME r) {

@@ -127,14 +127,14 @@ Each residual function keeps a flat capture array. Sharing capture blocks betwee
 
 ### Values that outlive a frame
 
-The frame owns its values: `dealloc_scope_values` frees the payload of every value in a scope's `inst_map` when the scope exits. So a capture needs `values_copy`, not just the `ValueIndex`.
+The frame owns its values: `dealloc_scope_values` frees the payload of every value in a scope's `inst_map` when the scope exits. So a capture needs `values_copy`, not just the `ValueKey`.
 
-- Nested captures don't copy the payload twice. A residual function's captures are permanent, so when an inner lambda captures what the middle function already captured, `SIR_func` copies only the `ValueIndex`. `dealloc_scope_values` must then skip `SIR_capture` slots, or `SIR_capture` must put a copy in `inst_map`.
-- `values_copy` is shallow. It copies the payload, but a `ValuePointer` inside it still refers to a `ValueIndex` the frame owns, and a `ValueSlice`'s `data` still points into frame memory. For now, captures whose type contains a pointer or slice are rejected. Integers, types and functions (`ValueFunc` is a `ResidualFunctionKey`) are fine.
+- Nested captures don't copy the payload twice. A residual function's captures are permanent, so when an inner lambda captures what the middle function already captured, `SIR_func` copies only the `ValueKey`. `dealloc_scope_values` must then skip `SIR_capture` slots, or `SIR_capture` must put a copy in `inst_map`.
+- `values_copy` is shallow. It copies the payload, but a `ValuePointer` inside it still refers to a `ValueKey` the frame owns, and a `ValueSlice`'s `data` still points into frame memory. For now, captures whose type contains a pointer or slice are rejected. Integers, types and functions (`ValueFunc` is a `ResidualFunctionKey`) are fine.
 
 General direction, following Zig: values that can outlive a frame are permanent and immutable, and a pointer into frame memory that escapes is a compile error. In Zig, a `const` that holds a pointer to a `comptime var` is an error, and a cyclic structure is written as a declaration that takes the address of its own elements (`const nodes = [_]Node{ .{ .next = &nodes[1] }, .{ .next = &nodes[0] } };`). Blu can't express that yet: without stubs, a declaration that looks up itself while `resolving_value` is a cycle.
 
-The alternative is copying the whole reachable graph when a value escapes, with an old → new `ValueIndex` map to handle sharing and cycles, walking each payload by its type. That can be added later without changing the language. Either way, pointers must be relocatable: `ValuePointer { val, offset }` is, but `ValueSlice { len, data }` holds a raw pointer and should become `{ val, offset, len }`. The IR → C backend needs this too, to emit permanent values as globals and pointers as `&global + offset`.
+The alternative is copying the whole reachable graph when a value escapes, with an old → new `ValueKey` map to handle sharing and cycles, walking each payload by its type. That can be added later without changing the language. Either way, pointers must be relocatable: `ValuePointer { val, offset }` is, but `ValueSlice { len, data }` holds a raw pointer and should become `{ val, offset, len }`. The IR → C backend needs this too, to emit permanent values as globals and pointers as `&global + offset`.
 
 ## Progress and remaining work
 

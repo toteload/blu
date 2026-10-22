@@ -109,7 +109,7 @@ _Static_assert(Offsetof(AstFunctionTmp, base)     == Tmp_base_offset, "Base must
 
 typedef struct {
   Tokens      *tokens;
-  TokenIndex   at;
+  TokenOffset   at;
 
   MessageSink *msg_sink;
 
@@ -164,7 +164,7 @@ internal b32 parse_param(Parser *parser, AstIndex *out);
 
 internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op);
 
-internal b32 is_token_index_past_end(Tokens *tokens, TokenIndex idx) {
+internal b32 is_token_index_past_end(Tokens *tokens, TokenOffset idx) {
   return idx >= tokens->tok_count;
 }
 
@@ -241,7 +241,7 @@ internal b32 peek_or_error(Parser *parser, u8 *token_kind) {
 }
 
 internal b32 peek2(Parser *parser, u8 *token_kind) {
-  TokenIndex lookahead = parser->at + 1;
+  TokenOffset lookahead = parser->at + 1;
 
   if (is_token_index_past_end(parser->tokens, lookahead)) {
     return False;
@@ -300,7 +300,7 @@ internal b32 parse_comma_separated_items_until(
 
 internal b32 parse_source(Parser *parser, AstIndex *out) {
   AstIndex idx = node_alloc(parser);
-  TokenIndex start = parser->at;
+  TokenOffset start = parser->at;
 
   AstSourceTmp *source = node_push_data(parser, AstSourceTmp, idx);
   zero_struct(AstSourceTmp, source);
@@ -320,14 +320,14 @@ internal b32 parse_source(Parser *parser, AstIndex *out) {
 
 internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
   AstIndex idx = node_alloc(parser);
-  TokenIndex start = parser->at;
+  TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_mod));
 
   AstModSectionTmp *section = node_push_data(parser, AstModSectionTmp, idx);
   zero_struct(AstModSectionTmp, section);
 
-  TokenIndex name = parser->at;
+  TokenOffset name = parser->at;
 
   Try(expect_token(parser, Tok_identifier));
 
@@ -353,8 +353,8 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   Try(expect_token(parser, tok));
 
@@ -376,8 +376,8 @@ internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
 }
 
 internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   AstBlockTmp *block = node_push_data(parser, AstBlockTmp, idx);
   zero_struct(AstBlockTmp, block);
@@ -421,8 +421,8 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     return True;
   }
 
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   switch (tok) {
   case Tok_bracket_open: {
@@ -461,12 +461,12 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     *node_kind(parser, idx) = Ast_type_function;
   } break;
   case Tok_identifier: {
-    TokenIndex identifier = parser->at;
+    TokenOffset identifier = parser->at;
 
     u8 ignored;
     next(parser, &ignored);
 
-    TokenIndex *p = node_push_data(parser, TokenIndex, idx);
+    TokenOffset *p = node_push_data(parser, TokenOffset, idx);
     *p = identifier;
 
     *node_kind(parser, idx) = Ast_identifier;
@@ -491,8 +491,8 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_declaration(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   AstDeclaration *declaration = node_push_data(parser, AstDeclaration, idx);
   zero_struct(AstDeclaration, declaration);
@@ -524,15 +524,15 @@ internal b32 parse_declaration(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
-  TokenIndex literal = parser->at;
+  TokenOffset literal = parser->at;
 
   u8 ignored;
   next(parser, &ignored);
 
-  TokenIndex *p = node_push_data(parser, TokenIndex, idx);
+  TokenOffset *p = node_push_data(parser, TokenOffset, idx);
   *p = literal;
 
   *node_kind(parser, idx) = kind;
@@ -544,8 +544,8 @@ internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind) {
 }
 
 internal b32 parse_param(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   AstParam *param = node_push_data(parser, AstParam, idx);
   zero_struct(AstParam, param);
@@ -566,8 +566,8 @@ internal b32 parse_param(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_function(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   AstFunctionTmp *function = node_push_data(parser, AstFunctionTmp, idx);
   zero_struct(AstFunctionTmp, function);
@@ -590,8 +590,8 @@ internal b32 parse_function(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_while));
 
@@ -612,8 +612,8 @@ internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
 }
 
 internal b32 parse_if_else(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_if));
 
@@ -672,8 +672,8 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_break(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_break));
 
@@ -700,14 +700,14 @@ internal b32 parse_break(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_label(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
-  TokenIndex label = parser->at;
+  TokenOffset label = parser->at;
 
   Try(expect_token(parser, Tok_label));
 
-  TokenIndex *p = node_push_data(parser, TokenIndex, idx);
+  TokenOffset *p = node_push_data(parser, TokenOffset, idx);
   *p = label;
 
   *node_kind(parser, idx) = Ast_label;
@@ -719,14 +719,14 @@ internal b32 parse_label(Parser *parser, AstIndex *out) {
 }
 
 internal b32 parse_identifier(Parser *parser, AstIndex *out) {
-  AstIndex   idx   = node_alloc(parser);
-  TokenIndex start = parser->at;
+  AstIndex    idx   = node_alloc(parser);
+  TokenOffset start = parser->at;
 
-  TokenIndex identifier = parser->at;
+  TokenOffset identifier = parser->at;
 
   Try(expect_token(parser, Tok_identifier));
 
-  TokenIndex *p = node_push_data(parser, TokenIndex, idx);
+  TokenOffset *p = node_push_data(parser, TokenOffset, idx);
   *p = identifier;
 
   *node_kind(parser, idx) = Ast_identifier;
@@ -812,8 +812,8 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     u8 ignored;
     next(parser, &ignored);
 
-    AstIndex   ast_index = node_alloc(parser);
-    TokenIndex start     = parser->at;
+    AstIndex    ast_index = node_alloc(parser);
+    TokenOffset start     = parser->at;
     AstCast   *cast      = node_push_data(parser, AstCast, ast_index);
 
     Try(expect_token(parser, Tok_paren_open));
@@ -832,8 +832,8 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
   case Tok_exclamation:
   case Tok_minus: {
-    AstIndex   ast_index = node_alloc(parser);
-    TokenIndex start     = parser->at;
+    AstIndex    ast_index = node_alloc(parser);
+    TokenOffset start     = parser->at;
 
     u8 ignored;
     next(parser, &ignored);
@@ -872,8 +872,8 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     _peek(parser, &tok);
 
     if (tok == Tok_bracket_open) {
-      AstIndex   ast_index = node_alloc(parser);
-      TokenIndex start     = parser->at;
+      AstIndex    ast_index = node_alloc(parser);
+      TokenOffset start     = parser->at;
 
       u8 ignored;
       next(parser, &ignored);
@@ -893,8 +893,8 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     }
 
     if (tok == Tok_paren_open) {
-      AstIndex   ast_index = node_alloc(parser);
-      TokenIndex start     = parser->at;
+      AstIndex    ast_index = node_alloc(parser);
+      TokenOffset start     = parser->at;
 
       u8 ignored;
       next(parser, &ignored);
@@ -1038,8 +1038,8 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
       return True;
     }
 
-    AstIndex   ast_index = node_alloc(parser);
-    TokenIndex start     = parser->at;
+    AstIndex    ast_index = node_alloc(parser);
+    TokenOffset start     = parser->at;
 
     u8 ignored;
     next(parser, &ignored);

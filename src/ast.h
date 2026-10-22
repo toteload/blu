@@ -14,11 +14,11 @@ typedef enum {
   Ast_builtin,
   Ast_declaration,
   Ast_assign,
-  Ast_literal_int, // TokenIndex
-  Ast_literal_string, // TokenIndex
-  Ast_literal_u8_string, // TokenIndex
-  Ast_identifier, // TokenIndex
-  Ast_label, // TokenIndex
+  Ast_literal_int, // TokenOffset
+  Ast_literal_string, // TokenOffset
+  Ast_literal_u8_string, // TokenOffset
+  Ast_identifier, // TokenOffset
+  Ast_label, // TokenOffset
   Ast_call,
   Ast_index,
   Ast_unary_op,
@@ -88,7 +88,7 @@ typedef struct {
 } AstTypeArray;
 
 typedef struct {
-  TokenIndex name;
+  TokenOffset name;
   AstIndex  type;
   AstIndex  value;
 } AstDeclaration;
@@ -99,7 +99,7 @@ typedef struct {
 } AstSource;
 
 typedef struct {
-  TokenIndex name;
+  TokenOffset name;
   u32 count;
   AstIndex items[];
 } AstModSection;
@@ -111,8 +111,8 @@ typedef struct {
 } AstBlock;
 
 typedef struct {
-  TokenIndex name;
-  AstIndex   type;
+  TokenOffset name;
+  AstIndex    type;
 } AstParam;
 
 typedef struct {
@@ -182,7 +182,7 @@ typedef union {
   AstTypeArray       type_array;
   AstDeclaration     declaration;
   AstAssign          assign;
-  TokenIndex         token_index;
+  TokenOffset        token_index;
   AstCall            call;
   AstIndexData       index;
   AstUnaryOp         unary_op;
@@ -193,8 +193,8 @@ typedef union {
 } AstNodeData;
 
 typedef struct {
-  TokenIndex start;
-  TokenIndex end;
+  TokenOffset start;
+  TokenOffset end;
 } SpanToken;
 
 typedef struct {

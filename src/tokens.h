@@ -98,7 +98,7 @@ typedef struct {
 } LineInfo;
 
 LineInfo tokens_find_line_info(String text, Tokens *tokens, u32 byte_offset);
-String token_string(Tokens *tokens, String text, TokenIndex tok);
+String token_string(Tokens *tokens, String text, TokenOffset tok);
 
 char const *token_kind_string(u8 kind);
 

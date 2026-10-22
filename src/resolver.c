@@ -10,7 +10,7 @@ typedef enum {
 typedef struct {
   u8 kind;
   u8 is_paused;
-  ValueIndex stub;
+  ValueKey stub;
   Specializer state;
 } ResolveEntry;
 
@@ -33,12 +33,12 @@ typedef struct {
   ResolveStack deferred_stack;
 } Resolver;
 
-internal always_inline ValueStub *get_stub(ResolveContext *ctx, ValueIndex val) {
+internal always_inline ValueStub *get_stub(ResolveContext *ctx, ValueKey val) {
   Value *v = values_get(ctx->values, val);
   return Cast(ValueStub*, v->data);
 }
 
-internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, DeclarationIndex decl) {
+internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, DeclarationKey decl) {
   Declaration *d = decls_extra_get_ptr(ctx->decls, decl);
 
   ResolveEntry *entry = resolve_stack_push(stack, ctx->scratch);
@@ -52,7 +52,7 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
   push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
 
-internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *stack, ValueIndex stub) {
+internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *stack, ValueKey stub) {
   Value *v = values_get(ctx->values, stub);
   ValueStub *s = Cast(ValueStub*, v->data);
 
@@ -168,7 +168,7 @@ internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, 
   return True;
 }
 
-b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationIndex *decls_to_resolve) {
+b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationKey *decls_to_resolve) {
   Resolver resolver = { 0 };
 
   SpecializerContext sp = {
@@ -185,7 +185,7 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
   b32 all_ok = True;
 
   for (u32 i = 0; i < decls_to_resolve_count; i++) {
-    DeclarationIndex decl_idx = decls_to_resolve[i];
+    DeclarationKey decl_idx = decls_to_resolve[i];
     Declaration *decl = decls_extra_get_ptr(ctx->decls, decl_idx);
     ValueStub *stub = get_stub(ctx, decl->data.decl.val);
 

@@ -12,18 +12,18 @@ internal u32 lowbias32(u32 x) {
   return x;
 }
 
-internal u32 hash_string_index(void *context, StringIndex s) {
+internal u32 hash_string_index(void *context, StringKey s) {
   Unused(context);
-  return lowbias32(s);
+  return lowbias32(s.x);
 }
 
-internal b32 cmp_string_index(void *context, StringIndex a, StringIndex b) {
+internal b32 cmp_string_index(void *context, StringKey a, StringKey b) {
   Unused(context);
-  return a == b;
+  return key_eq(a, b);
 }
 
 #define HASHMAP_NAME            LocalsMap
-#define HASHMAP_KEY_TYPE        StringIndex
+#define HASHMAP_KEY_TYPE        StringKey
 #define HASHMAP_VALUE_TYPE      u32
 #define HASHMAP_FUNCTION_PREFIX locals
 #define HASHMAP_HASH_FN         hash_string_index
@@ -55,7 +55,7 @@ void symbols_deinit(SymbolMap *symbols) {
   locals_deinit(&symbols->locals);
 }
 
-internal b32 add_symbol(SymbolMap *syms, StringIndex name, u32 idx, u32 *occupied_idx) {
+internal b32 add_symbol(SymbolMap *syms, StringKey name, u32 idx, u32 *occupied_idx) {
   b32 was_occupied = False;
   LocalsMapBucket *bucket = locals_insert_key_and_get_bucket(&syms->locals, name, &was_occupied);
   if (was_occupied) {
@@ -74,11 +74,11 @@ internal b32 add_symbol(SymbolMap *syms, StringIndex name, u32 idx, u32 *occupie
   return True;
 }
 
-SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, InstructionIndex inst, StringIndex label) {
+SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, InstructionOffset inst, StringKey label) {
   u32 offset = syms->stack.len;
 
   u32 occupied_idx;
-  if (label && !add_symbol(syms, label, offset, &occupied_idx)) {
+  if (key_is_some(label) && !add_symbol(syms, label, offset, &occupied_idx)) {
     ScopeEntry *existing = scopes_ptr_at_unchecked(&syms->stack, occupied_idx);
     return (SymbolsPushScopeResult){
       .err = SYMBOLS_ERR_FOUND_EXISTING_SYMBOL,
@@ -106,7 +106,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
   };
 }
 
-SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringIndex name, InstructionIndex inst) {
+SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, InstructionOffset inst) {
   u32 offset = syms->stack.len;
 
   u32 occupied_idx;
@@ -142,7 +142,7 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
       } break;
       case ScopeEntry_block:
       case ScopeEntry_loop: {
-        if (entry.name) {
+        if (key_is_some(entry.name)) {
           locals_remove(&syms->locals, entry.name);
         }
       } break;
@@ -157,12 +157,12 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
   syms->parent_loop_idx = entry.parent_loop_idx;
   syms->parent_block_idx = entry.parent_block_idx;
 
-  if (entry.name) {
+  if (key_is_some(entry.name)) {
     locals_remove(&syms->locals, entry.name);
   }
 }
 
-ScopeEntry *symbols_find(SymbolMap *syms, StringIndex name) {
+ScopeEntry *symbols_find(SymbolMap *syms, StringKey name) {
   u32 *idx = locals_find(&syms->locals, name);
   if (is_null(idx)) {
     return Null;

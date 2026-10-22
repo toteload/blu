@@ -6,9 +6,9 @@
 #include "ir.h"
 
 typedef struct {
-  DeclarationIndex parent;
-  StringIndex      name;
-} DeclarationKey;
+  DeclarationKey parent;
+  StringKey      name;
+} DeclarationPath;
 
 typedef enum {
   Declaration_root,
@@ -18,12 +18,12 @@ typedef enum {
 } DeclarationKind;
 
 struct Declaration {
-  DeclarationIndex idx;
+  DeclarationKey idx;
 
   u8 kind;
 
   union {
-    ValueIndex primitive;
+    ValueKey primitive;
 
     struct {
       Source *source;
@@ -34,14 +34,14 @@ struct Declaration {
       Source *source;
       u32 tree_idx;
       SIrChunk chunk;
-      ValueIndex val;
+      ValueKey val;
     } decl;
   } data;
 };
 
 #define DECLARATION_INTERNER_NAME DeclarationInterner
-#define DECLARATION_INTERNER_TYPE DeclarationKey
-#define DECLARATION_INTERNER_INDEX_TYPE DeclarationIndex
+#define DECLARATION_INTERNER_TYPE DeclarationPath
+#define DECLARATION_INTERNER_INDEX_TYPE DeclarationKey
 #define DECLARATION_INTERNER_EXTRA_TYPE Declaration
 #define DECLARATION_INTERNER_FUNCTION_PREFIX decls
 
@@ -59,14 +59,14 @@ struct Declaration {
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-internal u32 hash_decl_key(void *context, DeclarationKey key) {
+internal u32 hash_decl_path(void *context, DeclarationPath key) {
   Unused(context);
-  return XXH32(&key, sizeof(DeclarationKey), 0);
+  return XXH32(&key, sizeof(DeclarationPath), 0);
 }
 
-internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
+internal b32 cmp_decl_path(void *context, DeclarationPath a, DeclarationPath b) {
   Unused(context);
-  return a.parent == b.parent && a.name == b.name;
+  return key_eq(a.parent, b.parent) && key_eq(a.name, b.name);
 }
 
 #define INTERNER_NAME DECLARATION_INTERNER_NAME
@@ -75,8 +75,9 @@ internal b32 cmp_decl_key(void *context, DeclarationKey a, DeclarationKey b) {
 #define INTERNER_EXTRA_TYPE DECLARATION_INTERNER_EXTRA_TYPE
 #define INTERNER_FUNCTION_PREFIX DECLARATION_INTERNER_FUNCTION_PREFIX
 #define INTERNER_RESERVE_ZERO_INDEX
-#define INTERNER_HASH_FN hash_decl_key
-#define INTERNER_COMPARE_FN cmp_decl_key
+#define INTERNER_INDEX_IS_KEY
+#define INTERNER_HASH_FN hash_decl_path
+#define INTERNER_COMPARE_FN cmp_decl_path
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
 

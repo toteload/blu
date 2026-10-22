@@ -12,7 +12,7 @@ typedef struct {
 } Value;
 
 typedef struct {
-  ValueIndex val;
+  ValueKey val;
   u32 offset;
 } ValuePointer;
 
@@ -34,10 +34,10 @@ typedef enum {
 
 typedef struct {
   u8 resolve_status;
-  DeclarationIndex decl;
-  InstructionIndex inst;
+  DeclarationKey decl;
+  InstructionOffset inst;
   TypeKey type;
-  ValueIndex idx; // only valid if fully resolved
+  ValueKey idx; // only valid if fully resolved
 } ValueStub;
 
 // -----------------------------------------------------------------------------
@@ -63,12 +63,12 @@ typedef struct {
 void values_init(ValueStore *values, ValueStoreOptions *options);
 void values_deinit(ValueStore *values);
 
-ValueIndex  values_alloc(ValueStore *values, Value **out);
-void       *values_alloc_data(ValueStore *values, u32 size, u32 align);
-void        values_dealloc_data(ValueStore *values, void *data, u32 size);
-void        values_dealloc(ValueStore *values, ValueIndex idx);
-Value      *values_get(ValueStore *values, ValueIndex idx);
-ValueIndex  values_copy(ValueStore *values, ValueIndex val);
+ValueKey  values_alloc(ValueStore *values, Value **out);
+void     *values_alloc_data(ValueStore *values, u32 size, u32 align);
+void      values_dealloc_data(ValueStore *values, void *data, u32 size);
+void      values_dealloc(ValueStore *values, ValueKey idx);
+Value    *values_get(ValueStore *values, ValueKey idx);
+ValueKey  values_copy(ValueStore *values, ValueKey val);
 
 #define values_alloc_data_type(values, type) \
   Cast(type*, values_alloc_data((values), sizeof(type), Align_of(type)))

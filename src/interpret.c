@@ -45,7 +45,7 @@ internal void frame_pop(Interpreter *in) {
   stack_pop_unchecked(&in->call_stack);
 }
 
-internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
+internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionOffset block) {
   u32 inst_count = iir_chunk_data(f->chunk, block);
   stack_push(&f->scope_stack, ((ScopeSpan2){
     .start = block,
@@ -62,7 +62,7 @@ internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
   return iir_chunk_type(f->chunk, iref_to_instruction(ref));
 }
 
-internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionIndex block) {
+internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionOffset block) {
   while (True) {
     ScopeSpan2 span = stack_pop(&f->scope_stack);
 
@@ -84,7 +84,7 @@ typedef enum {
   Step_illegal_opcode,
 } StepResult;
 
-internal MessageLocation inst_location(CallFrame2 *f, InstructionIndex pc) {
+internal MessageLocation inst_location(CallFrame2 *f, InstructionOffset pc) {
   AstAndSourceIndex src = f->chunk->sources[pc];
   if (!src.ast_idx) {
     return (MessageLocation){ .kind = MessageLocation_unspecified, };
@@ -99,7 +99,7 @@ internal MessageLocation inst_location(CallFrame2 *f, InstructionIndex pc) {
 
 internal u32 step(Interpreter *in) {
   CallFrame2 *f = stack_peek_ptr(&in->call_stack);
-  InstructionIndex pc = f->pc;
+  InstructionOffset pc = f->pc;
   IIrOpcode op = f->chunk->opcodes[pc];
 
   void *local;
@@ -137,7 +137,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_repeat: {
-    InstructionIndex loop = iir_chunk_data(f->chunk, pc);
+    InstructionOffset loop = iir_chunk_data(f->chunk, pc);
     scopes_pop_to(in, f, loop);
     scope_push(in, f, loop);
     f->pc = loop + 1;
@@ -475,7 +475,7 @@ internal u32 step(Interpreter *in) {
   return Step_ok;
 }
 
-u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueIndex *args, u32 arg_count, void *out) {
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueKey *args, u32 arg_count, void *out) {
   Unused(args);
 
   // TODO: make sure that the args match the signature of the function

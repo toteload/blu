@@ -27,10 +27,10 @@ typedef struct {
   SourceKey source_idx;
 
   // `decl_idx` is set if kind is ir_instruction.
-  DeclarationIndex decl_idx;
+  DeclarationKey decl_idx;
 
   union {
-    TokenIndex token_index;
+    TokenOffset token_index;
     AstIndex ast_index;
     u32 offset;
   } data;

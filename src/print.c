@@ -103,7 +103,7 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
   switch (Cast(TypeKind, t->kind)) {
   case Type_stub: {
     ValueStub *stub = data;
-    fprintf(out, "status: %s, val: %d", resolve_status_string(stub->resolve_status), stub->idx);
+    fprintf(out, "status: %s, val: %d", resolve_status_string(stub->resolve_status), stub->idx.x);
   } break;
   case Type_comptime_int: {
     fprintf(out, "%lld", Cast(long long, read_signed(64, data)));
@@ -245,7 +245,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
 
-  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
+  for (InstructionOffset i = 0; i < chunk->opcode_count; i++) {
     SIrOpcode  op   = sir_chunk_op(chunk, i);
 
     u32 data = sir_chunk_data(chunk, i);
@@ -437,7 +437,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
   Stack(BlockPrint) blocks;
   stack_init(&blocks, buf, 64);
 
-  for (InstructionIndex i = 0; i < chunk->opcode_count; i++) {
+  for (InstructionOffset i = 0; i < chunk->opcode_count; i++) {
     IIrOpcode op = iir_chunk_op(chunk, i);
 
     u32 data = iir_chunk_data(chunk, i);

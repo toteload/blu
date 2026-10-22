@@ -70,16 +70,14 @@ internal b32 do_parse(ParserTestContext *context, String src, AstNodes *ast) {
   return parse(&parse_context, &context->tokens, ast);
 }
 
-#define Root 1
-
 void test_parse_empty(TestResult *test, ParserTestContext *context) {
   AstNodes ast;
   b32 ok = do_parse(context, string_lit(""), &ast);
 
   Test_assert(ok);
-  Test_assert_eq(ast.kinds[Root], Ast_source);
+  Test_assert_eq(ast.kinds[AST_INDEX_SOURCE], Ast_source);
 
-  AstSource *source = ast_data(&ast, Root);
+  AstSource *source = ast_data(&ast, AST_INDEX_SOURCE);
   Test_assert_eq(source->count, 0);
 }
 
@@ -90,9 +88,9 @@ void test_parse_mod_section(TestResult *test, ParserTestContext *context) {
   b32 ok = do_parse(context, text, &ast);
 
   Test_assert(ok);
-  Test_assert_eq(ast.kinds[Root], Ast_source);
+  Test_assert_eq(ast.kinds[AST_INDEX_SOURCE], Ast_source);
 
-  AstSource *source = ast_data(&ast, Root);
+  AstSource *source = ast_data(&ast, AST_INDEX_SOURCE);
   Test_assert_eq(source->count, 1);
 
   AstIndex mod_idx = source->items[0];
@@ -110,7 +108,7 @@ void test_parse_declaration(TestResult *test, ParserTestContext *context) {
 
   Test_assert(ok);
 
-  AstSource     *source = ast_data(&ast, Root);
+  AstSource     *source = ast_data(&ast, AST_INDEX_SOURCE);
   AstModSection *mod    = ast_data(&ast, source->items[0]);
   Test_assert_eq(mod->count, 1);
 
@@ -128,7 +126,7 @@ void test_parse_declaration_without_type(TestResult *test, ParserTestContext *co
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, Root);
+  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
@@ -143,7 +141,7 @@ void test_parse_binary_precedence(TestResult *test, ParserTestContext *context) 
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, Root);
+  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
@@ -166,7 +164,7 @@ void test_parse_function(TestResult *test, ParserTestContext *context) {
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, Root);
+  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
@@ -189,10 +187,10 @@ void test_parse_payload_layout(TestResult *test, ParserTestContext *context) {
   Test_assert(ok);
 
   // The root payload sits at the very start of the payload region.
-  Test_assert_eq(ast.datas[Root], 0);
+  Test_assert_eq(ast.datas[AST_INDEX_SOURCE], 0);
 
   // Payloads are written in increasing node-index order.
-  for (u32 i = Root+1; i < ast.count; i += 1) {
+  for (u32 i = AST_INDEX_SOURCE+1; i < ast.count; i += 1) {
     Test_assert(ast.datas[i] > ast.datas[i - 1]);
   }
 }

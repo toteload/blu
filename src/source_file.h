@@ -15,11 +15,11 @@ enum SourceDeclarationKind {
 };
 
 typedef struct {
-  u8          kind;
-  AstIndex    node;
-  u32         child_count;
-  u32         parent;
-  StringIndex name;
+  u8        kind;
+  AstIndex  node;
+  u32       child_count;
+  u32       parent;
+  StringKey name;
 } SourceDeclaration;
 
 enum SourceStatus {
@@ -45,7 +45,7 @@ struct Source {
 
   u32                decl_tree_size;
   SourceDeclaration *decls;
-  DeclarationIndex  *decl_idxs;
+  DeclarationKey    *decl_idxs;
 };
 
 void source_file_init(Source *source, SourceKey idx, String filename);
