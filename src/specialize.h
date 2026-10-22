@@ -66,7 +66,7 @@ Scope  pop_scope(Frame *frame);
 
 typedef struct {
   Frame frame;
-  IIrBuilder *builder;
+  IIrBuilder builder;
   union {
     ValueIndex val;
     DeclarationIndex decl;

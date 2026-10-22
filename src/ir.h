@@ -118,6 +118,7 @@ typedef enum {
 // A logical and/or is wrapped by a block, referenced by `block`.
 // `lhs` refers to the LHS value of the operator.
 // The RHS of the operator is immediately after this instruction.
+// The RHS is zero or more instructions terminated by a br to `block`.
 typedef struct {
   InstructionIndex block;
   SRef lhs;

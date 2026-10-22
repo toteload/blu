@@ -66,6 +66,8 @@ internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *sta
 
   zero_struct(SpecializerState, &entry->state);
 
+  entry->state.builder.scratch = ctx->scratch;
+
   frame_init(&entry->state.frame, ctx->scratch, d);
 
   SIrFunc *func = sir_chunk_extra(&d->data.decl.chunk, s->inst);

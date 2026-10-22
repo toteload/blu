@@ -279,7 +279,8 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_typeof_param: Todo();
     case SIR_func: {
       SIrFunc *func = extra;
-      fprintf(out, "param_count=%u instruction_count=%u", func->param_count, func->instruction_count);
+      fprintf(out, "param_count=%u instruction_count=%u type_destination=", func->param_count, func->instruction_count);
+      print_sref(out, compiler, func->type_destination);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
 
@@ -324,6 +325,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
 
     case SIR_block:
     case SIR_comptime_block:
+    case SIR_return_type:
     case SIR_loop: {
       fprintf(out, "count=%u", data);
       stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
@@ -347,8 +349,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_typeof:
     case SIR_base_type:
     case SIR_alloc:
-    case SIR_comptime_alloc:
-    case SIR_return_type: {
+    case SIR_comptime_alloc: {
       print_sref(out, compiler, (SRef){data});
     } break;
 
