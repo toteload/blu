@@ -27,9 +27,22 @@
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
-
-
 typedef struct {
+  IIrChunk chunk;
+} ResidualFunction;
+
+#define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 5
+#define RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT 20
+#define RESIDUAL_FUNCTION_LIST_NAME ResidualFunctionList
+#define RESIDUAL_FUNCTION_LIST_TYPE ResidualFunction
+#define SEGMENTLIST_NAME RESIDUAL_FUNCTION_LIST_NAME
+#define SEGMENTLIST_TYPE RESIDUAL_FUNCTION_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct Compiler {
   Arena arena;
   Arena scratch;
 
@@ -47,13 +60,18 @@ typedef struct {
 
   DeclarationInterner decls;
   DeclIdxList         user_decls;
+
+  ResidualFunctionList functions;
 } Compiler;
 
 void compiler_init(Compiler *compiler, CLIOptions *options);
 void compiler_deinit(Compiler *compiler);
 
 void compiler_add_sourcefile(Compiler *compiler, String filename);
-Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx);
+Source *compiler_get_source(Compiler *compiler, SourceKey source_idx);
+
+ResidualFunctionKey compiler_add_function(Compiler *compiler, IIrChunk chunk);
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationIndex *mods, u32 mod_count, StringIndex name, DeclarationIndex *out);
 

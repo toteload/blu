@@ -27,8 +27,8 @@ internal Type *intern_type(Arena *arena, Type *x) {
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
 
-void types_init(TypeInterner *types) {
-  aux_init(&types->_interner);
+void types_init(TypeInterner *types, InternerOptions *options) {
+  aux_init(&types->_interner, options);
 
   // clang-format off
   types->t_stub         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_stub}) };

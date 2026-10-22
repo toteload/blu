@@ -196,12 +196,12 @@ void test_eval_unify(TestResult *test, void *user) {
   // Identical array types unify trivially.
   err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_3, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(unified, t_arr_i32_3);
+  Test_assert(key_eq(unified, t_arr_i32_3));
 
   // Arrays with a comptime_int element unify element-wise into the concrete integer array.
   err = eval_unify(&scratch, &types, t_arr_comptime_3, t_arr_i32_3, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.array.base_type, t_i32);
+  Test_assert(key_eq(Cast(Type *, types_get(&types, unified))->data.array.base_type, t_i32));
 
   // Arrays of differing size cannot be unified.
   err = eval_unify(&scratch, &types, t_arr_i32_3, t_arr_i32_4, &unified);
@@ -210,16 +210,16 @@ void test_eval_unify(TestResult *test, void *user) {
   // Slices unify their base types, same as arrays.
   err = eval_unify(&scratch, &types, t_slice_comptime, t_slice_i32, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32);
+  Test_assert(key_eq(Cast(Type *, types_get(&types, unified))->data.slice.base_type, t_i32));
 
   // A slice whose base type is still unknown (TypeKey 0) is itself incomplete.
-  err = eval_unify(&scratch, &types, 0, t_slice_incomplete, &unified);
+  err = eval_unify(&scratch, &types, (TypeKey){0}, t_slice_incomplete, &unified);
   Test_assert_eq(err, UnifyResult_type_is_incomplete);
 
   // Pointers unify their base types.
   err = eval_unify(&scratch, &types, t_ptr_comptime, t_ptr_i32, &unified);
   Test_assert_eq(err, UnifyResult_ok);
-  Test_assert_eq(Cast(Type *, types_get(&types, unified))->data.pointer.base_type, t_i32);
+  Test_assert(key_eq(Cast(Type *, types_get(&types, unified))->data.pointer.base_type, t_i32));
 
   // Unrelated kinds cannot be unified.
   err = eval_unify(&scratch, &types, t_bool, t_arr_i32_3, &unified);

@@ -7,8 +7,8 @@
 
 typedef struct {
   TypeKey  type;
-  u32        data_size;
-  void      *data;
+  u32      data_size;
+  void    *data;
 } Value;
 
 typedef struct {
@@ -20,6 +20,10 @@ typedef struct {
   usize  len;
   void  *data;
 } ValueSlice;
+
+typedef struct {
+  ResidualFunctionKey key;
+} ValueResidualFunction;
 
 typedef enum {
   ResolveStatus_unresolved,

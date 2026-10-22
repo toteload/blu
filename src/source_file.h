@@ -30,7 +30,7 @@ enum SourceStatus {
 
 struct Source {
   u32         status;
-  SourceIndex idx; // Saves its own index :)
+  SourceKey idx; // Saves its own index :)
   Arena       arena;
 
   MessageList msg_list;
@@ -48,7 +48,7 @@ struct Source {
   DeclarationIndex  *decl_idxs;
 };
 
-void source_file_init(Source *source, SourceIndex idx, String filename);
+void source_file_init(Source *source, SourceKey idx, String filename);
 void source_file_deinit(Source *source);
 
 b32 source_read_file(Source *source);

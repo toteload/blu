@@ -11,7 +11,7 @@ typedef struct {
   u8 kind;
   u8 is_paused;
   ValueIndex stub;
-  SpecializerState state;
+  Specializer state;
 } ResolveEntry;
 
 #define RESOLVE_STACK_MIN_SIZE_LOG_2 8
@@ -47,7 +47,7 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
   entry->is_paused = False;
   entry->stub = d->data.decl.val;
 
-  zero_struct(SpecializerState, &entry->state);
+  zero_struct(Specializer, &entry->state);
   frame_init(&entry->state.frame, ctx->scratch, d);
   push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
@@ -64,7 +64,7 @@ internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *sta
   entry->is_paused = False;
   entry->stub = stub;
 
-  zero_struct(SpecializerState, &entry->state);
+  zero_struct(Specializer, &entry->state);
 
   entry->state.builder.scratch = ctx->scratch;
 
@@ -75,7 +75,7 @@ internal void push_resolve_function_entry(ResolveContext *ctx, ResolveStack *sta
   push_scope(&entry->state.frame, ctx->scratch, Scope_block, s->inst, func->instruction_count);
 }
 
-internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Specializer *sp) {
+internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, SpecializerContext *sp) {
   ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
   Value *vstub = values_get(ctx->values, entry->stub);
   ValueStub *stub = Cast(ValueStub*, vstub->data);
@@ -128,7 +128,7 @@ internal void clear_resolve_stack_with_error(ResolveContext *ctx, ResolveStack *
   }
 }
 
-internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, Specializer *sp) {
+internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, SpecializerContext *sp) {
   while (!resolve_stack_is_empty(&resolver->primary_stack)) {
     ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
     ValueStub *stub = get_stub(ctx, entry->stub);
@@ -171,7 +171,7 @@ internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, 
 b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationIndex *decls_to_resolve) {
   Resolver resolver = { 0 };
 
-  Specializer sp = {
+  SpecializerContext sp = {
     .perm = ctx->perm,
     .scratch = ctx->scratch,
     .msg_sink = ctx->msg_sink,
@@ -179,6 +179,7 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
     .types = ctx->types,
     .values = ctx->values,
     .common = ctx->common,
+    .compiler = ctx->compiler,
   };
 
   b32 all_ok = True;

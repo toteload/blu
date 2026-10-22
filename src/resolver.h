@@ -12,6 +12,7 @@ typedef struct {
   TypeInterner *types;
   ValueStore *values;
   Common *common;
+  Compiler *compiler;
 } ResolveContext;
 
 b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, DeclarationIndex *decls_to_resolve);

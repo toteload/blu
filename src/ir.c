@@ -37,7 +37,7 @@
 // Specializer IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_idx, AstIndex ast_idx) {
+InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx });
@@ -45,7 +45,7 @@ InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_
   return idx;
 }
 
-SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx) {
+SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstIndex ast_idx) {
   if (sref_is_nil(type_destination)) {
     return val;
   }
@@ -75,7 +75,7 @@ u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionIndex idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
 }
 
-InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx) {
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceKey source_idx, AstIndex ast_idx) {
   InstructionIndex br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
 
   SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
@@ -176,7 +176,7 @@ void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk) {
 InstructionIndex iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source) {
   InstructionIndex idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
-  typelist_append(&builder->types, builder->scratch, 0);
+  typelist_append(&builder->types, builder->scratch, (TypeKey){0});
   sourcelist_append(&builder->ast_source, builder->scratch, source);
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;

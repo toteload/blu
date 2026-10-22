@@ -97,7 +97,7 @@ typedef struct {
   TypeKey t_usize;
 } TypeInterner;
 
-void types_init(TypeInterner *types);
+void types_init(TypeInterner *types, InternerOptions *options);
 void types_deinit(TypeInterner *types);
 
 TypeKey types_intern(TypeInterner *types, Type *t);

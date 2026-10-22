@@ -4,7 +4,7 @@
 #include "blu.h"
 
 typedef struct {
-  SourceIndex source_idx;
+  SourceKey source_idx;
   AstIndex    ast_idx;
 } AstAndSourceIndex;
 
@@ -220,8 +220,8 @@ typedef struct {
   InstDataList data;
 } SIrBuilder;
 
-InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceIndex source_idx, AstIndex ast_idx);
-SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceIndex source_idx, AstIndex ast_idx);
+InstructionIndex sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx);
+SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstIndex ast_idx);
 
 void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionIndex idx, u32 size, u32 align);
 
@@ -232,7 +232,7 @@ void sir_builder_set_data(SIrBuilder *builder, InstructionIndex idx, u32 data);
 
 u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionIndex idx);
 
-InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceIndex source_idx, AstIndex ast_idx);
+InstructionIndex sir_builder_end_block_with(SIrBuilder *builder, InstructionIndex block, InstructionIndex target, SRef ref, SourceKey source_idx, AstIndex ast_idx);
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionIndex idx);
 void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk);

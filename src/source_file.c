@@ -23,7 +23,7 @@ internal void source_add_message(void *user, u8 severity, MessageLocation locati
   msglist_append(&source->msg_list, &source->arena, msg);
 }
 
-void source_file_init(Source *source, SourceIndex idx, String filename) {
+void source_file_init(Source *source, SourceKey idx, String filename) {
   zero_struct(Source, source);
   arena_init(&source->arena, &(ArenaOptions){
     .reserve_size        = MiB(64),

@@ -14,25 +14,39 @@ typedef u32 InstructionIndex; // Offset, not optional
 #define KEY_FUNCTION_PREFIX type_key
 #include "key.h"
 
+#define KEY_NAME SourceKey
+#define KEY_FUNCTION_PREFIX source_key
+#include "key.h"
+
+#define KEY_NAME ResidualFunctionKey
+#define KEY_FUNCTION_PREFIX residual_function_key
+#include "key.h"
+
 #define key_is_nil(K) _Generic((K), \
-  TypeKey : type_key_is_nil)(K)
+  TypeKey : type_key_is_nil, \
+  SourceKey : source_key_is_nil, \
+  ResidualFunctionKey : residual_function_key_is_nil)(K)
 
 #define key_is_some(K) _Generic((K), \
-  TypeKey : type_key_is_some)(K)
+  TypeKey : type_key_is_some, \
+  SourceKey : source_key_is_some, \
+  ResidualFunctionKey : residual_function_key_is_some)(K)
 
 #define key_eq(K,M) _Generic((K), \
-  TypeKey : type_key_eq)(K,M)
+  TypeKey : type_key_eq, \
+  SourceKey : source_key_eq, \
+  ResidualFunctionKey : residual_function_key_eq)(K,M)
 
 typedef u32 AstIndex;         // Optional, 0 means nil
 typedef u32 StringIndex;      // Optional, 0 means nil
 typedef u32 ValueIndex;       // Optional, 0 means nil
-typedef u32 SourceIndex;      // Optional, 0 means nil
 typedef u32 DeclarationIndex; // Optional, 0 means nil or root
 
 typedef struct ValueStore ValueStore;
 typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;
 typedef struct Declaration Declaration;
+typedef struct Compiler Compiler;
 
 typedef struct {
   struct {

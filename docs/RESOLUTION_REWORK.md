@@ -65,10 +65,10 @@ Recursive functions don't need a stub: the function body is specialized after th
 
 - The resolver lives in `src/resolver.c`. `src/resolver.h` exposes only `ResolveContext` and `resolve_declarations`.
 - `ResolveEntry` is `{ SpecializerState state; ArenaSnapshot snapshot; }`, allocated on a fixed stack of `MAX_RESOLVE_DEPTH` (64). Each entry's state is allocated in a scratch arena scope that ends when the entry is popped.
-- `SpecializerState` (formerly `RunState`) holds `requested_resolution`, a `Frame`, the `decl`, and an optional `function`. The `function` field is set when the state specializes a function body.
+- `Specializer` (formerly `RunState`) holds `requested_resolution`, a `Frame`, the `decl`, and an optional `function`. The `function` field is set when the state specializes a function body.
 - `Frame` holds the `chunk`, `inst_map`, `inst_types`, `comptime_depth` and a stack of `ScopeSpan`s. Scope kinds are `Scope_block` and `Scope_comptime`.
 - There is no IIR builder stack. Each `ResidualFunction` owns its `IIrBuilder`. A declaration's state has no builder: declarations are evaluated entirely at comptime, and residual code only comes from function bodies.
-- There is no `EvalStack`, so there are no comptime calls: `SIR_call` always emits `IIR_call`. Comptime calls can be added later by giving a `SpecializerState` a stack of frames.
+- There is no `EvalStack`, so there are no comptime calls: `SIR_call` always emits `IIR_call`. Comptime calls can be added later by giving a `Specializer` a stack of frames.
 
 ### Residual functions
 
@@ -95,7 +95,7 @@ If `g`'s body were specialized when `g` is created, it would look up `f` while `
 
 Work is split by whether anything is waiting on it, not by declaration vs. function:
 
-- **Resolve stack.** One stack of entries, each a declaration or a function body (`SpecializerState.function` tells them apart). Whatever is blocked pushes what it needs on top. A function body that looks up a declaration pushes that declaration.
+- **Resolve stack.** One stack of entries, each a declaration or a function body (`Specializer.function` tells them apart). Whatever is blocked pushes what it needs on top. A function body that looks up a declaration pushes that declaration.
 - **Deferred bodies.** `Compiler.functions` is the queue of bodies nobody has asked for yet. After the declaration loop, a second loop runs `for (i = 0; i < functions.len; i++)` and specializes every function that isn't `finished`, re-reading `len` so newly created functions are picked up.
 
 With explicit return types and no comptime calls, nothing ever waits on a function body, so function bodies only enter the resolve stack from the second loop. Once comptime calls exist, a declaration like `n := g()` will need `g`'s body and push it as a dependency; the single stack handles that without changes.
@@ -112,7 +112,7 @@ Deferred bodies only run when the resolve stack is empty, so declarations still 
 
 A function body can use comptime values from the scope it was created in. In `scrap.txt`, the inner lambda calls `g`, a local of `f`'s comptime block. Because bodies are specialized after the declaration's frame is gone, the function needs its own copy of those values.
 
-A capture is a copy taken when the function is created. Keeping the enclosing frame alive instead doesn't work: a lambda created in a comptime loop would see the last iteration's values, frames would have to be kept alive by other function frames, and each kept frame holds its whole `SpecializerState` (~36 KB of `ScopeSpan`s).
+A capture is a copy taken when the function is created. Keeping the enclosing frame alive instead doesn't work: a lambda created in a comptime loop would see the last iteration's values, frames would have to be kept alive by other function frames, and each kept frame holds its whole `Specializer` (~36 KB of `ScopeSpan`s).
 
 Locals compile to `SIR_alloc` + `SIR_store`, and reads are `SIR_load` of the alloc, so the outer frame holds a pointer to a slot, not the value. The capture has to load the value when the function is created, and the body has to read the copy:
 
@@ -158,7 +158,7 @@ Remaining steps:
 - [ ] Change `ValueSlice` to `{ val, offset, len }`
 - [ ] Check that each declaration's type is fully defined once it's resolved
 - [ ] Get `test.blu` and `scrap.txt` running and update `docs/ARCHITECTURE.md`
-- [ ] Later: comptime calls (a stack of frames per `SpecializerState`)
+- [ ] Later: comptime calls (a stack of frames per `Specializer`)
 
 ## Open questions
 

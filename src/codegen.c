@@ -218,7 +218,7 @@ internal void binary_op_type_destinations(CodeGenContext *ctx, BinaryOpKind op, 
   *rhs_type_destination = rhs;
 }
 
-internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKind op, SRef lhs, SRef rhs, SourceIndex source_idx, AstIndex ast_idx) {
+internal InstructionIndex gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKind op, SRef lhs, SRef rhs, SourceKey source_idx, AstIndex ast_idx) {
   // clang-format on
   u8 sir_op;
   switch (op) {
@@ -258,7 +258,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
 SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
   SIrBuilder *builder = &gen->builder;
-  SourceIndex source_idx = gen->source->idx;
+  SourceKey source_idx = gen->source->idx;
   InstructionIndex inst_block = sir_builder_add(builder, SIR_comptime_block, source_idx, idx_ast);
   SRef ref = gen_code(gen, ctx, idx_ast, type_destination);
   sir_builder_end_block_with(builder, inst_block, inst_block, ref, source_idx, idx_ast);
@@ -286,7 +286,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   Tokens *tokens = &gen->source->tokens;
   AstNodes *ast = &gen->source->ast;
   SIrBuilder *builder = &gen->builder;
-  SourceIndex source_idx = gen->source->idx;
+  SourceKey source_idx = gen->source->idx;
   SymbolMap *syms = &gen->syms;
   Source *source = gen->source;
 

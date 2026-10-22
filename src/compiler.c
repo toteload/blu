@@ -28,6 +28,15 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+#define SEGMENTLIST_NAME RESIDUAL_FUNCTION_LIST_NAME
+#define SEGMENTLIST_TYPE RESIDUAL_FUNCTION_LIST_TYPE
+#define SEGMENTLIST_FUNCTION_PREFIX functions
+#define SEGMENTLIST_MIN_SIZE_LOG2 RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT RESIDUAL_FUNCTION_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 internal void *
 cstd_alloc_fn(void *ctx, void *p, usize old_byte_size, usize new_byte_size, u32 align) {
   Unused(ctx);
@@ -137,6 +146,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   // Reserve 0 index to be nil value
   sources_push(&compiler->sources, &compiler->arena);
+  functions_push(&compiler->functions, &compiler->arena);
 
   strings_init(
     &compiler->strings,
@@ -190,7 +200,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 1;
     *v = (Value){
-      .type = compiler->common.type._bool,
+      .type = compiler->types.t_bool,
       .data_size = 1,
       .data = data,
     };
@@ -203,7 +213,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
     u8 *data = values_alloc_data(&compiler->values, 1, 1);
     *data = 0;
     *v = (Value){
-      .type = compiler->common.type._bool,
+      .type = compiler->types.t_bool,
       .data_size = 1,
       .data = data,
     };
@@ -228,13 +238,23 @@ void compiler_deinit(Compiler *compiler) {
 }
 
 void compiler_add_sourcefile(Compiler *compiler, String filename) {
-  SourceIndex idx = compiler->sources.len;
+  SourceKey idx = { compiler->sources.len };
   Source *source = sources_push(&compiler->sources, &compiler->arena);
   source_file_init(source, idx, filename);
 }
 
-Source *compiler_get_source(Compiler *compiler, SourceIndex source_idx) {
-  return sources_ptr_at_unchecked(&compiler->sources, source_idx);
+Source *compiler_get_source(Compiler *compiler, SourceKey source_idx) {
+  return sources_ptr_at_unchecked(&compiler->sources, source_idx.x);
+}
+
+ResidualFunctionKey compiler_add_function(Compiler *compiler, IIrChunk chunk) {
+  ResidualFunctionKey key = { compiler->functions.len };
+  functions_append(&compiler->functions, &compiler->arena, (ResidualFunction){ .chunk = chunk });
+  return key;
+}
+
+ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key) {
+  return functions_ptr_at_unchecked(&compiler->functions, key.x);
 }
 
 void compiler_print_all_messages(Compiler *compiler) {
@@ -253,8 +273,8 @@ void compiler_print_all_messages(Compiler *compiler) {
       decl = decls_extra_get_ptr(&compiler->decls, msg->location.decl_idx);
     }
 
-    if (msg->location.source_idx) {
-      source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx);
+    if (key_is_some(msg->location.source_idx)) {
+      source = sources_ptr_at_unchecked(&compiler->sources, msg->location.source_idx.x);
     }
 
     print_message(&compiler->scratch, &compiler->types, msg, source, decl);
@@ -487,7 +507,7 @@ b32 compile(Compiler *compiler) {
       ValueStub *data = values_alloc_data_type(&compiler->values, ValueStub);
       *data = (ValueStub){ .decl = declidx, };
       *v = (Value){
-        .type = compiler->common.type.stub,
+        .type = compiler->types.t_stub,
         .data_size = sizeof(ValueStub),
         .data = data,
       };
@@ -511,6 +531,7 @@ b32 compile(Compiler *compiler) {
       .types = &compiler->types,
       .values = &compiler->values,
       .common = &compiler->common,
+      .compiler = compiler,
     };
 
     b32 ok = resolve_declarations(&resolve_context, compiler->user_decls.len, user_decls);

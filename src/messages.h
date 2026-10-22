@@ -24,7 +24,7 @@ typedef struct {
   u8 kind;
 
   // `source_idx` is set if kind is byte_offset, token_index or ast_index.
-  SourceIndex source_idx;
+  SourceKey source_idx;
 
   // `decl_idx` is set if kind is ir_instruction.
   DeclarationIndex decl_idx;

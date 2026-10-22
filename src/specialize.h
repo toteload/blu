@@ -71,7 +71,7 @@ typedef struct {
     ValueIndex val;
     DeclarationIndex decl;
   } data;
-} SpecializerState;
+} Specializer;
 
 typedef struct {
   Arena               *perm;
@@ -83,7 +83,8 @@ typedef struct {
   TypeInterner        *types;
   ValueStore          *values;
   Common              *common;
-} Specializer;
+  Compiler *compiler;
+} SpecializerContext;
 
 typedef enum {
   Step_ok,
@@ -115,8 +116,8 @@ typedef struct {
   } data;
 } RunResult;
 
-RunResult run_toplevel_block(Specializer *sp, SpecializerState *state);
-void specializer_resolve_decl(SpecializerState *state, ValueIndex decl_val);
+RunResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
+void specializer_resolve_decl(Specializer *state, ValueIndex decl_val);
 
 #endif // SPECIALIZE_H
 

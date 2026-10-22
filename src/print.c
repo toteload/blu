@@ -196,7 +196,7 @@ internal char const* typekind_string(u8 kind) {
 internal void print_inst_source(FILE *out, Compiler *compiler, AstAndSourceIndex src) {
   fputs(" ; ", out);
 
-  if (src.source_idx == 0 || src.ast_idx == 0) {
+  if (key_is_nil(src.source_idx) || src.ast_idx == 0) {
     fputs("_\n", out);
     return;
   }
