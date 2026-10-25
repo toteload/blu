@@ -28,7 +28,11 @@
 #include "segment_list.h"
 
 typedef struct {
-  IIrChunk chunk;
+  u8 resolve_status;
+  DeclarationKey decl;
+  InstructionOffset inst; // The SIR_func instruction in the chunk of `decl`
+  TypeKey type;           // The declared type unified with the types written on the function value
+  IIrChunk chunk;         // Only valid once fully resolved
 } ResidualFunction;
 
 #define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 5
@@ -70,7 +74,7 @@ void compiler_deinit(Compiler *compiler);
 void compiler_add_sourcefile(Compiler *compiler, String filename);
 Source *compiler_get_source(Compiler *compiler, SourceKey source_idx);
 
-ResidualFunctionKey compiler_add_function(Compiler *compiler, IIrChunk chunk);
+ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction function);
 ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationKey *mods, u32 mod_count, StringKey name, DeclarationKey *out);

@@ -154,8 +154,28 @@ internal b32 finalize_function(SpecializerContext *in, Specializer *state, Scope
 
   Assert(func->breaks_and_returns.len > 0);
 
-  for (u32 i = 1; i < func->breaks_and_returns.len; i++) {
-    Todo();
+  ResidualFunction *residual = compiler_get_function(in->compiler, state->function);
+  TypeKey return_type = types_get(in->types, residual->type)->data.function.return_type;
+
+  for (u32 i = 0; i < func->breaks_and_returns.len; i++) {
+    InstructionOffset ret = breaks_at_unchecked(&func->breaks_and_returns, i);
+    TypeKey type_ret = f->inst_types[ret];
+
+    if (!key_eq(type_ret, return_type)) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = f->decl,
+          .data.offset = ret,
+        },
+        string_lit("Returned value of type %type does not match the return type %type of the function"),
+        type_ret,
+        return_type
+      );
+
+      return False;
+    }
   }
 
   return True;
@@ -437,23 +457,194 @@ internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
   return res;
 }
 
+// Returns the offset of the first instruction of the body of the function at `func`, which comes
+// right after the SIR_return_type and SIR_param blocks.
+internal InstructionOffset function_body_start(SIrChunk *chunk, InstructionOffset func) {
+  SIrFunc *data = sir_chunk_extra(chunk, func);
+
+  InstructionOffset pc = func + 1;
+
+  for (u32 i = 0; i < 1 + data->param_count; i++) {
+    Assert(sir_chunk_op(chunk, pc) == (i == 0 ? SIR_return_type : SIR_param));
+    pc += sir_chunk_data(chunk, pc);
+  }
+
+  return pc;
+}
+
+// Called once the SIR_return_type and SIR_param blocks of a SIR_func have been evaluated.
+// The types written on the function value are unified with the declared type of the SIR_func,
+// which must result in a complete function type. The function is registered, but its body is
+// specialized later.
+internal u32 finish_function_signature(SpecializerContext *in, Specializer *state) {
+  Frame *f = &state->frame;
+
+  Scope *sig = scopes_peek_ptr_unchecked(&f->scopes);
+  Assert(sig->scope_kind == Scope_signature);
+
+  InstructionOffset pc = sig->start;
+  SIrFunc *func = sir_chunk_extra(f->chunk, pc);
+
+  MessageLocation location = {
+    .kind = MessageLocation_ir_instruction,
+    .decl_idx = f->decl,
+    .data.offset = pc,
+  };
+
+  ArenaSnapshot snapshot = arena_scope_begin(in->scratch);
+
+  Type *type_value = arena_push_type_function(in->scratch, func->param_count);
+  type_value->kind = Type_function;
+  type_value->data.function.param_count = func->param_count;
+
+  InstructionOffset at = pc + 1;
+  for (u32 i = 0; i < 1 + func->param_count; i++) {
+    TypeKey *dst = (i == 0) ? &type_value->data.function.return_type : &type_value->data.function.param_types[i - 1];
+
+    b32 ok = expect_type_value_or_nil(in, state, sref_from_instruction(at), dst);
+    if (!ok) {
+      arena_scope_end(in->scratch, snapshot);
+      return Step_error;
+    }
+
+    at += sir_chunk_data(f->chunk, at);
+  }
+
+  TypeKey type_declared;
+  b32 ok = expect_type_value_or_nil(in, state, func->type_destination, &type_declared);
+  if (!ok) {
+    arena_scope_end(in->scratch, snapshot);
+    return Step_error;
+  }
+
+  TypeKey type_func = types_intern(in->types, type_value);
+
+  arena_scope_end(in->scratch, snapshot);
+
+  TypeKey type_unified;
+  u32 err = eval_unify(in->scratch, in->types, type_declared, type_func, &type_unified);
+  switch (Cast(UnifyResult, err)) {
+  case UnifyResult_ok: break;
+  case UnifyResult_types_cannot_be_unified: {
+    Message_error(
+      in->msg_sink,
+      location,
+      string_lit("Function of type %type does not match its declared type %type"),
+      type_func,
+      type_declared
+    );
+    return Step_error;
+  }
+  case UnifyResult_type_is_incomplete: {
+    Message_error(
+      in->msg_sink,
+      location,
+      string_lit("Type of function is incomplete, the types of all parameters and the return type must be known")
+    );
+    return Step_error;
+  }
+  }
+
+  Scope span = pop_scope(f);
+  dealloc_scope_values(in, f, span);
+
+  ResidualFunctionKey key = compiler_add_function(
+    in->compiler,
+    (ResidualFunction){
+      .resolve_status = ResolveStatus_unresolved,
+      .decl = f->decl,
+      .inst = pc,
+      .type = type_unified,
+    }
+  );
+
+  Value *v;
+  ValueKey val = values_alloc(in->values, &v);
+  ValueResidualFunction *data = values_alloc_data_type(in->values, ValueResidualFunction);
+  *data = (ValueResidualFunction){ .key = key };
+  *v = (Value){
+    .type = type_unified,
+    .data_size = sizeof(ValueResidualFunction),
+    .data = data,
+  };
+
+  store_inst_value(f, pc, iref_from_value(val));
+  store_inst_type(f, pc, type_unified);
+
+  state->data.function = key;
+
+  return Step_register_function;
+}
+
+void specializer_init_function(SpecializerContext *sp, Specializer *state, ResidualFunctionKey key) {
+  ResidualFunction *func = compiler_get_function(sp->compiler, key);
+  Declaration *decl = decls_extra_get_ptr(sp->declarations, func->decl);
+
+  zero_struct(Specializer, state);
+
+  state->function = key;
+  state->builder.scratch = sp->scratch;
+
+  Frame *f = &state->frame;
+  IIrBuilder *builder = &state->builder;
+
+  frame_init(f, sp->scratch, decl);
+
+  SIrFunc *ir_func = sir_chunk_extra(f->chunk, func->inst);
+  Scope *scope = push_scope(f, sp->scratch, Scope_block, func->inst, ir_func->instruction_count);
+
+  InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[func->inst]);
+  iir_builder_set_type(builder, inst_func, func->type);
+
+  // The signature was already evaluated when the function value was created. The body uses the
+  // final function type instead of evaluating the SIR_return_type and SIR_param blocks again, since
+  // those may only specify part of the type.
+  TypeFunction *type = &types_get(sp->types, func->type)->data.function;
+
+  InstructionOffset pc = func->inst + 1;
+
+  Assert(sir_chunk_op(f->chunk, pc) == SIR_return_type);
+  store_inst_value(f, pc, iref_from_value(val_from_type(sp, type->return_type)));
+  pc += sir_chunk_data(f->chunk, pc);
+
+  for (u32 i = 0; i < type->param_count; i++) {
+    Assert(sir_chunk_op(f->chunk, pc) == SIR_param);
+
+    InstructionOffset inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc]);
+    iir_builder_set_type(builder, inst_param, type->param_types[i]);
+
+    store_inst_value(f, pc, iref_from_instruction(inst_param));
+    store_inst_type(f, pc, type->param_types[i]);
+
+    pc += sir_chunk_data(f->chunk, pc);
+  }
+
+  scope->pc = pc;
+}
+
 internal u32 step(SpecializerContext *in, Specializer *state) {
   Frame *f = &state->frame;
   IIrBuilder *builder = &state->builder;
 
   Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
 
+  if (s->scope_kind == Scope_signature && s->pc == s->end) {
+    return finish_function_signature(in, state);
+  }
+
   InstructionOffset pc = s->pc;
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
 
   switch (op) {
   case SIR_return_type:
-  case SIR_param:
+  case SIR_param_type:
   case SIR_comptime_block: {
     u32 inst_count = sir_chunk_data(f->chunk, pc);
     push_scope(f, in->scratch, Scope_comptime, pc, inst_count);
     s->pc += inst_count;
   } break;
+
+  case SIR_param: { s->pc += 1; } break;
 
   case SIR_loop:
   case SIR_block: {
@@ -475,76 +666,17 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
   case SIR_func: {
     SIrFunc *func = sir_chunk_extra(f->chunk, pc);
 
-    TypeKey t;
-    b32 ok = expect_some_type_value(in, state, func->type_destination, &t);
-    if (!ok) {
-      Todo();
-    }
-
-    Value *v;
-    ValueKey stub = values_alloc(in->values, &v);
-    ValueStub *data = values_alloc_data_type(in->values, ValueStub);
-    *data = (ValueStub){
-      .decl = f->decl,
-      .inst = pc,
-      .type = t,
-    };
-
-    *v = (Value){
-      .type = in->types->t_stub,
-      .data_size = sizeof(ValueStub),
-      .data = data,
-    };
-
-    store_inst_value(f, pc, iref_from_value(stub));
-
-    state->data.val = stub;
+    // Evaluate the SIR_return_type and SIR_param blocks first. Once the signature scope reaches
+    // its end the function value is created, see finish_function_signature.
+    InstructionOffset body = function_body_start(f->chunk, pc);
+    push_scope(f, in->scratch, Scope_signature, pc, body - pc);
 
     s->pc += func->instruction_count;
-
-    return Step_register_function;
   } break;
-
-  //case SIR_func: {
-  //  SIrFunc *func = sir_chunk_extra(f->chunk, pc);
-  //  u32 inst_count = func->instruction_count;
-
-  //  IIrBuilder *builder = push_ir_builder(in);
-  //  InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[pc]);
-
-  //  TypeKey return_type;
-  //  b32 ok = expect_some_type_value(in, f, func->return_type, &return_type);
-  //  if (!ok) {
-  //    return Step_error;
-  //  }
-
-  //  iir_builder_set_type(builder, inst_func, return_type);
-
-  //  for (u32 i = 0; i < func->param_count; i++) {
-  //    TypeKey param_type;
-  //    ok = expect_some_type_value(in, f, (SRef){sir_chunk_data(f->chunk, pc + 1 + i)}, &param_type);
-  //    if (!ok) {
-  //      Todo(); // report problem. can this happen?
-  //      return Step_error;
-  //    }
-
-  //    InstructionOffset inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc + 1 + i]);
-  //    iir_builder_set_type(builder, inst_param, param_type);
-
-  //    store_inst_value(f, pc + 1 + i, iref_from_instruction(inst_param));
-  //    f->inst_types[pc + 1 + i] = param_type;
-  //  }
-
-  //  push_function_scope(f, pc, func->param_count, inst_count);
-
-  //  s->pc += inst_count;
-  //} break;
 
   case SIR_get_decl_value: {
     DeclarationKey decl_idx = {sir_chunk_data(f->chunk, pc)};
     Declaration *decl = decls_extra_get_ptr(in->declarations, decl_idx);
-
-    s->pc += 1;
 
     switch (Cast(DeclarationKind, decl->kind)) {
     case Declaration_root: Panic(); break;
@@ -555,10 +687,28 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
       store_inst_value(f, pc, iref_from_value(ptr));
     } break;
     case Declaration_decl: {
-      state->data.decl = decl_idx;
-      return Step_resolve_declaration_value;
+      ValueStub *stub = values_get(in->values, decl->data.decl.val)->data;
+
+      switch (Cast(ResolveStatus, stub->resolve_status)) {
+      case ResolveStatus_fully_resolved: {
+        ValueKey ptr = create_value_pointer(in, stub->idx);
+        store_inst_value(f, pc, iref_from_value(ptr));
+      } break;
+
+      // The error has already been reported when resolving the declaration.
+      case ResolveStatus_error: return Step_error;
+
+      // The pc is not advanced, so this instruction runs again once the declaration is resolved.
+      case ResolveStatus_unresolved:
+      case ResolveStatus_resolving: {
+        state->data.decl = decl_idx;
+        return Step_resolve_declaration_value;
+      } break;
+      }
     } break;
     }
+
+    s->pc += 1;
   } break;
 
   case SIR_as: {
@@ -773,8 +923,10 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
 
       pop_scopes_to(in, f, br->block);
 
+      // This was the outermost block of a declaration, its value is the value of the declaration.
       if (scopes_is_empty(&f->scopes)) {
-        Todo();
+        state->data.val = val;
+        return Step_leave_scope;
       }
 
       break;
@@ -795,8 +947,6 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
 
       Scope *block = find_scope(&f->scopes, br->block);
       scope_add_break_or_return(block, in->scratch, pc);
-
-      Assert(s->end == pc + 1); // br may only appear at the end of a block
 
       f->inst_types[pc] = type_br;
       iir_builder_set_type(builder, inst_br, type_br);
@@ -916,6 +1066,8 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
       ValueKey vidx = values_copy(in->values, iref_to_value(val));
       val = iref_from_value(vidx);
       type_ret = type_of_val(in, vidx);
+    } else if (iref_is_nil(val)) {
+      type_ret = (TypeKey){0};
     } else {
       type_ret = f->inst_types[sref_to_instruction(ref_val)];
     }
@@ -931,41 +1083,18 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
     if (pc + 1 == func_scope->end) {
       b32 ok = finalize_function(in, state, func_scope);
       if (!ok) {
-        Todo();
+        return Step_error;
       }
 
-      SIrFunc *ir_func = sir_chunk_extra(f->chunk, func_scope->start);
-
-      u32 param_count = ir_func->param_count;
-
-      Type *type = arena_push_type_function(in->scratch, param_count);
-      type->kind = Type_function;
-      type->data.function.param_count = param_count;
-
-      Todo();
-
-      TypeKey t = types_intern(in->types, type);
-
+      // The function value was already created when its signature was evaluated and it refers to
+      // the function by key, so only the body has to be stored.
       iir_builder_set_data(builder, 0, builder->kinds.len);
 
-      IIrChunk chunk;
-      iir_builder_flatten(builder, in->perm, &chunk);
+      ResidualFunction *func = compiler_get_function(in->compiler, state->function);
+      iir_builder_flatten(builder, in->perm, &func->chunk);
 
-      ResidualFunctionKey key = compiler_add_function(in->compiler, chunk);
-
-      Value *v;
-      ValueKey vidx = values_alloc(in->values, &v);
-      ValueResidualFunction *data = values_alloc_data_type(in->values, ValueResidualFunction);
-      *data = (ValueResidualFunction){ .key = key };
-      *v = (Value){
-        .type = t,
-        .data_size = sizeof(ValueResidualFunction),
-        .data = data,
-      };
-
-      state->data.val = vidx;
-
-      pop_scope(f);
+      Scope span = pop_scope(f);
+      dealloc_scope_values(in, f, span);
 
       return Step_leave_scope;
     }
@@ -1286,7 +1415,52 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
     s->pc += 1;
   } break;
 
-  case SIR_typeof_param: { Todo(); } break;
+  case SIR_typeof_param: {
+    SIrTypeofParam *typeof_param = sir_chunk_extra(f->chunk, pc);
+
+    TypeKey type;
+    b32 ok = expect_some_type_value(in, state, typeof_param->function_type, &type);
+    if (!ok) {
+      return Step_error;
+    }
+
+    Type *t = types_get(in->types, type);
+
+    if (t->kind != Type_function) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("Cannot call a value of type %type"),
+        type
+      );
+
+      return Step_error;
+    }
+
+    if (typeof_param->param_index >= t->data.function.param_count) {
+      Message_error(
+        in->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("Too many arguments for function of type %type"),
+        type
+      );
+
+      return Step_error;
+    }
+
+    ValueKey v = val_from_type(in, t->data.function.param_types[typeof_param->param_index]);
+    store_inst_value(f, pc, iref_from_value(v));
+
+    s->pc += 1;
+  } break;
 
   case SIR_bitshift_left:
   case SIR_bitshift_right: {
@@ -1742,7 +1916,7 @@ RunResult run_toplevel_block(SpecializerContext *in, Specializer *state) {
     case Step_register_function: {
       return (RunResult){
         .code = Run_register_function,
-        .data.stub = state->data.val,
+        .data.function = state->data.function,
       };
     }
     }

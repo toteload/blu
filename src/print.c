@@ -123,7 +123,9 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
   } break;
   case Type_function: {
     if (flags & PrintFlag_expand_function) {
-      Todo(); //print_iir_chunk(out, compiler, &func->data.chunk);
+      ValueResidualFunction *func = data;
+      fputs("\n", out);
+      print_iir_chunk(out, compiler, &compiler_get_function(compiler, func->key)->chunk);
     } else {
       fprintf(out, "0x%p", data);
     }
@@ -276,7 +278,11 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     void *extra = sir_chunk_extra(chunk, i);
 
     switch (op) {
-    case SIR_typeof_param: Todo();
+    case SIR_typeof_param: {
+      SIrTypeofParam *typeof_param = extra;
+      print_sref(out, compiler, typeof_param->function_type);
+      fprintf(out, " param_index=%u", typeof_param->param_index);
+    } break;
     case SIR_func: {
       SIrFunc *func = extra;
       fprintf(out, "param_count=%u instruction_count=%u type_destination=", func->param_count, func->instruction_count);
@@ -326,6 +332,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_block:
     case SIR_comptime_block:
     case SIR_return_type:
+    case SIR_param_type:
     case SIR_loop: {
       fprintf(out, "count=%u", data);
       stack_push(&blocks, ((BlockPrint){ .count = data - 1, .at = 0 }));
@@ -337,11 +344,11 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       print_sref(out, compiler, br->value);
     } break;
 
+    case SIR_param:
     case SIR_repeat: {
       fprintf(out, "%%%u", data);
     } break;
 
-    case SIR_param:
     case SIR_builtin_debug:
     case SIR_builtin_len:
     case SIR_ret:

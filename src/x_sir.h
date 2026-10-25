@@ -4,6 +4,7 @@
 
 X(SIR_func,              "func",              True,  SIrFunc)
 X(SIR_param,             "param",             False, u32)
+X(SIR_param_type,        "param_type",        False, u32)
 X(SIR_return_type,       "return_type",       False, u32)
 X(SIR_alloc,             "alloc",             False, u32)
 X(SIR_load,              "load",              False, u32)

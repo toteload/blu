@@ -19,6 +19,7 @@
 typedef enum {
   Scope_block,
   Scope_comptime,
+  Scope_signature, // the SIR_return_type and SIR_param blocks of a SIR_func
 } ScopeKind;
 
 typedef struct {
@@ -67,9 +68,11 @@ Scope  pop_scope(Frame *frame);
 typedef struct {
   Frame frame;
   IIrBuilder builder;
+  ResidualFunctionKey function; // the function whose body is specialized, nil for a declaration
   union {
     ValueKey val;
     DeclarationKey decl;
+    ResidualFunctionKey function;
   } data;
 } Specializer;
 
@@ -107,14 +110,16 @@ typedef struct {
   // Run_ok                        - val ...
   // Run_error                     - none
   // Run_resolve_declaration_value - decl is the declaration that needs to be resolved
-  // Run_register_function         - stub is the value of the function just encountered
+  // Run_register_function         - function is the function just encountered, its body still has to be specialized
 
   union {
     ValueKey val;
     DeclarationKey decl;
-    ValueKey stub;
+    ResidualFunctionKey function;
   } data;
 } RunResult;
+
+void specializer_init_function(SpecializerContext *sp, Specializer *state, ResidualFunctionKey key);
 
 RunResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
 void specializer_resolve_decl(Specializer *state, ValueKey decl_val);

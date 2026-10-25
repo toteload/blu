@@ -418,7 +418,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     *condbr_data = (SIrCondbr){
       .cond = cond_val,
-      .otherwise = else_br_inst,
+      .otherwise = then_br + 1,
     };
 
     sir_builder_set_data(builder, block, sir_builder_offset(builder, block));
@@ -476,10 +476,13 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       sir_builder_end_block_with(builder, return_type_inst, return_type_inst, return_type_ref, source_idx, func->return_type);
     }
 
+    InstructionOffset *param_type_offsets = arena_push_array(InstructionOffset, ctx->scratch, func->count);
+
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
 
-      InstructionOffset param_inst = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
+      InstructionOffset param_inst = sir_builder_add(builder, SIR_param_type, source_idx, func->params[i]);
+      param_type_offsets[i] = param_inst;
 
       SRef param_type = {};
       if (ast_param->type) {
@@ -487,6 +490,13 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       }
 
       sir_builder_end_block_with(builder, param_inst, param_inst, param_type, source_idx, ast_param->type);
+    }
+
+    for (u32 i = 0; i < func->count; i++) {
+      AstParam *ast_param = ast_data(ast, func->params[i]);
+
+      InstructionOffset param_inst = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
+      sir_builder_set_data(builder, param_inst, param_type_offsets[i]);
 
       StringKey str = strings_add(ctx->strings, token_string(tokens, text, ast_param->name));
       SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_param, str, param_inst);

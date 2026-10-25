@@ -223,6 +223,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKe
     Type *f = arena_push_type_function(scratch, param_count);
     f->kind = Type_function;
     f->data.function.return_type = return_type;
+    f->data.function.param_count = param_count;
 
     for (u32 i = 0; i < param_count; i++) {
       TypeKey param_type;

@@ -67,7 +67,8 @@ typedef union {
 // clang-format off
 typedef enum {
   SIR_func,              // references SIrFunc
-  SIR_param,             // contains instruction count
+  SIR_param,             // contains InstructionOffset that references its SIR_param_type
+  SIR_param_type,        // contains instruction count
   SIR_return_type,       // contains instruction count
   SIR_alloc,             // contains SRef to a type
   SIR_load,

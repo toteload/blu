@@ -1,4 +1,8 @@
-- [ ] Get project compiling again.
+- Problem: SIR_param is now a block-like instruction that holds a type expression,
+  BUT param was used to occupy a position in the code that the function body can
+  reference in order to use that parameter.
+  This points to a split of param -> param + param_type
+
 - [ ] Test new SIR code layout of if/else
 - [ ] Test new SIR code layout of while
 - [ ] Test new SIR code layout of functions

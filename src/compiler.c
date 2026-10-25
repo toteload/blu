@@ -247,9 +247,9 @@ Source *compiler_get_source(Compiler *compiler, SourceKey source_idx) {
   return sources_ptr_at_unchecked(&compiler->sources, source_idx.x);
 }
 
-ResidualFunctionKey compiler_add_function(Compiler *compiler, IIrChunk chunk) {
+ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction function) {
   ResidualFunctionKey key = { compiler->functions.len };
-  functions_append(&compiler->functions, &compiler->arena, (ResidualFunction){ .chunk = chunk });
+  functions_append(&compiler->functions, &compiler->arena, function);
   return key;
 }
 
@@ -548,7 +548,7 @@ b32 compile(Compiler *compiler) {
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
       String name = strings_get(&compiler->strings, key.name);
 
-      ValueKey val = decl->data.decl.val;
+      ValueKey val = Cast(ValueStub *, values_get(&compiler->values, decl->data.decl.val)->data)->idx;
 
       printf("%.*s : ", Cast(int, name.len), name.str);
       print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
@@ -603,24 +603,26 @@ b32 run_main(Compiler *compiler) {
   }
 
   Declaration *decl_main = decls_extra_get_ptr(&compiler->decls, fn_main);
+  Value *stub = values_get(&compiler->values, decl_main->data.decl.val);
+  Value *vfunc = values_get(&compiler->values, Cast(ValueStub*, stub->data)->idx);
+  ResidualFunctionKey func_key = Cast(ValueResidualFunction*, vfunc->data)->key;
+  ResidualFunction *f = compiler_get_function(compiler, func_key);
 
   // TODO: make sure main has the correct type
 
-  Todo();
+  Interpreter in = {
+    .scratch = &compiler->scratch,
+    .msg_sink = &compiler->msg_sink,
+    .compiler = compiler,
+  };
 
-  //Interpreter in = {
-  //  .scratch = &compiler->scratch,
-  //  .msg_sink = &compiler->msg_sink,
-  //  .compiler = compiler,
-  //};
+  stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
-  //stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
-
-  //u8 buf[16];
-  //u32 err = interpreter_call(&in, chunk, (ValueKey[]){0}, 0, &buf);
-  //if (err) {
-  //  return False;
-  //}
+  u8 buf[16];
+  u32 err = interpreter_call(&in, &f->chunk, (ValueKey[]){0}, 0, &buf);
+  if (err) {
+    return False;
+  }
 
   return True;
 }

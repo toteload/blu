@@ -369,7 +369,17 @@ String write_type(Arena *arena, TypeInterner *types, TypeKey type) {
     return (String){.str = s.str, .len = s.len + a.len};
   } break;
   case Type_function: {
-    Todo();
+    String s = arena_printf(arena, "(");
+    u32 len = s.len;
+    for (u32 i = 0; i < t->data.function.param_count; i++) {
+      if (i != 0) {
+        len += arena_printf(arena, ", ").len;
+      }
+      len += write_type(arena, types, t->data.function.param_types[i]).len;
+    }
+    len += arena_printf(arena, ") ").len;
+    len += write_type(arena, types, t->data.function.return_type).len;
+    return (String){.str = s.str, .len = len};
   } break;
   case Type_slice: {
     String s = arena_printf(arena, "[]", t->data.array.size);

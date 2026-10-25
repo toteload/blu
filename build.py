@@ -4,6 +4,7 @@ import ninja_syntax as n
 from subprocess import run, call
 import sys
 import os
+import glob
 import platform
 
 join = os.path.join
@@ -156,7 +157,19 @@ def create_build_ninja():
 
     add_test_suite(out)
 
+def format_sources():
+    files = sorted(
+        f
+        for d in ['src', 'test']
+        for ext in ['c', 'h']
+        for f in glob.glob(join(d, '**', f'*.{ext}'), recursive=True)
+        )
+    return call(['clang-format', '-i'] + files)
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['format']:
+        sys.exit(format_sources())
+
     create_build_ninja()
     run(['ninja'] + sys.argv[1:])
     comp_commands = open('compile_commands.json', 'w')
