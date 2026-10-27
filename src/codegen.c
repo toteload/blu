@@ -492,6 +492,8 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       sir_builder_end_block_with(builder, param_inst, param_inst, param_type, source_idx, ast_param->type);
     }
 
+    InstructionOffset param_start = sir_builder_offset(builder, 0);
+
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
 
@@ -519,6 +521,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     *data_func = (SIrFunc){
       .type_destination = type_destination,
       .param_count = func->count,
+      .body = param_start,
       .instruction_count = func_instruction_count,
     };
 

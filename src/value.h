@@ -37,6 +37,7 @@ typedef struct {
   DeclarationKey decl;
   InstructionOffset inst;
   TypeKey type;
+  // stubkind?
   ValueKey idx; // only valid if fully resolved
 } ValueStub;
 

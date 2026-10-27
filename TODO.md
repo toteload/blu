@@ -41,9 +41,6 @@
 - [ ] `break`/`continue`
 - [ ] Add `return` expression.
 - [ ] `for` loop
-- [ ] `match` expression.
-  - Can match on integer values.
-  - Can match on enums.
 
 
 ## Types
@@ -65,9 +62,8 @@
     - Then what is the type of `Direction`? I am guessing `distinct enum`?
       - I guess that would mean that enums are nominal. Does that make sense?
   - You can 'size' an enum through integer refinement, e.g. `u32(Direction) dir`.
-- [ ] Add coercion of `bool` to integer types.
 - [ ] Floating point type
-- [ ] Add flow typing
+- [ ] Add flow typing. is this that useful?
 
 - pointer to member of a struct. `PtrY := *{struct { x: i32, y: i32 }}.y` this type is only allowed to point to y member.
 

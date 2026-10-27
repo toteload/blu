@@ -47,6 +47,7 @@ void types_init(TypeInterner *types, InternerOptions *options) {
 }
 
 void types_deinit(TypeInterner *types) {
+  Todo();
 }
 
 TypeKey types_intern(TypeInterner *types, Type *t) {

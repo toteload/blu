@@ -125,11 +125,10 @@ typedef struct {
   SRef lhs;
 } SIrLogicalAndOr;
 
-// A SIR_func instruction is followed by a SIR_return_type instruction and
-// `param_count` SIR_param instructions.
 typedef struct {
   SRef type_destination;
   u32 param_count;
+  InstructionOffset body;
   u32 instruction_count;
 } SIrFunc;
 

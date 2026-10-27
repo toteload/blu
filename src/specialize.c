@@ -457,25 +457,19 @@ internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
   return res;
 }
 
-// Returns the offset of the first instruction of the body of the function at `func`, which comes
-// right after the SIR_return_type and SIR_param blocks.
 internal InstructionOffset function_body_start(SIrChunk *chunk, InstructionOffset func) {
   SIrFunc *data = sir_chunk_extra(chunk, func);
 
   InstructionOffset pc = func + 1;
 
   for (u32 i = 0; i < 1 + data->param_count; i++) {
-    Assert(sir_chunk_op(chunk, pc) == (i == 0 ? SIR_return_type : SIR_param));
+    Assert(sir_chunk_op(chunk, pc) == (i == 0 ? SIR_return_type : SIR_param_type));
     pc += sir_chunk_data(chunk, pc);
   }
 
   return pc;
 }
 
-// Called once the SIR_return_type and SIR_param blocks of a SIR_func have been evaluated.
-// The types written on the function value are unified with the declared type of the SIR_func,
-// which must result in a complete function type. The function is registered, but its body is
-// specialized later.
 internal u32 finish_function_signature(SpecializerContext *in, Specializer *state) {
   Frame *f = &state->frame;
 
@@ -608,7 +602,7 @@ void specializer_init_function(SpecializerContext *sp, Specializer *state, Resid
   pc += sir_chunk_data(f->chunk, pc);
 
   for (u32 i = 0; i < type->param_count; i++) {
-    Assert(sir_chunk_op(f->chunk, pc) == SIR_param);
+    Assert(sir_chunk_op(f->chunk, pc) == SIR_param_type);
 
     InstructionOffset inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst_param, type->param_types[i]);

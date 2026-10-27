@@ -3,3 +3,4 @@ mod main
 fac := |n: i32|: i32 {
   if n <= 0 do 1 else n * fac(n-1)
 }
+
