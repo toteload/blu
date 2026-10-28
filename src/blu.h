@@ -36,6 +36,10 @@ typedef u32 AstIndex;
 #define KEY_FUNCTION_PREFIX declaration_key
 #include "key.h"
 
+#define KEY_NAME StubKey
+#define KEY_FUNCTION_PREFIX stub_key
+#include "key.h"
+
 #define key_is_nil(K) _Generic((K), \
   TypeKey : type_key_is_nil, \
   SourceKey : source_key_is_nil, \

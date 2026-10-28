@@ -25,21 +25,9 @@ typedef struct {
   ResidualFunctionKey key;
 } ValueResidualFunction;
 
-typedef enum {
-  ResolveStatus_unresolved,
-  ResolveStatus_resolving,
-  ResolveStatus_fully_resolved,
-  ResolveStatus_error,
-} ResolveStatus;
-
 typedef struct {
-  u8 resolve_status;
-  DeclarationKey decl;
-  InstructionOffset inst;
-  TypeKey type;
-  // stubkind?
-  ValueKey idx; // only valid if fully resolved
-} ValueStub;
+  StubKey stub;
+} ValueStubRef;
 
 // -----------------------------------------------------------------------------
 
@@ -68,6 +56,7 @@ ValueKey  values_alloc(ValueStore *values, Value **out);
 void     *values_alloc_data(ValueStore *values, u32 size, u32 align);
 void      values_dealloc_data(ValueStore *values, void *data, u32 size);
 void      values_dealloc(ValueStore *values, ValueKey idx);
+ValueKey  values_alloc_stub(ValueStore *values, TypeInterner *types, Stub **stub);
 Value    *values_get(ValueStore *values, ValueKey idx);
 ValueKey  values_copy(ValueStore *values, ValueKey val);
 

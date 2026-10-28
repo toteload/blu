@@ -67,7 +67,7 @@ typedef union {
 // clang-format off
 typedef enum {
   SIR_func,              // references SIrFunc
-  SIR_param,             // contains InstructionOffset that references its SIR_param_type
+  SIR_param,             // contains no data
   SIR_param_type,        // contains instruction count
   SIR_return_type,       // contains instruction count
   SIR_alloc,             // contains SRef to a type
@@ -126,7 +126,6 @@ typedef struct {
 } SIrLogicalAndOr;
 
 typedef struct {
-  SRef type_destination;
   u32 param_count;
   InstructionOffset body;
   u32 instruction_count;

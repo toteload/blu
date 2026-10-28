@@ -6,3 +6,50 @@ f := {
     |a: i32|: i32 { if a < 0 do 1 else f(a-1) }
   }
 }
+
+   0 | decl val=%3 ; fac := |n: i32|: i32 { ...
+   1 |   comptime_block count=2 ; _
+   2 |     br block=%1 _ ; _
+   3 |   comptime_block count=42 ; |n: i32|: i32 { ...
+   4 |     func param_count=1 instruction_count=40 body=%15 ; |n: i32|: i32 { ...
+   5 |       return_type count=5 ; i32
+   6 |         get_decl_value decl=9 ; i32
+   7 |         load %6 ; i32
+   8 |                              
+   9 |         br block=%5 %8 ; i32
+  10 |       param_type count=5 ; n: i32
+  11 |         get_decl_value decl=9 ; i32
+  12 |         load %11 ; i32
+  13 |                               
+  14 |         br block=%10 %13 ; i32
+  15 |       param ; n: i32
+  16 |       block count=27 ; { ...
+  17 |         block count=25 ; if n <= 0 do 1 else n * fac(n-1)
+  18 |                         
+  19 |                                    
+  20 |                               
+  21 |                         
+  22 |                                    
+  23 |           cmp_le %15, comptime_int 0 ; <= 0
+  24 |                                  
+  25 |           condbr cond=%23 otherwise=%28 ; <= 0
+  26 |                                   
+  27 |           br block=%17 comptime_int 1 ; 1
+  28 |                        
+  29 |           get_decl_value decl=14 ; fac
+  30 |           load %29 ; fac
+  31 |                           
+  32 |                                              
+  33 |                         
+  34 |                                    
+  35 |           sub %15, comptime_int 1 ; -1
+  36 |                          
+  37 |           call %30 %35 ; (n-1)
+  38 |                            
+  39 |           mul %15, %37 ; * fac(n-1)
+  40 |                                 
+  41 |           br block=%17 %39 ; * fac(n-1)
+  42 |         br block=%16 %17 ; { ...
+  43 |       ret %16 ; { ...
+  44 |     br block=%3 %4 ; fac := |n: i32|: i32 { ...
+  45 |   br block=%0 %3 ; fac := |n: i32|: i32 { ...

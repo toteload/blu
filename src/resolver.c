@@ -65,7 +65,7 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
   push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
 
-internal void push_resolve_function_entry(SpecializerContext *sp, ResolveStack *stack, ResidualFunctionKey function) {
+internal void push_resolve_function_entry(SpecializerContext *sp, ResolveStack *stack, ValueKey stub) {
   ResolveEntry *entry = resolve_stack_push(stack, sp->scratch);
 
   entry->kind = ResolveEntryKind_function;
@@ -105,9 +105,7 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
     return True;
   }
   case Run_register_function: {
-    // Nothing waits on the body of the function, so it is specialized after the primary stack is
-    // empty. The entry that registered it just continues.
-    push_resolve_function_entry(sp, &resolver->deferred_stack, res.data.function);
+    push_resolve_function_entry(sp, &resolver->deferred_stack, res.data.val);
     return True;
   }
   }

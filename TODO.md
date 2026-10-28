@@ -1,8 +1,3 @@
-- Problem: SIR_param is now a block-like instruction that holds a type expression,
-  BUT param was used to occupy a position in the code that the function body can
-  reference in order to use that parameter.
-  This points to a split of param -> param + param_type
-
 - [ ] Test new SIR code layout of if/else
 - [ ] Test new SIR code layout of while
 - [ ] Test new SIR code layout of functions
@@ -15,6 +10,16 @@
 - [ ] Typecheck main.main before running it
 - [ ] SIR code generation can be moved to `Source`.
 - [ ] ValueSlice should use ValuePointer instead of void*
+
+## Notes and thoughts
+
+- I feel like many of the `SIR_as` instructions can be removed if type checking is done in the specializer at certain steps.
+  This makes the SIR code less noisy, which is nice.
+  I have played around a little bit with this and I think it is very doable.
+  The whole reason that the as instructions are there is because Blu pushes the destination type down into the expression.
+  I am going to get rid of this.
+  Consequently, `as(T)` should then bind tightly instead of loosely.
+
 
 ## Comptime
 

@@ -19,7 +19,7 @@
 typedef enum {
   Scope_block,
   Scope_comptime,
-  Scope_signature, // the SIR_return_type and SIR_param blocks of a SIR_func
+  Scope_signature,
 } ScopeKind;
 
 typedef struct {
@@ -68,11 +68,9 @@ Scope  pop_scope(Frame *frame);
 typedef struct {
   Frame frame;
   IIrBuilder builder;
-  ResidualFunctionKey function; // the function whose body is specialized, nil for a declaration
   union {
     ValueKey val;
     DeclarationKey decl;
-    ResidualFunctionKey function;
   } data;
 } Specializer;
 

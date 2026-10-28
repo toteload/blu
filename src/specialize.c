@@ -542,76 +542,62 @@ internal u32 finish_function_signature(SpecializerContext *in, Specializer *stat
   Scope span = pop_scope(f);
   dealloc_scope_values(in, f, span);
 
-  ResidualFunctionKey key = compiler_add_function(
-    in->compiler,
-    (ResidualFunction){
-      .resolve_status = ResolveStatus_unresolved,
-      .decl = f->decl,
-      .inst = pc,
-      .type = type_unified,
-    }
-  );
-
-  Value *v;
-  ValueKey val = values_alloc(in->values, &v);
-  ValueResidualFunction *data = values_alloc_data_type(in->values, ValueResidualFunction);
-  *data = (ValueResidualFunction){ .key = key };
-  *v = (Value){
+  Stub *stub;
+  ValueKey stub_ref = values_alloc_stub(in->values, &stub);
+  *stub = (Stub){
+    .resolve_status = ResolveStatus_unresolved,
+    .decl = f->decl,
+    .inst = pc,
     .type = type_unified,
-    .data_size = sizeof(ValueResidualFunction),
-    .data = data,
   };
 
-  store_inst_value(f, pc, iref_from_value(val));
+  store_inst_value(f, pc, iref_from_value(stub_ref));
   store_inst_type(f, pc, type_unified);
 
-  state->data.function = key;
+  state->data.val = stub_ref;
 
   return Step_register_function;
 }
 
-void specializer_init_function(SpecializerContext *sp, Specializer *state, ResidualFunctionKey key) {
-  ResidualFunction *func = compiler_get_function(sp->compiler, key);
-  Declaration *decl = decls_extra_get_ptr(sp->declarations, func->decl);
+void specializer_init_function(SpecializerContext *ctx, Specializer *state, ValueKey stub) {
+  Stub *stub = Cast(ValueStubRef*, values_get(ctx->values, stub)->data)->stub;
+  Declaration *decl = decls_extra_get_ptr(ctx->declarations, stub->decl);
 
   zero_struct(Specializer, state);
 
-  state->function = key;
-  state->builder.scratch = sp->scratch;
+  state->builder.scratch = ctx->scratch;
 
   Frame *f = &state->frame;
   IIrBuilder *builder = &state->builder;
 
-  frame_init(f, sp->scratch, decl);
+  frame_init(f, ctx->scratch, decl);
 
-  SIrFunc *ir_func = sir_chunk_extra(f->chunk, func->inst);
-  Scope *scope = push_scope(f, sp->scratch, Scope_block, func->inst, ir_func->instruction_count);
+  SIrFunc *ir_func = sir_chunk_extra(f->chunk, stub->inst);
+  Scope *scope = push_scope(f, ctx->scratch, Scope_block, func->inst, ir_func->instruction_count);
 
-  InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[func->inst]);
-  iir_builder_set_type(builder, inst_func, func->type);
+  InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[stub->inst]);
+  iir_builder_set_type(builder, inst_func, stub->type);
 
-  // The signature was already evaluated when the function value was created. The body uses the
-  // final function type instead of evaluating the SIR_return_type and SIR_param blocks again, since
-  // those may only specify part of the type.
-  TypeFunction *type = &types_get(sp->types, func->type)->data.function;
+  TypeFunction *type = &types_get(ctx->types, stub->type)->data.function;
 
-  InstructionOffset pc = func->inst + 1;
+  InstructionOffset pc = stub->inst + 1;
 
-  Assert(sir_chunk_op(f->chunk, pc) == SIR_return_type);
-  store_inst_value(f, pc, iref_from_value(val_from_type(sp, type->return_type)));
-  pc += sir_chunk_data(f->chunk, pc);
+  for (u32 i = 0; i < 1 + type->param_count; i++) {
+    Assert(sir_chunk_op(f->chunk, pc) == ((i == 0) ? SIR_return_type : SIR_param_type));
+    pc += sir_chunk_data(f->chunk, pc);
+  }
 
   for (u32 i = 0; i < type->param_count; i++) {
-    Assert(sir_chunk_op(f->chunk, pc) == SIR_param_type);
+    Assert(sir_chunk_op(f->chunk, pc) == SIR_param);
 
     InstructionOffset inst_param = iir_builder_add(builder, IIR_param, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst_param, type->param_types[i]);
 
     store_inst_value(f, pc, iref_from_instruction(inst_param));
     store_inst_type(f, pc, type->param_types[i]);
-
-    pc += sir_chunk_data(f->chunk, pc);
   }
+
+  pc += type->param_count;
 
   scope->pc = pc;
 }
@@ -638,7 +624,10 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
     s->pc += inst_count;
   } break;
 
-  case SIR_param: { s->pc += 1; } break;
+  case SIR_param: {
+    Todo();
+    s->pc += 1;
+  } break;
 
   case SIR_loop:
   case SIR_block: {
@@ -660,8 +649,6 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
   case SIR_func: {
     SIrFunc *func = sir_chunk_extra(f->chunk, pc);
 
-    // Evaluate the SIR_return_type and SIR_param blocks first. Once the signature scope reaches
-    // its end the function value is created, see finish_function_signature.
     InstructionOffset body = function_body_start(f->chunk, pc);
     push_scope(f, in->scratch, Scope_signature, pc, body - pc);
 

@@ -27,12 +27,34 @@
 #define SEGMENTLIST_OUTPUT_TYPES
 #include "segment_list.h"
 
+typedef enum {
+  RESOLVE_STATUS_UNRESOLVED,
+  RESOLVE_STATUS_RESOLVING,
+  RESOLVE_STATUS_FULLY_RESOLVED,
+  RESOLVE_STATUS_ERROR,
+} ResolveStatus;
+
 typedef struct {
   u8 resolve_status;
   DeclarationKey decl;
-  InstructionOffset inst; // The SIR_func instruction in the chunk of `decl`
-  TypeKey type;           // The declared type unified with the types written on the function value
-  IIrChunk chunk;         // Only valid once fully resolved
+  InstructionOffset inst;
+  TypeKey type;
+  ValueKey val;
+} Stub;
+
+#define STUB_LIST_NAME StubList
+#define STUB_LIST_TYPE Stub
+#define STUB_LIST_MIN_SIZE_LOG2 5
+#define STUB_LIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME STUB_LIST_NAME
+#define SEGMENTLIST_TYPE STUB_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 STUB_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT STUB_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_OUTPUT_TYPES
+#include "segment_list.h"
+
+typedef struct {
+  IIrChunk chunk;
 } ResidualFunction;
 
 #define RESIDUAL_FUNCTION_LIST_MIN_SIZE_LOG2 5
@@ -66,6 +88,7 @@ typedef struct Compiler {
   DeclIdxList         user_decls;
 
   ResidualFunctionList functions;
+  StubList stubs;
 } Compiler;
 
 void compiler_init(Compiler *compiler, CLIOptions *options);
@@ -76,6 +99,8 @@ Source *compiler_get_source(Compiler *compiler, SourceKey source_idx);
 
 ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction function);
 ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
+
+StubKey compiler_add_stub(Compiler *compiler, DeclarationKey decl, InstructionOffset inst, TypeKey type);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationKey *mods, u32 mod_count, StringKey name, DeclarationKey *out);
 

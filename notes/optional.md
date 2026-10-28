@@ -98,7 +98,44 @@ Option := |T: type|: type {
   }
 }
 
+Value := union {
+  int: i64,
+  float: f64,
+}
+
+v := .float 0.0001
+
+z := v match {
+  .float y = cast(i64) y,
+  .int   y = y,
+}
+
+loop: while true {
+  x := next() match {
+    .none = break.loop
+    .some x = x
+  }
+}
+
+while let .some x = next() {
+  ...
+}
+
+x := let .some x = next() do x else 0
+
+while next() match .some x {
+}
+
 x := .none
 
 y := x match { .some y => y, _ => 0 };
+y := x match .some y => y else 0;
+
+y := .some y = x do y else 0
+
+for xs, 0.. do *x, i {
+}
 ```
+
+After some more thought I think that optionals should be user code and errors be a special case.
+
