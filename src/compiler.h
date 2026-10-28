@@ -38,7 +38,7 @@ typedef struct {
   u8 resolve_status;
   DeclarationKey decl;
   InstructionOffset inst;
-  TypeKey type;
+  TypeKey result_type;
   ValueKey val;
 } Stub;
 
@@ -101,6 +101,7 @@ ResidualFunctionKey compiler_add_function(Compiler *compiler, ResidualFunction f
 ResidualFunction *compiler_get_function(Compiler *compiler, ResidualFunctionKey key);
 
 StubKey compiler_add_stub(Compiler *compiler, DeclarationKey decl, InstructionOffset inst, TypeKey type);
+Stub *compiler_get_stub(Compiler *compiler, StubKey key);
 
 b32 lookup_identifier(DeclarationInterner *decls_keys, DeclarationKey *mods, u32 mod_count, StringKey name, DeclarationKey *out);
 

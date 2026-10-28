@@ -34,7 +34,7 @@ struct Declaration {
       Source *source;
       u32 tree_idx;
       SIrChunk chunk;
-      ValueKey val;
+      StubKey stub;
     } decl;
   } data;
 };

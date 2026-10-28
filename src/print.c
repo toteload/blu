@@ -89,10 +89,10 @@ internal u64 read_unsigned(u16 bitwidth, void *data) {
 
 internal char const *resolve_status_string(ResolveStatus status) {
   switch (status) {
-  case ResolveStatus_unresolved: return "unresolved";
-  case ResolveStatus_resolving: return "resolving";
-  case ResolveStatus_fully_resolved: return "fully_resolved";
-  case ResolveStatus_error: return "error";
+  case RESOLVE_STATUS_UNRESOLVED: return "unresolved";
+  case RESOLVE_STATUS_RESOLVING: return "resolving";
+  case RESOLVE_STATUS_FULLY_RESOLVED: return "fully_resolved";
+  case RESOLVE_STATUS_ERROR: return "error";
   }
 }
 
@@ -102,8 +102,8 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
   Type *t = types_get(&compiler->types, type);
   switch (Cast(TypeKind, t->kind)) {
   case Type_stub: {
-    ValueStub *stub = data;
-    fprintf(out, "status: %s, val: %d", resolve_status_string(stub->resolve_status), stub->idx.x);
+    ValueStubRef *stub = data;
+    fprintf(out, "stub: %u", stub->stub.x);
   } break;
   case Type_comptime_int: {
     fprintf(out, "%lld", Cast(long long, read_signed(64, data)));

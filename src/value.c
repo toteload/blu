@@ -39,27 +39,6 @@ void values_dealloc(ValueStore *values, ValueKey idx) {
   }
 }
 
-ValueKey values_alloc_stub(ValueStore *values, TypeInterner *types, Stub **out) {
-  Value *v;
-  ValueKey key = values_alloc(values, &v);
-  ValueStubRef *ref = values_alloc_data_type(values, ValueStubRef);
-  Stub *stub = values_alloc_data_type(values, Stub);
-
-  *ref = (ValueStubRef){
-    .stub = stub,
-  };
-
-  *v = (Value){
-    .type = types->t_stub,
-    .data_size = sizeof(ValueStubRef),
-    .data = ref,
-  };
-
-  *out = stub;
-
-  return key;
-}
-
 Value *values_get(ValueStore *values, ValueKey idx) {
   return list_ptr_at_unchecked(&values->list, idx.x);
 }

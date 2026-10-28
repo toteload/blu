@@ -28,6 +28,15 @@
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
 #include "segment_list.h"
 
+#define SEGMENTLIST_NAME STUB_LIST_NAME
+#define SEGMENTLIST_TYPE STUB_LIST_TYPE
+#define SEGMENTLIST_FUNCTION_PREFIX stubs
+#define SEGMENTLIST_MIN_SIZE_LOG2 STUB_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT STUB_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
 #define SEGMENTLIST_NAME RESIDUAL_FUNCTION_LIST_NAME
 #define SEGMENTLIST_TYPE RESIDUAL_FUNCTION_LIST_TYPE
 #define SEGMENTLIST_FUNCTION_PREFIX functions
@@ -147,6 +156,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   // Reserve 0 index to be nil value
   sources_push(&compiler->sources, &compiler->arena);
   functions_push(&compiler->functions, &compiler->arena);
+  stubs_push(&compiler->stubs, &compiler->arena);
 
   strings_init(
     &compiler->strings,
@@ -501,16 +511,6 @@ b32 compile(Compiler *compiler) {
 
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, declidx);
       is_ok &= generate_code(&context, decl);
-
-      Value *v;
-      decl->data.decl.val = values_alloc(&compiler->values, &v);
-      ValueStub *data = values_alloc_data_type(&compiler->values, ValueStub);
-      *data = (ValueStub){ .decl = declidx, };
-      *v = (Value){
-        .type = compiler->types.t_stub,
-        .data_size = sizeof(ValueStub),
-        .data = data,
-      };
 
       if (compiler->options->print_sir) {
         print_sir_chunk(stdout, compiler, &decl->data.decl.chunk);

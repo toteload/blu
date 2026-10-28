@@ -10,6 +10,7 @@ typedef enum {
 typedef struct {
   u8 kind;
   u8 is_started; // the entry has run before and is continued
+  StubKey stub;
   Specializer state;
 } ResolveEntry;
 
@@ -31,26 +32,6 @@ typedef struct {
   ResolveStack primary_stack;
   ResolveStack deferred_stack;
 } Resolver;
-
-internal always_inline ValueStub *get_stub(ResolveContext *ctx, ValueKey val) {
-  Value *v = values_get(ctx->values, val);
-  return Cast(ValueStub*, v->data);
-}
-
-// The resolve status of what the entry resolves, either a declaration or the body of a function.
-internal u8 *get_entry_status(ResolveContext *ctx, ResolveEntry *entry) {
-  switch (Cast(ResolveEntryKind, entry->kind)) {
-  case ResolveEntryKind_declaration: {
-    Declaration *d = decls_extra_get_ptr(ctx->decls, entry->state.frame.decl);
-    return &get_stub(ctx, d->data.decl.val)->resolve_status;
-  }
-  case ResolveEntryKind_function: {
-    return &compiler_get_function(ctx->compiler, entry->state.function)->resolve_status;
-  }
-  }
-
-  Unreachable();
-}
 
 internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, DeclarationKey decl) {
   Declaration *d = decls_extra_get_ptr(ctx->decls, decl);
