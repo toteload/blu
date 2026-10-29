@@ -519,7 +519,6 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     u32 func_instruction_count = sir_builder_offset(&gen->builder, inst_func);
 
     *data_func = (SIrFunc){
-      .type_destination = type_destination,
       .param_count = func->count,
       .body = param_start,
       .instruction_count = func_instruction_count,

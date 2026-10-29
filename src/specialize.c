@@ -104,9 +104,10 @@ Scope pop_scope(Frame *frame) {
   return scopes_pop(&frame->scopes);
 }
 
-// Assumes that the frame is for a function instead of a toplevel comptime expression.
 Scope *get_func_scope(Frame *f) {
-  return scopes_ptr_at_unchecked(&f->scopes, 0);
+  Scope *s = scopes_ptr_at_unchecked(&f->scopes, 0);
+  Assert(s->scope_kind == Scope_function);
+  return s;
 }
 
 internal b32 end_residual_block(IIrBuilder *builder, Frame *f, Scope *block) {
@@ -132,9 +133,10 @@ internal b32 end_residual_block(IIrBuilder *builder, Frame *f, Scope *block) {
   return True;
 }
 
-internal b32 finalize_function(SpecializerContext *in, Specializer *state, Scope *func) {
-  IIrBuilder *builder = &state->builder;
+internal b32 finalize_function(SpecializerContext *in, Specializer *state) {
+  IIrBuilder *builder = &state->function.builder;
   Frame *f = &state->frame;
+  Scope *func = get_func_scope(f);
 
   while (True) {
     Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
@@ -154,8 +156,7 @@ internal b32 finalize_function(SpecializerContext *in, Specializer *state, Scope
 
   Assert(func->breaks_and_returns.len > 0);
 
-  ResidualFunction *residual = compiler_get_function(in->compiler, state->function);
-  TypeKey return_type = types_get(in->types, residual->type)->data.function.return_type;
+  TypeKey return_type = state->function.return_type;
 
   for (u32 i = 0; i < func->breaks_and_returns.len; i++) {
     InstructionOffset ret = breaks_at_unchecked(&func->breaks_and_returns, i);
@@ -171,8 +172,7 @@ internal b32 finalize_function(SpecializerContext *in, Specializer *state, Scope
         },
         string_lit("Returned value of type %type does not match the return type %type of the function"),
         type_ret,
-        return_type
-      );
+        return_type);
 
       return False;
     }
@@ -226,7 +226,7 @@ expect_residual_at_instruction_index(Frame *f, InstructionOffset inst) {
 }
 
 internal void pop_finished_scopes(SpecializerContext *in, Specializer *state, InstructionOffset end) {
-  IIrBuilder *builder = &state->builder;
+  IIrBuilder *builder = &state->function.builder;
   Frame *f = &state->frame;
 
   Scope last;
@@ -470,7 +470,7 @@ internal InstructionOffset function_body_start(SIrChunk *chunk, InstructionOffse
   return pc;
 }
 
-internal u32 finish_function_signature(SpecializerContext *in, Specializer *state) {
+internal b32 finalize_function_signature(SpecializerContext *in, Specializer *state, TypeKey *type_signature) {
   Frame *f = &state->frame;
 
   Scope *sig = scopes_peek_ptr_unchecked(&f->scopes);
@@ -478,12 +478,6 @@ internal u32 finish_function_signature(SpecializerContext *in, Specializer *stat
 
   InstructionOffset pc = sig->start;
   SIrFunc *func = sir_chunk_extra(f->chunk, pc);
-
-  MessageLocation location = {
-    .kind = MessageLocation_ir_instruction,
-    .decl_idx = f->decl,
-    .data.offset = pc,
-  };
 
   ArenaSnapshot snapshot = arena_scope_begin(in->scratch);
 
@@ -498,87 +492,43 @@ internal u32 finish_function_signature(SpecializerContext *in, Specializer *stat
     b32 ok = expect_type_value_or_nil(in, state, sref_from_instruction(at), dst);
     if (!ok) {
       arena_scope_end(in->scratch, snapshot);
-      return Step_error;
+      return False;
     }
 
     at += sir_chunk_data(f->chunk, at);
-  }
-
-  TypeKey type_declared;
-  b32 ok = expect_type_value_or_nil(in, state, func->type_destination, &type_declared);
-  if (!ok) {
-    arena_scope_end(in->scratch, snapshot);
-    return Step_error;
   }
 
   TypeKey type_func = types_intern(in->types, type_value);
 
   arena_scope_end(in->scratch, snapshot);
 
-  TypeKey type_unified;
-  u32 err = eval_unify(in->scratch, in->types, type_declared, type_func, &type_unified);
-  switch (Cast(UnifyResult, err)) {
-  case UnifyResult_ok: break;
-  case UnifyResult_types_cannot_be_unified: {
-    Message_error(
-      in->msg_sink,
-      location,
-      string_lit("Function of type %type does not match its declared type %type"),
-      type_func,
-      type_declared
-    );
-    return Step_error;
-  }
-  case UnifyResult_type_is_incomplete: {
-    Message_error(
-      in->msg_sink,
-      location,
-      string_lit("Type of function is incomplete, the types of all parameters and the return type must be known")
-    );
-    return Step_error;
-  }
-  }
+  *type_signature = type_func;
 
-  Scope span = pop_scope(f);
-  dealloc_scope_values(in, f, span);
-
-  Stub *stub;
-  ValueKey stub_ref = values_alloc_stub(in->values, &stub);
-  *stub = (Stub){
-    .resolve_status = ResolveStatus_unresolved,
-    .decl = f->decl,
-    .inst = pc,
-    .type = type_unified,
-  };
-
-  store_inst_value(f, pc, iref_from_value(stub_ref));
-  store_inst_type(f, pc, type_unified);
-
-  state->data.val = stub_ref;
-
-  return Step_register_function;
+  return True;
 }
 
-void specializer_init_function(SpecializerContext *ctx, Specializer *state, ValueKey stub) {
-  Stub *stub = Cast(ValueStubRef*, values_get(ctx->values, stub)->data)->stub;
+void specializer_init_function(SpecializerContext *ctx, Specializer *state, StubKey stub_key) {
+  Stub *stub = compiler_get_stub(ctx->compiler, stub_key);
   Declaration *decl = decls_extra_get_ptr(ctx->declarations, stub->decl);
 
   zero_struct(Specializer, state);
 
-  state->builder.scratch = ctx->scratch;
+  state->function.builder.scratch = ctx->scratch;
 
   Frame *f = &state->frame;
-  IIrBuilder *builder = &state->builder;
+  IIrBuilder *builder = &state->function.builder;
 
   frame_init(f, ctx->scratch, decl);
 
   SIrFunc *ir_func = sir_chunk_extra(f->chunk, stub->inst);
-  Scope *scope = push_scope(f, ctx->scratch, Scope_block, func->inst, ir_func->instruction_count);
+  Scope *scope = push_scope(f, ctx->scratch, Scope_function, func->inst, ir_func->instruction_count);
 
   InstructionOffset inst_func = iir_builder_add(builder, IIR_func, f->chunk->sources[stub->inst]);
-  iir_builder_set_type(builder, inst_func, stub->type);
+  iir_builder_set_type(builder, inst_func, stub->result_type);
 
   TypeFunction *type = &types_get(ctx->types, stub->type)->data.function;
+
+  state->function.return_type = type->return_type;
 
   InstructionOffset pc = stub->inst + 1;
 
@@ -602,14 +552,56 @@ void specializer_init_function(SpecializerContext *ctx, Specializer *state, Valu
   scope->pc = pc;
 }
 
-internal u32 step(SpecializerContext *in, Specializer *state) {
+internal StepResult step(SpecializerContext *in, Specializer *state) {
   Frame *f = &state->frame;
   IIrBuilder *builder = &state->builder;
 
   Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
 
-  if (s->scope_kind == Scope_signature && s->pc == s->end) {
-    return finish_function_signature(in, state);
+  if (s->pc == s->end) {
+    switch (Cast(ScopeKind, s->scope_kind)) {
+    case Scope_signature: {
+      TypeKey type_signature;
+      b32 ok = finalize_function_signature(in, state, &type_signature);
+
+      Scope span = pop_scope(f);
+      dealloc_scope_values(in, f, span);
+
+      if (!ok) {
+        Todo();
+      }
+
+      return (StepResult){
+        .kind = Step_register_function,
+        .data.register_function = {
+          .type_signature = type_signature,
+        },
+      };
+    } break;
+    case Scope_function: {
+      b32 ok = finalize_function(in, state);
+
+      if (!ok) {
+        Todo();
+      }
+
+      Todo();
+
+      // The function value was already created when its signature was evaluated and it refers to
+      // the function by key, so only the body has to be stored.
+      iir_builder_set_data(builder, 0, builder->kinds.len);
+
+      ResidualFunction *func = compiler_get_function(in->compiler, state->function);
+      iir_builder_flatten(builder, in->perm, &func->chunk);
+
+      Scope span = pop_scope(f);
+      dealloc_scope_values(in, f, span);
+
+
+    } break;
+    case Scope_block: { Todo(); } break;
+    case Scope_comptime: { Todo(); } break;
+    }
   }
 
   InstructionOffset pc = s->pc;
@@ -666,30 +658,17 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
       ValueKey val = decl->data.primitive;
       ValueKey ptr = create_value_pointer(in, val);
       store_inst_value(f, pc, iref_from_value(ptr));
+      s->pc += 1;
     } break;
     case Declaration_decl: {
-      ValueStub *stub = values_get(in->values, decl->data.decl.val)->data;
-
-      switch (Cast(ResolveStatus, stub->resolve_status)) {
-      case ResolveStatus_fully_resolved: {
-        ValueKey ptr = create_value_pointer(in, stub->idx);
-        store_inst_value(f, pc, iref_from_value(ptr));
-      } break;
-
-      // The error has already been reported when resolving the declaration.
-      case ResolveStatus_error: return Step_error;
-
-      // The pc is not advanced, so this instruction runs again once the declaration is resolved.
-      case ResolveStatus_unresolved:
-      case ResolveStatus_resolving: {
-        state->data.decl = decl_idx;
-        return Step_resolve_declaration_value;
-      } break;
-      }
+      return (StepResult){
+        .kind = Step_resolve_declaration_value,
+        .data.resolve_decl = {
+          .decl = decl_idx,
+        },
+      };
     } break;
     }
-
-    s->pc += 1;
   } break;
 
   case SIR_as: {
@@ -713,7 +692,7 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
     TypeKey type_dst;
     b32 ok = expect_some_type_value(in, state, as->type_dst, &type_dst);
     if (!ok) {
-      return Step_error;
+      return (StepResult){ .kind = Step_error };
     }
 
     f->inst_types[pc] = type_dst;
@@ -1061,27 +1040,7 @@ internal u32 step(SpecializerContext *in, Specializer *state) {
     Scope *func_scope = get_func_scope(f);
     scope_add_break_or_return(func_scope, in->scratch, pc);
 
-    if (pc + 1 == func_scope->end) {
-      b32 ok = finalize_function(in, state, func_scope);
-      if (!ok) {
-        return Step_error;
-      }
-
-      // The function value was already created when its signature was evaluated and it refers to
-      // the function by key, so only the body has to be stored.
-      iir_builder_set_data(builder, 0, builder->kinds.len);
-
-      ResidualFunction *func = compiler_get_function(in->compiler, state->function);
-      iir_builder_flatten(builder, in->perm, &func->chunk);
-
-      Scope span = pop_scope(f);
-      dealloc_scope_values(in, f, span);
-
-      return Step_leave_scope;
-    }
-
-    // early return
-    Todo();
+    s->pc += 1;
   } break;
 
   case SIR_condbr: {
@@ -1875,7 +1834,7 @@ RunResult run_toplevel_block(SpecializerContext *in, Specializer *state) {
   while (True) {
     StepResult res = step(in, state);
 
-    switch (res) {
+    switch (Cast(StepResultKind, res.kind)) {
     case Step_ok: continue;
     case Step_error: return (RunResult){ .code = Run_error, };
     case Step_leave_scope: {

@@ -548,14 +548,16 @@ b32 compile(Compiler *compiler) {
       Declaration *decl = decls_extra_get_ptr(&compiler->decls, idx);
       String name = strings_get(&compiler->strings, key.name);
 
-      ValueKey val = Cast(ValueStub *, values_get(&compiler->values, decl->data.decl.val)->data)->idx;
+      Todo();
 
-      printf("%.*s : ", Cast(int, name.len), name.str);
-      print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
-      printf(" = ");
-      Value *v = values_get(&compiler->values, val);
-      print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
-      printf("\n");
+      //ValueKey val = Cast(ValueStub *, values_get(&compiler->values, decl->data.decl.val)->data)->idx;
+
+      //printf("%.*s : ", Cast(int, name.len), name.str);
+      //print_type(stdout, &compiler->types, values_get(&compiler->values, val)->type);
+      //printf(" = ");
+      //Value *v = values_get(&compiler->values, val);
+      //print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
+      //printf("\n");
     }
   }
 

@@ -285,8 +285,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     } break;
     case SIR_func: {
       SIrFunc *func = extra;
-      fprintf(out, "param_count=%u instruction_count=%u body=%%%u type_destination=", func->param_count, func->instruction_count, func->body);
-      print_sref(out, compiler, func->type_destination);
+      fprintf(out, "param_count=%u instruction_count=%u body=%%%u", func->param_count, func->instruction_count, func->body);
       stack_push(&blocks, ((BlockPrint){ .count = func->instruction_count - 1, .at = 0 }));
     } break;
 

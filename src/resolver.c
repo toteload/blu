@@ -46,23 +46,13 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
   push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
 
-internal void push_resolve_function_entry(SpecializerContext *sp, ResolveStack *stack, ValueKey stub) {
-  ResolveEntry *entry = resolve_stack_push(stack, sp->scratch);
-
-  entry->kind = ResolveEntryKind_function;
-  entry->is_started = False;
-
-  specializer_init_function(sp, &entry->state, function);
-}
-
 internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, SpecializerContext *sp) {
   ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
-  u8 *status = get_entry_status(ctx, entry);
+  Stub *stub = compiler_get_stub(ctx->compiler, entry->stub);
 
-  // A continued entry runs the instruction it stopped at again.
   if (!entry->is_started) {
-    Assert(*status == ResolveStatus_unresolved);
-    *status = ResolveStatus_resolving;
+    Assert(stub->resolve_status == RESOLVE_STATUS_UNRESOLVED);
+    stub->resolve_status = RESOLVE_STATUS_RESOLVING;
     entry->is_started = True;
   }
 
@@ -72,12 +62,8 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
   case Run_error:
     return False;
   case Run_ok: {
-    if (entry->kind == ResolveEntryKind_declaration) {
-      Declaration *decl = decls_extra_get_ptr(ctx->decls, entry->state.frame.decl);
-      get_stub(ctx, decl->data.decl.val)->idx = res.data.val;
-    }
-
-    *status = ResolveStatus_fully_resolved;
+    Todo(); // set the value of the stub
+    stub->resolve_status = RESOLVE_STATUS_FULLY_RESOLVED;
     resolve_stack_pop(&resolver->primary_stack);
     return True;
   }
@@ -86,7 +72,19 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
     return True;
   }
   case Run_register_function: {
-    push_resolve_function_entry(sp, &resolver->deferred_stack, res.data.val);
+    StubKey stub = compiler_add_stub(
+      ctx->compiler,
+      res.data.register_function.decl,
+      res.data.register_function.inst,
+      res.data.register_function.type_signature);
+
+    ResolveEntry *entry = resolve_stack_push(&resolver->deferred_stack, sp->scratch);
+
+    entry->kind = ResolveEntryKind_function;
+    entry->is_started = False;
+
+    specializer_init_function(sp, &entry->state, stub);
+
     return True;
   }
   }
@@ -97,7 +95,8 @@ internal b32 try_resolve_entry(ResolveContext *ctx, Resolver *resolver, Speciali
 internal void clear_resolve_stack_with_error(ResolveContext *ctx, ResolveStack *stack) {
   while (!resolve_stack_is_empty(stack)) {
     ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(stack);
-    *get_entry_status(ctx, entry) = ResolveStatus_error;
+    Stub *stub = compiler_get_stub(ctx->compiler, entry->stub);
+    stub->resolve_status = RESOLVE_STATUS_ERROR;
     resolve_stack_pop(stack);
   }
 }
@@ -105,10 +104,11 @@ internal void clear_resolve_stack_with_error(ResolveContext *ctx, ResolveStack *
 internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, SpecializerContext *sp) {
   while (!resolve_stack_is_empty(&resolver->primary_stack)) {
     ResolveEntry *entry = resolve_stack_peek_ptr_unchecked(&resolver->primary_stack);
+    Stub *stub = compiler_get_stub(ctx->compiler, entry->stub);
 
-    switch (*get_entry_status(ctx, entry)) {
-    case ResolveStatus_unresolved: break;
-    case ResolveStatus_resolving: {
+    switch (stub->resolve_status) {
+    case RESOLVE_STATUS_UNRESOLVED: break;
+    case RESOLVE_STATUS_RESOLVING: {
       if (!entry->is_started) {
         Message_error(
           ctx->msg_sink,
@@ -126,8 +126,8 @@ internal b32 try_resolve_primary_stack(ResolveContext *ctx, Resolver *resolver, 
 
       break;
     }
-    case ResolveStatus_fully_resolved: Panic(); // This should never happen
-    case ResolveStatus_error: Panic(); // This should never happen
+    case RESOLVE_STATUS_FULLY_RESOLVED: Panic(); // This should never happen
+    case RESOLVE_STATUS_ERROR: Panic(); // This should never happen
     }
 
     b32 ok = try_resolve_entry(ctx, resolver, sp);
@@ -160,11 +160,11 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
   for (u32 i = 0; i < decls_to_resolve_count; i++) {
     DeclarationKey decl_idx = decls_to_resolve[i];
     Declaration *decl = decls_extra_get_ptr(ctx->decls, decl_idx);
-    ValueStub *stub = get_stub(ctx, decl->data.decl.val);
+    Stub *stub = compiler_get_stub(ctx->compiler, decl->data.decl.stub);
 
-    Assert(stub->resolve_status != ResolveStatus_resolving);
+    Assert(stub->resolve_status != RESOLVE_STATUS_RESOLVING);
 
-    if (stub->resolve_status == ResolveStatus_error || stub->resolve_status == ResolveStatus_fully_resolved) {
+    if (stub->resolve_status == RESOLVE_STATUS_ERROR || stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED) {
       continue;
     }
 

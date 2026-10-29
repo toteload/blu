@@ -1,0 +1,31 @@
+f := |x: bool|: (i32, i32) i32 {
+  if x {
+    |a, b| a + b
+  } else {
+    |a, b| a - b  
+  }
+}
+
+g := |x: bool|: (i32, i32) i32 {
+  y := ::tmp {
+    if x {
+      break ::tmp |a, b| a + b 
+    }
+
+    |a: i32, b: i32|: i32 { a - b }
+  }
+
+  // y does not have a declared type that can be propagated through.
+  // the ::tmp block will have the two functions registered as the values that can become the values
+  // of the block.
+  // After the block closes we can unify the types.
+  // the last function has full type information and is compatible with the first function, so it typechecks.
+
+  y
+}
+
+main := || {
+  a : i32 = 4
+  b : i32 = 9
+  c := f(false)(a, b)
+}

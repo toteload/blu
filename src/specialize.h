@@ -19,6 +19,7 @@
 typedef enum {
   Scope_block,
   Scope_comptime,
+  Scope_function,
   Scope_signature,
 } ScopeKind;
 
@@ -67,11 +68,11 @@ Scope  pop_scope(Frame *frame);
 
 typedef struct {
   Frame frame;
-  IIrBuilder builder;
-  union {
-    ValueKey val;
-    DeclarationKey decl;
-  } data;
+  struct {
+    IIrBuilder builder;
+    TypeKey    return_type;
+  } function;
+  ValueKey val; // TODO what is this used for again?
 } Specializer;
 
 typedef struct {
@@ -84,42 +85,37 @@ typedef struct {
   TypeInterner        *types;
   ValueStore          *values;
   Common              *common;
-  Compiler *compiler;
+  Compiler            *compiler;
 } SpecializerContext;
 
 typedef enum {
-  Step_ok,
+  Step_next_step,
+  Step_finished,
   Step_error,
   Step_resolve_declaration_value,
   Step_register_function,
-  Step_leave_scope,
-} StepResult;
-
-typedef enum {
-  Run_ok,
-  Run_error = Step_error,
-  Run_resolve_declaration_value = Step_resolve_declaration_value,
-  Run_register_function = Step_register_function,
-} RunResultCode;
+} StepResultKind;
 
 typedef struct {
-  u32 code;
-
-  // Run_ok                        - val ...
-  // Run_error                     - none
-  // Run_resolve_declaration_value - decl is the declaration that needs to be resolved
-  // Run_register_function         - function is the function just encountered, its body still has to be specialized
-
+  u8 kind;
   union {
-    ValueKey val;
-    DeclarationKey decl;
-    ResidualFunctionKey function;
+    struct {
+      ValueKey val;
+    } finished;
+    struct {
+      DeclarationKey decl;
+    } resolve_decl;
+    struct {
+      DeclarationKey decl;
+      InstructionOffset inst;
+      TypeKey type_signature;
+    } register_function;
   } data;
-} RunResult;
+} StepResult;
 
-void specializer_init_function(SpecializerContext *sp, Specializer *state, ResidualFunctionKey key);
+void specializer_init_function(SpecializerContext *sp, Specializer *state, StubKey stub_key);
 
-RunResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
+StepResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
 void specializer_resolve_decl(Specializer *state, ValueKey decl_val);
 
 #endif // SPECIALIZE_H
