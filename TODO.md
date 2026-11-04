@@ -6,7 +6,7 @@
 
 ## Comptime
 
-- [ ] Add `eval` keyword to evaluate expressions at compile time. (or just use `comptime` as the name)
+- [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations. (Maybe not a qualifier, just use `eval`)
   - This means that the declaration only exists at compile time.

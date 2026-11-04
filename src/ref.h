@@ -29,10 +29,12 @@ always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_nil)(REF_NAME r) {
 }
 
 always_inline ValueKey Cat(REF_FUNCTION_PREFIX, _to_value)(REF_NAME r) {
+  ASSERT_SAFE(Cat(REF_FUNCTION_PREFIX, _is_value)(r));
   return (ValueKey){r.x};
 }
 
 always_inline InstructionOffset Cat(REF_FUNCTION_PREFIX, _to_instruction)(REF_NAME r) {
+  ASSERT_SAFE(Cat(REF_FUNCTION_PREFIX, _is_instruction)(r));
   return r.x & ~BITMASK_REF_IS_INSTRUCTION_INDEX;
 }
 

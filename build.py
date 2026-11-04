@@ -90,7 +90,7 @@ def create_build_ninja():
                   '-fansi-escape-codes -fcolor-diagnostics',
                   '-std=c23',
                   '-march=native',
-                  '-DTTLD_DEBUG',
+                  '-DTTLD_SAFE',
                   '-g',
                   '-gcodeview -D_CRT_SECURE_NO_WARNINGS' if is_windows else '',
                   '-fsanitize=address,undefined' if USE_SANITIZERS else '',

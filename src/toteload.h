@@ -140,20 +140,26 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 void ttld_panic_handler(char const *func, char const *file, i32 line);
 
 #ifdef TTLD_COMPILER_CLANG
-#ifdef TTLD_SAFE
-#define Unreachable() PanicMsg("Reach unreachable code")
+  #ifdef TTLD_SAFE
+    #define Unreachable() PanicMsg("Reach unreachable code")
+  #else
+    #define Unreachable() __builtin_unreachable()
+  #endif
 #else
-#define Unreachable() __builtin_unreachable()
-#endif
-#else
-#error "unimplemented: Unreachable"
+  #error "unimplemented: Unreachable"
 #endif
 
 #define Todo() do { fprintf(stderr, "TODO: "); Panic(); } while (0)
 #define TodoMsg(msg) do { fprintf(stderr, "TODO: %s. ", msg); Panic(); } while (0)
 #define Assert(e) assert(e)
-#define Panic()   do { ttld_panic_handler(TTLD_FUNC, __FILE__, __LINE__); Unreachable(); } while (0)
+#define Panic()   do { ttld_panic_handler(TTLD_FUNC, __FILE__, __LINE__); } while (0)
 #define PanicMsg(msg) do { fprintf(stderr, "%s", msg); Panic(); } while (0)
+
+#ifdef TTLD_SAFE
+  #define ASSERT_SAFE(e) Assert(e)
+#else
+  #define ASSERT_SAFE(e) ((void)(e))
+#endif
 
 typedef struct String {
   u8 const *str;

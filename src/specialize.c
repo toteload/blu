@@ -115,6 +115,10 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   case Coercion_invalid:
     Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), from, dst);
     return False;
+
+  case Coercion_array_to_array:
+  case Coercion_slice_to_slice:
+    Todo();
   }
 
   Unreachable();
@@ -261,7 +265,8 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
     return True;
   }
 
-  TypeKey type_unified = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, 0)];
+  TypeKey base_type = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, 0)];
+  TypeKey type_unified = base_type;
   u32 err = UnifyResult_ok;
 
   for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
@@ -278,7 +283,12 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
     }
   }
 
-  if (err != UnifyResult_ok) {
+  if (err == UnifyResult_types_cannot_be_unified) {
+    Todo();
+  }
+
+  if (err == UnifyResult_type_is_incomplete && !key_is_nil(type_unified)) {
+    // partially complete type
     Todo();
   }
 
@@ -407,7 +417,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         IIrCondbr *data = iir_builder_push_data(builder, residual_condbr, IIrCondbr);
         *data = (IIrCondbr){
           .cond = resolve(ctx, f, condbr->cond),
-          .otherwise = iref_to_instruction(resolve(ctx, f, sref_from_instruction(condbr->otherwise))),
+          .otherwise = span->residual_otherwise,
         };
       }
 
@@ -725,6 +735,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   InstructionOffset pc = s->pc;
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
+
+  if (s->condbr && pc == Cast(SIrCondbr*, sir_chunk_extra(f->chunk, s->condbr))->otherwise) {
+    s->residual_otherwise = builder->kinds.len;
+  }
 
   switch (op) {
   case SIR_comptime_block: {
@@ -1173,8 +1187,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef cond = resolve(ctx, f, condbr->cond);
 
     if (iref_is_some_value(cond)) {
-      ValueKey v = iref_to_value(cond);
-      if (key_eq(v, ctx->common->val._true)) {
+      if (*Cast(u8 *, values_get(ctx->values, iref_to_value(cond))->data)) {
         s->pc += 1;
       } else {
         s->pc = condbr->otherwise;
@@ -1690,7 +1703,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
 
   case SIR_repeat: {
-    InstructionOffset loop = sref_to_instruction((SRef){sir_chunk_data(f->chunk, pc)});
+    InstructionOffset loop = sir_chunk_data(f->chunk, pc);
 
     if (frame_is_comptime(f)) {
       Todo();

@@ -33,6 +33,7 @@ typedef struct {
   InstructionOffset residual; // if scope_kind == Scope_block then this refers to the block in residual code
   InstructionOffset condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
   InstructionOffset logical_and; // if this scope wraps a runtime `and` then this refers to the SIR_logical_and
+  InstructionOffset residual_otherwise;
 
   TypeKey result_type; // if scope_kind == Scope_block, the type every br to this block is coerced to, or nil to unify the brs
 

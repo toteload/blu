@@ -204,66 +204,14 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKe
   Type *type_a = types_get(types, a);
   Type *type_b = types_get(types, b);
 
-  if (type_a->kind > type_b->kind) {
-    Swap(Type*, type_a, type_b);
-    Swap(TypeKey, a, b);
+  if (classify_type_coercion(types, a, b) != Coercion_invalid) {
+    *unified = a;
+    return UnifyResult_ok;
   }
 
-  // a and type_a will be the type with the lower or equal TypeKind value
-
-  if (type_a->kind == Type_comptime_int && type_b->kind == Type_integer) {
+  if (classify_type_coercion(types, b, a) != Coercion_invalid) {
     *unified = b;
     return UnifyResult_ok;
-  }
-
-  if (type_a->kind == Type_integer && type_b->kind == Type_integer) {
-    if (type_a->data.integer.signedness != type_b->data.integer.signedness) {
-      return UnifyResult_types_cannot_be_unified;
-    }
-
-    if (type_a->data.integer.bitwidth > type_b->data.integer.bitwidth) {
-      *unified = a;
-    } else {
-      *unified = b;
-    }
-
-    return UnifyResult_ok;
-  }
-
-  if (type_a->kind == Type_array && type_b->kind == Type_array) {
-    if (type_a->data.array.size != type_b->data.array.size) {
-      return UnifyResult_types_cannot_be_unified;
-    }
-
-    u32 res = classify_type_coercion(types, type_a->data.array.base_type, type_b->data.array.base_type);
-    if (res == Coercion_comptime_int_to_intlike) {
-      *unified = a;
-      return UnifyResult_ok;
-    }
-
-    res = classify_type_coercion(types, type_b->data.array.base_type, type_a->data.array.base_type);
-    if (res == Coercion_comptime_int_to_intlike) {
-      *unified = b;
-      return UnifyResult_ok;
-    }
-
-    return UnifyResult_types_cannot_be_unified;
-  }
-
-  if (type_a->kind == Type_slice && type_b->kind == Type_slice) {
-    u32 res = classify_type_coercion(types, type_a->data.array.base_type, type_b->data.array.base_type);
-    if (res == Coercion_comptime_int_to_intlike) {
-      *unified = a;
-      return UnifyResult_ok;
-    }
-
-    res = classify_type_coercion(types, type_b->data.array.base_type, type_a->data.array.base_type);
-    if (res == Coercion_comptime_int_to_intlike) {
-      *unified = b;
-      return UnifyResult_ok;
-    }
-
-    return UnifyResult_types_cannot_be_unified;
   }
 
   if (type_a->kind == Type_function && type_b->kind == Type_function) {
@@ -423,6 +371,10 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     *res = idx;
     return CoerceResult_ok;
   }
+
+  case Coercion_array_to_array:
+  case Coercion_slice_to_slice:
+    Todo();
   }
 }
 

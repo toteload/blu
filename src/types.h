@@ -126,6 +126,8 @@ typedef enum {
   Coercion_int_widen,
   Coercion_bool_to_int,
   Coercion_array_to_slice,
+  Coercion_array_to_array,
+  Coercion_slice_to_slice,
 } CoercionResult;
 
 u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from);

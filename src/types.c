@@ -278,7 +278,37 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
       return Coercion_array_to_slice;
     }
 
-    return Coercion_invalid;
+    if (!is_type_comptime(types, type_from->data.array.base_type)) {
+      return Coercion_invalid;
+    }
+
+    Todo();
+
+    return Coercion_array_to_slice;
+  }
+
+  if (type_from->kind == Type_array && type_to->kind == Type_array) {
+    if (type_from->data.array.size != type_to->data.array.size) {
+      return Coercion_invalid;
+    }
+
+    if (!is_type_comptime(types, type_from->data.array.base_type)) {
+      return Coercion_invalid;
+    }
+
+    Todo();
+
+    return Coercion_array_to_array;
+  }
+
+  if (type_from->kind == Type_slice && type_to->kind == Type_slice) {
+    if (!is_type_comptime(types, type_from->data.slice.base_type)) {
+      return Coercion_invalid;
+    }
+
+    Todo();
+
+    return Coercion_slice_to_slice;
   }
 
   return Coercion_invalid;
@@ -313,6 +343,16 @@ b32 check_can_type_add(Type *t) {
 
 b32 check_can_type_cmp(Type *t) {
   return is_type_int_like(t) || t->kind == Type_bool;
+}
+
+b8 is_type_comptime(TypeInterner *types, TypeKey t) {
+  Type *p = types_get(types, t);
+  switch (Cast(TypeKind, p->kind)) {
+  case Type_comptime_int: return True;
+  case Type_array: return is_type_comptime(types, p->data.array.base_type);
+  case Type_slice: return is_type_comptime(types, p->data.slice.base_type);
+  default: return False;
+  }
 }
 
 internal String arena_printf(Arena *arena, char const *format, ...) {
