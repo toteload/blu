@@ -312,7 +312,12 @@ internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref) {
     return IREF_NIL;
   }
 
-  return f->inst_map[sref_to_instruction(ref)];
+  IRef x = f->inst_map[sref_to_instruction(ref)];
+  if (iref_is_some_value(x)) {
+    return iref_from_value(values_copy(ctx->values, iref_to_value(x)));
+  }
+
+  return x;
 }
 
 internal InstructionOffset expect_residual_at_instruction_index(Frame *f, InstructionOffset inst) {
@@ -348,7 +353,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
       Stub *stub = compiler_get_stub(ctx->compiler, span->data.signature_of_function.stub);
       stub->type_hint = type_signature;
 
-      //dealloc_scope_values(ctx, f, span);
+      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
 
       return (StepResult){
@@ -375,7 +380,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         .data = data,
       };
 
-      //dealloc_scope_values(ctx, f, span);
+      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
 
@@ -421,7 +426,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         };
       }
 
-      //dealloc_scope_values(ctx, f, span);
+      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
 
@@ -431,7 +436,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         Todo();
       }
       last_value = iref_to_value(r);
-      //dealloc_scope_values(ctx, f, span);
+      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
     }
