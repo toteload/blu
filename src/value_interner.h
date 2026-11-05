@@ -4,6 +4,52 @@
 #include "blu.h"
 #include "types.h"
 
+typedef u32 ValueOffset;
+
+#define BITMASK_VREF_IS_OFFSET (Cast(u32, 1) << 31)
+
+typedef struct { u32 x; } ValueRef;
+
+always_inline b32 vref_is_value(ValueRef r) {
+  return (r.x & BITMASK_VREF_IS_OFFSET) == 0;
+}
+
+always_inline b32 vref_is_some_value(ValueRef r) {
+  return r.x != 0 && vref_is_value(r);
+}
+
+always_inline b32 vref_is_offset(ValueRef r) {
+  return (r.x & BITMASK_VREF_IS_OFFSET) != 0;
+}
+
+always_inline b32 vref_is_nil(ValueRef r) {
+  return r.x == 0;
+}
+
+always_inline ValueKey vref_to_value(ValueRef r) {
+  ASSERT_SAFE(vref_is_value(r));
+  return (ValueKey){r.x};
+}
+
+always_inline ValueOffset vref_to_offset(ValueRef r) {
+  ASSERT_SAFE(vref_is_offset(r));
+  return r.x & ~BITMASK_VREF_IS_OFFSET;
+}
+
+always_inline ValueRef vref_from_offset(ValueOffset offset) {
+  return (ValueRef){offset | BITMASK_VREF_IS_OFFSET};
+}
+
+always_inline ValueRef vref_from_value(ValueKey key) {
+  return (ValueRef){key.x};
+}
+
+always_inline u32 vref_to_u32(ValueRef r) {
+  return r.x;
+}
+
+#define VREF_NIL ((ValueRef){0})
+
 enum {
   VAL_TYPE_TYPE = 1,
   VAL_TYPE_COMPTIME_INT,
