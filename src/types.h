@@ -99,6 +99,7 @@ typedef struct {
   TypeKey t_i16;
   TypeKey t_i32;
   TypeKey t_i64;
+  TypeKey t_isize;
 } TypeInterner;
 
 void types_init(TypeInterner *types, InternerOptions *options);
@@ -117,17 +118,15 @@ TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type);
 u32 type_intern_byte_size(Type *type);
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
-TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeKey idx);
+TypeSizeInfo types_size_info_by_key(TypeInterner *types, TypeKey idx);
 
 typedef enum {
   Coercion_invalid,
   Coercion_identical_types,
-  Coercion_comptime_int_to_intlike,
   Coercion_int_widen,
   Coercion_bool_to_int,
   Coercion_array_to_slice,
-  Coercion_array_to_array,
-  Coercion_slice_to_slice,
+  Coercion_comptime,
 } CoercionResult;
 
 u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from);

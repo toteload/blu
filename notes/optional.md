@@ -123,9 +123,6 @@ while let .some x = next() {
 
 x := let .some x = next() do x else 0
 
-while next() match .some x {
-}
-
 x := .none
 
 y := x match { .some y => y, _ => 0 };
@@ -134,6 +131,23 @@ y := x match .some y => y else 0;
 y := .some y = x do y else 0
 
 for xs, 0.. do *x, i {
+}
+
+for *x,i in xs, 0.. {
+}
+
+---
+
+let <pattern> = x else _
+
+while let <pattern> = x {
+  ...
+}
+
+x match { <pattern-arm> = ... }
+
+for <pattern> in xs {
+  ...
 }
 ```
 

@@ -23,6 +23,7 @@ internal Type *intern_type(Arena *arena, Type *x) {
 #define INTERNER_HASH_FN hash_type
 #define INTERNER_COMPARE_FN cmp_type
 #define INTERNER_COPY_FN intern_type
+#define INTERNER_LINKAGE internal
 #define INTERNER_RESERVE_ZERO_INDEX
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
@@ -46,6 +47,7 @@ void types_init(TypeInterner *types, InternerOptions *options) {
   types->t_i16          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}}) };
   types->t_i32          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}) };
   types->t_i64          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}}) };
+  types->t_isize        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Signed, .bitwidth = 64}}) };
   // clang-format on
 }
 
@@ -220,7 +222,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
     return (TypeSizeInfo){.size = 16, .align = 8, .stride = 16};
   }
   case Type_array: {
-    TypeSizeInfo size_info = types_size_info_by_index(types, type->data.array.base_type);
+    TypeSizeInfo size_info = types_size_info_by_key(types, type->data.array.base_type);
     u32 size = size_info.stride * type->data.array.size;
     return (TypeSizeInfo){
       .size = size,
@@ -239,9 +241,31 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   return (TypeSizeInfo){0};
 }
 
-TypeSizeInfo types_size_info_by_index(TypeInterner *types, TypeKey idx) {
+TypeSizeInfo types_size_info_by_key(TypeInterner *types, TypeKey idx) {
   Type *type = types_get(types, idx);
   return types_size_info(types, type);
+}
+
+// assumes that
+// - from is a comptime type
+// - to and from are not the same
+u32 classify_comptime_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
+  Type *type_to = types_get(types, to);
+  Type *type_from = types_get(types, from);
+
+  if (type_from->kind == Type_comptime_int) {
+    if (type_to->kind == Type_integer) {
+      return Coercion_comptime;
+    }
+
+    return Coercion_invalid;
+  }
+
+  if (classify_type_coercion(types, to, from) == Coercion_invalid) {
+    return Coercion_invalid;
+  }
+
+  return Coercion_comptime;
 }
 
 u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
@@ -251,14 +275,6 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
 
   Type *type_to = types_get(types, to);
   Type *type_from = types_get(types, from);
-
-  if (type_from->kind == Type_comptime_int) {
-    if (type_to->kind == Type_integer) {
-      return Coercion_comptime_int_to_intlike;
-    }
-
-    return Coercion_invalid;
-  }
 
   if (type_from->kind == Type_integer && type_to->kind == Type_integer) {
     if (type_from->data.integer.signedness == type_to->data.integer.signedness &&
@@ -278,13 +294,7 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
       return Coercion_array_to_slice;
     }
 
-    if (!is_type_comptime(types, type_from->data.array.base_type)) {
-      return Coercion_invalid;
-    }
-
-    Todo();
-
-    return Coercion_array_to_slice;
+    return classify_comptime_coercion(types, type_to->data.slice.base_type, type_from->data.array.base_type);
   }
 
   if (type_from->kind == Type_array && type_to->kind == Type_array) {
@@ -292,13 +302,7 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
       return Coercion_invalid;
     }
 
-    if (!is_type_comptime(types, type_from->data.array.base_type)) {
-      return Coercion_invalid;
-    }
-
-    Todo();
-
-    return Coercion_array_to_array;
+    return classify_comptime_coercion(types, type_to->data.array.base_type, type_from->data.array.base_type);
   }
 
   if (type_from->kind == Type_slice && type_to->kind == Type_slice) {
@@ -306,9 +310,11 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
       return Coercion_invalid;
     }
 
-    Todo();
+    return classify_comptime_coercion(types, type_to->data.slice.base_type, type_from->data.slice.base_type);
+  }
 
-    return Coercion_slice_to_slice;
+  if (is_type_comptime(types, from)) {
+    return classify_comptime_coercion(types, to, from);
   }
 
   return Coercion_invalid;

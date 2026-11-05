@@ -270,7 +270,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     Value *p;
     ValueKey idx = values_alloc(values, &p);
 
-    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    TypeSizeInfo size_info = types_size_info_by_key(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
     memcpy(data, val->data, size_info.size);
 
@@ -287,7 +287,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     Value *p;
     ValueKey idx = values_alloc(values, &p);
 
-    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    TypeSizeInfo size_info = types_size_info_by_key(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
     memset(data, 0, size_info.size);
     *Cast(u8*,data) = *Cast(u8*, val->data);
@@ -306,7 +306,7 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     Value *p;
     ValueKey idx = values_alloc(values, &p);
 
-    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
+    TypeSizeInfo size_info = types_size_info_by_key(types, dst);
     void *data = values_alloc_data(values, size_info.size, size_info.align);
 
     TypeInteger int_src = types_get(types, val->type)->data.integer;
@@ -325,32 +325,36 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
 
     return CoerceResult_ok;
   }
-  case Coercion_comptime_int_to_intlike: {
-    TypeInteger comptime_int = {
-      .signedness = Signed,
-      .bitwidth   = sizeof(ComptimeInt) * 8,
-    };
+  case Coercion_comptime: {
+    if (type_dst->kind == Type_integer && key_eq(val->type, types->t_comptime_int)) {
+      TypeInteger comptime_int = {
+        .signedness = Signed,
+        .bitwidth   = sizeof(ComptimeInt) * 8,
+      };
 
-    TypeSizeInfo size_info = types_size_info_by_index(types, dst);
-    void *data = values_alloc_data(values, size_info.size, size_info.align);
+      TypeSizeInfo size_info = types_size_info_by_key(types, dst);
+      void *data = values_alloc_data(values, size_info.size, size_info.align);
 
-    u32 err = eval_cast_int(comptime_int, val->data, type_dst->data.integer, data);
-    if (err) {
-      values_dealloc_data(values, data, size_info.size);
-      return CoerceResult_comptime_int_value_out_of_range;
+      u32 err = eval_cast_int(comptime_int, val->data, type_dst->data.integer, data);
+      if (err) {
+        values_dealloc_data(values, data, size_info.size);
+        return CoerceResult_comptime_int_value_out_of_range;
+      }
+
+      Value *v;
+      ValueKey idx = values_alloc(values, &v);
+      *v = (Value){
+        .type = dst,
+        .data = data,
+        .data_size = size_info.size,
+      };
+
+      *res = idx;
+
+      return CoerceResult_ok;
     }
 
-    Value *v;
-    ValueKey idx = values_alloc(values, &v);
-    *v = (Value){
-      .type = dst,
-      .data = data,
-      .data_size = size_info.size,
-    };
-
-    *res = idx;
-
-    return CoerceResult_ok;
+    Todo();
   }
   case Coercion_array_to_slice: {
     Value *p;
@@ -371,10 +375,6 @@ u32 eval_coerce(TypeInterner *types, ValueStore *values, TypeKey dst, Value *val
     *res = idx;
     return CoerceResult_ok;
   }
-
-  case Coercion_array_to_array:
-  case Coercion_slice_to_slice:
-    Todo();
   }
 }
 

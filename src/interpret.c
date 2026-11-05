@@ -113,7 +113,7 @@ internal u32 step(Interpreter *in) {
   TypeSizeInfo size_info;
   TypeKey type = iir_chunk_type(f->chunk, pc);
   if (key_is_some(type)) {
-    size_info = types_size_info_by_index(&in->compiler->types, type);
+    size_info = types_size_info_by_key(&in->compiler->types, type);
     local = arena_push(in->scratch, size_info.size, size_info.align);
     f->inst_values[pc] = local;
   }
@@ -179,7 +179,7 @@ internal u32 step(Interpreter *in) {
 
     for (u32 i = 0; i < call->arg_count; i++) {
       TypeSizeInfo param_size_info =
-        types_size_info_by_index(&in->compiler->types, iir_chunk_type(chunk, 1 + i));
+        types_size_info_by_key(&in->compiler->types, iir_chunk_type(chunk, 1 + i));
 
       void *slot = arena_push(in->scratch, param_size_info.size, param_size_info.align);
       memcpy(slot, resolve(in, f, call->args[i]), param_size_info.size);

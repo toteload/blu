@@ -108,17 +108,11 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   }
 
   case Coercion_array_to_slice: Todo();
-  case Coercion_comptime_int_to_intlike:
-    Message_error(ctx->msg_sink, loc, string_lit("Value of type %type must be comptime known"), from);
-    return False;
+  case Coercion_comptime: Todo(); 
 
   case Coercion_invalid:
     Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), from, dst);
     return False;
-
-  case Coercion_array_to_array:
-  case Coercion_slice_to_slice:
-    Todo();
   }
 
   Unreachable();
@@ -1424,7 +1418,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     {
       Value *v;
       idx_alloc = values_alloc(ctx->values, &v);
-      TypeSizeInfo size_info = types_size_info_by_index(ctx->types, type);
+      TypeSizeInfo size_info = types_size_info_by_key(ctx->types, type);
       void *data = values_alloc_data(ctx->values, size_info.size, size_info.align);
       *v = (Value){
         .type = type,
@@ -1858,7 +1852,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         return (StepResult){ .kind = Step_error };
       }
 
-      TypeSizeInfo size_info = types_size_info_by_index(ctx->types, base_type);
+      TypeSizeInfo size_info = types_size_info_by_key(ctx->types, base_type);
 
       Value *v;
       ValueKey res = values_alloc(ctx->values, &v);

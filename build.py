@@ -32,6 +32,7 @@ def add_test_suite(out):
         'messages.test.c',
         'eval.test.c',
         'symbol_map.test.c',
+        'value_interner.test.c',
     ]
 
     outputs = []
@@ -44,6 +45,7 @@ def add_test_suite(out):
     outputs.append(outd('value.c.o'))
     outputs.append(outd('symbol_map.c.o'))
     outputs.append(outd('string_interner.c.o'))
+    outputs.append(outd('value_interner.c.o'))
 
     for f in inputs:
         fout = outd(f'{f}.o')
@@ -133,6 +135,7 @@ def create_build_ninja():
         'symbol_map.c',
         'resolver.c',
         'declaration_interner.c',
+        'value_interner.c',
     ]
 
     outputs = []

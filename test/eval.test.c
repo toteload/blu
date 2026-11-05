@@ -276,7 +276,7 @@ void test_classify_type_coercion(TestResult *test, void *user) {
   TypeKey t_fn_bool = types_intern(&types, &(Type){ .kind = Type_function, .data.function = { .return_type = t_bool, .param_count = 0 } });
 
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_i32), Coercion_identical_types);
-  Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime_int_to_intlike);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime);
   Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_i32), Coercion_identical_types);
   Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_bool), Coercion_invalid);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_bool), Coercion_bool_to_int);
