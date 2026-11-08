@@ -87,6 +87,14 @@ typedef struct {
   ValuePointer ptr;
 } ValueSlice;
 
+typedef struct {
+  ResidualFunctionKey key;
+} ValueResidualFunction;
+
+typedef struct {
+  StubKey stub;
+} ValueStubRef;
+
 typedef Value* ValuePtr;
 
 #define INTERNER_NAME            AuxValueInterner
@@ -101,7 +109,7 @@ typedef struct {
   Arena *scratch;
 } ValueInternerContext;
 
-typedef struct {
+typedef struct ValueInterner {
   AuxValueInterner aux;
   ValueInternerContext context;
 } ValueInterner;
@@ -117,6 +125,7 @@ void values2_init(ValueInterner *values, ValueInternerInitOptions *options);
 void values2_deinit(ValueInterner *values);
 
 ValueKey values2_intern(ValueInterner *values, Value *v);
+ValueKey values2_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size);
 Value *values2_get(ValueInterner *values, ValueKey key);
 
 #endif // VALUE_INTERNER_H

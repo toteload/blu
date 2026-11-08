@@ -64,7 +64,7 @@ typedef u32 AstIndex;
   ValueKey : value_key_eq, \
   DeclarationKey : declaration_key_eq)(K,M)
 
-typedef struct ValueStore ValueStore;
+typedef struct ValueInterner ValueInterner;
 typedef struct SourceAllocator SourceAllocator;
 typedef struct Source Source;
 typedef struct Declaration Declaration;

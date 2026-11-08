@@ -1,18 +1,37 @@
 #include "interpret.h"
-#include "value.h"
 #include "eval.h"
 #include "print.h"
 
 #define MAX_SCOPE_DEPTH 64
 
+typedef struct {
+  usize  len;
+  void  *data;
+} InterpreterSlice;
+
 internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
+  if (iref_is_nil(ref)) {
+    return Null;
+  }
+
   if (iref_is_value(ref)) {
-    Value *v = values_get(&in->compiler->values, iref_to_value(ref));
-    
+    ValueInterner *values = &in->compiler->values;
+    Value *v = values2_get(values, iref_to_value(ref));
+
     while (key_eq(v->type, in->compiler->types.t_stub)) {
       StubKey ref = Cast(ValueStubRef*, v->data)->stub;
       Stub *stub = compiler_get_stub(in->compiler, ref);
-      v = values_get(&in->compiler->values, stub->val);
+      v = values2_get(values, stub->val);
+    }
+
+    if (types_get(&in->compiler->types, v->type)->kind == Type_slice) {
+      ValueSlice *slice = Cast(ValueSlice*, v->data);
+      InterpreterSlice *res = arena_push_one(InterpreterSlice, in->scratch);
+      *res = (InterpreterSlice){
+        .len = slice->len,
+        .data = Cast(u8*, values2_get(values, slice->ptr.val)->data) + slice->ptr.offset,
+      };
+      return res;
     }
 
     return v->data;
@@ -62,8 +81,12 @@ internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionOffset block
 }
 
 internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
+  if (iref_is_nil(ref)) {
+    return (TypeKey){0};
+  }
+
   if (iref_is_value(ref)) {
-    return values_get(&in->compiler->values, iref_to_value(ref))->type;
+    return values2_get(&in->compiler->values, iref_to_value(ref))->type;
   }
 
   return iir_chunk_type(f->chunk, iref_to_instruction(ref));
@@ -209,7 +232,7 @@ internal u32 step(Interpreter *in) {
       base = resolve(in, f, bin->lhs);
       len = t->data.array.size;
     } else {
-      ValueSlice *slice = resolve(in, f, bin->lhs);
+      InterpreterSlice *slice = resolve(in, f, bin->lhs);
       base = slice->data;
       len = slice->len;
     }
@@ -231,7 +254,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_builtin_len: {
-    ValueSlice *slice = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
+    InterpreterSlice *slice = resolve(in, f, (IRef){iir_chunk_data(f->chunk, pc)});
     *Cast(usize *, local) = slice->len;
     f->pc += 1;
   } break;

@@ -1,7 +1,7 @@
 #include "toteload.h"
 #include "blu.h"
 #include "types.h"
-#include "value.h"
+#include "value_interner.h"
 #include "eval.h"
 #include "test.h"
 
@@ -296,35 +296,41 @@ void test_eval_coerce(TestResult *test, void *user) {
 
   TypeInterner types = test_types_init(&arena, &scratch);
 
-  ValueStore values;
-  values_init(&values, &(ValueStoreOptions){ .arena = &arena, .payload_allocator = (Allocator){ .fn = test_alloc_fn } });
-
   TypeKey t_i8   = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 8 } });
   TypeKey t_i64  = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Signed,   .bitwidth = 64 } });
   TypeKey t_u32  = types_intern(&types, &(Type){ .kind = Type_integer, .data.integer = { .signedness = Unsigned, .bitwidth = 32 } });
   TypeKey t_bool = types_intern(&types, &(Type){ .kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
+
+  ValueInterner values;
+  values2_init(&values, &(ValueInternerInitOptions){
+    .storage       = &arena,
+    .map_allocator = (Allocator){ .fn = test_alloc_fn },
+    .scratch       = &scratch,
+    .types         = &types,
+  });
 
   ValueKey res;
   Value *v;
 
   // Widening a signed int sign-extends and yields a fully initialized value of the destination type.
   i8 neg = -5;
-  u32 err = eval_coerce(&types, &values, t_i64, &(Value){ .type = t_i8, .data = &neg, .data_size = 1 }, &res);
+  u32 err = eval_coerce(&types, &values, t_i64, values2_intern_data(&values, t_i8, &neg, sizeof(neg)), &res);
   Test_assert_eq(err, CoerceResult_ok);
-  v = values_get(&values, res);
+  v = values2_get(&values, res);
   Test_assert(key_eq(v->type, t_i64));
-  Test_assert_eq(v->data_size, 8);
+  Test_assert_eq(v->size - sizeof(Value), 8);
   Test_assert_eq(*Cast(i64 *, v->data), -5);
 
   // bool -> int zero-extends.
   u8 yes = 1;
-  err = eval_coerce(&types, &values, t_u32, &(Value){ .type = t_bool, .data = &yes, .data_size = 1 }, &res);
+  err = eval_coerce(&types, &values, t_u32, values2_intern_data(&values, t_bool, &yes, sizeof(yes)), &res);
   Test_assert_eq(err, CoerceResult_ok);
-  v = values_get(&values, res);
+  v = values2_get(&values, res);
   Test_assert(key_eq(v->type, t_u32));
-  Test_assert_eq(v->data_size, 4);
+  Test_assert_eq(v->size - sizeof(Value), 4);
   Test_assert_eq(*Cast(u32 *, v->data), 1);
 
+  values2_deinit(&values);
   arena_deinit(&arena);
   arena_deinit(&scratch);
 }

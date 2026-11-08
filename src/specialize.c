@@ -69,10 +69,10 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   }
 
   if (iref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, iref_to_value(ref));
+    Value *v = values2_get(ctx->values, iref_to_value(ref));
 
     ValueKey val_res;
-    u32 err = eval_coerce(ctx->types, ctx->values, dst, v, &val_res);
+    u32 err = eval_coerce(ctx->types, ctx->values, dst, iref_to_value(ref), &val_res);
     if (err == CoerceResult_comptime_int_value_out_of_range) {
       Message_error(ctx->msg_sink, loc, string_lit("Value of comptime_int is out of range of destination type"));
       return False;
@@ -146,16 +146,6 @@ Scope *find_scope(ScopeStack *scopes, InstructionOffset start_of_block) {
   Panic();
 }
 
-internal void dealloc_scope_values(SpecializerContext *ctx, Frame *f, Scope* span) {
-  // Do not dealloc the value stored at the block address
-  for (u32 i = span->start + 1; i < span->end; i++) {
-    if (iref_is_some_value(f->inst_map[i])) {
-      values_dealloc(ctx->values, iref_to_value(f->inst_map[i]));
-      f->inst_map[i] = (IRef){0};
-    }
-  }
-}
-
 // --- Frame
 
 void frame_init(Frame *f, Arena *arena, Declaration *decl) {
@@ -217,7 +207,7 @@ internal void store_inst_type(Frame *f, InstructionOffset idx, TypeKey type) {
 }
 
 internal TypeKey get_value_type(SpecializerContext *ctx, ValueKey key) {
-  Value *v = values_get(ctx->values, key);
+  Value *v = values2_get(ctx->values, key);
   Type *t = types_get(ctx->types, v->type);
 
   if (t->kind == Type_stub) {
@@ -230,7 +220,7 @@ internal TypeKey get_value_type(SpecializerContext *ctx, ValueKey key) {
 
 internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, sref_to_value(ref));
+    Value *v = values2_get(ctx->values, sref_to_value(ref));
     return v->type;
   }
 
@@ -239,7 +229,7 @@ internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref) {
 
 internal TypeKey get_iref_type(SpecializerContext *ctx, Specializer *sp, IRef ref) {
   if (iref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, iref_to_value(ref));
+    Value *v = values2_get(ctx->values, iref_to_value(ref));
     return v->type;
   }
 
@@ -299,19 +289,10 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
 // instruction.
 internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_value(ref)) {
-    if (sref_is_some_value(ref)) {
-      return iref_from_value(values_copy(ctx->values, sref_to_value(ref)));
-    }
-
-    return IREF_NIL;
+    return iref_from_value(sref_to_value(ref));
   }
 
-  IRef x = f->inst_map[sref_to_instruction(ref)];
-  if (iref_is_some_value(x)) {
-    return iref_from_value(values_copy(ctx->values, iref_to_value(x)));
-  }
-
-  return x;
+  return f->inst_map[sref_to_instruction(ref)];
 }
 
 internal InstructionOffset expect_residual_at_instruction_index(Frame *f, InstructionOffset inst) {
@@ -347,7 +328,6 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
       Stub *stub = compiler_get_stub(ctx->compiler, span->data.signature_of_function.stub);
       stub->type_hint = type_signature;
 
-      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
 
       return (StepResult){
@@ -364,17 +344,9 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
 
       iir_builder_flatten(builder, ctx->perm, &func->chunk);
 
-      Value *v;
-      last_value = values_alloc(ctx->values, &v);
-      ValueResidualFunction *data = values_alloc_data_type(ctx->values, ValueResidualFunction);
-      *data = (ValueResidualFunction){ .key = key };
-      *v = (Value){
-        .type = span->data.function.function_type,
-        .data_size = sizeof(ValueResidualFunction),
-        .data = data,
-      };
+      ValueResidualFunction data = { .key = key };
+      last_value = values2_intern_data(ctx->values, span->data.function.function_type, &data, sizeof(data));
 
-      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
 
@@ -420,7 +392,6 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         };
       }
 
-      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
 
@@ -430,7 +401,6 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
         Todo();
       }
       last_value = iref_to_value(r);
-      dealloc_scope_values(ctx, f, span);
       scopes_pop(&f->scopes);
     } break;
     }
@@ -499,7 +469,7 @@ internal b32 expect_some_comptime_value(SpecializerContext *sp, Specializer *sta
 internal b32 _get_value_expect_type(SpecializerContext *sp, Specializer *state, ValueKey val, TypeKey *out) {
   Frame *f = &state->frame;
 
-  Value *v = values_get(sp->values, val);
+  Value *v = values2_get(sp->values, val);
 
   if (!key_eq(v->type, sp->types->t_type)) {
     Scope *s = scopes_peek_ptr_unchecked(&f->scopes);
@@ -561,39 +531,21 @@ internal b32 expect_type_value_or_nil(SpecializerContext *sp, Specializer *state
 internal TypeKey type_of_val(SpecializerContext *ctx, ValueKey v) {
   Assert(key_is_some(v));
 
-  Value *val = values_get(ctx->values, v);
+  Value *val = values2_get(ctx->values, v);
   return val->type;
 }
 
 internal ValueKey val_from_type(SpecializerContext *ctx, TypeKey t) {
-  Value *v;
-  ValueKey res = values_alloc(ctx->values, &v);
-  TypeKey *data = values_alloc_data(ctx->values, sizeof(TypeKey), Align_of(TypeKey));
-  *data = t;
-  *v = (Value){
-    .type = ctx->types->t_type,
-    .data_size = sizeof(TypeKey),
-    .data = data,
-  };
-  return res;
+  return values2_intern_data(ctx->values, ctx->types->t_type, &t, sizeof(t));
 }
 
 internal ValueKey val_from_usize(SpecializerContext *ctx, usize x) {
-  Value *v;
-  ValueKey res = values_alloc(ctx->values, &v);
-  usize *data = values_alloc_data_type(ctx->values, usize);
-  *data = x;
-  *v = (Value){
-    .type = ctx->types->t_usize,
-    .data_size = sizeof(usize),
-    .data = data,
-  };
-  return res;
+  return values2_intern_data(ctx->values, ctx->types->t_usize, &x, sizeof(x));
 }
 
 internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, sref_to_value(ref));
+    Value *v = values2_get(ctx->values, sref_to_value(ref));
     return v->type;
   }
 
@@ -607,28 +559,14 @@ internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref) {
 }
 
 internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
-  TypeKey type_ptr;
-  {
-    Value *v = values_get(sp->values, idx);
-    type_ptr = types_add_pointer(sp->types, v->type);
-  }
+  TypeKey type_ptr = types_add_pointer(sp->types, values2_get(sp->values, idx)->type);
 
-  Value *v;
-  ValueKey res = values_alloc(sp->values, &v);
-  ValuePointer *data = values_alloc_data_type(sp->values, ValuePointer);
-
-  *data = (ValuePointer){
+  ValuePointer data = {
     .val = idx,
     .offset = 0,
   };
 
-  *v = (Value){
-    .type = type_ptr,
-    .data = data,
-    .data_size = sizeof(ValuePointer),
-  };
-
-  return res;
+  return values2_intern_data(sp->values, type_ptr, &data, sizeof(data));
 }
 
 internal b32 finalize_function_signature(SpecializerContext *ctx, Specializer *state, TypeKey *type_signature) {
@@ -792,15 +730,8 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     StubKey stub = compiler_add_stub(ctx->compiler, decl, inst, (TypeKey){0});
 
-    Value *v;
-    ValueKey ref = values_alloc(ctx->values, &v);
-    ValueStubRef *stub_ref = values_alloc_data_type(ctx->values, ValueStubRef);
-    *stub_ref = (ValueStubRef){.stub = stub};
-    *v = (Value){
-      .type = ctx->types->t_stub,
-      .data_size = sizeof(ValueStubRef),
-      .data = stub_ref,
-    };
+    ValueStubRef stub_ref = { .stub = stub };
+    ValueKey ref = values2_intern_data(ctx->values, ctx->types->t_stub, &stub_ref, sizeof(stub_ref));
 
     store_inst_value(f, pc, iref_from_value(ref));
 
@@ -819,8 +750,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     case Declaration_root: Panic(); break;
     case Declaration_mod: { Todo(); } break;
     case Declaration_primitive: {
-      ValueKey val = values_copy(ctx->values, decl->data.primitive);
-      ValueKey ptr = create_value_pointer(ctx, val);
+      ValueKey ptr = create_value_pointer(ctx, decl->data.primitive);
       store_inst_value(f, pc, iref_from_value(ptr));
       s->pc += 1;
     } break;
@@ -935,13 +865,12 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       u32 size = int_dst.bitwidth / 8;
 
-      Value *v;
-      ValueKey res = values_alloc(ctx->values, &v);
-      void *data = values_alloc_data(ctx->values, size, size);
+      u64 data = 0;
+      Assert(size <= sizeof(data));
 
-      void *payload = values_get(ctx->values, iref_to_value(ref))->data;
+      void *payload = values2_get(ctx->values, iref_to_value(ref))->data;
 
-      u32 err = eval_cast_int(int_src, payload, int_dst, data);
+      u32 err = eval_cast_int(int_src, payload, int_dst, &data);
       if (err) {
         Message_error(
           ctx->msg_sink,
@@ -957,11 +886,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         return (StepResult){ .kind = Step_error };
       }
 
-      *v = (Value){
-        .type = type_dst,
-        .data = data,
-        .data_size = size,
-      };
+      ValueKey res = values2_intern_data(ctx->values, type_dst, &data, size);
 
       store_inst_value(f, pc, iref_from_value(res));
     } else {
@@ -1161,9 +1086,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     if (key_is_some(return_type)) {
       type_ret = return_type;
     } else if (iref_is_some_value(val)) {
-      ValueKey vidx = values_copy(ctx->values, iref_to_value(val));
-      val = iref_from_value(vidx);
-      type_ret = type_of_val(ctx, vidx);
+      type_ret = type_of_val(ctx, iref_to_value(val));
     } else if (iref_is_nil(val)) {
       type_ret = (TypeKey){0};
     } else {
@@ -1186,7 +1109,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef cond = resolve(ctx, f, condbr->cond);
 
     if (iref_is_some_value(cond)) {
-      if (*Cast(u8 *, values_get(ctx->values, iref_to_value(cond))->data)) {
+      if (key_eq(iref_to_value(cond), (ValueKey){VAL_BOOL_TRUE})) {
         s->pc += 1;
       } else {
         s->pc = condbr->otherwise;
@@ -1275,7 +1198,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef val = resolve(ctx, f, ref);
 
     if (iref_is_some_value(val)) {
-      Value *v = values_get(ctx->values, iref_to_value(val));
+      Value *v = values2_get(ctx->values, iref_to_value(val));
       store_inst_value(f, pc, iref_from_value(val_from_usize(ctx, Cast(ValueSlice *, v->data)->len)));
       s->pc += 1;
       break;
@@ -1320,13 +1243,11 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     // TODO make sure it is a pionter
 
     if (iref_is_some_value(val)) {
-      Value *v = values_get(ctx->values, iref_to_value(val));
-      ValuePointer *p = v->data;
+      Value *v = values2_get(ctx->values, iref_to_value(val));
+      ValuePointer *p = Cast(ValuePointer *, v->data);
       Assert(p->offset == 0);
 
-      ValueKey x = values_copy(ctx->values, p->val);
-
-      store_inst_value(f, pc, iref_from_value(x));
+      store_inst_value(f, pc, iref_from_value(p->val));
 
       TypeKey type_idx = type_of_val(ctx, iref_to_value(val));
       Type *t = types_get(ctx->types, type_idx);
@@ -1416,32 +1337,17 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     ValueKey idx_alloc;
     {
-      Value *v;
-      idx_alloc = values_alloc(ctx->values, &v);
+      ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
+
       TypeSizeInfo size_info = types_size_info_by_key(ctx->types, type);
-      void *data = values_alloc_data(ctx->values, size_info.size, size_info.align);
-      *v = (Value){
-        .type = type,
-        .data = data,
-        .data_size = size_info.size,
-      };
+      void *data = arena_push(ctx->scratch, size_info.size, size_info.align);
+      memset(data, 0, size_info.size);
+      idx_alloc = values2_intern_data(ctx->values, type, data, size_info.size);
+
+      arena_scope_end(ctx->scratch, snapshot);
     }
 
-    ValueKey idx_p;
-    {
-      Value *v;
-      idx_p = values_alloc(ctx->values, &v);
-      ValuePointer *data = values_alloc_data_type(ctx->values, ValuePointer);
-      *data = (ValuePointer){
-        .val = idx_alloc,
-        .offset = 0,
-      };
-      *v = (Value){
-        .type = types_add_pointer(ctx->types, type),
-        .data = data,
-        .data_size = sizeof(ValuePointer),
-      };
-    }
+    ValueKey idx_p = create_value_pointer(ctx, idx_alloc);
 
     store_inst_value(f, pc, iref_from_value(idx_p));
 
@@ -1570,10 +1476,8 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     IRef lhs = resolve(ctx, f, data->lhs);
     if (iref_is_some_value(lhs)) {
-      // Compare payloads, not keys: resolve() hands out copies of the canonical true/false values.
-      u8 lhs_bool = *Cast(u8 *, values_get(ctx->values, iref_to_value(lhs))->data);
-      u8 short_circuit_bool = op == SIR_logical_or;
-      if (lhs_bool == short_circuit_bool) {
+      ValueKey short_circuit_bool = (op == SIR_logical_or) ? (ValueKey){VAL_BOOL_TRUE} : (ValueKey){VAL_BOOL_FALSE};
+      if (key_eq(iref_to_value(lhs), short_circuit_bool)) {
         store_inst_value(f, data->block, lhs);
 
         u32 inst_count = sir_chunk_block_count(f->chunk, data->block);
@@ -1822,21 +1726,21 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef index = resolve(ctx, f, bin->rhs);
 
     if (iref_is_some_value(indexable) && iref_is_some_value(index)) {
-      Value *v_indexable = values_get(ctx->values, iref_to_value(indexable));
+      Value *v_indexable = values2_get(ctx->values, iref_to_value(indexable));
 
-      void *base;
+      u8 *base;
       u64 len;
       if (is_array) {
         base = v_indexable->data;
         len = t->data.array.size;
       } else {
-        ValueSlice *slice = v_indexable->data;
-        base = slice->data;
+        ValueSlice *slice = Cast(ValueSlice *, v_indexable->data);
+        base = Cast(u8 *, values2_get(ctx->values, slice->ptr.val)->data) + slice->ptr.offset;
         len = slice->len;
       }
 
       // The index is coerced to a usize by codegen, so it is always 8 bytes wide here.
-      u64 at = read_int_zero_extend(64, values_get(ctx->values, iref_to_value(index))->data);
+      u64 at = read_int_zero_extend(64, values2_get(ctx->values, iref_to_value(index))->data);
 
       if (at >= len) {
         Message_error(
@@ -1854,15 +1758,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       TypeSizeInfo size_info = types_size_info_by_key(ctx->types, base_type);
 
-      Value *v;
-      ValueKey res = values_alloc(ctx->values, &v);
-      void *data = values_alloc_data(ctx->values, size_info.size, size_info.align);
-      memcpy(data, Cast(u8 *, base) + at * size_info.stride, size_info.size);
-      *v = (Value){
-        .type = base_type,
-        .data = data,
-        .data_size = size_info.size,
-      };
+      ValueKey res = values2_intern_data(ctx->values, base_type, base + at * size_info.stride, size_info.size);
 
       store_inst_value(f, pc, iref_from_value(res));
 
@@ -1922,15 +1818,13 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       u8 zero[sizeof(u64)] = {0};
       Assert(size <= sizeof(zero));
 
-      Value *v;
-      ValueKey res = values_alloc(ctx->values, &v);
-      void *data = values_alloc_data(ctx->values, size, size);
+      u64 data = 0;
 
       b32 ok = eval_int_sub_safe(
         int_type,
         zero,
-        values_get(ctx->values, iref_to_value(val))->data,
-        data
+        values2_get(ctx->values, iref_to_value(val))->data,
+        &data
       );
       if (!ok) {
         Message_error(
@@ -1947,11 +1841,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         return (StepResult){ .kind = Step_error };
       }
 
-      *v = (Value){
-        .type = type,
-        .data = data,
-        .data_size = size,
-      };
+      ValueKey res = values2_intern_data(ctx->values, type, &data, size);
 
       store_inst_value(f, pc, iref_from_value(res));
 
@@ -1959,15 +1849,9 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       break;
     }
 
-    Value *v_zero;
-    ValueKey zero = values_alloc(ctx->values, &v_zero);
-    void *data_zero = values_alloc_data(ctx->values, size, size);
-    memset(data_zero, 0, size);
-    *v_zero = (Value){
-      .type = type,
-      .data = data_zero,
-      .data_size = size,
-    };
+    u64 data_zero = 0;
+    Assert(size <= sizeof(data_zero));
+    ValueKey zero = values2_intern_data(ctx->values, type, &data_zero, size);
 
     InstructionOffset inst = iir_builder_add(builder, IIR_int_sub, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
@@ -1996,7 +1880,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef res = resolve(ctx, f, val);
 
     if (iref_is_some_value(res)) {
-      b32 b = *Cast(u8 *, values_get(ctx->values, iref_to_value(res))->data);
+      b32 b = *Cast(u8 *, values2_get(ctx->values, iref_to_value(res))->data);
       store_inst_value(f, pc, iref_from_value(b ? ctx->common->val._false : ctx->common->val._true));
     } else {
       InstructionOffset inst = iir_builder_add(builder, IIR_bit_not, f->chunk->sources[pc]);

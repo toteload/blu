@@ -126,6 +126,25 @@ ValueKey values2_intern(ValueInterner *values, Value *v) {
   return aux_add(&values->aux, v);
 }
 
+ValueKey values2_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size) {
+  Arena *scratch = values->context.scratch;
+  ArenaSnapshot snap = arena_scope_begin(scratch);
+
+  u32 size = Cast(u32, sizeof(Value)) + data_size;
+  Value *v = arena_push(scratch, size, Align_of(Value));
+  v->type = type;
+  v->size = size;
+  if (data_size > 0) {
+    memcpy(v->data, data, data_size);
+  }
+
+  ValueKey res = aux_add(&values->aux, v);
+
+  arena_scope_end(scratch, snap);
+
+  return res;
+}
+
 Value *values2_get(ValueInterner *values, ValueKey key) {
   return aux_get(&values->aux, key);
 }

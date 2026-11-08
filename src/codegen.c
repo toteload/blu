@@ -1,5 +1,4 @@
 #include "blu.h"
-#include "value.h"
 #include "tokens.h"
 #include "messages.h"
 #include "string_interner.h"
@@ -514,15 +513,8 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       Todo();
     }
 
-    Value *v;
-    ValueKey idx = values_alloc(ctx->values, &v);
-    u8 *data = values_alloc_data_type(ctx->values, u8);
-    *data = s.str[3];
-    *v = (Value){
-      .type = ctx->types->t_u8,
-      .data_size = sizeof(u8),
-      .data = data,
-    };
+    u8 data = s.str[3];
+    ValueKey idx = values2_intern_data(ctx->values, ctx->types->t_u8, &data, sizeof(data));
 
     return sref_from_value(idx);
   } break;
@@ -544,15 +536,12 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       return sref_from_value(ctx->common->val.nil);
     }
 
-    Value *v;
-    ValueKey idx = values_alloc(ctx->values, &v);
-    ComptimeInt *data = values_alloc_data(ctx->values, sizeof(ComptimeInt), Align_of(ComptimeInt));
-    *data = Cast(i64, value);
-    *v = (Value){
-      .type = ctx->types->t_comptime_int,
-      .data_size = sizeof(ComptimeInt),
-      .data = data,
-    };
+    if (value > INT64_MAX) {
+      Todo();
+    }
+
+    ComptimeInt data = Cast(ComptimeInt, value);
+    ValueKey idx = values2_intern_data(ctx->values, ctx->types->t_comptime_int, &data, sizeof(data));
 
     return sir_builder_add_as(builder, type_destination, sref_from_value(idx), source_idx, idx_ast);
   } break;
@@ -617,7 +606,9 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     
     String s = token_string(&gen->source->tokens, gen->source->text, *name);
 
-    void *data = values_alloc_data(ctx->values, s.len, 1);
+    ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
+
+    u8 *data = arena_push(ctx->scratch, s.len, 1);
     u32 len;
     decode_string_literal(s, data, &len);
 
@@ -629,13 +620,9 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       },
     });
 
-    Value *v;
-    ValueKey idx = values_alloc(ctx->values, &v);
-    *v = (Value){
-      .type = type,
-      .data = data,
-      .data_size = s.len,
-    };
+    ValueKey idx = values2_intern_data(ctx->values, type, data, len);
+
+    arena_scope_end(ctx->scratch, snapshot);
 
     return sref_from_value(idx);
   } break;

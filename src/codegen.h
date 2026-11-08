@@ -12,7 +12,7 @@ typedef struct {
   MessageSink    *msg_sink;
   StringInterner *strings;
   DeclarationInterner *decls;
-  ValueStore          *values;
+  ValueInterner       *values;
   TypeInterner *types;
 } CodeGenContext;
 

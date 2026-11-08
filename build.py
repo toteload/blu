@@ -42,7 +42,6 @@ def add_test_suite(out):
     outputs.append(outd('messages.c.o'))
     outputs.append(outd('eval.c.o'))
     outputs.append(outd('types.c.o'))
-    outputs.append(outd('value.c.o'))
     outputs.append(outd('symbol_map.c.o'))
     outputs.append(outd('string_interner.c.o'))
     outputs.append(outd('value_interner.c.o'))
@@ -120,7 +119,6 @@ def create_build_ninja():
         'string_interner.c',
         'parse.c',
         'types.c',
-        'value.c',
         'messages.c',
         'eval.c',
         'source_file.c',

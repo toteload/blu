@@ -2,7 +2,9 @@
 - [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `case Ast_declaration` in codegen.c
 - [ ] Typecheck main.main before running it
 - [ ] SIR code generation can be moved to `Source`.
-- [ ] ValueSlice should use ValuePointer instead of void*
+- [ ] Use the same setup for common type keys as is used for the value interner.
+- [ ] Change the signature of the eval_int_* functions to use signedness enum and bitwidth instead of TypeInteger.
+
 
 ## Comptime
 

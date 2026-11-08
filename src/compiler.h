@@ -4,7 +4,7 @@
 #include "blu.h"
 #include "messages.h"
 #include "string_interner.h"
-#include "value.h"
+#include "value_interner.h"
 #include "ir.h"
 #include "cli_options.h"
 #include "declaration_interner.h"
@@ -80,7 +80,7 @@ typedef struct Compiler {
   MessageSink msg_sink;
 
   Common         common;
-  ValueStore     values;
+  ValueInterner  values;
   StringInterner strings;
   TypeInterner   types;
 
