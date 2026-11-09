@@ -1,0 +1,10 @@
+mod main
+
+N : i32 = ::o { if true { break ::o 10 }  20 }
+M : i32 = if true do 1 else 2
+
+main: () i32 = || {
+  #debug(N)
+  #debug(M)
+  0
+}

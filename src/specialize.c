@@ -931,7 +931,13 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       store_inst_value(f, br->block, iref_from_value(val));
 
-      s->pc += 1;
+      for (u32 i = f->scopes.len; i-- > 0;) {
+        Scope *scope = scopes_ptr_at_unchecked(&f->scopes, i);
+        scope->pc = scope->end;
+        if (scope->start == br->block) {
+          break;
+        }
+      }
       break;
     }
 
