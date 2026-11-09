@@ -99,7 +99,6 @@ typedef struct {
   DeclarationInterner *declarations;
   TypeInterner        *types;
   ValueInterner       *values;
-  Common              *common;
   Compiler            *compiler;
 } SpecializerContext;
 

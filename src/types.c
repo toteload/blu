@@ -31,22 +31,22 @@ void types_init(TypeInterner *types, InternerOptions *options) {
   aux_init(&types->_interner, options);
 
   // clang-format off
-  types->t_stub         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_stub}) };
-  types->t_type         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_type}) };
-  types->t_nil          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_nil}) };
-  types->t_bool         = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}}) };
-  types->t_never        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_never}) };
-  types->t_comptime_int = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_comptime_int}) };
-  types->t_u8           = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}) };
-  types->t_u16          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 16}}) };
-  types->t_u32          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 32}}) };
-  types->t_u64          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 64}}) };
-  types->t_usize        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Unsigned, .bitwidth = 64}}) };
-  types->t_i8           = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}) };
-  types->t_i16          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}}) };
-  types->t_i32          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}) };
-  types->t_i64          = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}}) };
-  types->t_isize        = (TypeKey){ aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Signed, .bitwidth = 64}}) };
+  aux_add(&types->_interner, &(Type){.kind = Type_stub});
+  aux_add(&types->_interner, &(Type){.kind = Type_type});
+  aux_add(&types->_interner, &(Type){.kind = Type_nil});
+  aux_add(&types->_interner, &(Type){.kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8}});
+  aux_add(&types->_interner, &(Type){.kind = Type_never});
+  aux_add(&types->_interner, &(Type){.kind = Type_comptime_int});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 16}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 32}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 64}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Unsigned, .bitwidth = 64}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}});
+  aux_add(&types->_interner, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Signed, .bitwidth = 64}});
   // clang-format on
 }
 
@@ -319,8 +319,8 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
   return Coercion_invalid;
 }
 
-internal b32 is_type_int_like(Type *t) {
-  return t->kind == Type_integer || t->kind == Type_comptime_int;
+internal b32 is_type_int_like(TypeKey t) {
+  return (t.x >= TYPE_COMPTIME_INT.x) && (t.x <= TYPE_ISIZE.x);
 }
 
 b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from) {
@@ -328,26 +328,35 @@ b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from) {
     return True;
   }
 
-  Type *type_to = types_get(types, to);
-  Type *type_from = types_get(types, from);
-
-  if (type_to->kind == Type_comptime_int) {
+  if (key_eq(to, TYPE_COMPTIME_INT)) {
     return False;
   }
 
-  return is_type_int_like(type_to) && is_type_int_like(type_from);
+  return is_type_int_like(to) && is_type_int_like(from);
 }
 
 TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type) {
   return types_intern(types, &(Type){.kind = Type_pointer, .data.pointer = {.base_type = base_type}});
 }
 
-b32 check_can_type_add(Type *t) {
+b32 check_type_for_op_bitshift(TypeKey lhs, TypeKey rhs) {
+  return is_type_int_like(lhs) && is_type_int_like(rhs);
+}
+
+b32 check_type_for_op_bitwise(TypeKey t) {
   return is_type_int_like(t);
 }
 
-b32 check_can_type_cmp(Type *t) {
-  return is_type_int_like(t) || t->kind == Type_bool;
+b32 check_type_for_op_arithmetic(TypeKey t) {
+  return is_type_int_like(t);
+}
+
+b32 check_type_for_op_cmp(TypeKey t) {
+  return is_type_int_like(t) || key_eq(t, TYPE_BOOL);
+}
+
+b32 check_type_for_op_negate(TypeKey t) {
+  return is_type_int_like(t);
 }
 
 b8 is_type_comptime(TypeInterner *types, TypeKey t) {

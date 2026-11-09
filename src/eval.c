@@ -298,7 +298,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     return CoerceResult_ok;
   }
   case Coercion_comptime: {
-    if (type_dst->kind == Type_integer && key_eq(v->type, types->t_comptime_int)) {
+    if (type_dst->kind == Type_integer && key_eq(v->type, TYPE_COMPTIME_INT)) {
       TypeInteger comptime_int = {
         .signedness = Signed,
         .bitwidth   = sizeof(ComptimeInt) * 8,

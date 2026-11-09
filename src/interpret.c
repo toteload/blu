@@ -18,7 +18,7 @@ internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
     ValueInterner *values = &in->compiler->values;
     Value *v = values_get(values, iref_to_value(ref));
 
-    while (key_eq(v->type, in->compiler->types.t_stub)) {
+    while (key_eq(v->type, TYPE_STUB)) {
       StubKey ref = Cast(ValueStubRef*, v->data)->stub;
       Stub *stub = compiler_get_stub(in->compiler, ref);
       v = values_get(values, stub->val);

@@ -11,7 +11,6 @@ typedef struct {
   DeclarationInterner *decls;
   TypeInterner *types;
   ValueInterner *values;
-  Common *common;
   Compiler *compiler;
 } ResolveContext;
 

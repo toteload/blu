@@ -38,10 +38,10 @@ internal Value *copy_value(Arena *arena, Value *x) {
 #define INTERNER_OUTPUT_DEFINITIONS
 #include "interner.h"
 
-internal void intern_type(ValueInterner *values, Arena *scratch, TypeInterner *types, TypeKey type) {
+internal void intern_type(ValueInterner *values, Arena *scratch, TypeKey type) {
   u32 size = sizeof(Value) + sizeof(TypeKey);
   Value *v = arena_push(scratch, size, Align_of(Value));
-  v->type = types->t_type;
+  v->type = TYPE_TYPE;
   v->size = size;
   TypeKey *t = Cast(TypeKey*, &v->data);
   *t = type;
@@ -65,23 +65,24 @@ void values_init(ValueInterner *values, ValueInternerInitOptions *options) {
 
   ArenaSnapshot snap = arena_scope_begin(scratch);
 
-  intern_type(values, scratch, types, types->t_type);
-  intern_type(values, scratch, types, types->t_comptime_int);
-  intern_type(values, scratch, types, types->t_never);
-  intern_type(values, scratch, types, types->t_bool);
-  intern_type(values, scratch, types, types->t_i8);
-  intern_type(values, scratch, types, types->t_i16);
-  intern_type(values, scratch, types, types->t_i32);
-  intern_type(values, scratch, types, types->t_i64);
-  intern_type(values, scratch, types, types->t_u8);
-  intern_type(values, scratch, types, types->t_u16);
-  intern_type(values, scratch, types, types->t_u32);
-  intern_type(values, scratch, types, types->t_u64);
-  intern_type(values, scratch, types, types->t_usize);
-  intern_type(values, scratch, types, types->t_isize);
+  intern_type(values, scratch, TYPE_TYPE);
+  intern_type(values, scratch, TYPE_COMPTIME_INT);
+  intern_type(values, scratch, TYPE_NEVER);
+  intern_type(values, scratch, TYPE_BOOL);
+  intern_type(values, scratch, TYPE_I8);
+  intern_type(values, scratch, TYPE_I16);
+  intern_type(values, scratch, TYPE_I32);
+  intern_type(values, scratch, TYPE_I64);
+  intern_type(values, scratch, TYPE_U8);
+  intern_type(values, scratch, TYPE_U16);
+  intern_type(values, scratch, TYPE_U32);
+  intern_type(values, scratch, TYPE_U64);
+  intern_type(values, scratch, TYPE_USIZE);
+  intern_type(values, scratch, TYPE_ISIZE);
+  intern_type(values, scratch, TYPE_NIL);
 
   {
-    TypeKey t = types->t_bool;
+    TypeKey t = TYPE_BOOL;
     TypeSizeInfo size_info = types_size_info_by_key(types, t);
     u32 size = sizeof(Value) + size_info.size;
     Value *v = arena_push(scratch, size, Align_of(Value));
@@ -93,7 +94,7 @@ void values_init(ValueInterner *values, ValueInternerInitOptions *options) {
   }
 
   {
-    TypeKey t = types->t_bool;
+    TypeKey t = TYPE_BOOL;
     TypeSizeInfo size_info = types_size_info_by_key(types, t);
     u32 size = sizeof(Value) + size_info.size;
     Value *v = arena_push(scratch, size, Align_of(Value));
@@ -105,7 +106,7 @@ void values_init(ValueInterner *values, ValueInternerInitOptions *options) {
   }
 
   {
-    TypeKey t = types->t_comptime_int;
+    TypeKey t = TYPE_COMPTIME_INT;
     u32 size = sizeof(Value) + sizeof(ComptimeInt);
     Value *v = arena_push(scratch, size, Align_of(Value));
     v->type = t;

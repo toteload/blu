@@ -81,26 +81,24 @@ typedef Type *TypePtr;
 
 typedef struct {
   TypeInternerAux _interner;
-
-  TypeKey t_stub;
-  TypeKey t_comptime_int;
-  TypeKey t_type;
-  TypeKey t_nil;
-  TypeKey t_bool;
-  TypeKey t_never;
-
-  TypeKey t_u8;
-  TypeKey t_u16;
-  TypeKey t_u32;
-  TypeKey t_u64;
-  TypeKey t_usize;
-
-  TypeKey t_i8;
-  TypeKey t_i16;
-  TypeKey t_i32;
-  TypeKey t_i64;
-  TypeKey t_isize;
 } TypeInterner;
+
+#define TYPE_STUB         ((TypeKey){1})
+#define TYPE_TYPE         ((TypeKey){2})
+#define TYPE_NIL          ((TypeKey){3})
+#define TYPE_BOOL         ((TypeKey){4})
+#define TYPE_NEVER        ((TypeKey){5})
+#define TYPE_COMPTIME_INT ((TypeKey){6})
+#define TYPE_U8           ((TypeKey){7})
+#define TYPE_U16          ((TypeKey){8})
+#define TYPE_U32          ((TypeKey){9})
+#define TYPE_U64          ((TypeKey){10})
+#define TYPE_USIZE        ((TypeKey){11})
+#define TYPE_I8           ((TypeKey){12})
+#define TYPE_I16          ((TypeKey){13})
+#define TYPE_I32          ((TypeKey){14})
+#define TYPE_I64          ((TypeKey){15})
+#define TYPE_ISIZE        ((TypeKey){16})
 
 void types_init(TypeInterner *types, InternerOptions *options);
 void types_deinit(TypeInterner *types);
@@ -138,9 +136,11 @@ b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from);
 b8 is_type_comptime(TypeInterner *types, TypeKey t);
 
 // An add is always between two values of the same type.
-b32 check_can_type_add(Type *t);
-
-b32 check_can_type_cmp(Type *t);
+b32 check_type_for_op_bitshift(TypeKey lhs, TypeKey rhs);
+b32 check_type_for_op_bitwise(TypeKey t);
+b32 check_type_for_op_arithmetic(TypeKey t);
+b32 check_type_for_op_cmp(TypeKey t);
+b32 check_type_for_op_negate(TypeKey t);
 
 String write_type(Arena *arena, TypeInterner *types, TypeKey type);
 

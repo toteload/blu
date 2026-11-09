@@ -153,7 +153,6 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
     .declarations = ctx->decls,
     .types = ctx->types,
     .values = ctx->values,
-    .common = ctx->common,
     .compiler = ctx->compiler,
   };
 

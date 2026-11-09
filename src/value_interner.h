@@ -50,26 +50,24 @@ always_inline u32 vref_to_u32(ValueRef r) {
 
 #define VREF_NIL ((ValueRef){0})
 
-enum {
-  VAL_TYPE_TYPE = 1,
-  VAL_TYPE_COMPTIME_INT,
-  VAL_TYPE_NEVER,
-  VAL_TYPE_BOOL,
-  VAL_TYPE_I8,
-  VAL_TYPE_I16,
-  VAL_TYPE_I32,
-  VAL_TYPE_I64,
-  VAL_TYPE_U8,
-  VAL_TYPE_U16,
-  VAL_TYPE_U32,
-  VAL_TYPE_U64,
-  VAL_TYPE_USIZE,
-  VAL_TYPE_ISIZE,
-
-  VAL_BOOL_TRUE,
-  VAL_BOOL_FALSE,
-  VAL_COMPTIME_INT_1,
-};
+#define VAL_TYPE_TYPE         ((ValueKey){1})
+#define VAL_TYPE_COMPTIME_INT ((ValueKey){2})
+#define VAL_TYPE_NEVER        ((ValueKey){3})
+#define VAL_TYPE_BOOL         ((ValueKey){4})
+#define VAL_TYPE_I8           ((ValueKey){5})
+#define VAL_TYPE_I16          ((ValueKey){6})
+#define VAL_TYPE_I32          ((ValueKey){7})
+#define VAL_TYPE_I64          ((ValueKey){8})
+#define VAL_TYPE_U8           ((ValueKey){9})
+#define VAL_TYPE_U16          ((ValueKey){10})
+#define VAL_TYPE_U32          ((ValueKey){11})
+#define VAL_TYPE_U64          ((ValueKey){12})
+#define VAL_TYPE_USIZE        ((ValueKey){13})
+#define VAL_TYPE_ISIZE        ((ValueKey){14})
+#define VAL_TYPE_NIL          ((ValueKey){15})
+#define VAL_BOOL_TRUE         ((ValueKey){16})
+#define VAL_BOOL_FALSE        ((ValueKey){17})
+#define VAL_COMPTIME_INT_1    ((ValueKey){18})
 
 typedef struct {
   TypeKey type;

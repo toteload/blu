@@ -8,7 +8,6 @@ typedef struct {
   Arena *scratch;
   Allocator gpa;
 
-  Common         *common;
   MessageSink    *msg_sink;
   StringInterner *strings;
   DeclarationInterner *decls;

@@ -70,30 +70,6 @@ typedef struct Source Source;
 typedef struct Declaration Declaration;
 typedef struct Compiler Compiler;
 
-typedef struct {
-  struct {
-    ValueKey type;
-    ValueKey nil;
-    ValueKey _bool;
-    ValueKey never;
-    ValueKey comptime_int;
-
-    ValueKey i8;
-    ValueKey i16;
-    ValueKey i32;
-    ValueKey i64;
-
-    ValueKey u8;
-    ValueKey u16;
-    ValueKey u32;
-    ValueKey u64;
-    ValueKey usize;
-
-    ValueKey _true;
-    ValueKey _false;
-  } val;
-} Common;
-
 // `out` must point to enough memory for the decoded string.
 // The caller may assume that the amount of memory needed for the decoded string is equal to or less
 // than the size of `literal`.

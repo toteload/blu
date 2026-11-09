@@ -59,11 +59,11 @@ internal Value *make_value(Arena *arena, TypeKey type, void const *data, u32 dat
 }
 
 internal ValueKey intern_type_value(Fixture *f, TypeKey t) {
-  return values_intern(&f->values, make_value(&f->scratch, f->types.t_type, &t, sizeof(t)));
+  return values_intern(&f->values, make_value(&f->scratch, TYPE_TYPE, &t, sizeof(t)));
 }
 
 internal ValueKey intern_bool(Fixture *f, u8 b) {
-  return values_intern(&f->values, make_value(&f->scratch, f->types.t_bool, &b, sizeof(b)));
+  return values_intern(&f->values, make_value(&f->scratch, TYPE_BOOL, &b, sizeof(b)));
 }
 
 internal void test_value_interner_preinterned(TestResult *test, void *user) {
@@ -72,26 +72,44 @@ internal void test_value_interner_preinterned(TestResult *test, void *user) {
   Fixture f;
   fixture_init(&f);
 
-  Test_assert_eq(intern_type_value(&f, f.types.t_type).x, VAL_TYPE_TYPE);
-  Test_assert_eq(intern_type_value(&f, f.types.t_comptime_int).x, VAL_TYPE_COMPTIME_INT);
-  Test_assert_eq(intern_type_value(&f, f.types.t_never).x, VAL_TYPE_NEVER);
-  Test_assert_eq(intern_type_value(&f, f.types.t_bool).x, VAL_TYPE_BOOL);
-  Test_assert_eq(intern_type_value(&f, f.types.t_i8).x, VAL_TYPE_I8);
-  Test_assert_eq(intern_type_value(&f, f.types.t_i16).x, VAL_TYPE_I16);
-  Test_assert_eq(intern_type_value(&f, f.types.t_i32).x, VAL_TYPE_I32);
-  Test_assert_eq(intern_type_value(&f, f.types.t_i64).x, VAL_TYPE_I64);
-  Test_assert_eq(intern_type_value(&f, f.types.t_u8).x, VAL_TYPE_U8);
-  Test_assert_eq(intern_type_value(&f, f.types.t_u16).x, VAL_TYPE_U16);
-  Test_assert_eq(intern_type_value(&f, f.types.t_u32).x, VAL_TYPE_U32);
-  Test_assert_eq(intern_type_value(&f, f.types.t_u64).x, VAL_TYPE_U64);
-  Test_assert_eq(intern_type_value(&f, f.types.t_usize).x, VAL_TYPE_USIZE);
-  Test_assert_eq(intern_type_value(&f, f.types.t_isize).x, VAL_TYPE_ISIZE);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_stub}).x, TYPE_STUB.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_type}).x, TYPE_TYPE.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_nil}).x, TYPE_NIL.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_bool, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}).x, TYPE_BOOL.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_never}).x, TYPE_NEVER.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_comptime_int}).x, TYPE_COMPTIME_INT.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 8}}).x, TYPE_U8.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 16}}).x, TYPE_U16.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 32}}).x, TYPE_U32.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Unsigned, .bitwidth = 64}}).x, TYPE_U64.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Unsigned, .bitwidth = 64}}).x, TYPE_USIZE.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 8}}).x, TYPE_I8.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 16}}).x, TYPE_I16.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 32}}).x, TYPE_I32.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.signedness = Signed, .bitwidth = 64}}).x, TYPE_I64.x);
+  Test_assert_eq(types_intern(&f.types, &(Type){.kind = Type_integer, .data.integer = {.is_uisize = True, .signedness = Signed, .bitwidth = 64}}).x, TYPE_ISIZE.x);
 
-  Test_assert_eq(intern_bool(&f, 1).x, VAL_BOOL_TRUE);
-  Test_assert_eq(intern_bool(&f, 0).x, VAL_BOOL_FALSE);
+  Test_assert_eq(intern_type_value(&f, TYPE_TYPE).x, VAL_TYPE_TYPE.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_COMPTIME_INT).x, VAL_TYPE_COMPTIME_INT.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_NEVER).x, VAL_TYPE_NEVER.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_BOOL).x, VAL_TYPE_BOOL.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_I8).x, VAL_TYPE_I8.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_I16).x, VAL_TYPE_I16.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_I32).x, VAL_TYPE_I32.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_I64).x, VAL_TYPE_I64.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_U8).x, VAL_TYPE_U8.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_U16).x, VAL_TYPE_U16.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_U32).x, VAL_TYPE_U32.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_U64).x, VAL_TYPE_U64.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_USIZE).x, VAL_TYPE_USIZE.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_ISIZE).x, VAL_TYPE_ISIZE.x);
+  Test_assert_eq(intern_type_value(&f, TYPE_NIL).x, VAL_TYPE_NIL.x);
 
-  Value *one = values_get(&f.values, (ValueKey){ VAL_COMPTIME_INT_1 });
-  Test_assert(key_eq(one->type, f.types.t_comptime_int));
+  Test_assert_eq(intern_bool(&f, 1).x, VAL_BOOL_TRUE.x);
+  Test_assert_eq(intern_bool(&f, 0).x, VAL_BOOL_FALSE.x);
+
+  Value *one = values_get(&f.values, VAL_COMPTIME_INT_1);
+  Test_assert(key_eq(one->type, TYPE_COMPTIME_INT));
   ComptimeInt x;
   memcpy(&x, one->data, sizeof(x));
   Test_assert_eq(x, 1);
@@ -105,14 +123,14 @@ internal void test_value_interner_dedup(TestResult *test, void *user) {
   Fixture f;
   fixture_init(&f);
 
-  TypeKey ptr_u8 = types_add_pointer(&f.types, f.types.t_u8);
+  TypeKey ptr_u8 = types_add_pointer(&f.types, TYPE_U8);
 
   ValueKey a = intern_type_value(&f, ptr_u8);
   ValueKey b = intern_type_value(&f, ptr_u8);
   Test_assert(key_eq(a, b));
-  Test_assert(a.x > VAL_COMPTIME_INT_1);
+  Test_assert(a.x > VAL_COMPTIME_INT_1.x);
 
-  ValueKey c = intern_type_value(&f, types_add_pointer(&f.types, f.types.t_u16));
+  ValueKey c = intern_type_value(&f, types_add_pointer(&f.types, TYPE_U16));
   Test_assert(!key_eq(a, c));
 
   fixture_deinit(&f);
@@ -124,11 +142,11 @@ internal void test_value_interner_pointer(TestResult *test, void *user) {
   Fixture f;
   fixture_init(&f);
 
-  TypeKey ptr_bool = types_add_pointer(&f.types, f.types.t_bool);
+  TypeKey ptr_bool = types_add_pointer(&f.types, TYPE_BOOL);
 
-  ValuePointer p0 = { .val = { VAL_BOOL_TRUE }, .offset = 0 };
-  ValuePointer p1 = { .val = { VAL_BOOL_TRUE }, .offset = 1 };
-  ValuePointer p2 = { .val = { VAL_BOOL_FALSE }, .offset = 0 };
+  ValuePointer p0 = { .val = VAL_BOOL_TRUE, .offset = 0 };
+  ValuePointer p1 = { .val = VAL_BOOL_TRUE, .offset = 1 };
+  ValuePointer p2 = { .val = VAL_BOOL_FALSE, .offset = 0 };
 
   ValueKey k0 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
   ValueKey k1 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p1, sizeof(p1)));
@@ -148,15 +166,15 @@ internal void test_value_interner_copies(TestResult *test, void *user) {
   Fixture f;
   fixture_init(&f);
 
-  TypeKey ptr_u8 = types_add_pointer(&f.types, f.types.t_u8);
-  Value *v = make_value(&f.scratch, f.types.t_type, &ptr_u8, sizeof(ptr_u8));
+  TypeKey ptr_u8 = types_add_pointer(&f.types, TYPE_U8);
+  Value *v = make_value(&f.scratch, TYPE_TYPE, &ptr_u8, sizeof(ptr_u8));
   ValueKey k = values_intern(&f.values, v);
 
   Value *stored = values_get(&f.values, k);
   Test_assert(stored != v);
   Test_assert_eq(stored->size, v->size);
 
-  TypeKey other = f.types.t_u64;
+  TypeKey other = TYPE_U64;
   memcpy(v->data, &other, sizeof(other));
 
   TypeKey t;

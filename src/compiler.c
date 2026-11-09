@@ -105,10 +105,6 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
   msglist_append(&compiler->msg_list, &compiler->arena, msg);
 }
 
-internal ValueKey add_type_value(Compiler *compiler, TypeKey t) {
-  return values_intern_data(&compiler->values, compiler->types.t_type, &t, sizeof(t));
-}
-
 internal void add_primitive(Compiler *compiler, String name, ValueKey val) {
   DeclarationKey idx = decls_add(
     &compiler->decls,
@@ -183,48 +179,22 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .map_initial_size = 32,
     });
 
-  // clang-format off
-  compiler->common.val.comptime_int = add_type_value(compiler, compiler->types.t_comptime_int);
-  compiler->common.val.type         = add_type_value(compiler, compiler->types.t_type);
-  compiler->common.val.nil          = add_type_value(compiler, compiler->types.t_nil);
-  compiler->common.val._bool        = add_type_value(compiler, compiler->types.t_bool);
-  compiler->common.val.never        = add_type_value(compiler, compiler->types.t_never);
-  compiler->common.val.i8           = add_type_value(compiler, compiler->types.t_i8);
-  compiler->common.val.i16          = add_type_value(compiler, compiler->types.t_i16);
-  compiler->common.val.i32          = add_type_value(compiler, compiler->types.t_i32);
-  compiler->common.val.i64          = add_type_value(compiler, compiler->types.t_i64);
-  compiler->common.val.u8           = add_type_value(compiler, compiler->types.t_u8);
-  compiler->common.val.u16          = add_type_value(compiler, compiler->types.t_u16);
-  compiler->common.val.u32          = add_type_value(compiler, compiler->types.t_u32);
-  compiler->common.val.u64          = add_type_value(compiler, compiler->types.t_u64);
-  compiler->common.val.usize        = add_type_value(compiler, compiler->types.t_usize);
-  // clang-format on
-
-  {
-    u8 data = 1;
-    compiler->common.val._true = values_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
-    add_primitive(compiler, string_lit("true"), compiler->common.val._true);
-  }
-
-  {
-    u8 data = 0;
-    compiler->common.val._false = values_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
-    add_primitive(compiler, string_lit("false"), compiler->common.val._false);
-  }
-
-  add_primitive(compiler, string_lit("type"), compiler->common.val.type);
-  add_primitive(compiler, string_lit("nil"), compiler->common.val.nil);
-  add_primitive(compiler, string_lit("bool"), compiler->common.val._bool);
-  add_primitive(compiler, string_lit("never"), compiler->common.val.never);
-  add_primitive(compiler, string_lit("i8"), compiler->common.val.i8);
-  add_primitive(compiler, string_lit("i16"), compiler->common.val.i16);
-  add_primitive(compiler, string_lit("i32"), compiler->common.val.i32);
-  add_primitive(compiler, string_lit("i64"), compiler->common.val.i64);
-  add_primitive(compiler, string_lit("u8"), compiler->common.val.u8);
-  add_primitive(compiler, string_lit("u16"), compiler->common.val.u16);
-  add_primitive(compiler, string_lit("u32"), compiler->common.val.u32);
-  add_primitive(compiler, string_lit("u64"), compiler->common.val.u64);
-  add_primitive(compiler, string_lit("usize"), compiler->common.val.usize);
+  add_primitive(compiler, string_lit("true"), VAL_BOOL_TRUE);
+  add_primitive(compiler, string_lit("false"), VAL_BOOL_FALSE);
+  add_primitive(compiler, string_lit("type"), VAL_TYPE_TYPE);
+  add_primitive(compiler, string_lit("nil"), VAL_TYPE_NIL);
+  add_primitive(compiler, string_lit("bool"), VAL_TYPE_BOOL);
+  add_primitive(compiler, string_lit("never"), VAL_TYPE_NEVER);
+  add_primitive(compiler, string_lit("i8"), VAL_TYPE_I8);
+  add_primitive(compiler, string_lit("i16"), VAL_TYPE_I16);
+  add_primitive(compiler, string_lit("i32"), VAL_TYPE_I32);
+  add_primitive(compiler, string_lit("i64"), VAL_TYPE_I64);
+  add_primitive(compiler, string_lit("u8"), VAL_TYPE_U8);
+  add_primitive(compiler, string_lit("u16"), VAL_TYPE_U16);
+  add_primitive(compiler, string_lit("u32"), VAL_TYPE_U32);
+  add_primitive(compiler, string_lit("u64"), VAL_TYPE_U64);
+  add_primitive(compiler, string_lit("usize"), VAL_TYPE_USIZE);
+  add_primitive(compiler, string_lit("isize"), VAL_TYPE_ISIZE);
 }
 
 void compiler_deinit(Compiler *compiler) {
@@ -498,7 +468,6 @@ b32 compile(Compiler *compiler) {
       .perm = &compiler->arena,
       .scratch = &compiler->scratch,
       .gpa = cstd_allocator,
-      .common = &compiler->common,
       .msg_sink = &compiler->msg_sink,
       .strings = &compiler->strings,
       .decls = &compiler->decls,
@@ -532,7 +501,6 @@ b32 compile(Compiler *compiler) {
       .decls = &compiler->decls,
       .types = &compiler->types,
       .values = &compiler->values,
-      .common = &compiler->common,
       .compiler = compiler,
     };
 
@@ -630,7 +598,7 @@ internal b32 get_decl_val(Compiler *compiler, DeclarationKey key, ValueKey *val)
   Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
   Value *v = values_get(&compiler->values, stub->val);
 
-  while (key_eq(v->type, compiler->types.t_stub)) {
+  while (key_eq(v->type, TYPE_STUB)) {
     StubKey ref = Cast(ValueStubRef*, v->data)->stub;
     stub = compiler_get_stub(compiler, ref);
     Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);

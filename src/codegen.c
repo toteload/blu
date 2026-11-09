@@ -234,7 +234,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_cast: {
     AstCast *cast = ast_data(ast, idx_ast);
 
-    SRef ref_type = gen_code(gen, ctx, cast->type, sref_from_value(ctx->common->val.type));
+    SRef ref_type = gen_code(gen, ctx, cast->type, sref_from_value(VAL_TYPE_TYPE));
     SRef ref_val = gen_code(gen, ctx, cast->value, SREF_NIL);
 
     InstructionOffset inst = sir_builder_add(builder, SIR_cast, source_idx, idx_ast);
@@ -287,7 +287,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     AstBlock *block = ast_data(ast, idx_ast);
     u32 count = block->count;
     if (count == 0) {
-      return sref_from_value(ctx->common->val.nil);
+      return sref_from_value(VAL_TYPE_NIL);
     }
 
     InstructionOffset inst_block = sir_builder_add_block(builder, type_destination, source_idx, idx_ast);
@@ -326,7 +326,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionOffset block = sir_builder_add_block(builder, type_destination, source_idx, idx_ast);
 
-    SRef cond_val = gen_code(gen, ctx, if_else->cond, sref_from_value(ctx->common->val._bool));
+    SRef cond_val = gen_code(gen, ctx, if_else->cond, sref_from_value(VAL_TYPE_BOOL));
 
     InstructionOffset condbr = sir_builder_add(builder, SIR_condbr, source_idx, if_else->cond);
     SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
@@ -470,7 +470,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     StringKey str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, decl->name));
 
-    SRef ref_type = sref_from_value(ctx->common->val.type);
+    SRef ref_type = sref_from_value(VAL_TYPE_TYPE);
 
     SRef ref_decl_type = gen_code(gen, ctx, decl->type, ref_type);
 
@@ -500,7 +500,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       .value = ref_decl_val,
     };
 
-    return sref_from_value(ctx->common->val.nil);
+    return sref_from_value(VAL_TYPE_NIL);
   } break;
 
   case Ast_literal_u8_string: {
@@ -514,7 +514,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     }
 
     u8 data = s.str[3];
-    ValueKey idx = values_intern_data(ctx->values, ctx->types->t_u8, &data, sizeof(data));
+    ValueKey idx = values_intern_data(ctx->values, TYPE_U8, &data, sizeof(data));
 
     return sref_from_value(idx);
   } break;
@@ -533,7 +533,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
         },
         string_lit("Integer literal does not fit in u64."));
       gen->has_error = True;
-      return sref_from_value(ctx->common->val.nil);
+      return sref_from_value(VAL_TYPE_NIL);
     }
 
     if (value > INT64_MAX) {
@@ -541,7 +541,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     }
 
     ComptimeInt data = Cast(ComptimeInt, value);
-    ValueKey idx = values_intern_data(ctx->values, ctx->types->t_comptime_int, &data, sizeof(data));
+    ValueKey idx = values_intern_data(ctx->values, TYPE_COMPTIME_INT, &data, sizeof(data));
 
     return sir_builder_add_as(builder, type_destination, sref_from_value(idx), source_idx, idx_ast);
   } break;
@@ -615,7 +615,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     TypeKey type = types_intern(ctx->types, &(Type){
       .kind = Type_array,
       .data.array = {
-        .base_type = ctx->types->t_u8,
+        .base_type = TYPE_U8,
         .size = len,
       },
     });
@@ -629,7 +629,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
   case Ast_type_slice: {
     AstTypeSlice *slice = ast_data(ast, idx_ast);
-    SRef base_type = gen_code(gen, ctx, slice->base, sref_from_value(ctx->common->val.type));
+    SRef base_type = gen_code(gen, ctx, slice->base, sref_from_value(VAL_TYPE_TYPE));
     InstructionOffset inst = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + sizeof(SRef), Align_of(SIrType));
     data->kind = Type_slice;
@@ -641,9 +641,9 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_type_array: {
     AstTypeArray *array = ast_data(ast, idx_ast);
 
-    SRef array_size = gen_comptime_code(gen, ctx, array->size, sref_from_value(ctx->common->val.usize));
+    SRef array_size = gen_comptime_code(gen, ctx, array->size, sref_from_value(VAL_TYPE_USIZE));
 
-    SRef base_type = gen_code(gen, ctx, array->base, sref_from_value(ctx->common->val.type));
+    SRef base_type = gen_code(gen, ctx, array->base, sref_from_value(VAL_TYPE_TYPE));
 
     InstructionOffset inst = sir_builder_add(builder, SIR_type, source_idx, idx_ast);
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + 2 * sizeof(SRef), Align_of(SIrType));
@@ -688,7 +688,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_index: {
     AstIndexData *index = ast_data(ast, idx_ast);
     SRef indexable = gen_code(gen, ctx, index->indexable, SREF_NIL);
-    SRef index_at = gen_code(gen, ctx, index->index_at, sref_from_value(ctx->common->val.usize));
+    SRef index_at = gen_code(gen, ctx, index->index_at, sref_from_value(VAL_TYPE_USIZE));
 
     InstructionOffset inst = sir_builder_add(builder, SIR_index, source_idx, idx_ast);
     SIrBinary *data = sir_builder_push_data(builder, inst, SIrBinary);
@@ -723,8 +723,8 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
     if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
-      InstructionOffset block = sir_builder_add_block(builder, sref_from_value(ctx->common->val._bool), source_idx, idx_ast);
-      SRef lhs = gen_code(gen, ctx, binary->lhs, sref_from_value(ctx->common->val._bool));
+      InstructionOffset block = sir_builder_add_block(builder, sref_from_value(VAL_TYPE_BOOL), source_idx, idx_ast);
+      SRef lhs = gen_code(gen, ctx, binary->lhs, sref_from_value(VAL_TYPE_BOOL));
 
       u8 op = (binary->op_kind == Logical_and) ? SIR_logical_and : SIR_logical_or;
 
@@ -735,7 +735,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
         .lhs = lhs,
       };
 
-      SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(ctx->common->val._bool));
+      SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(VAL_TYPE_BOOL));
 
       sir_builder_end_block_with(builder, block, block, rhs, source_idx, binary->rhs);
 
@@ -755,7 +755,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionOffset loop = sir_builder_add(builder, SIR_loop, source_idx, idx_ast);
 
-    SRef cond_val = gen_code(gen, ctx, ast_while->cond, sref_from_value(ctx->common->val._bool));
+    SRef cond_val = gen_code(gen, ctx, ast_while->cond, sref_from_value(VAL_TYPE_BOOL));
 
     InstructionOffset condbr_inst = sir_builder_add(builder, SIR_condbr, source_idx, ast_while->cond);
     SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr_inst, SIrCondbr);
@@ -857,7 +857,7 @@ b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
 
     SRef ref_decl_type = SREF_NIL;
     if (ast_decl->type) {
-      ref_decl_type = gen_code(&gen, ctx, ast_decl->type, sref_from_value(ctx->common->val.type));
+      ref_decl_type = gen_code(&gen, ctx, ast_decl->type, sref_from_value(VAL_TYPE_TYPE));
     }
 
     sir_builder_end_block_with(builder, block, block, ref_decl_type, source->idx, ast_decl->type);

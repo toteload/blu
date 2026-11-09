@@ -79,7 +79,6 @@ typedef struct Compiler {
   MessageList msg_list;
   MessageSink msg_sink;
 
-  Common         common;
   ValueInterner  values;
   StringInterner strings;
   TypeInterner   types;
