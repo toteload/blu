@@ -121,11 +121,11 @@ typedef struct {
   TypeInterner *types;
 } ValueInternerInitOptions;
 
-void values2_init(ValueInterner *values, ValueInternerInitOptions *options);
-void values2_deinit(ValueInterner *values);
+void values_init(ValueInterner *values, ValueInternerInitOptions *options);
+void values_deinit(ValueInterner *values);
 
-ValueKey values2_intern(ValueInterner *values, Value *v);
-ValueKey values2_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size);
-Value *values2_get(ValueInterner *values, ValueKey key);
+ValueKey values_intern(ValueInterner *values, Value *v);
+ValueKey values_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size);
+Value *values_get(ValueInterner *values, ValueKey key);
 
 #endif // VALUE_INTERNER_H

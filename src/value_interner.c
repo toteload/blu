@@ -48,7 +48,7 @@ internal void intern_type(ValueInterner *values, Arena *scratch, TypeInterner *t
   aux_add(&values->aux, v);
 }
 
-void values2_init(ValueInterner *values, ValueInternerInitOptions *options) {
+void values_init(ValueInterner *values, ValueInternerInitOptions *options) {
   TypeInterner *types = options->types;
   Arena *scratch = options->scratch;
 
@@ -118,15 +118,15 @@ void values2_init(ValueInterner *values, ValueInternerInitOptions *options) {
   arena_scope_end(scratch, snap);
 }
 
-void values2_deinit(ValueInterner *values) {
+void values_deinit(ValueInterner *values) {
   aux_deinit(&values->aux);
 }
 
-ValueKey values2_intern(ValueInterner *values, Value *v) {
+ValueKey values_intern(ValueInterner *values, Value *v) {
   return aux_add(&values->aux, v);
 }
 
-ValueKey values2_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size) {
+ValueKey values_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size) {
   Arena *scratch = values->context.scratch;
   ArenaSnapshot snap = arena_scope_begin(scratch);
 
@@ -145,6 +145,6 @@ ValueKey values2_intern_data(ValueInterner *values, TypeKey type, void const *da
   return res;
 }
 
-Value *values2_get(ValueInterner *values, ValueKey key) {
+Value *values_get(ValueInterner *values, ValueKey key) {
   return aux_get(&values->aux, key);
 }

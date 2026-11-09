@@ -50,7 +50,7 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
   case Type_stub: {
     ValueStubRef *ref = data;
     Stub *stub = compiler_get_stub(compiler, ref->stub);
-    Value *v = values2_get(&compiler->values, stub->val);
+    Value *v = values_get(&compiler->values, stub->val);
     fprintf(out, "(stub_%u) ", ref->stub.x);
     print_value_raw(out, compiler, flags, v->type, v->data);
   } break;
@@ -94,7 +94,7 @@ internal void print_sref(FILE *out, Compiler *compiler, SRef ref) {
   }
 
   if (sref_is_value(ref)) {
-    Value *value = values2_get(&compiler->values, sref_to_value(ref));
+    Value *value = values_get(&compiler->values, sref_to_value(ref));
     print_value_raw(out, compiler, 0, value->type, value->data);
   } else {
     fprintf(out, "%%%u", sref_to_instruction(ref));
@@ -108,7 +108,7 @@ internal void print_iref(FILE *out, Compiler *compiler, IRef ref) {
   }
 
   if (iref_is_value(ref)) {
-    Value *value = values2_get(&compiler->values, iref_to_value(ref));
+    Value *value = values_get(&compiler->values, iref_to_value(ref));
     print_value_raw(out, compiler, 0, value->type, value->data);
   } else {
     fprintf(out, "%%%u", iref_to_instruction(ref));

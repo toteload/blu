@@ -514,7 +514,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     }
 
     u8 data = s.str[3];
-    ValueKey idx = values2_intern_data(ctx->values, ctx->types->t_u8, &data, sizeof(data));
+    ValueKey idx = values_intern_data(ctx->values, ctx->types->t_u8, &data, sizeof(data));
 
     return sref_from_value(idx);
   } break;
@@ -541,7 +541,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     }
 
     ComptimeInt data = Cast(ComptimeInt, value);
-    ValueKey idx = values2_intern_data(ctx->values, ctx->types->t_comptime_int, &data, sizeof(data));
+    ValueKey idx = values_intern_data(ctx->values, ctx->types->t_comptime_int, &data, sizeof(data));
 
     return sir_builder_add_as(builder, type_destination, sref_from_value(idx), source_idx, idx_ast);
   } break;
@@ -620,7 +620,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       },
     });
 
-    ValueKey idx = values2_intern_data(ctx->values, type, data, len);
+    ValueKey idx = values_intern_data(ctx->values, type, data, len);
 
     arena_scope_end(ctx->scratch, snapshot);
 

@@ -106,7 +106,7 @@ compiler_add_message(void *user, u8 severity, MessageLocation location, String f
 }
 
 internal ValueKey add_type_value(Compiler *compiler, TypeKey t) {
-  return values2_intern_data(&compiler->values, compiler->types.t_type, &t, sizeof(t));
+  return values_intern_data(&compiler->values, compiler->types.t_type, &t, sizeof(t));
 }
 
 internal void add_primitive(Compiler *compiler, String name, ValueKey val) {
@@ -166,7 +166,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .context = &compiler->scratch,
     });
 
-  values2_init(
+  values_init(
     &compiler->values,
     &(ValueInternerInitOptions){
       .storage = &compiler->arena,
@@ -202,13 +202,13 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 
   {
     u8 data = 1;
-    compiler->common.val._true = values2_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
+    compiler->common.val._true = values_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
     add_primitive(compiler, string_lit("true"), compiler->common.val._true);
   }
 
   {
     u8 data = 0;
-    compiler->common.val._false = values2_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
+    compiler->common.val._false = values_intern_data(&compiler->values, compiler->types.t_bool, &data, sizeof(data));
     add_primitive(compiler, string_lit("false"), compiler->common.val._false);
   }
 
@@ -554,9 +554,9 @@ b32 compile(Compiler *compiler) {
       ValueKey val = stub->val;
 
       printf("%.*s : ", Cast(int, name.len), name.str);
-      print_type(stdout, compiler, values2_get(&compiler->values, val)->type);
+      print_type(stdout, compiler, values_get(&compiler->values, val)->type);
       printf(" = ");
-      Value *v = values2_get(&compiler->values, val);
+      Value *v = values_get(&compiler->values, val);
       print_value_raw(stdout, compiler, PrintFlag_expand_function, v->type, v->data);
       printf("\n");
     }
@@ -628,13 +628,13 @@ internal b32 get_decl_val(Compiler *compiler, DeclarationKey key, ValueKey *val)
 
   Stub *stub = compiler_get_stub(compiler, decl->data.decl.stub);
   Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
-  Value *v = values2_get(&compiler->values, stub->val);
+  Value *v = values_get(&compiler->values, stub->val);
 
   while (key_eq(v->type, compiler->types.t_stub)) {
     StubKey ref = Cast(ValueStubRef*, v->data)->stub;
     stub = compiler_get_stub(compiler, ref);
     Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
-    v = values2_get(&compiler->values, stub->val);
+    v = values_get(&compiler->values, stub->val);
   }
 
   *val = stub->val;
@@ -655,7 +655,7 @@ b32 run_main(Compiler *compiler) {
     return False;
   }
 
-  Value *vfunc = values2_get(&compiler->values, v);
+  Value *vfunc = values_get(&compiler->values, v);
   ResidualFunctionKey func_key = Cast(ValueResidualFunction*, vfunc->data)->key;
   ResidualFunction *f = compiler_get_function(compiler, func_key);
 

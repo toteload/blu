@@ -16,12 +16,12 @@ internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
 
   if (iref_is_value(ref)) {
     ValueInterner *values = &in->compiler->values;
-    Value *v = values2_get(values, iref_to_value(ref));
+    Value *v = values_get(values, iref_to_value(ref));
 
     while (key_eq(v->type, in->compiler->types.t_stub)) {
       StubKey ref = Cast(ValueStubRef*, v->data)->stub;
       Stub *stub = compiler_get_stub(in->compiler, ref);
-      v = values2_get(values, stub->val);
+      v = values_get(values, stub->val);
     }
 
     if (types_get(&in->compiler->types, v->type)->kind == Type_slice) {
@@ -29,7 +29,7 @@ internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
       InterpreterSlice *res = arena_push_one(InterpreterSlice, in->scratch);
       *res = (InterpreterSlice){
         .len = slice->len,
-        .data = Cast(u8*, values2_get(values, slice->ptr.val)->data) + slice->ptr.offset,
+        .data = Cast(u8*, values_get(values, slice->ptr.val)->data) + slice->ptr.offset,
       };
       return res;
     }
@@ -86,7 +86,7 @@ internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
   }
 
   if (iref_is_value(ref)) {
-    return values2_get(&in->compiler->values, iref_to_value(ref))->type;
+    return values_get(&in->compiler->values, iref_to_value(ref))->type;
   }
 
   return iir_chunk_type(f->chunk, iref_to_instruction(ref));

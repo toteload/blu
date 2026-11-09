@@ -257,7 +257,7 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKe
 }
 
 u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKey val, ValueKey *res) {
-  Value *v = values2_get(values, val);
+  Value *v = values_get(values, val);
 
   u32 coercion = classify_type_coercion(types, dst, v->type);
 
@@ -277,7 +277,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     Assert(size_info.size <= sizeof(data));
     *Cast(u8*, &data) = *Cast(u8*, v->data);
 
-    *res = values2_intern_data(values, dst, &data, size_info.size);
+    *res = values_intern_data(values, dst, &data, size_info.size);
 
     return CoerceResult_ok;
   }
@@ -293,7 +293,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     u32 err = eval_cast_int(int_src, v->data, int_dst, &data);
     Assert(err == CastResult_ok);
 
-    *res = values2_intern_data(values, dst, &data, size_info.size);
+    *res = values_intern_data(values, dst, &data, size_info.size);
 
     return CoerceResult_ok;
   }
@@ -313,7 +313,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
         return CoerceResult_comptime_int_value_out_of_range;
       }
 
-      *res = values2_intern_data(values, dst, &data, size_info.size);
+      *res = values_intern_data(values, dst, &data, size_info.size);
 
       return CoerceResult_ok;
     }
@@ -326,7 +326,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
       .ptr = { .val = val, .offset = 0 },
     };
 
-    *res = values2_intern_data(values, dst, &slice, sizeof(slice));
+    *res = values_intern_data(values, dst, &slice, sizeof(slice));
     return CoerceResult_ok;
   }
   }

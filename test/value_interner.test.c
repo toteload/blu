@@ -35,7 +35,7 @@ internal void fixture_init(Fixture *f) {
     .context          = &f->scratch,
   });
 
-  values2_init(&f->values, &(ValueInternerInitOptions){
+  values_init(&f->values, &(ValueInternerInitOptions){
     .storage       = &f->storage,
     .map_allocator = (Allocator){ .fn = test_alloc_fn },
     .scratch       = &f->scratch,
@@ -44,7 +44,7 @@ internal void fixture_init(Fixture *f) {
 }
 
 internal void fixture_deinit(Fixture *f) {
-  values2_deinit(&f->values);
+  values_deinit(&f->values);
   arena_deinit(&f->scratch);
   arena_deinit(&f->storage);
 }
@@ -59,11 +59,11 @@ internal Value *make_value(Arena *arena, TypeKey type, void const *data, u32 dat
 }
 
 internal ValueKey intern_type_value(Fixture *f, TypeKey t) {
-  return values2_intern(&f->values, make_value(&f->scratch, f->types.t_type, &t, sizeof(t)));
+  return values_intern(&f->values, make_value(&f->scratch, f->types.t_type, &t, sizeof(t)));
 }
 
 internal ValueKey intern_bool(Fixture *f, u8 b) {
-  return values2_intern(&f->values, make_value(&f->scratch, f->types.t_bool, &b, sizeof(b)));
+  return values_intern(&f->values, make_value(&f->scratch, f->types.t_bool, &b, sizeof(b)));
 }
 
 internal void test_value_interner_preinterned(TestResult *test, void *user) {
@@ -90,7 +90,7 @@ internal void test_value_interner_preinterned(TestResult *test, void *user) {
   Test_assert_eq(intern_bool(&f, 1).x, VAL_BOOL_TRUE);
   Test_assert_eq(intern_bool(&f, 0).x, VAL_BOOL_FALSE);
 
-  Value *one = values2_get(&f.values, (ValueKey){ VAL_COMPTIME_INT_1 });
+  Value *one = values_get(&f.values, (ValueKey){ VAL_COMPTIME_INT_1 });
   Test_assert(key_eq(one->type, f.types.t_comptime_int));
   ComptimeInt x;
   memcpy(&x, one->data, sizeof(x));
@@ -130,10 +130,10 @@ internal void test_value_interner_pointer(TestResult *test, void *user) {
   ValuePointer p1 = { .val = { VAL_BOOL_TRUE }, .offset = 1 };
   ValuePointer p2 = { .val = { VAL_BOOL_FALSE }, .offset = 0 };
 
-  ValueKey k0 = values2_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
-  ValueKey k1 = values2_intern(&f.values, make_value(&f.scratch, ptr_bool, &p1, sizeof(p1)));
-  ValueKey k2 = values2_intern(&f.values, make_value(&f.scratch, ptr_bool, &p2, sizeof(p2)));
-  ValueKey k0_again = values2_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
+  ValueKey k0 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
+  ValueKey k1 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p1, sizeof(p1)));
+  ValueKey k2 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p2, sizeof(p2)));
+  ValueKey k0_again = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
 
   Test_assert(!key_eq(k0, k1));
   Test_assert(!key_eq(k0, k2));
@@ -150,9 +150,9 @@ internal void test_value_interner_copies(TestResult *test, void *user) {
 
   TypeKey ptr_u8 = types_add_pointer(&f.types, f.types.t_u8);
   Value *v = make_value(&f.scratch, f.types.t_type, &ptr_u8, sizeof(ptr_u8));
-  ValueKey k = values2_intern(&f.values, v);
+  ValueKey k = values_intern(&f.values, v);
 
-  Value *stored = values2_get(&f.values, k);
+  Value *stored = values_get(&f.values, k);
   Test_assert(stored != v);
   Test_assert_eq(stored->size, v->size);
 

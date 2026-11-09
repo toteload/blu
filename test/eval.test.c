@@ -302,7 +302,7 @@ void test_eval_coerce(TestResult *test, void *user) {
   TypeKey t_bool = types_intern(&types, &(Type){ .kind = Type_bool, .data.integer = { .signedness = Unsigned, .bitwidth = 8 } });
 
   ValueInterner values;
-  values2_init(&values, &(ValueInternerInitOptions){
+  values_init(&values, &(ValueInternerInitOptions){
     .storage       = &arena,
     .map_allocator = (Allocator){ .fn = test_alloc_fn },
     .scratch       = &scratch,
@@ -314,23 +314,23 @@ void test_eval_coerce(TestResult *test, void *user) {
 
   // Widening a signed int sign-extends and yields a fully initialized value of the destination type.
   i8 neg = -5;
-  u32 err = eval_coerce(&types, &values, t_i64, values2_intern_data(&values, t_i8, &neg, sizeof(neg)), &res);
+  u32 err = eval_coerce(&types, &values, t_i64, values_intern_data(&values, t_i8, &neg, sizeof(neg)), &res);
   Test_assert_eq(err, CoerceResult_ok);
-  v = values2_get(&values, res);
+  v = values_get(&values, res);
   Test_assert(key_eq(v->type, t_i64));
   Test_assert_eq(v->size - sizeof(Value), 8);
   Test_assert_eq(*Cast(i64 *, v->data), -5);
 
   // bool -> int zero-extends.
   u8 yes = 1;
-  err = eval_coerce(&types, &values, t_u32, values2_intern_data(&values, t_bool, &yes, sizeof(yes)), &res);
+  err = eval_coerce(&types, &values, t_u32, values_intern_data(&values, t_bool, &yes, sizeof(yes)), &res);
   Test_assert_eq(err, CoerceResult_ok);
-  v = values2_get(&values, res);
+  v = values_get(&values, res);
   Test_assert(key_eq(v->type, t_u32));
   Test_assert_eq(v->size - sizeof(Value), 4);
   Test_assert_eq(*Cast(u32 *, v->data), 1);
 
-  values2_deinit(&values);
+  values_deinit(&values);
   arena_deinit(&arena);
   arena_deinit(&scratch);
 }
