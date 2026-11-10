@@ -17,7 +17,7 @@ typedef Stack(ScopeSpan2) ScopeStack2;
 typedef struct {
   void *ret;
   IIrChunk *chunk;
-  void **inst_values;
+  u32 *value_offsets;
   ScopeStack2 scope_stack;
   InstructionOffset pc;
 } CallFrame2;

@@ -9,34 +9,19 @@ typedef struct {
   void  *data;
 } InterpreterSlice;
 
+internal void *data_ptr(Interpreter *in, CallFrame2 *f, u32 inst) {
+  return ptr_offset(in->scratch->base, f->value_offsets[inst]);
+}
+
 internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
   if (iref_is_nil(ref)) {
     return Null;
   }
 
   if (iref_is_value(ref)) {
-    ValueInterner *values = &in->compiler->values;
-    Value *v = values_get(values, iref_to_value(ref));
-
-    while (key_eq(v->type, TYPE_STUB)) {
-      StubKey ref = Cast(ValueStubRef*, v->data)->stub;
-      Stub *stub = compiler_get_stub(in->compiler, ref);
-      v = values_get(values, stub->val);
-    }
-
-    if (types_get(&in->compiler->types, v->type)->kind == Type_slice) {
-      ValueSlice *slice = Cast(ValueSlice*, v->data);
-      InterpreterSlice *res = arena_push_one(InterpreterSlice, in->scratch);
-      *res = (InterpreterSlice){
-        .len = slice->len,
-        .data = Cast(u8*, values_get(values, slice->ptr.val)->data) + slice->ptr.offset,
-      };
-      return res;
-    }
-
-    return v->data;
+    Todo();
   } else {
-    return f->inst_values[iref_to_instruction(ref)];
+    return data_ptr(in, f, iref_to_instruction(ref));
   }
 }
 
@@ -132,14 +117,10 @@ internal u32 step(Interpreter *in) {
   InstructionOffset pc = f->pc;
   IIrOpcode op = f->chunk->opcodes[pc];
 
-  void *local;
-  TypeSizeInfo size_info;
-  TypeKey type = iir_chunk_type(f->chunk, pc);
-  if (key_is_some(type)) {
-    size_info = types_size_info_by_key(&in->compiler->types, type);
-    local = arena_push(in->scratch, size_info.size, size_info.align);
-    f->inst_values[pc] = local;
-  }
+  IIrOpSizeInfo size_info = f->chunk->value_offsets[pc];
+  void *local = arena_push(in->scratch, size_info.size, size_info.align);
+  u32 local_offset = Cast(u32, ptr_diff(local, in->scratch->base));
+  f->value_offsets[pc] = local_offset;
 
   switch (op) {
   case IIR_func: {
@@ -175,9 +156,7 @@ internal u32 step(Interpreter *in) {
 
   case IIR_br: {
     IIrBr *br = iir_chunk_extra(f->chunk, pc);
-    if (key_is_some(type)) {
-      memcpy(f->inst_values[br->block], resolve(in, f, br->value), size_info.size);
-    }
+    memcpy(data_ptr(br->block), resolve(in, f, br->value), size_info.size);
     scopes_pop_to(in, f, br->block);
     u32 inst_count = iir_chunk_data(f->chunk, br->block);
     f->pc = br->block + inst_count;

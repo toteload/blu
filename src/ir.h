@@ -330,10 +330,15 @@ typedef struct {
 // -------------------------------------------------------------------------------------------------
 
 typedef struct {
+  u32 size;
+  u32 align;
+} IIrOpSizeInfo;
+
+typedef struct {
   u32 opcode_count;
   u8 *opcodes;
   u32 *data;
-  TypeKey *types;
+  IIrOpSizeInfo *size_infos;
   AstAndSourceIndex *sources;
   void *extra;
 } IIrChunk;

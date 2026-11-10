@@ -1,3 +1,8 @@
+- [ ] Change the memory layout of values in the interpreter.
+  - IRef also needs to be different and should no longer refer to a Value.
+    For the interpreter, all referenced Values must be converted to flat bytes.
+    IRef then still has the split between either referring to an instruction result or flat data.
+
 - [ ] Compile time evaluation of binary operators in specialize.c
   - Both operands constant hits `Todo()` (`specialize.c:1672`), e.g. `N : i32 = 6 * 7`.
   - Applies to `+ - * / %` and the bit operators. Reuse the interpreter's overflow and division-by-zero checks so comptime and runtime behave the same.
@@ -15,7 +20,7 @@
 
 - [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
-- [ ] Add `comptime` qualifier to declarations. (Maybe not a qualifier, just use `eval`)
+- [ ] Add `comptime` qualifier to declarations.
   - This means that the declaration only exists at compile time.
     All uses of the declaration are replaced with its value.
 
