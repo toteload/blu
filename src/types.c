@@ -230,8 +230,8 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
     };
   }
   case Type_function: {
-    // A variable holding a function is stored as an 8-byte pointer to the actual code of the function.
-    Todo();
+    // A variable holding a function is stored as the ResidualFunctionKey of the function.
+    return (TypeSizeInfo){.size = 4, .align = 4, .stride = 4};
   }
   }
 

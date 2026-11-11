@@ -1,7 +1,8 @@
 #ifndef PRINT_H
 #define PRINT_H
 
-#include "ir.h"
+#include "sir.h"
+#include "iir.h"
 #include "tokens.h"
 #include "ast.h"
 #include "compiler.h"

@@ -3,7 +3,7 @@
 
 #include "blu.h"
 #include "source_file.h"
-#include "ir.h"
+#include "sir.h"
 
 typedef struct {
   DeclarationKey parent;

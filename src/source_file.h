@@ -6,7 +6,6 @@
 #include "ast.h"
 #include "messages.h"
 #include "string_interner.h"
-#include "ir.h"
 
 enum SourceDeclarationKind {
   SourceDeclaration_root,

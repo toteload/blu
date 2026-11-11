@@ -5,7 +5,7 @@
 #include "specialize.h"
 #include "resolver.h"
 #include "interpret.h"
-#include "ir.h"
+#include "iir.h"
 #include "print.h"
 
 #include <stdarg.h>
@@ -638,7 +638,7 @@ b32 run_main(Compiler *compiler) {
   stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
   u8 buf[16];
-  u32 err = interpreter_call(&in, &f->chunk, (ValueKey[]){0}, 0, &buf);
+  u32 err = interpreter_call(&in, &f->chunk, Null, 0, &buf);
   if (err) {
     return False;
   }

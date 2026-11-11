@@ -2,7 +2,7 @@
 #define INTERPRET_H
 
 #include "blu.h"
-#include "ir.h"
+#include "iir.h"
 #include "messages.h"
 #include "compiler.h"
 
@@ -39,6 +39,6 @@ typedef enum {
   Interpret_illegal_opcode,
 } InterpretResult;
 
-u32 interpreter_call(Interpreter* in, IIrChunk *chunk, ValueKey *args, u32 arg_count, void *out);
+u32 interpreter_call(Interpreter* in, IIrChunk *chunk, void **args, u32 arg_count, void *out);
 
 #endif // INTERPRET_H

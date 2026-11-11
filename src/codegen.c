@@ -5,7 +5,7 @@
 #include "source_file.h"
 #include "compiler.h"
 #include "codegen.h"
-#include "ir.h"
+#include "sir.h"
 #include "symbol_map.h"
 
 typedef struct {

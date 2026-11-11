@@ -128,6 +128,8 @@ def create_build_ninja():
         'specialize.c',
         'interpret.c',
         'ir.c',
+        'sir.c',
+        'iir.c',
         'print.c',
         'util.c',
         'symbol_map.c',

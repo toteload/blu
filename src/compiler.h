@@ -5,7 +5,7 @@
 #include "messages.h"
 #include "string_interner.h"
 #include "value_interner.h"
-#include "ir.h"
+#include "iir.h"
 #include "cli_options.h"
 #include "declaration_interner.h"
 

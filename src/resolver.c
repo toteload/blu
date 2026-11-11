@@ -194,6 +194,10 @@ b32 resolve_declarations(ResolveContext *ctx, u32 decls_to_resolve_count, Declar
     arena_scope_end(ctx->scratch, snapshot);
   }
 
+  if (all_ok) {
+    specializer_flatten_constants(&sp);
+  }
+
   return all_ok;
 }
 

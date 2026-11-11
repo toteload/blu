@@ -4,7 +4,8 @@
 #include "blu.h"
 #include "types.h"
 #include "value_interner.h"
-#include "ir.h"
+#include "sir.h"
+#include "iir.h"
 #include "compiler.h"
 #include "source_file.h"
 #include "print.h"
@@ -101,17 +102,12 @@ internal void print_sref(FILE *out, Compiler *compiler, SRef ref) {
   }
 }
 
-internal void print_iref(FILE *out, Compiler *compiler, IRef ref) {
-  if (iref_is_nil(ref)) {
-    fprintf(out, "_");
-    return;
-  }
-
-  if (iref_is_value(ref)) {
-    Value *value = values_get(&compiler->values, iref_to_value(ref));
-    print_value_raw(out, compiler, 0, value->type, value->data);
+internal void print_cref(FILE *out, Compiler *compiler, IIrChunk *chunk, CRef ref) {
+  if (cref_is_constant(ref)) {
+    IIrConstant *constant = iir_chunk_constant(chunk, ref);
+    print_value_raw(out, compiler, 0, constant->type, constant->data);
   } else {
-    fprintf(out, "%%%u", iref_to_instruction(ref));
+    fprintf(out, "%%%u", cref_to_instruction(ref));
   }
 }
 
@@ -433,7 +429,8 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     } break;
 
     case IIR_param:
-    case IIR_alloc: break;
+    case IIR_alloc:
+    case IIR_ret_void: break;
 
     case IIR_bit_not:
     case IIR_int_cast:
@@ -442,7 +439,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_builtin_debug:
     case IIR_builtin_len: {
       fputs(" ", out);
-      print_iref(out, compiler, (IRef){data});
+      print_cref(out, compiler, chunk, iir_chunk_ref(chunk, i));
     } break;
 
     case IIR_index:
@@ -460,32 +457,36 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_int_sub:
     case IIR_int_mul:
     case IIR_int_div: {
-      IIrBinary *bin = iir_chunk_extra(chunk, i);
+      IIrChunkBinary *bin = iir_chunk_extra(chunk, i);
       fputs(" ", out);
-      print_iref(out, compiler, bin->lhs);
+      print_cref(out, compiler, chunk, bin->lhs);
       fputs(", ", out);
-      print_iref(out, compiler, bin->rhs);
+      print_cref(out, compiler, chunk, bin->rhs);
     } break;
 
     case IIR_store: {
-      IIrStore *store = iir_chunk_extra(chunk, i);
+      IIrChunkStore *store = iir_chunk_extra(chunk, i);
       fputs(" ptr=", out);
-      print_iref(out, compiler, store->ptr);
+      print_cref(out, compiler, chunk, store->ptr);
       fputs(" value=", out);
-      print_iref(out, compiler, store->value);
+      print_cref(out, compiler, chunk, store->value);
     } break;
 
     case IIR_condbr: {
-      IIrCondbr *condbr = iir_chunk_extra(chunk, i);
+      IIrChunkCondbr *condbr = iir_chunk_extra(chunk, i);
       fputs(" cond=", out);
-      print_iref(out, compiler, condbr->cond);
+      print_cref(out, compiler, chunk, condbr->cond);
       fprintf(out, " otherwise=%%%u", condbr->otherwise);
     } break;
 
     case IIR_br: {
-      IIrBr *br = iir_chunk_extra(chunk, i);
+      IIrChunkBr *br = iir_chunk_extra(chunk, i);
       fprintf(out, " block=%%%u ", br->block);
-      print_iref(out, compiler, br->value);
+      print_cref(out, compiler, chunk, br->value);
+    } break;
+
+    case IIR_br_void: {
+      fprintf(out, " block=%%%u", data);
     } break;
 
     case IIR_repeat: {
@@ -493,9 +494,9 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     } break;
 
     case IIR_call: {
-      IIrCall *call = iir_chunk_extra(chunk, i);
+      IIrChunkCall *call = iir_chunk_extra(chunk, i);
       fputs(" ", out);
-      print_iref(out, compiler, call->func_ptr);
+      print_cref(out, compiler, chunk, call->func_ptr);
       if (call->arg_count) {
         fputs(" ", out);
       }
@@ -503,7 +504,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
         if (j != 0) {
           fputs(", ", out);
         }
-        print_iref(out, compiler, call->args[j]);
+        print_cref(out, compiler, chunk, call->args[j]);
       }
     } break;
     }

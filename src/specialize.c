@@ -1,5 +1,6 @@
 #include "specialize.h"
-#include "ir.h"
+#include "sir.h"
+#include "iir.h"
 #include "eval.h"
 
 #define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
@@ -303,6 +304,165 @@ internal InstructionOffset expect_residual_at_instruction_index(Frame *f, Instru
   return iref_to_instruction(res);
 }
 
+#define IIR_CONSTANT_LIST_MIN_SIZE_LOG2 4
+#define IIR_CONSTANT_LIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME IIrConstantList
+#define SEGMENTLIST_TYPE IIrConstant
+#define SEGMENTLIST_MIN_SIZE_LOG2 IIR_CONSTANT_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT IIR_CONSTANT_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX constants
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_TYPES
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+#define VALUE_KEY_LIST_MIN_SIZE_LOG2 4
+#define VALUE_KEY_LIST_SEGMENT_COUNT 20
+#define SEGMENTLIST_NAME ValueKeyList
+#define SEGMENTLIST_TYPE ValueKey
+#define SEGMENTLIST_MIN_SIZE_LOG2 VALUE_KEY_LIST_MIN_SIZE_LOG2
+#define SEGMENTLIST_SEGMENT_COUNT VALUE_KEY_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_FUNCTION_PREFIX value_keys
+#define SEGMENTLIST_LINKAGE internal
+#define SEGMENTLIST_OUTPUT_TYPES
+#define SEGMENTLIST_OUTPUT_DECLARATIONS
+#define SEGMENTLIST_OUTPUT_DEFINITIONS
+#include "segment_list.h"
+
+typedef struct {
+  SpecializerContext *ctx;
+  IIrConstantList constants;
+  ValueKeyList keys;
+} ConstantFlattener;
+
+internal void *flatten_value_data(ConstantFlattener *cf, ValueKey key);
+
+internal void flatten_data_of_type(ConstantFlattener *cf, TypeKey type, void const *src, void *dst) {
+  SpecializerContext *ctx = cf->ctx;
+  Type *t = types_get(ctx->types, type);
+
+  switch (Cast(TypeKind, t->kind)) {
+  case Type_integer:
+  case Type_bool:
+  case Type_type:
+  case Type_nil:
+  case Type_never:
+  case Type_function: {
+    TypeSizeInfo size_info = types_size_info(ctx->types, t);
+    if (size_info.size > 0) {
+      memcpy(dst, src, size_info.size);
+    }
+  } break;
+
+  case Type_array: {
+    TypeSizeInfo elem = types_size_info_by_key(ctx->types, t->data.array.base_type);
+    for (u64 i = 0; i < t->data.array.size; i++) {
+      flatten_data_of_type(
+        cf,
+        t->data.array.base_type,
+        ptr_offset(src, i * elem.stride),
+        ptr_offset(dst, i * elem.stride)
+      );
+    }
+  } break;
+
+  case Type_slice: {
+    ValueSlice const *slice = src;
+    void *pointee = flatten_value_data(cf, slice->ptr.val);
+    *Cast(IIrSlice *, dst) = (IIrSlice){
+      .len = slice->len,
+      .data = ptr_offset(pointee, slice->ptr.offset),
+    };
+  } break;
+
+  case Type_pointer: {
+    ValuePointer const *p = src;
+    void *pointee = flatten_value_data(cf, p->val);
+    *Cast(void **, dst) = ptr_offset(pointee, p->offset);
+  } break;
+
+  case Type_comptime_int:
+  case Type_stub:
+    Unreachable();
+  }
+}
+
+internal u32 find_constant(ConstantFlattener *cf, ValueKey key) {
+  for (u32 i = 1; i < cf->keys.len; i++) {
+    if (key_eq(value_keys_at_unchecked(&cf->keys, i), key)) {
+      return i;
+    }
+  }
+
+  return 0;
+}
+
+internal u32 add_constant(ConstantFlattener *cf, ValueKey key) {
+  u32 idx = find_constant(cf, key);
+  if (idx) {
+    return idx;
+  }
+
+  SpecializerContext *ctx = cf->ctx;
+  Value *v = values_get(ctx->values, key);
+
+  while (key_eq(v->type, TYPE_STUB)) {
+    Stub *stub = compiler_get_stub(ctx->compiler, Cast(ValueStubRef *, v->data)->stub);
+    Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
+    v = values_get(ctx->values, stub->val);
+  }
+
+  TypeSizeInfo size_info = types_size_info_by_key(ctx->types, v->type);
+  void *data = arena_push(ctx->perm, size_info.size, Max(size_info.align, 1));
+  flatten_data_of_type(cf, v->type, v->data, data);
+
+  IIrConstant constant = { .type = v->type, .data = data };
+
+  idx = Cast(u32, cf->keys.len);
+  value_keys_append(&cf->keys, ctx->scratch, key);
+  constants_append(&cf->constants, ctx->scratch, constant);
+
+  return idx;
+}
+
+internal void *flatten_value_data(ConstantFlattener *cf, ValueKey key) {
+  u32 idx = add_constant(cf, key);
+  return constants_at_unchecked(&cf->constants, idx).data;
+}
+
+internal u32 constant_from_value(void *context, ValueKey value) {
+  return add_constant(context, value);
+}
+
+internal void flatten_chunk_constants(SpecializerContext *ctx, IIrChunk *chunk) {
+  ArenaSnapshot snapshot = arena_scope_begin(ctx->scratch);
+
+  ConstantFlattener cf = { .ctx = ctx };
+  value_keys_append(&cf.keys, ctx->scratch, (ValueKey){0});
+  constants_append(&cf.constants, ctx->scratch, (IIrConstant){0});
+
+  iir_chunk_convert_refs(chunk, constant_from_value, &cf);
+
+  chunk->constant_count = Cast(u32, cf.constants.len);
+  chunk->constants = arena_push_array(IIrConstant, ctx->perm, cf.constants.len);
+  constants_copy_to_array(&cf.constants, chunk->constants);
+
+  arena_scope_end(ctx->scratch, snapshot);
+}
+
+void specializer_flatten_constants(SpecializerContext *ctx) {
+  Compiler *compiler = ctx->compiler;
+
+  for (u32 i = 1; i < compiler->functions.len; i++) {
+    IIrChunk *chunk = &compiler_get_function(compiler, (ResidualFunctionKey){i})->chunk;
+
+    if (!chunk->constants) {
+      flatten_chunk_constants(ctx, chunk);
+    }
+  }
+}
+
 internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *state) {
   IIrBuilder *builder = &state->function.builder;
   Frame *f = &state->frame;
@@ -342,7 +502,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
       ResidualFunction *func;
       ResidualFunctionKey key = compiler_add_function(ctx->compiler, &func);
 
-      iir_builder_flatten(builder, ctx->perm, &func->chunk);
+      iir_builder_flatten(builder, ctx->perm, ctx->types, &func->chunk);
 
       ValueResidualFunction data = { .key = key };
       last_value = values_intern_data(ctx->values, span->data.function.function_type, &data, sizeof(data));
@@ -954,12 +1114,20 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         type_br = result_type;
       }
 
-      InstructionOffset inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
-      IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
-      *data_br = (IIrBr){
-        .block = expect_residual_at_instruction_index(f, br->block),
-        .value = ref,
-      };
+      InstructionOffset target = expect_residual_at_instruction_index(f, br->block);
+      InstructionOffset inst_br;
+
+      if (iref_is_nil(ref)) {
+        inst_br = iir_builder_add(builder, IIR_br_void, f->chunk->sources[pc]);
+        iir_builder_set_data(builder, inst_br, target);
+      } else {
+        inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
+        IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
+        *data_br = (IIrBr){
+          .block = target,
+          .value = ref,
+        };
+      }
 
       Scope *block = find_scope(&f->scopes, br->block);
       scope_add_break_or_return(block, ctx->scratch, pc);
@@ -1086,7 +1254,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    InstructionOffset inst = iir_builder_add(builder, IIR_ret, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, iref_is_nil(val) ? IIR_ret_void : IIR_ret, f->chunk->sources[pc]);
 
     TypeKey type_ret;
     if (key_is_some(return_type)) {
@@ -1101,7 +1269,9 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     f->inst_types[pc] = type_ret;
 
-    iir_builder_set_data(builder, inst, iref_to_u32(val));
+    if (!iref_is_nil(val)) {
+      iir_builder_set_data(builder, inst, iref_to_u32(val));
+    }
     iir_builder_set_type(builder, inst, type_ret);
 
     scope_add_break_or_return(func_scope, ctx->scratch, pc);
@@ -1133,6 +1303,41 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_call: {
     SIrCall *call = sir_chunk_extra(f->chunk, pc);
 
+    IRef func = resolve(ctx, f, call->func);
+
+    if (!iref_is_some_value(func)) {
+      Todo();
+    }
+
+    TypeKey type_func = get_value_type(ctx, iref_to_value(func));
+
+    if (types_get(ctx->types, type_func)->kind != Type_function) {
+      Todo();
+    }
+
+    if (types_get(ctx->types, type_func)->data.function.param_count != call->arg_count) {
+      Todo();
+    }
+
+    IRef *args = arena_push_array(IRef, ctx->scratch, call->arg_count);
+
+    for (u32 i = 0; i < call->arg_count; i++) {
+      IRef arg = resolve(ctx, f, call->args[i]);
+      TypeKey type_param = types_get(ctx->types, type_func)->data.function.param_types[i];
+
+      if (key_is_nil(type_param)) {
+        args[i] = arg;
+        continue;
+      }
+
+      b32 ok = coerce(ctx, state, arg, type_param, pc, &args[i]);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+    }
+
+    TypeKey return_type = types_get(ctx->types, type_func)->data.function.return_type;
+
     InstructionOffset inst_call = iir_builder_add(builder, IIR_call, f->chunk->sources[pc]);
 
     IIrCall *data_call = iir_builder_push_data_raw(
@@ -1142,30 +1347,17 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       Align_of(IIrCall)
     );
 
-    IRef func = resolve(ctx, f, call->func);
-
     *data_call = (IIrCall){
       .func_ptr = func,
       .arg_count = call->arg_count,
     };
 
     for (u32 i = 0; i < call->arg_count; i++) {
-      data_call->args[i] = resolve(ctx, f, call->args[i]);
+      data_call->args[i] = args[i];
     }
 
-    if (iref_is_some_value(func)) {
-      TypeKey t = get_value_type(ctx, iref_to_value(func));
-      Type *func_type = types_get(ctx->types, t);
-
-      if (func_type->kind != Type_function) {
-        Todo();
-      }
-
-      store_inst_type(f, pc, func_type->data.function.return_type);
-      iir_builder_set_type(builder, inst_call, func_type->data.function.return_type);
-    } else {
-      Todo();
-    }
+    store_inst_type(f, pc, return_type);
+    iir_builder_set_type(builder, inst_call, return_type);
 
     store_inst_value(f, pc, iref_from_instruction(inst_call));
 
@@ -1261,16 +1453,15 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       f->inst_types[pc] = t->data.pointer.base_type;
     } else {
-      InstructionOffset inst = iir_builder_add(builder, IIR_load, f->chunk->sources[pc]);
-      TypeKey type = iir_builder_get_type(builder, iref_to_instruction(val));
-      iir_builder_set_type(builder, inst, type);
-      iir_builder_set_data(builder, inst, iref_to_u32(val));
-
-      store_inst_value(f, pc, iref_from_instruction(inst));
-
       TypeKey type_idx = ref_typeof(ctx, f, ref);
       Type *t = types_get(ctx->types, type_idx);
       Assert(t->kind == Type_pointer);
+
+      InstructionOffset inst = iir_builder_add(builder, IIR_load, f->chunk->sources[pc]);
+      iir_builder_set_type(builder, inst, t->data.pointer.base_type);
+      iir_builder_set_data(builder, inst, iref_to_u32(val));
+
+      store_inst_value(f, pc, iref_from_instruction(inst));
 
       f->inst_types[pc] = t->data.pointer.base_type;
     }
@@ -1324,13 +1515,14 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     // TODO type may not be comptime
 
+    TypeKey ptr_type = types_add_pointer(ctx->types, type);
+
     InstructionOffset inst = iir_builder_add(builder, IIR_alloc, f->chunk->sources[pc]);
 
-    iir_builder_set_type(builder, inst, type);
+    iir_builder_set_type(builder, inst, ptr_type);
 
     store_inst_value(f, pc, iref_from_instruction(inst));
 
-    TypeKey ptr_type = types_add_pointer(ctx->types, type);
     f->inst_types[pc] = ptr_type;
 
     s->pc += 1;
