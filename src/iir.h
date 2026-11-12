@@ -41,8 +41,8 @@ typedef enum {
   IIR_ret_void,
   IIR_call, // references `ICall`
 
-  // int_cast is for widening integer casts that cannot fail.
-  IIR_int_cast, // contains IRef
+  IIR_int_extend, // contains IRef
+  IIR_int_cast_check, // contains IRef
   IIR_int_add,
   IIR_int_sub,
   IIR_int_mul,

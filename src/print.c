@@ -433,7 +433,8 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_ret_void: break;
 
     case IIR_bit_not:
-    case IIR_int_cast:
+    case IIR_int_extend:
+    case IIR_int_cast_check:
     case IIR_load:
     case IIR_ret:
     case IIR_builtin_debug:

@@ -51,6 +51,8 @@ typedef uint64_t b64;
 
 #define internal      static
 #define always_inline __attribute__((always_inline)) inline
+#define TTLD_NORETURN __attribute__((noreturn))
+#define TTLD_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 
 #define Cast(T, x) ((T)(x))
 
@@ -137,7 +139,7 @@ always_inline void *ptr_forward_align(void const *p, u32 align) {
 #define Align_of(x) _Alignof(x)
 #define Offsetof(s,m) offsetof(s,m)
 
-void ttld_panic_handler(char const *func, char const *file, i32 line);
+TTLD_NORETURN void ttld_panic_handler(char const *func, char const *file, i32 line);
 
 #ifdef TTLD_COMPILER_CLANG
   #ifdef TTLD_SAFE

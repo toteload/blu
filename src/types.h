@@ -129,9 +129,24 @@ typedef enum {
 
 u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from);
 
-// An explicit cast. Allows everything a coercion allows, plus narrowing and signedness changes
-// between integer types, which truncate.
-b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from);
+typedef enum {
+  CAST_INVALID,
+  CAST_COERCION_IDENTICAL_TYPES,
+  CAST_COERCION_INT_WIDEN,
+  CAST_COERCION_BOOL_TO_INT,
+  CAST_COERCION_ARRAY_TO_SLICE,
+  CAST_COERCION_COMPTIME,
+  CAST_INT_RANGE_CHECK,
+} CastClassification;
+
+TTLD_STATIC_ASSERT(Coercion_invalid         == CAST_INVALID,                  "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Coercion_identical_types == CAST_COERCION_IDENTICAL_TYPES, "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Coercion_int_widen       == CAST_COERCION_INT_WIDEN,       "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Coercion_bool_to_int     == CAST_COERCION_BOOL_TO_INT,     "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Coercion_array_to_slice  == CAST_COERCION_ARRAY_TO_SLICE,  "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Coercion_comptime        == CAST_COERCION_COMPTIME,        "Coercion classification must be in sync with cast classification");
+
+u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from);
 
 b8 is_type_comptime(TypeInterner *types, TypeKey t);
 

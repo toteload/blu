@@ -384,7 +384,8 @@ internal u32 step(Interpreter *in) {
     f->pc += 1;
   } break;
 
-  case IIR_int_cast: {
+  case IIR_int_extend:
+  case IIR_int_cast_check: {
     IRef ref = iir_chunk_ref(f->chunk, pc);
 
     // The operand of an int_cast is always runtime otherwise the cast would have already been performed in the specializer.

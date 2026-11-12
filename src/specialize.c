@@ -75,7 +75,7 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
     ValueKey val_res;
     u32 err = eval_coerce(ctx->types, ctx->values, dst, iref_to_value(ref), &val_res);
     if (err == CoerceResult_comptime_int_value_out_of_range) {
-      Message_error(ctx->msg_sink, loc, string_lit("Value of comptime_int is out of range of destination type"));
+      Message_error(ctx->msg_sink, loc, string_lit("Value of comptime_int does not fit in the destination type %type"), dst);
       return False;
     }
 
@@ -101,7 +101,7 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   case Coercion_int_widen:
   case Coercion_bool_to_int: {
     IIrBuilder *builder = &sp->function.builder;
-    InstructionOffset inst = iir_builder_add(builder, IIR_int_cast, sp->frame.chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, IIR_int_extend, sp->frame.chunk->sources[pc]);
     iir_builder_set_data(builder, inst, iref_to_u32(ref));
     iir_builder_set_type(builder, inst, dst);
     *res = iref_from_instruction(inst);
@@ -828,7 +828,9 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     TypeKey type_src = ref_typeof(ctx, f, cast->val);
 
-    if (!is_type_castable_to(ctx->types, type_dst, type_src)) {
+    CastClassification kind = classify_type_cast(ctx->types, type_dst, type_src);
+
+    if (kind == CAST_INVALID) {
       Message_error(
         ctx->msg_sink,
         (MessageLocation){
@@ -849,53 +851,67 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef ref = resolve(ctx, f, cast->val);
     Assert(!iref_is_nil(ref));
 
-    if (key_eq(type_dst, type_src)) {
-      store_inst_value(f, pc, ref);
-      s->pc = pc + 1;
-      break;
-    }
+    switch (kind) {
+    case CAST_INVALID:
+      Unreachable();
 
-    if (iref_is_some_value(ref)) {
-      Type *t_src = types_get(ctx->types, type_src);
-
-      TypeInteger int_src = (t_src->kind == Type_comptime_int)
-        ? (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 }
-        : t_src->data.integer;
-
-      TypeInteger int_dst = types_get(ctx->types, type_dst)->data.integer;
-
-      u32 size = int_dst.bitwidth / 8;
-
-      u64 data = 0;
-      Assert(size <= sizeof(data));
-
-      void *payload = values_get(ctx->values, iref_to_value(ref))->data;
-
-      u32 err = eval_cast_int(int_src, payload, int_dst, &data);
-      if (err) {
-        Message_error(
-          ctx->msg_sink,
-          (MessageLocation){
-            .kind = MessageLocation_ir_instruction,
-            .decl_idx = state->frame.decl,
-            .data.offset = s->pc,
-          },
-          string_lit("Value does not fit in the destination type %type of the cast"),
-          type_dst
-        );
-
+    case CAST_COERCION_IDENTICAL_TYPES:
+    case CAST_COERCION_INT_WIDEN:
+    case CAST_COERCION_BOOL_TO_INT:
+    case CAST_COERCION_ARRAY_TO_SLICE:
+    case CAST_COERCION_COMPTIME: {
+      IRef res;
+      if (!coerce(ctx, state, ref, type_dst, pc, &res)) {
         return (StepResult){ .kind = Step_error };
       }
 
-      ValueKey res = values_intern_data(ctx->values, type_dst, &data, size);
+      store_inst_value(f, pc, res);
+    } break;
 
-      store_inst_value(f, pc, iref_from_value(res));
-    } else {
-      InstructionOffset inst = iir_builder_add(builder, IIR_int_cast, f->chunk->sources[pc]);
+    case CAST_INT_RANGE_CHECK: {
+      if (iref_is_some_value(ref)) {
+        Type *t_src = types_get(ctx->types, type_src);
+        Assert(t_src->kind == Type_integer);
+
+        TypeInteger int_src = t_src->data.integer;
+
+        TypeInteger int_dst = types_get(ctx->types, type_dst)->data.integer;
+
+        u32 size = int_dst.bitwidth / 8;
+
+        u64 data = 0;
+        Assert(size <= sizeof(data));
+
+        void *payload = values_get(ctx->values, iref_to_value(ref))->data;
+
+        u32 err = eval_cast_int(int_src, payload, int_dst, &data);
+        if (err) {
+          Message_error(
+            ctx->msg_sink,
+            (MessageLocation){
+              .kind = MessageLocation_ir_instruction,
+              .decl_idx = state->frame.decl,
+              .data.offset = s->pc,
+            },
+            string_lit("Value does not fit in the destination type %type of the cast"),
+            type_dst
+          );
+
+          return (StepResult){ .kind = Step_error };
+        }
+
+        ValueKey res = values_intern_data(ctx->values, type_dst, &data, size);
+
+        store_inst_value(f, pc, iref_from_value(res));
+        break;
+      }
+
+      InstructionOffset inst = iir_builder_add(builder, IIR_int_cast_check, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(ref));
       iir_builder_set_type(builder, inst, type_dst);
 
       store_inst_value(f, pc, iref_from_instruction(inst));
+    } break;
     }
 
     s->pc = pc + 1;

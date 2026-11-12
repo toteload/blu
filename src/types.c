@@ -323,16 +323,21 @@ internal b32 is_type_int_like(TypeKey t) {
   return (t.x >= TYPE_COMPTIME_INT.x) && (t.x <= TYPE_ISIZE.x);
 }
 
-b32 is_type_castable_to(TypeInterner *types, TypeKey to, TypeKey from) {
-  if (classify_type_coercion(types, to, from) != Coercion_invalid) {
-    return True;
+u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from) {
+  if (is_type_comptime(types, to)) {
+    return CAST_INVALID;
   }
 
-  if (key_eq(to, TYPE_COMPTIME_INT)) {
-    return False;
+  u32 coercion = classify_type_coercion(types, to, from);
+  if (coercion != Coercion_invalid) {
+    return coercion;
   }
 
-  return is_type_int_like(to) && is_type_int_like(from);
+  if (is_type_int_like(to) && is_type_int_like(from)) {
+    return CAST_INT_RANGE_CHECK;
+  }
+
+  return CAST_INVALID;
 }
 
 TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type) {
