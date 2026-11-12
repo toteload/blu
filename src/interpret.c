@@ -4,8 +4,105 @@
 
 #define MAX_SCOPE_DEPTH 64
 
-internal u32 slot_alloc(Interpreter *in, IIrOpSizeInfo size_info) {
-  void *p = arena_push(in->scratch, size_info.size, size_info.align);
+typedef struct {
+  usize len;
+  void *data;
+} RawSlice;
+
+internal TypeSizeInfo layout_of(Interpreter *in, TypeKey type) {
+  if (key_is_nil(type)) {
+    return (TypeSizeInfo){ .size = 0, .stride = 0, .align = 1 };
+  }
+
+  TypeSizeInfo info = types_size_info_by_key(&in->compiler->types, type);
+  info.align = Max(info.align, 1);
+  return info;
+}
+
+internal ValueKey follow_stubs(Compiler *compiler, ValueKey key) {
+  Value *v = values_get(&compiler->values, key);
+
+  while (key_eq(v->type, TYPE_STUB)) {
+    Stub *stub = compiler_get_stub(compiler, Cast(ValueStubRef *, v->data)->stub);
+    Assert(stub->resolve_status == RESOLVE_STATUS_FULLY_RESOLVED);
+    key = stub->val;
+    v = values_get(&compiler->values, key);
+  }
+
+  return key;
+}
+
+internal void *constant_data(Interpreter *in, ValueKey key);
+
+internal void materialize(Interpreter *in, TypeKey type, void const *src, void *dst) {
+  TypeInterner *types = &in->compiler->types;
+  Type *t = types_get(types, type);
+
+  switch (Cast(TypeKind, t->kind)) {
+  case Type_integer:
+  case Type_bool:
+  case Type_type:
+  case Type_nil:
+  case Type_never:
+  case Type_function: {
+    TypeSizeInfo size_info = types_size_info(types, t);
+    if (size_info.size > 0) {
+      memcpy(dst, src, size_info.size);
+    }
+  } break;
+
+  case Type_array: {
+    TypeSizeInfo elem = types_size_info_by_key(types, t->data.array.base_type);
+    for (u64 i = 0; i < t->data.array.size; i++) {
+      materialize(
+        in,
+        t->data.array.base_type,
+        ptr_offset(src, i * elem.stride),
+        ptr_offset(dst, i * elem.stride)
+      );
+    }
+  } break;
+
+  case Type_slice: {
+    ValueSlice const *slice = src;
+    void *pointee = constant_data(in, slice->ptr.val);
+    *Cast(RawSlice *, dst) = (RawSlice){
+      .len = slice->len,
+      .data = ptr_offset(pointee, slice->ptr.offset),
+    };
+  } break;
+
+  case Type_pointer: {
+    ValuePointer const *p = src;
+    void *pointee = constant_data(in, p->val);
+    *Cast(void **, dst) = ptr_offset(pointee, p->offset);
+  } break;
+
+  case Type_comptime_int:
+  case Type_stub:
+    Unreachable();
+  }
+}
+
+internal void *constant_data(Interpreter *in, ValueKey key) {
+  key = follow_stubs(in->compiler, key);
+
+  void **slot = &in->constants[key.x];
+  if (*slot) {
+    return *slot;
+  }
+
+  Value *v = values_get(&in->compiler->values, key);
+  TypeSizeInfo info = layout_of(in, v->type);
+  void *data = arena_push(in->perm, info.size, info.align);
+  *slot = data;
+  materialize(in, v->type, v->data, data);
+
+  return data;
+}
+
+internal u32 slot_alloc(Interpreter *in, TypeSizeInfo info) {
+  void *p = arena_push(in->scratch, info.size, info.align);
   return Cast(u32, ptr_diff(p, in->scratch->base));
 }
 
@@ -13,20 +110,21 @@ internal void *slot_ptr(Interpreter *in, CallFrame2 *f, InstructionOffset inst) 
   return ptr_offset(in->scratch->base, f->value_offsets[inst]);
 }
 
-internal void *resolve(Interpreter *in, CallFrame2 *f, CRef ref) {
-  if (cref_is_constant(ref)) {
-    return iir_chunk_constant(f->chunk, ref)->data;
+internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
+  if (iref_is_value(ref)) {
+    return constant_data(in, iref_to_value(ref));
   }
 
-  return slot_ptr(in, f, cref_to_instruction(ref));
+  return slot_ptr(in, f, iref_to_instruction(ref));
 }
 
-internal TypeKey ref_type(CallFrame2 *f, CRef ref) {
-  if (cref_is_constant(ref)) {
-    return iir_chunk_constant(f->chunk, ref)->type;
+internal TypeKey ref_type(Interpreter *in, CallFrame2 *f, IRef ref) {
+  if (iref_is_value(ref)) {
+    ValueKey key = follow_stubs(in->compiler, iref_to_value(ref));
+    return values_get(&in->compiler->values, key)->type;
   }
 
-  return iir_chunk_type(f->chunk, cref_to_instruction(ref));
+  return iir_chunk_type(f->chunk, iref_to_instruction(ref));
 }
 
 internal void copy_value(void *dst, void const *src, u32 size) {
@@ -63,7 +161,7 @@ internal void frame_set_param(Interpreter *in, CallFrame2 *f, u32 param_index, v
   InstructionOffset inst = 1 + param_index;
   Assert(iir_chunk_op(f->chunk, inst) == IIR_param);
 
-  IIrOpSizeInfo size_info = iir_chunk_size_info(f->chunk, inst);
+  TypeSizeInfo size_info = layout_of(in, iir_chunk_type(f->chunk, inst));
   f->value_offsets[inst] = slot_alloc(in, size_info);
   copy_value(slot_ptr(in, f, inst), src, size_info.size);
 }
@@ -126,7 +224,7 @@ internal u32 step(Interpreter *in) {
   InstructionOffset pc = f->pc;
   IIrOpcode op = iir_chunk_op(f->chunk, pc);
   TypeKey type = iir_chunk_type(f->chunk, pc);
-  IIrOpSizeInfo size_info = iir_chunk_size_info(f->chunk, pc);
+  TypeSizeInfo size_info = layout_of(in, type);
 
   f->value_offsets[pc] = slot_alloc(in, size_info);
   void *local = slot_ptr(in, f, pc);
@@ -164,8 +262,8 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_br: {
-    IIrChunkBr *br = iir_chunk_extra(f->chunk, pc);
-    u32 size = iir_chunk_size_info(f->chunk, br->block).size;
+    IIrBr *br = iir_chunk_extra(f->chunk, pc);
+    u32 size = layout_of(in, iir_chunk_type(f->chunk, br->block)).size;
     copy_value(slot_ptr(in, f, br->block), resolve(in, f, br->value), size);
     scopes_pop_to(in, f, br->block);
     u32 inst_count = iir_chunk_data(f->chunk, br->block);
@@ -180,7 +278,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_condbr: {
-    IIrChunkCondbr *condbr = iir_chunk_extra(f->chunk, pc);
+    IIrCondbr *condbr = iir_chunk_extra(f->chunk, pc);
     u8* v = resolve(in, f, condbr->cond);
     if (*v) {
       f->pc += 1;
@@ -190,7 +288,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_call: {
-    IIrChunkCall *call = iir_chunk_extra(f->chunk, pc);
+    IIrCall *call = iir_chunk_extra(f->chunk, pc);
     ResidualFunctionKey key = *Cast(ResidualFunctionKey *, resolve(in, f, call->func_ptr));
     IIrChunk *chunk = &compiler_get_function(in->compiler, key)->chunk;
 
@@ -216,9 +314,9 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_index: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
 
-    Type *t = types_get(&in->compiler->types, ref_type(f, bin->lhs));
+    Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
 
     void *base;
     u64 len;
@@ -227,7 +325,7 @@ internal u32 step(Interpreter *in) {
       base = resolve(in, f, bin->lhs);
       len = t->data.array.size;
     } else {
-      IIrSlice *slice = resolve(in, f, bin->lhs);
+      RawSlice *slice = resolve(in, f, bin->lhs);
       base = slice->data;
       len = slice->len;
     }
@@ -250,7 +348,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_builtin_len: {
-    IIrSlice *slice = resolve(in, f, iir_chunk_ref(f->chunk, pc));
+    RawSlice *slice = resolve(in, f, iir_chunk_ref(f->chunk, pc));
     *Cast(usize *, local) = slice->len;
     f->pc += 1;
   } break;
@@ -272,7 +370,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_store: {
-    IIrChunkStore *store = iir_chunk_extra(f->chunk, pc);
+    IIrStore *store = iir_chunk_extra(f->chunk, pc);
     void **p = resolve(in, f, store->ptr);
     void *val = resolve(in, f, store->value);
     copy_value(*p, val, size_info.size);
@@ -280,21 +378,21 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_load: {
-    CRef ref = iir_chunk_ref(f->chunk, pc);
+    IRef ref = iir_chunk_ref(f->chunk, pc);
     void **p = resolve(in, f, ref);
     copy_value(local, *p, size_info.size);
     f->pc += 1;
   } break;
 
   case IIR_int_cast: {
-    CRef ref = iir_chunk_ref(f->chunk, pc);
+    IRef ref = iir_chunk_ref(f->chunk, pc);
 
     // The operand of an int_cast is always runtime otherwise the cast would have already been performed in the specializer.
-    Assert(cref_is_instruction(ref));
+    Assert(iref_is_instruction(ref));
 
     void *val = resolve(in, f, ref);
 
-    Type *t = types_get(&in->compiler->types, ref_type(f, ref));
+    Type *t = types_get(&in->compiler->types, ref_type(in, f, ref));
     Type *v = types_get(&in->compiler->types, type);
 
     u32 err = eval_cast_int(t->data.integer, val, v->data.integer, local);
@@ -311,7 +409,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_add: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
@@ -330,7 +428,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_sub: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
@@ -349,7 +447,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_mul: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
@@ -368,7 +466,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_div: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
@@ -402,7 +500,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_int_mod: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
@@ -432,7 +530,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_bit_and: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     u8 *lhs = resolve(in, f, bin->lhs);
     u8 *rhs = resolve(in, f, bin->rhs);
 
@@ -457,11 +555,11 @@ internal u32 step(Interpreter *in) {
   case IIR_int_cmp_ge:
   case IIR_int_cmp_lt:
   case IIR_int_cmp_le: {
-    IIrChunkBinary *bin = iir_chunk_extra(f->chunk, pc);
+    IIrBinary *bin = iir_chunk_extra(f->chunk, pc);
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
-    Type *t = types_get(&in->compiler->types, ref_type(f, bin->lhs));
+    Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
 
     i32 ord;
     if (t->data.integer.signedness == Signed) {

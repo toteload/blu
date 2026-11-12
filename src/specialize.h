@@ -126,7 +126,6 @@ typedef struct {
 } StepResult;
 
 void specializer_init_function(SpecializerContext *sp, Specializer *state, StubKey stub_key);
-void specializer_flatten_constants(SpecializerContext *sp);
 
 StepResult run_toplevel_block(SpecializerContext *sp, Specializer *state);
 void specializer_resolve_decl(Specializer *state, ValueKey decl_val);

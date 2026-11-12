@@ -629,8 +629,14 @@ b32 run_main(Compiler *compiler) {
 
   // TODO: make sure main has the correct type
 
+  usize value_count = compiler->values.aux.list.len;
+  void **constants = arena_push_array(void *, &compiler->arena, value_count);
+  memset(constants, 0, value_count * sizeof(void *));
+
   Interpreter in = {
     .scratch = &compiler->scratch,
+    .perm = &compiler->arena,
+    .constants = constants,
     .msg_sink = &compiler->msg_sink,
     .compiler = compiler,
   };
