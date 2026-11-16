@@ -279,7 +279,8 @@ void test_classify_type_coercion(TestResult *test, void *user) {
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_comptime_int), Coercion_comptime);
   Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_i32), Coercion_identical_types);
   Test_assert_eq(classify_type_coercion(&types, t_fn_i32, t_fn_bool), Coercion_invalid);
-  Test_assert_eq(classify_type_coercion(&types, t_i32, t_bool), Coercion_bool_to_int);
+  Test_assert_eq(classify_type_coercion(&types, t_i32, t_bool), Coercion_invalid);
+  Test_assert_eq(classify_type_cast(&types, t_i32, t_bool), CAST_BOOL_TO_INT);
   Test_assert_eq(classify_type_coercion(&types, t_i32, t_u8), Coercion_invalid);
 
   arena_deinit(&arena);
@@ -321,14 +322,9 @@ void test_eval_coerce(TestResult *test, void *user) {
   Test_assert_eq(v->size - sizeof(Value), 8);
   Test_assert_eq(*Cast(i64 *, v->data), -5);
 
-  // bool -> int zero-extends.
   u8 yes = 1;
   err = eval_coerce(&types, &values, t_u32, values_intern_data(&values, t_bool, &yes, sizeof(yes)), &res);
-  Test_assert_eq(err, CoerceResult_ok);
-  v = values_get(&values, res);
-  Test_assert(key_eq(v->type, t_u32));
-  Test_assert_eq(v->size - sizeof(Value), 4);
-  Test_assert_eq(*Cast(u32 *, v->data), 1);
+  Test_assert_eq(err, CoerceResult_invalid_coercion_types);
 
   values_deinit(&values);
   arena_deinit(&arena);

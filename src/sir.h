@@ -8,6 +8,9 @@
 // Specializer IR
 // -------------------------------------------------------------------------------------------------
 
+#define SIR_TYPE_ARG_ARRAY_SIZE 0
+#define SIR_TYPE_ARG_ARRAY_BASE_TYPE 1
+
 #define REF_NAME SRef
 #define REF_FUNCTION_PREFIX sref
 #include "ref.h"

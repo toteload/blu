@@ -270,17 +270,6 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     *res = val;
     return CoerceResult_ok;
   }
-  case Coercion_bool_to_int: {
-    TypeSizeInfo size_info = types_size_info_by_key(types, dst);
-    u64 data = 0;
-    // not a very nice solution, because what if we get integers larger than u64, but it will do for now
-    Assert(size_info.size <= sizeof(data));
-    *Cast(u8*, &data) = *Cast(u8*, v->data);
-
-    *res = values_intern_data(values, dst, &data, size_info.size);
-
-    return CoerceResult_ok;
-  }
   case Coercion_int_widen: {
     TypeSizeInfo size_info = types_size_info_by_key(types, dst);
     u64 data = 0;

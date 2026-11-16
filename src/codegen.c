@@ -649,8 +649,8 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     SIrType *data = sir_builder_push_data_raw(builder, inst, sizeof(SIrType) + 2 * sizeof(SRef), Align_of(SIrType));
     data->kind = Type_array;
     data->arg_count = 2;
-    data->args[0] = array_size;
-    data->args[1] = base_type;
+    data->args[SIR_TYPE_ARG_ARRAY_SIZE] = array_size;
+    data->args[SIR_TYPE_ARG_ARRAY_BASE_TYPE] = base_type;
     return sref_from_instruction(inst);
   } break;
 

@@ -122,7 +122,6 @@ typedef enum {
   Coercion_invalid,
   Coercion_identical_types,
   Coercion_int_widen,
-  Coercion_bool_to_int,
   Coercion_array_to_slice,
   Coercion_comptime,
 } CoercionResult;
@@ -133,22 +132,22 @@ typedef enum {
   CAST_INVALID,
   CAST_COERCION_IDENTICAL_TYPES,
   CAST_COERCION_INT_WIDEN,
-  CAST_COERCION_BOOL_TO_INT,
   CAST_COERCION_ARRAY_TO_SLICE,
   CAST_COERCION_COMPTIME,
   CAST_INT_RANGE_CHECK,
+  CAST_BOOL_TO_INT,
 } CastClassification;
 
-TTLD_STATIC_ASSERT(Coercion_invalid         == CAST_INVALID,                  "Coercion classification must be in sync with cast classification");
-TTLD_STATIC_ASSERT(Coercion_identical_types == CAST_COERCION_IDENTICAL_TYPES, "Coercion classification must be in sync with cast classification");
-TTLD_STATIC_ASSERT(Coercion_int_widen       == CAST_COERCION_INT_WIDEN,       "Coercion classification must be in sync with cast classification");
-TTLD_STATIC_ASSERT(Coercion_bool_to_int     == CAST_COERCION_BOOL_TO_INT,     "Coercion classification must be in sync with cast classification");
-TTLD_STATIC_ASSERT(Coercion_array_to_slice  == CAST_COERCION_ARRAY_TO_SLICE,  "Coercion classification must be in sync with cast classification");
-TTLD_STATIC_ASSERT(Coercion_comptime        == CAST_COERCION_COMPTIME,        "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Cast(u32, Coercion_invalid)         == CAST_INVALID,                  "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Cast(u32, Coercion_identical_types) == CAST_COERCION_IDENTICAL_TYPES, "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Cast(u32, Coercion_int_widen)       == CAST_COERCION_INT_WIDEN,       "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Cast(u32, Coercion_array_to_slice)  == CAST_COERCION_ARRAY_TO_SLICE,  "Coercion classification must be in sync with cast classification");
+TTLD_STATIC_ASSERT(Cast(u32, Coercion_comptime)        == CAST_COERCION_COMPTIME,        "Coercion classification must be in sync with cast classification");
 
 u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from);
 
 b8 is_type_comptime(TypeInterner *types, TypeKey t);
+b32 is_type_int_like(TypeKey t);
 
 // An add is always between two values of the same type.
 b32 check_type_for_op_bitshift(TypeKey lhs, TypeKey rhs);

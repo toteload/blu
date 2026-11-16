@@ -1,8 +1,3 @@
-- [ ] Change the memory layout of values in the interpreter.
-  - IRef also needs to be different and should no longer refer to a Value.
-    For the interpreter, all referenced Values must be converted to flat bytes.
-    IRef then still has the split between either referring to an instruction result or flat data.
-
 - [ ] Compile time evaluation of binary operators in specialize.c
   - Both operands constant hits `Todo()` (`specialize.c:1672`), e.g. `N : i32 = 6 * 7`.
   - Applies to `+ - * / %` and the bit operators. Reuse the interpreter's overflow and division-by-zero checks so comptime and runtime behave the same.
@@ -12,6 +7,9 @@
   - `main := |x: i32|: i32 { x }` segfaults: arguments are never passed (`interpreter_call` hits `Todo()` for any argument).
   - The return value is written to a fixed `u8 buf[16]`, so a larger return type overflows the stack.
   - Require no parameters and a return type that fits, and report a normal error otherwise.
+- [ ] Referring to a declaration that failed to resolve panics (`RESOLVE_STATUS_ERROR: Panic()` in `SIR_get_decl_value`, `specialize.c:767`).
+  - Repro: `T := [true]u8` and `main := ||: i32 { #debug(T) 0 }`. The panic hides the original error ("Cannot coerce value of type bool to type usize").
+  - The use site should give up with `Step_error`, so the original error is still reported.
 - [ ] SIR code generation can be moved to `Source`.
 - [ ] Change the signature of the eval_int_* functions to use signedness enum and bitwidth instead of TypeInteger.
 

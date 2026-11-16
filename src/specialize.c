@@ -98,8 +98,7 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
     *res = ref;
     return True;
 
-  case Coercion_int_widen:
-  case Coercion_bool_to_int: {
+  case Coercion_int_widen: {
     IIrBuilder *builder = &sp->function.builder;
     InstructionOffset inst = iir_builder_add(builder, IIR_int_extend, sp->frame.chunk->sources[pc]);
     iir_builder_set_data(builder, inst, iref_to_u32(ref));
@@ -109,7 +108,7 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   }
 
   case Coercion_array_to_slice: Todo();
-  case Coercion_comptime: Todo(); 
+  case Coercion_comptime: Unreachable();
 
   case Coercion_invalid:
     Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), from, dst);
@@ -857,7 +856,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     case CAST_COERCION_IDENTICAL_TYPES:
     case CAST_COERCION_INT_WIDEN:
-    case CAST_COERCION_BOOL_TO_INT:
     case CAST_COERCION_ARRAY_TO_SLICE:
     case CAST_COERCION_COMPTIME: {
       IRef res;
@@ -907,6 +905,30 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
 
       InstructionOffset inst = iir_builder_add(builder, IIR_int_cast_check, f->chunk->sources[pc]);
+      iir_builder_set_data(builder, inst, iref_to_u32(ref));
+      iir_builder_set_type(builder, inst, type_dst);
+
+      store_inst_value(f, pc, iref_from_instruction(inst));
+    } break;
+
+    case CAST_BOOL_TO_INT: {
+      if (iref_is_some_value(ref)) {
+        TypeInteger int_dst = types_get(ctx->types, type_dst)->data.integer;
+        TypeInteger int_bool = { .signedness = Unsigned, .bitwidth = 8 };
+
+        u64 data = 0;
+        void *payload = values_get(ctx->values, iref_to_value(ref))->data;
+
+        u32 err = eval_cast_int(int_bool, payload, int_dst, &data);
+        Assert(err == CastResult_ok);
+
+        ValueKey res = values_intern_data(ctx->values, type_dst, &data, int_dst.bitwidth / 8);
+
+        store_inst_value(f, pc, iref_from_value(res));
+        break;
+      }
+
+      InstructionOffset inst = iir_builder_add(builder, IIR_int_extend, f->chunk->sources[pc]);
       iir_builder_set_data(builder, inst, iref_to_u32(ref));
       iir_builder_set_type(builder, inst, type_dst);
 
@@ -1038,7 +1060,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       TypeKey base_type;
       b32 ok = expect_type_value_or_nil(ctx, state, type->args[0], &base_type);
       if (!ok) {
-        Todo();
+        return (StepResult){ .kind = Step_error };
       }
 
       t = types_intern(
@@ -1050,7 +1072,40 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       );
     } break;
 
-    case Type_array: Todo();
+    case Type_array: {
+      Assert(type->arg_count == 2);
+
+      ValueKey array_size;
+      b32 ok = expect_some_comptime_value(ctx, state, type->args[SIR_TYPE_ARG_ARRAY_SIZE], &array_size);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+
+      IRef ref_usize_array_size;
+      ok = coerce(ctx, state, iref_from_value(array_size), TYPE_USIZE, pc, &ref_usize_array_size);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+
+      ValueKey usize_array_size = iref_to_value(ref_usize_array_size);
+
+      TypeKey array_base_type;
+      ok = expect_some_type_value(ctx, state, type->args[SIR_TYPE_ARG_ARRAY_BASE_TYPE], &array_base_type);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
+      }
+
+      t = types_intern(
+        ctx->types,
+        &(Type){
+          .kind = Type_array,
+          .data.array = {
+            .base_type = array_base_type,
+            .size = read_int_zero_extend(64, values_get(ctx->values, usize_array_size)->data),
+          },
+        }
+      );
+    } break;
 
     default:
       Panic();

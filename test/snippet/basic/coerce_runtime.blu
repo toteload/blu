@@ -16,7 +16,7 @@ widen_store := |a: i8|: i64 {
 widen_operand := |a: i8, b: i32|: i32 { a + b }
 
 bool_store := |b: bool|: u8 {
-  x: u8 = b
+  x: u8 = cast(u8) b
   x
 }
 

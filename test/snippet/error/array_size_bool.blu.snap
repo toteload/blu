@@ -1,0 +1,3 @@
+[error] test/snippet/error/array_size_bool.blu:4:10: Cannot coerce value of type bool to type usize
+    4 |   #debug([true]u8)
+      |          ^

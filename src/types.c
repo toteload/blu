@@ -284,10 +284,6 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
     return Coercion_invalid;
   }
 
-  if (type_from->kind == Type_bool && type_to->kind == Type_integer) {
-    return Coercion_bool_to_int;
-  }
-
   if (type_from->kind == Type_array && type_to->kind == Type_slice) {
     if (key_eq(type_from->data.array.base_type, type_to->data.slice.base_type)) {
       return Coercion_array_to_slice;
@@ -319,7 +315,7 @@ u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
   return Coercion_invalid;
 }
 
-internal b32 is_type_int_like(TypeKey t) {
+b32 is_type_int_like(TypeKey t) {
   return (t.x >= TYPE_COMPTIME_INT.x) && (t.x <= TYPE_ISIZE.x);
 }
 
@@ -335,6 +331,10 @@ u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from) {
 
   if (is_type_int_like(to) && is_type_int_like(from)) {
     return CAST_INT_RANGE_CHECK;
+  }
+
+  if (key_eq(from, TYPE_BOOL) && types_get(types, to)->kind == Type_integer) {
+    return CAST_BOOL_TO_INT;
   }
 
   return CAST_INVALID;
