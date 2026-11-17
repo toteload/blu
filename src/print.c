@@ -231,14 +231,6 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
       fprintf(out, " otherwise=%%%u", cond_br->otherwise);
     } break;
 
-    case SIR_logical_and:
-    case SIR_logical_or: {
-      SIrLogicalAndOr *andor = extra; // Funny Star Wars joke it is
-      fprintf(out, "lhs=");
-      print_sref(out, compiler, andor->lhs);
-      fprintf(out, " block=%%%u", andor->block);
-    } break;
-
     case SIR_index:
     case SIR_mul:
     case SIR_div:

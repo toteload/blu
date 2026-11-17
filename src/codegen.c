@@ -199,6 +199,36 @@ SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef
   return sref_from_instruction(inst_block);
 }
 
+internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, AstIndex cond, AstIndex then, SRef then_fallback, AstIndex otherwise, SRef otherwise_fallback, SRef type_destination) {
+  SIrBuilder *builder = &gen->builder;
+  SourceKey source_idx = gen->source->idx;
+
+  InstructionOffset block = sir_builder_add_block(builder, type_destination, source_idx, idx_ast);
+
+  SRef cond_val = gen_code(gen, ctx, cond, sref_from_value(VAL_TYPE_BOOL));
+
+  InstructionOffset condbr = sir_builder_add(builder, SIR_condbr, source_idx, cond);
+  SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
+
+  SRef then_val = then ? gen_code(gen, ctx, then, type_destination) : then_fallback;
+  InstructionOffset then_br = sir_builder_add(builder, SIR_br, source_idx, then);
+  SIrBr *then_data = sir_builder_push_data(builder, then_br, SIrBr);
+  *then_data = (SIrBr){
+    .block = block,
+    .value = then_val,
+  };
+
+  SRef else_val = otherwise ? gen_code(gen, ctx, otherwise, type_destination) : otherwise_fallback;
+  sir_builder_end_block_with(builder, block, block, else_val, source_idx, otherwise);
+
+  *condbr_data = (SIrCondbr){
+    .cond = cond_val,
+    .otherwise = then_br + 1,
+  };
+
+  return sref_from_instruction(block);
+}
+
 internal BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
   switch (kind) {
   case Assign_normal: Panic();
@@ -323,43 +353,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
   case Ast_if_else: {
     AstIfElse *if_else = ast_data(ast, idx_ast);
-
-    InstructionOffset block = sir_builder_add_block(builder, type_destination, source_idx, idx_ast);
-
-    SRef cond_val = gen_code(gen, ctx, if_else->cond, sref_from_value(VAL_TYPE_BOOL));
-
-    InstructionOffset condbr = sir_builder_add(builder, SIR_condbr, source_idx, if_else->cond);
-    SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
-
-    SRef then_val = gen_code(gen, ctx, if_else->then, type_destination);
-
-    InstructionOffset then_br = sir_builder_add(builder, SIR_br, source_idx, if_else->then);
-    SIrBr *then_data = sir_builder_push_data(builder, then_br, SIrBr);
-    *then_data = (SIrBr){
-      .block = block,
-      .value = then_val,
-    };
-
-    SRef else_val = SREF_NIL;
-    if (if_else->otherwise) {
-      else_val = gen_code(gen, ctx, if_else->otherwise, type_destination);
-    }
-
-    InstructionOffset else_br_inst = sir_builder_add(builder, SIR_br, source_idx, if_else->otherwise);
-    SIrBr *else_br_data = sir_builder_push_data(builder, else_br_inst, SIrBr);
-    *else_br_data = (SIrBr){
-      .block = block,
-      .value = else_val,
-    };
-
-    *condbr_data = (SIrCondbr){
-      .cond = cond_val,
-      .otherwise = then_br + 1,
-    };
-
-    sir_builder_end_block(builder, block);
-
-    return sref_from_instruction(block);
+    return gen_if_else(gen, ctx, idx_ast, if_else->cond, if_else->then, SREF_NIL, if_else->otherwise, SREF_NIL, type_destination);
   } break;
 
   case Ast_type_function: {
@@ -722,24 +716,12 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_binary_op: {
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
-    if (binary->op_kind == Logical_and || binary->op_kind == Logical_or) {
-      InstructionOffset block = sir_builder_add_block(builder, sref_from_value(VAL_TYPE_BOOL), source_idx, idx_ast);
-      SRef lhs = gen_code(gen, ctx, binary->lhs, sref_from_value(VAL_TYPE_BOOL));
+    if (binary->op_kind == Logical_and) {
+      return gen_if_else(gen, ctx, idx_ast, binary->lhs, binary->rhs, SREF_NIL, 0, sref_from_value(VAL_BOOL_FALSE), sref_from_value(VAL_TYPE_BOOL));
+    }
 
-      u8 op = (binary->op_kind == Logical_and) ? SIR_logical_and : SIR_logical_or;
-
-      InstructionOffset inst = sir_builder_add(builder, op, source_idx, idx_ast);
-      SIrLogicalAndOr *data = sir_builder_push_data(builder, inst, SIrLogicalAndOr);
-      *data = (SIrLogicalAndOr){
-        .block = block,
-        .lhs = lhs,
-      };
-
-      SRef rhs = gen_code(gen, ctx, binary->rhs, sref_from_value(VAL_TYPE_BOOL));
-
-      sir_builder_end_block_with(builder, block, block, rhs, source_idx, binary->rhs);
-
-      return sref_from_instruction(block);
+    if (binary->op_kind == Logical_or) {
+      return gen_if_else(gen, ctx, idx_ast, binary->lhs, 0, sref_from_value(VAL_BOOL_TRUE), binary->rhs, SREF_NIL, sref_from_value(VAL_TYPE_BOOL));
     }
 
     SRef lhs = gen_code(gen, ctx, binary->lhs, SREF_NIL);

@@ -3,10 +3,10 @@
 #include "iir.h"
 #include "eval.h"
 
-#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
-#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
-#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
-#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define SEGMENTLIST_NAME BREAK_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_LIST_SEGMENT_COUNT
 #define SEGMENTLIST_FUNCTION_PREFIX breaks
 #define SEGMENTLIST_LINKAGE internal
 #define SEGMENTLIST_OUTPUT_DEFINITIONS
@@ -123,16 +123,13 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
 b8 scope_kind_is_comptime(ScopeKind kind) {
   switch (kind) {
   case Scope_block:
+  case Scope_condbr:
   case Scope_function:
     return False;
   case Scope_comptime:
   case Scope_signature_of_function:
     return True;
   }
-}
-
-void scope_add_break_or_return(Scope *scope, Arena *arena, InstructionOffset source) {
-  breaks_append(&scope->breaks_and_returns, arena, source);
 }
 
 Scope *find_scope(ScopeStack *scopes, InstructionOffset start_of_block) {
@@ -236,25 +233,30 @@ internal TypeKey get_iref_type(SpecializerContext *ctx, Specializer *sp, IRef re
   return iir_builder_get_type(&sp->function.builder, iref_to_instruction(ref));
 }
 
-internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builder, Frame *f, Scope *block) {
-  iir_builder_set_data(builder, block->residual, iir_builder_offset(builder, block->residual));
+internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builder, Frame *f, Scope *scope) {
+  Assert(scope->scope_kind == Scope_block);
+  InstructionOffset residual = scope->data.block.residual;
+  TypeKey result_type = scope->data.block.result_type;
+  BreakList *breaks = &scope->data.block.breaks;
 
-  if (key_is_some(block->result_type)) {
-    f->inst_types[block->start] = block->result_type;
-    iir_builder_set_type(builder, block->residual, block->result_type);
+  iir_builder_set_data(builder, residual, iir_builder_offset(builder, residual));
+
+  if (key_is_some(result_type)) {
+    f->inst_types[scope->start] = result_type;
+    iir_builder_set_type(builder, residual, result_type);
     return True;
   }
 
-  if (block->breaks_and_returns.len == 0) {
+  if (breaks->len == 0) {
     return True;
   }
 
-  TypeKey base_type = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, 0)];
+  TypeKey base_type = f->inst_types[breaks_at_unchecked(breaks, 0)];
   TypeKey type_unified = base_type;
   u32 err = UnifyResult_ok;
 
-  for (u32 i = 1; i < block->breaks_and_returns.len; i++) {
-    TypeKey t = f->inst_types[breaks_at_unchecked(&block->breaks_and_returns, i)];
+  for (u32 i = 1; i < breaks->len; i++) {
+    TypeKey t = f->inst_types[breaks_at_unchecked(breaks, i)];
 
     err = eval_unify(ctx->scratch, ctx->types, type_unified, t, &type_unified);
 
@@ -276,9 +278,9 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
     Todo();
   }
 
-  f->inst_types[block->start] = type_unified;
+  f->inst_types[scope->start] = type_unified;
 
-  iir_builder_set_type(builder, block->residual, type_unified);
+  iir_builder_set_type(builder, residual, type_unified);
 
   return True;
 }
@@ -351,46 +353,22 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
     } break;
 
     case Scope_block: {
-      // Must come before finalize_residual_block, so the short-circuit br is counted as part of the block.
-      if (span->logical_and) {
-        SIrLogicalAndOr *logic = sir_chunk_extra(f->chunk, span->logical_and);
-        AstAndSourceIndex source = f->chunk->sources[span->logical_and];
-
-        InstructionOffset inst_br = iir_builder_add(builder, IIR_br, source);
-        IIrBr *br = iir_builder_push_data(builder, inst_br, IIrBr);
-        *br = (IIrBr){
-          .block = span->residual,
-          .value = resolve(ctx, f, sref_from_value(VAL_BOOL_FALSE)),
-        };
-        iir_builder_set_type(builder, inst_br, TYPE_BOOL);
-
-        InstructionOffset inst_condbr = expect_residual_at_instruction_index(f, span->logical_and);
-        IIrCondbr *condbr = iir_builder_push_data(builder, inst_condbr, IIrCondbr);
-        *condbr = (IIrCondbr){
-          .cond = resolve(ctx, f, logic->lhs),
-          .otherwise = inst_br,
-        };
+      b32 ok = finalize_residual_block(ctx, builder, f, span);
+      if (!ok) {
+        Todo();
       }
 
-      if (span->residual) {
-        b32 ok = finalize_residual_block(ctx, builder, f, span);
-        if (!ok) {
-          Todo();
-        }
-      }
+      scopes_pop(&f->scopes);
+    } break;
 
-      if (span->condbr) {
-        SIrCondbr *condbr = sir_chunk_extra(f->chunk, span->condbr);
+    case Scope_condbr: {
+      SIrCondbr *condbr = sir_chunk_extra(f->chunk, span->start);
 
-        InstructionOffset residual_condbr =
-          iref_to_instruction(resolve(ctx, f, sref_from_instruction(span->condbr)));
-
-        IIrCondbr *data = iir_builder_push_data(builder, residual_condbr, IIrCondbr);
-        *data = (IIrCondbr){
-          .cond = resolve(ctx, f, condbr->cond),
-          .otherwise = span->residual_otherwise,
-        };
-      }
+      IIrCondbr *data = iir_builder_push_data(builder, expect_residual_at_instruction_index(f, span->start), IIrCondbr);
+      *data = (IIrCondbr){
+        .cond = resolve(ctx, f, condbr->cond),
+        .otherwise = builder->kinds.len,
+      };
 
       scopes_pop(&f->scopes);
     } break;
@@ -673,10 +651,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   InstructionOffset pc = s->pc;
   SIrOpcode op = sir_chunk_op(f->chunk, pc);
 
-  if (s->condbr && pc == Cast(SIrCondbr*, sir_chunk_extra(f->chunk, s->condbr))->otherwise) {
-    s->residual_otherwise = builder->kinds.len;
-  }
-
   switch (op) {
   case SIR_comptime_block: {
     u32 inst_count = sir_chunk_block_count(f->chunk, pc);
@@ -708,15 +682,17 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    Scope *scope = frame_push_scope(f, ctx->scratch, Scope_block, pc, inst_count);
-    scope->result_type = result_type;
-
-    if (!frame_is_comptime(f)) {
+    if (frame_is_comptime(f)) {
+      Scope *scope = frame_push_scope(f, ctx->scratch, Scope_comptime, pc, inst_count);
+      scope->data.comptime.result_type = result_type;
+    } else {
       InstructionOffset inst = iir_builder_add(builder, op == SIR_loop ? IIR_loop : IIR_block, f->chunk->sources[pc]);
 
       store_inst_value(f, pc, iref_from_instruction(inst));
 
-      scope->residual = inst;
+      Scope *scope = frame_push_scope(f, ctx->scratch, Scope_block, pc, inst_count);
+      scope->data.block.residual = inst;
+      scope->data.block.result_type = result_type;
     }
 
     s->pc += inst_count;
@@ -942,12 +918,12 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_br: {
     SIrBr *br = sir_chunk_extra(f->chunk, pc);
 
-    TypeKey result_type = {0};
-    if (sir_chunk_op(f->chunk, br->block) == SIR_block) {
-      result_type = find_scope(&f->scopes, br->block)->result_type;
-    }
+    Scope *target = find_scope(&f->scopes, br->block);
 
     if (frame_is_comptime(f)) {
+      Assert(target->scope_kind == Scope_comptime);
+      TypeKey result_type = target->data.comptime.result_type;
+
       ValueKey val;
       b32 ok = expect_comptime_value_or_nil(ctx, state, br->value, &val);
       if (!ok) {
@@ -980,47 +956,43 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       break;
     }
 
-    if (s->scope_kind == Scope_block) {
-      IRef ref = resolve(ctx, f, br->value);
-      TypeKey type_br = iref_is_nil(ref) ? (TypeKey){0} : get_sref_type(ctx, f, br->value);
+    Assert(target->scope_kind == Scope_block);
+    TypeKey result_type = target->data.block.result_type;
 
-      if (key_is_some(result_type)) {
-        b32 ok = coerce(ctx, state, ref, result_type, pc, &ref);
-        if (!ok) {
-          return (StepResult){ .kind = Step_error };
-        }
+    IRef ref = resolve(ctx, f, br->value);
+    TypeKey type_br = iref_is_nil(ref) ? (TypeKey){0} : get_sref_type(ctx, f, br->value);
 
-        type_br = result_type;
+    if (key_is_some(result_type)) {
+      b32 ok = coerce(ctx, state, ref, result_type, pc, &ref);
+      if (!ok) {
+        return (StepResult){ .kind = Step_error };
       }
 
-      InstructionOffset target = expect_residual_at_instruction_index(f, br->block);
-      InstructionOffset inst_br;
-
-      if (iref_is_nil(ref)) {
-        inst_br = iir_builder_add(builder, IIR_br_void, f->chunk->sources[pc]);
-        iir_builder_set_data(builder, inst_br, target);
-      } else {
-        inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
-        IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
-        *data_br = (IIrBr){
-          .block = target,
-          .value = ref,
-        };
-      }
-
-      Scope *block = find_scope(&f->scopes, br->block);
-      scope_add_break_or_return(block, ctx->scratch, pc);
-
-      store_inst_type(f, pc, type_br);
-      store_inst_value(f, pc, iref_from_instruction(inst_br));
-
-      iir_builder_set_type(builder, inst_br, type_br);
-
-      s->pc += 1;
-      break;
+      type_br = result_type;
     }
 
-    Unreachable();
+    InstructionOffset inst_br;
+
+    if (iref_is_nil(ref)) {
+      inst_br = iir_builder_add(builder, IIR_br_void, f->chunk->sources[pc]);
+      iir_builder_set_data(builder, inst_br, target->data.block.residual);
+    } else {
+      inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
+      IIrBr *data_br = iir_builder_push_data(builder, inst_br, IIrBr);
+      *data_br = (IIrBr){
+        .block = target->data.block.residual,
+        .value = ref,
+      };
+    }
+
+    breaks_append(&target->data.block.breaks, ctx->scratch, pc);
+
+    store_inst_type(f, pc, type_br);
+    store_inst_value(f, pc, iref_from_instruction(inst_br));
+
+    iir_builder_set_type(builder, inst_br, type_br);
+
+    s->pc += 1;
   } break;
 
   case SIR_type: {
@@ -1186,8 +1158,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     }
     iir_builder_set_type(builder, inst, type_ret);
 
-    scope_add_break_or_return(func_scope, ctx->scratch, pc);
-
     s->pc += 1;
   } break;
 
@@ -1207,8 +1177,8 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       store_inst_value(f, pc, iref_from_instruction(inst_condbr));
 
-      s->condbr = pc;
-      s->pc += 1;
+      s->pc = condbr->otherwise;
+      frame_push_scope(f, ctx->scratch, Scope_condbr, pc, condbr->otherwise - pc);
     }
   } break;
 
@@ -1572,57 +1542,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_bitshift_left:
   case SIR_bitshift_right: {
     Todo();
-  } break;
-
-  case SIR_logical_or:
-  case SIR_logical_and: {
-    SIrLogicalAndOr *data = sir_chunk_extra(f->chunk, pc);
-
-    TypeKey type_lhs = get_sref_type(ctx, f, data->lhs);
-
-    if (!key_eq(type_lhs, TYPE_BOOL)) {
-      Todo();
-    }
-
-    IRef lhs = resolve(ctx, f, data->lhs);
-    if (iref_is_some_value(lhs)) {
-      ValueKey short_circuit_bool = (op == SIR_logical_or) ? VAL_BOOL_TRUE : VAL_BOOL_FALSE;
-      if (key_eq(iref_to_value(lhs), short_circuit_bool)) {
-        store_inst_value(f, data->block, lhs);
-
-        u32 inst_count = sir_chunk_block_count(f->chunk, data->block);
-        s->pc = data->block + inst_count;
-        break;
-      }
-
-      s->pc += 1;
-      break;
-    }
-
-    Assert(s->start == data->block);
-
-    InstructionOffset inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
-    store_inst_value(f, pc, iref_from_instruction(inst_condbr));
-
-    if (op == SIR_logical_or) {
-      InstructionOffset inst_br = iir_builder_add(builder, IIR_br, f->chunk->sources[pc]);
-      IIrBr *br = iir_builder_push_data(builder, inst_br, IIrBr);
-      *br = (IIrBr){
-        .block = s->residual,
-        .value = resolve(ctx, f, sref_from_value(VAL_BOOL_TRUE)),
-      };
-      iir_builder_set_type(builder, inst_br, TYPE_BOOL);
-
-      IIrCondbr *condbr = iir_builder_push_data(builder, inst_condbr, IIrCondbr);
-      *condbr = (IIrCondbr){
-        .cond = lhs,
-        .otherwise = inst_br + 1,
-      };
-    } else {
-      s->logical_and = pc;
-    }
-
-    s->pc += 1;
   } break;
 
   case SIR_bit_and:

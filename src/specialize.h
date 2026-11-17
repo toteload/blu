@@ -4,14 +4,14 @@
 #include "blu.h"
 #include "compiler.h"
 
-#define BREAK_RETURN_LIST_MIN_SIZE_LOG_2 4
-#define BREAK_RETURN_LIST_SEGMENT_COUNT  12
-#define BREAK_RETURN_LIST_NAME BreakReturnList
-#define BREAK_RETURN_LIST_TYPE InstructionOffset
-#define SEGMENTLIST_NAME BREAK_RETURN_LIST_NAME
-#define SEGMENTLIST_TYPE BREAK_RETURN_LIST_TYPE
-#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_RETURN_LIST_MIN_SIZE_LOG_2
-#define SEGMENTLIST_SEGMENT_COUNT BREAK_RETURN_LIST_SEGMENT_COUNT
+#define BREAK_LIST_MIN_SIZE_LOG_2 4
+#define BREAK_LIST_SEGMENT_COUNT  12
+#define BREAK_LIST_NAME BreakList
+#define BREAK_LIST_TYPE InstructionOffset
+#define SEGMENTLIST_NAME BREAK_LIST_NAME
+#define SEGMENTLIST_TYPE BREAK_LIST_TYPE
+#define SEGMENTLIST_MIN_SIZE_LOG2 BREAK_LIST_MIN_SIZE_LOG_2
+#define SEGMENTLIST_SEGMENT_COUNT BREAK_LIST_SEGMENT_COUNT
 #define SEGMENTLIST_OUTPUT_TYPES
 #define SEGMENTLIST_OUTPUT_DECLARATIONS
 #include "segment_list.h"
@@ -21,6 +21,7 @@ typedef enum {
   Scope_signature_of_function,
   Scope_function,
   Scope_block,
+  Scope_condbr,
 } ScopeKind;
 
 typedef struct {
@@ -30,16 +31,11 @@ typedef struct {
   InstructionOffset end;
   InstructionOffset pc;
 
-  InstructionOffset residual; // if scope_kind == Scope_block then this refers to the block in residual code
-  InstructionOffset condbr; // if this scope wraps an if/else then this refers to a SIR_condbr
-  InstructionOffset logical_and; // if this scope wraps a runtime `and` then this refers to the SIR_logical_and
-  InstructionOffset residual_otherwise;
-
-  TypeKey result_type; // if scope_kind == Scope_block, the type every br to this block is coerced to, or nil to unify the brs
-
-  BreakReturnList breaks_and_returns;
-
   union {
+    struct {
+      TypeKey result_type;
+    } comptime;
+
     struct {
       StubKey stub;
     } signature_of_function;
@@ -48,11 +44,16 @@ typedef struct {
       TypeKey function_type;
       TypeKey return_type;
     } function;
+
+    struct {
+      InstructionOffset residual;
+      TypeKey result_type;
+      BreakList breaks;
+    } block;
   } data;
 } Scope;
 
 b8 scope_kind_is_comptime(ScopeKind kind);
-void scope_add_break_or_return(Scope *scope, Arena *arena, InstructionOffset source);
 
 #define SCOPE_STACK_MIN_SIZE_LOG_2 4
 #define SCOPE_STACK_SEGMENT_COUNT  12

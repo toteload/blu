@@ -31,8 +31,6 @@ typedef enum {
   SIR_repeat,            // contains InstructionOffset of loop block to repeat
   SIR_ret,               // contains SRef to value to return
   SIR_call,              // references SIrCall
-  SIR_logical_and,       // references SIrLogicalAndOr
-  SIR_logical_or,        // references SIrLogicalAndOr
   SIR_mul,               // references SIrBinary
   SIR_div,               // references SIrBinary
   SIR_mod,               // references SIrBinary
@@ -67,15 +65,6 @@ typedef enum {
   SIR_return_type,       // contains no data, evaluates to the return type of the function it is in
 } SIrOpcode;
 // clang-format on
-
-// A logical and/or is wrapped by a block, referenced by `block`.
-// `lhs` refers to the LHS value of the operator.
-// The RHS of the operator is immediately after this instruction.
-// The RHS is zero or more instructions terminated by a br to `block`.
-typedef struct {
-  InstructionOffset block;
-  SRef lhs;
-} SIrLogicalAndOr;
 
 typedef struct {
   u32 instruction_count;
