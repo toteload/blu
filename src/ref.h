@@ -8,12 +8,10 @@
 
 #include "toteload.h"
 
-#define BITMASK_REF_IS_INSTRUCTION_INDEX (Cast(u32, 1) << 31)
-
 typedef struct { u32 x; } REF_NAME;
 
 always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_value)(REF_NAME r) {
-  return (r.x & BITMASK_REF_IS_INSTRUCTION_INDEX) == 0;
+  return (r.x & REF_TAG_MASK) == REF_TAG_VALUE;
 }
 
 always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_some_value)(REF_NAME r) {
@@ -21,7 +19,7 @@ always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_some_value)(REF_NAME r) {
 }
 
 always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_instruction)(REF_NAME r) {
-  return (r.x & BITMASK_REF_IS_INSTRUCTION_INDEX) != 0;
+  return (r.x & REF_TAG_MASK) == REF_TAG_INSTRUCTION;
 }
 
 always_inline b32 Cat(REF_FUNCTION_PREFIX, _is_nil)(REF_NAME r) {
@@ -35,14 +33,16 @@ always_inline ValueKey Cat(REF_FUNCTION_PREFIX, _to_value)(REF_NAME r) {
 
 always_inline InstructionOffset Cat(REF_FUNCTION_PREFIX, _to_instruction)(REF_NAME r) {
   ASSERT_SAFE(Cat(REF_FUNCTION_PREFIX, _is_instruction)(r));
-  return r.x & ~BITMASK_REF_IS_INSTRUCTION_INDEX;
+  return r.x & ~REF_TAG_MASK;
 }
 
 always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_instruction)(InstructionOffset idx) {
-  return (REF_NAME){idx | BITMASK_REF_IS_INSTRUCTION_INDEX};
+  ASSERT_SAFE((idx & REF_TAG_MASK) == 0);
+  return (REF_NAME){idx | REF_TAG_INSTRUCTION};
 }
 
 always_inline REF_NAME Cat(REF_FUNCTION_PREFIX, _from_value)(ValueKey idx) {
+  ASSERT_SAFE((idx.x & REF_TAG_MASK) == 0);
   return (REF_NAME){idx.x};
 }
 

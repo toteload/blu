@@ -424,6 +424,10 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     case IIR_alloc:
     case IIR_ret_void: break;
 
+    case IIR_global: {
+      fprintf(out, " offset=%u", vref_to_offset((ValueRef){data}));
+    } break;
+
     case IIR_bit_not:
     case IIR_int_extend:
     case IIR_int_cast_check:

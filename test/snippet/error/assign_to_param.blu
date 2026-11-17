@@ -1,0 +1,11 @@
+mod main
+
+add := |a: i32, b: i32|: i32 {
+  a += b
+  a = 0
+  a
+}
+
+main := ||: i32 {
+  add(1, 2)
+}

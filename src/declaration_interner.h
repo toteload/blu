@@ -35,6 +35,7 @@ struct Declaration {
       u32 tree_idx;
       SIrChunk chunk;
       StubKey stub;
+      b8 is_mut;
     } decl;
   } data;
 };

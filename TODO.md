@@ -5,11 +5,15 @@
   - The return value is written to a fixed `u8 buf[16]`, so a larger return type overflows the stack.
   - Require no parameters and a return type that fits, and report a normal error otherwise.
 - [ ] SIR code generation can be moved to `Source`.
-- [ ] Change the signature of the eval_int_* functions to use signedness enum and bitwidth instead of TypeInteger.
 
 
 ## Comptime
 
+- [ ] comptime function calls
+- [ ] comptime parameters and caching function specializations
+- [ ] comptime mut variables
+- [ ] comptime loops
+- [ ] comptime expressions
 - [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.

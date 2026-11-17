@@ -1,0 +1,16 @@
+mod main
+
+mut X : i32 = 4
+
+Y : i32 = X + 1
+
+Z : i32 = ::b {
+  X = 1
+  break ::b 2
+}
+
+main := ||: i32 {
+  #debug(Y)
+  #debug(Z)
+  0
+}

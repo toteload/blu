@@ -1,0 +1,8 @@
+mod main
+
+main := ||: i32 {
+  #debug(if yes() do 1 else 2)
+  0
+}
+
+yes := ||: bool true

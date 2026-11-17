@@ -1,0 +1,6 @@
+[error] test/snippet/error/mut_global_comptime.blu:5:11: A mutable declaration cannot be used at comptime
+    5 | Y : i32 = X + 1
+      |           ^
+[error] test/snippet/error/mut_global_comptime.blu:8:3: A mutable declaration cannot be used at comptime
+    8 |   X = 1
+      |   ^

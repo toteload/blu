@@ -1,0 +1,31 @@
+mod main
+
+mut X : i32 = 4
+Y : i32 = 4
+
+mut C : i64 = 0
+
+main := ||: i32 {
+  #debug(X)
+  X = 5
+  #debug(X)
+  X += 10
+  #debug(X)
+  bump()
+  #debug(X)
+  #debug(Y)
+
+  i: i32 = 0
+  while i < 5 {
+    C += as(i64) i
+    i += 1
+  }
+  #debug(C)
+
+  0
+}
+
+bump := ||: i32 {
+  X *= 2
+  0
+}

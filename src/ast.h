@@ -92,6 +92,7 @@ typedef struct {
   TokenOffset name;
   AstKey  type;
   AstKey  value;
+  b8      is_mut;
 } AstDeclaration;
 
 typedef struct {

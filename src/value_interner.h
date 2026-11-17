@@ -29,8 +29,40 @@ typedef struct {
   _Alignas(8) u8 data[];
 } Value;
 
+typedef u32 ValueOffset;
+
+typedef struct { u32 x; } ValueRef;
+
+always_inline b32 vref_is_value(ValueRef r) {
+  return (r.x & REF_TAG_MASK) == REF_TAG_VALUE;
+}
+
+always_inline b32 vref_is_offset(ValueRef r) {
+  return (r.x & REF_TAG_MASK) == REF_TAG_OFFSET;
+}
+
+always_inline ValueKey vref_to_value(ValueRef r) {
+  ASSERT_SAFE(vref_is_value(r));
+  return (ValueKey){r.x};
+}
+
+always_inline ValueOffset vref_to_offset(ValueRef r) {
+  ASSERT_SAFE(vref_is_offset(r));
+  return r.x & ~REF_TAG_MASK;
+}
+
+always_inline ValueRef vref_from_value(ValueKey key) {
+  ASSERT_SAFE((key.x & REF_TAG_MASK) == 0);
+  return (ValueRef){key.x};
+}
+
+always_inline ValueRef vref_from_offset(ValueOffset offset) {
+  ASSERT_SAFE((offset & REF_TAG_MASK) == 0);
+  return (ValueRef){offset | REF_TAG_OFFSET};
+}
+
 typedef struct {
-  ValueKey val;
+  ValueRef base;
   u32      offset;
 } ValuePointer;
 

@@ -495,6 +495,7 @@ internal b32 parse_declaration(Parser *parser, AstKey *out) {
 
   AstDeclaration *declaration = node_push_data(parser, AstDeclaration, idx);
   zero_struct(AstDeclaration, declaration);
+  declaration->is_mut = consume_if_match(parser, Tok_keyword_mut);
   declaration->name = parser->at;
 
   Try(expect_token(parser, Tok_identifier));

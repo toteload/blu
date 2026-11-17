@@ -63,6 +63,7 @@ typedef enum {
   Tok_keyword_bitcast,
   Tok_keyword_as,
   Tok_keyword_mod,
+  Tok_keyword_mut,
 
   Tok_keyword_inline,
 

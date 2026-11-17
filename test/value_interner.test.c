@@ -144,9 +144,9 @@ internal void test_value_interner_pointer(TestResult *test, void *user) {
 
   TypeKey ptr_bool = types_add_pointer(&f.types, TYPE_BOOL);
 
-  ValuePointer p0 = { .val = VAL_BOOL_TRUE, .offset = 0 };
-  ValuePointer p1 = { .val = VAL_BOOL_TRUE, .offset = 1 };
-  ValuePointer p2 = { .val = VAL_BOOL_FALSE, .offset = 0 };
+  ValuePointer p0 = { .base = vref_from_value(VAL_BOOL_TRUE), .offset = 0 };
+  ValuePointer p1 = { .base = vref_from_value(VAL_BOOL_TRUE), .offset = 1 };
+  ValuePointer p2 = { .base = vref_from_value(VAL_BOOL_FALSE), .offset = 0 };
 
   ValueKey k0 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p0, sizeof(p0)));
   ValueKey k1 = values_intern(&f.values, make_value(&f.scratch, ptr_bool, &p1, sizeof(p1)));

@@ -4,11 +4,6 @@
 
 #define MAX_SCOPE_DEPTH 64
 
-typedef struct {
-  usize len;
-  void *data;
-} RawSlice;
-
 internal TypeSizeInfo layout_of(Interpreter *in, TypeKey type) {
   if (key_is_nil(type)) {
     return (TypeSizeInfo){ .size = 0, .stride = 0, .align = 1 };
@@ -32,87 +27,33 @@ internal ValueKey follow_stubs(Compiler *compiler, ValueKey key) {
   return key;
 }
 
-internal void *constant_data(Interpreter *in, ValueKey key);
-
-internal void materialize(Interpreter *in, TypeKey type, void const *src, void *dst) {
-  TypeInterner *types = &in->compiler->types;
-  Type *t = types_get(types, type);
-
-  switch (Cast(TypeKind, t->kind)) {
-  case Type_integer:
-  case Type_bool:
-  case Type_type:
-  case Type_nil:
-  case Type_never:
-  case Type_function: {
-    TypeSizeInfo size_info = types_size_info(types, t);
-    if (size_info.size > 0) {
-      memcpy(dst, src, size_info.size);
-    }
-  } break;
-
-  case Type_array: {
-    TypeSizeInfo elem = types_size_info_by_key(types, t->data.array.base_type);
-    for (u64 i = 0; i < t->data.array.size; i++) {
-      materialize(
-        in,
-        t->data.array.base_type,
-        ptr_offset(src, i * elem.stride),
-        ptr_offset(dst, i * elem.stride)
-      );
-    }
-  } break;
-
-  case Type_slice: {
-    ValueSlice const *slice = src;
-    void *pointee = constant_data(in, slice->ptr.val);
-    *Cast(RawSlice *, dst) = (RawSlice){
-      .len = slice->len,
-      .data = ptr_offset(pointee, slice->ptr.offset),
-    };
-  } break;
-
-  case Type_pointer: {
-    ValuePointer const *p = src;
-    void *pointee = constant_data(in, p->val);
-    *Cast(void **, dst) = ptr_offset(pointee, p->offset);
-  } break;
-
-  case Type_comptime_int:
-  case Type_stub:
-    Unreachable();
-  }
+internal ValueOffset memory_alloc(Interpreter *in, TypeSizeInfo info) {
+  void *p = arena_push(in->memory, info.size, info.align);
+  return Cast(ValueOffset, ptr_diff(p, in->memory->base));
 }
 
-internal void *constant_data(Interpreter *in, ValueKey key) {
-  key = follow_stubs(in->compiler, key);
-
-  void **slot = &in->constants[key.x];
-  if (*slot) {
-    return *slot;
-  }
-
-  Value *v = values_get(&in->compiler->values, key);
-  TypeSizeInfo info = layout_of(in, v->type);
-  void *data = arena_push(in->perm, info.size, info.align);
-  *slot = data;
-  materialize(in, v->type, v->data, data);
-
-  return data;
+internal void *memory_ptr(Interpreter *in, ValueOffset offset) {
+  return ptr_offset(in->memory->base, offset);
 }
 
-internal u32 slot_alloc(Interpreter *in, TypeSizeInfo info) {
-  void *p = arena_push(in->scratch, info.size, info.align);
-  return Cast(u32, ptr_diff(p, in->scratch->base));
+internal void *value_data(Interpreter *in, ValueKey key) {
+  return values_get(&in->compiler->values, follow_stubs(in->compiler, key))->data;
+}
+
+internal void *deref(Interpreter *in, ValuePointer p) {
+  void *base = vref_is_value(p.base)
+    ? value_data(in, vref_to_value(p.base))
+    : memory_ptr(in, vref_to_offset(p.base));
+  return ptr_offset(base, p.offset);
 }
 
 internal void *slot_ptr(Interpreter *in, CallFrame2 *f, InstructionOffset inst) {
-  return ptr_offset(in->scratch->base, f->value_offsets[inst]);
+  return memory_ptr(in, f->value_offsets[inst]);
 }
 
 internal void *resolve(Interpreter *in, CallFrame2 *f, IRef ref) {
   if (iref_is_value(ref)) {
-    return constant_data(in, iref_to_value(ref));
+    return value_data(in, iref_to_value(ref));
   }
 
   return slot_ptr(in, f, iref_to_instruction(ref));
@@ -134,7 +75,7 @@ internal void copy_value(void *dst, void const *src, u32 size) {
 }
 
 internal CallFrame2 *frame_push(Interpreter *in, IIrChunk *chunk, void *ret) {
-  ArenaSnapshot snapshot = arena_scope_begin(in->scratch);
+  ArenaSnapshot snapshot = arena_scope_begin(in->memory);
 
   CallFrame2 *f = stack_push_ptr(&in->call_stack);
 
@@ -142,9 +83,9 @@ internal CallFrame2 *frame_push(Interpreter *in, IIrChunk *chunk, void *ret) {
 
   f->ret = ret;
   f->chunk = chunk;
-  f->value_offsets = arena_push_array(u32, in->scratch, count);
+  f->value_offsets = arena_push_array(u32, in->memory, count);
 
-  stack_init(&f->scope_stack, arena_push_array(ScopeSpan2, in->scratch, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
+  stack_init(&f->scope_stack, arena_push_array(ScopeSpan2, in->memory, MAX_SCOPE_DEPTH), MAX_SCOPE_DEPTH);
   stack_push(&f->scope_stack, ((ScopeSpan2){ .start = 0, .end = count, .snapshot = snapshot }));
 
   for (u32 i = 1; i < count; i++) {
@@ -162,7 +103,7 @@ internal void frame_set_param(Interpreter *in, CallFrame2 *f, u32 param_index, v
   Assert(iir_chunk_op(f->chunk, inst) == IIR_param);
 
   TypeSizeInfo size_info = layout_of(in, iir_chunk_type(f->chunk, inst));
-  f->value_offsets[inst] = slot_alloc(in, size_info);
+  f->value_offsets[inst] = memory_alloc(in, size_info);
   copy_value(slot_ptr(in, f, inst), src, size_info.size);
 }
 
@@ -170,7 +111,7 @@ internal void frame_pop(Interpreter *in) {
   CallFrame2 *f = stack_peek_ptr(&in->call_stack);
 
   ScopeSpan2 *span = f->scope_stack.data;
-  arena_scope_end(in->scratch, span->snapshot);
+  arena_scope_end(in->memory, span->snapshot);
 
   stack_pop_unchecked(&in->call_stack);
 }
@@ -180,7 +121,7 @@ internal void scope_push(Interpreter *in, CallFrame2 *f, InstructionOffset block
   stack_push(&f->scope_stack, ((ScopeSpan2){
     .start = block,
     .end = block + inst_count,
-    .snapshot = arena_scope_begin(in->scratch),
+    .snapshot = arena_scope_begin(in->memory),
   }));
 }
 
@@ -189,7 +130,7 @@ internal void scopes_pop_to(Interpreter *in, CallFrame2 *f, InstructionOffset bl
     ScopeSpan2 span = stack_pop(&f->scope_stack);
 
     if (span.start == block) {
-      arena_scope_end(in->scratch, span.snapshot);
+      arena_scope_end(in->memory, span.snapshot);
       return;
     }
   }
@@ -226,7 +167,7 @@ internal u32 step(Interpreter *in) {
   TypeKey type = iir_chunk_type(f->chunk, pc);
   TypeSizeInfo size_info = layout_of(in, type);
 
-  f->value_offsets[pc] = slot_alloc(in, size_info);
+  f->value_offsets[pc] = memory_alloc(in, size_info);
   void *local = slot_ptr(in, f, pc);
 
   switch (op) {
@@ -325,8 +266,8 @@ internal u32 step(Interpreter *in) {
       base = resolve(in, f, bin->lhs);
       len = t->data.array.size;
     } else {
-      RawSlice *slice = resolve(in, f, bin->lhs);
-      base = slice->data;
+      ValueSlice *slice = resolve(in, f, bin->lhs);
+      base = deref(in, slice->ptr);
       len = slice->len;
     }
 
@@ -348,7 +289,7 @@ internal u32 step(Interpreter *in) {
   } break;
 
   case IIR_builtin_len: {
-    RawSlice *slice = resolve(in, f, iir_chunk_ref(f->chunk, pc));
+    ValueSlice *slice = resolve(in, f, iir_chunk_ref(f->chunk, pc));
     *Cast(usize *, local) = slice->len;
     f->pc += 1;
   } break;
@@ -364,23 +305,27 @@ internal u32 step(Interpreter *in) {
   case IIR_alloc: {
     Type *t = types_get(&in->compiler->types, type);
     Assert(t->kind == Type_pointer);
-    TypeSizeInfo base = types_size_info_by_key(&in->compiler->types, t->data.pointer.base_type);
-    *Cast(void **, local) = arena_push(in->scratch, base.size, Max(base.align, 1));
+    ValueOffset offset = memory_alloc(in, layout_of(in, t->data.pointer.base_type));
+    *Cast(ValuePointer *, local) = (ValuePointer){ .base = vref_from_offset(offset), .offset = 0 };
+    f->pc += 1;
+  } break;
+
+  case IIR_global: {
+    *Cast(ValuePointer *, local) = (ValuePointer){ .base = (ValueRef){iir_chunk_data(f->chunk, pc)}, .offset = 0 };
     f->pc += 1;
   } break;
 
   case IIR_store: {
     IIrStore *store = iir_chunk_extra(f->chunk, pc);
-    void **p = resolve(in, f, store->ptr);
-    void *val = resolve(in, f, store->value);
-    copy_value(*p, val, size_info.size);
+    ValuePointer *p = resolve(in, f, store->ptr);
+    Assert(vref_is_offset(p->base));
+    copy_value(deref(in, *p), resolve(in, f, store->value), size_info.size);
     f->pc += 1;
   } break;
 
   case IIR_load: {
-    IRef ref = iir_chunk_ref(f->chunk, pc);
-    void **p = resolve(in, f, ref);
-    copy_value(local, *p, size_info.size);
+    ValuePointer *p = resolve(in, f, iir_chunk_ref(f->chunk, pc));
+    copy_value(local, deref(in, *p), size_info.size);
     f->pc += 1;
   } break;
 

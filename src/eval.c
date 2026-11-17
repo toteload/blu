@@ -310,7 +310,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
   case Coercion_array_to_slice: {
     ValueSlice slice = {
       .len = type_val->data.array.size,
-      .ptr = { .val = val, .offset = 0 },
+      .ptr = { .base = vref_from_value(val), .offset = 0 },
     };
 
     *res = values_intern_data(values, dst, &slice, sizeof(slice));

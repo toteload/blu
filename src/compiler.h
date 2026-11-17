@@ -71,6 +71,7 @@ typedef struct {
 typedef struct Compiler {
   Arena arena;
   Arena scratch;
+  Arena memory;
 
   CLIOptions *options;
 

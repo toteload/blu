@@ -61,6 +61,7 @@ typedef enum {
   IIR_builtin_debug, // contains IRef
   IIR_builtin_len, // contains IRef to a slice
   IIR_index, // references IIrBinary, lhs is an array or slice
+  IIR_global, // contains DeclarationKey
 } IIrOpcode;
 
 typedef struct {

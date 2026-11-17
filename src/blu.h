@@ -8,6 +8,11 @@
 typedef u32 TokenOffset;
 typedef u32 InstructionOffset;
 
+#define REF_TAG_MASK        (Cast(u32, 3) << 30)
+#define REF_TAG_VALUE       (Cast(u32, 0) << 30)
+#define REF_TAG_OFFSET      (Cast(u32, 1) << 30)
+#define REF_TAG_INSTRUCTION (Cast(u32, 2) << 30)
+
 #define KEY_NAME TypeKey
 #define KEY_FUNCTION_PREFIX type_key
 #include "key.h"

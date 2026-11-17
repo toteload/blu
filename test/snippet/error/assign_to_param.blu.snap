@@ -1,0 +1,6 @@
+[error] test/snippet/error/assign_to_param.blu:4:3: Cannot assign to a parameter
+    4 |   a += b
+      |   ^
+[error] test/snippet/error/assign_to_param.blu:5:3: Cannot assign to a parameter
+    5 |   a = 0
+      |   ^

@@ -123,8 +123,38 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
 
     InstructionOffset inst;
     switch (Cast(LookupResultKind, res.kind)) {
-    case LOOKUP_PARAM: Todo(); // cannot take pointer to a param
-    case LOOKUP_DECL:  Todo();
+    case LOOKUP_PARAM: {
+      gen->has_error = True;
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ast_index,
+          .source_idx = gen->source->idx,
+          .data.ast_index = idx_ast,
+        },
+        string_lit("Cannot assign to a parameter")
+      );
+      return SREF_NIL;
+    }
+    case LOOKUP_DECL: {
+      Declaration *decl = decls_extra_get_ptr(ctx->decls, res.data.decl_idx);
+      if (decl->kind != Declaration_decl || !decl->data.decl.is_mut) {
+        gen->has_error = True;
+        Message_error(
+          ctx->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ast_index,
+            .source_idx = gen->source->idx,
+            .data.ast_index = idx_ast,
+          },
+          string_lit("Cannot assign to an immutable declaration")
+        );
+        return SREF_NIL;
+      }
+
+      inst = sir_builder_add(&gen->builder, SIR_get_decl_value, gen->source->idx, idx_ast);
+      sir_builder_set_data(&gen->builder, inst, res.data.decl_idx.x);
+    } break;
     case LOOKUP_LOCAL: inst = res.data.inst; break;
     }
 

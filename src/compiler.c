@@ -135,6 +135,13 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
       .initial_commit_size = MiB(1),
     });
 
+  arena_init(
+    &compiler->memory,
+    &(ArenaOptions){
+      .reserve_size = GiB(1),
+      .initial_commit_size = MiB(1),
+    });
+
   compiler->msg_sink = (MessageSink){
     .user = compiler,
     .add_message = compiler_add_message,
@@ -200,6 +207,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
 void compiler_deinit(Compiler *compiler) {
   arena_deinit(&compiler->arena);
   arena_deinit(&compiler->scratch);
+  arena_deinit(&compiler->memory);
 }
 
 void compiler_add_sourcefile(Compiler *compiler, String filename) {
@@ -290,6 +298,8 @@ typedef struct {
   DeclarationKey mod;
   u32 n;
 } DeclFrame;
+
+internal void place_mut_globals(Compiler *compiler);
 
 b32 compile(Compiler *compiler) {
   b32 is_ok = True;
@@ -452,6 +462,7 @@ b32 compile(Compiler *compiler) {
               .source = source,
               .tree_idx = offset,
               .stub = stub,
+              .is_mut = Cast(AstDeclaration *, ast_data(&source->ast, decl->node))->is_mut,
             },
           });
 
@@ -510,6 +521,8 @@ b32 compile(Compiler *compiler) {
       return False;
     }
   }
+
+  place_mut_globals(compiler);
 
   if (compiler->options->print_iir) {
     for (u32 i = 0; i < compiler->user_decls.len; i++) {
@@ -610,6 +623,70 @@ internal b32 get_decl_val(Compiler *compiler, DeclarationKey key, ValueKey *val)
   return True;
 }
 
+typedef struct {
+  DeclarationKey decl;
+  u32 *data;
+} GlobalUse;
+
+internal u32 collect_global_uses(Compiler *compiler, GlobalUse *out) {
+  u32 count = 0;
+
+  for (u32 i = 0; i < compiler->functions.len; i++) {
+    IIrChunk *chunk = &compiler_get_function(compiler, (ResidualFunctionKey){i})->chunk;
+
+    for (InstructionOffset inst = 0; inst < chunk->opcode_count; inst++) {
+      if (iir_chunk_op(chunk, inst) != IIR_global) {
+        continue;
+      }
+
+      if (out) {
+        out[count] = (GlobalUse){ .decl = {chunk->data[inst]}, .data = &chunk->data[inst] };
+      }
+
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+internal int compare_global_use(void const *a, void const *b) {
+  u32 x = Cast(GlobalUse const *, a)->decl.x;
+  u32 y = Cast(GlobalUse const *, b)->decl.x;
+  return (x > y) - (x < y);
+}
+
+internal void place_mut_globals(Compiler *compiler) {
+  ArenaSnapshot snapshot = arena_scope_begin(&compiler->scratch);
+
+  u32 count = collect_global_uses(compiler, Null);
+  GlobalUse *uses = arena_push_array(GlobalUse, &compiler->scratch, count);
+  collect_global_uses(compiler, uses);
+
+  qsort(uses, count, sizeof(GlobalUse), compare_global_use);
+
+  ValueRef ref = {0};
+
+  for (u32 i = 0; i < count; i++) {
+    if (i == 0 || !key_eq(uses[i].decl, uses[i - 1].decl)) {
+      ValueKey key;
+      b32 ok = get_decl_val(compiler, uses[i].decl, &key);
+      Assert(ok);
+
+      Value *v = values_get(&compiler->values, key);
+      TypeSizeInfo info = types_size_info_by_key(&compiler->types, v->type);
+      void *p = arena_push(&compiler->memory, info.size, Max(info.align, 1));
+      memcpy(p, v->data, info.size);
+
+      ref = vref_from_offset(Cast(ValueOffset, ptr_diff(p, compiler->memory.base)));
+    }
+
+    *uses[i].data = ref.x;
+  }
+
+  arena_scope_end(&compiler->scratch, snapshot);
+}
+
 b32 run_main(Compiler *compiler) {
   DeclarationKey fn_main;
   b32 ok = get_decl_key_by_path(compiler, string_lit("main.main"), &fn_main);
@@ -629,14 +706,8 @@ b32 run_main(Compiler *compiler) {
 
   // TODO: make sure main has the correct type
 
-  usize value_count = compiler->values.aux.list.len;
-  void **constants = arena_push_array(void *, &compiler->arena, value_count);
-  memset(constants, 0, value_count * sizeof(void *));
-
   Interpreter in = {
-    .scratch = &compiler->scratch,
-    .perm = &compiler->arena,
-    .constants = constants,
+    .memory = &compiler->memory,
     .msg_sink = &compiler->msg_sink,
     .compiler = compiler,
   };

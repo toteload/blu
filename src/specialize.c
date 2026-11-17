@@ -310,6 +310,31 @@ internal InstructionOffset expect_residual_at_instruction_index(Frame *f, Instru
   return iref_to_instruction(res);
 }
 
+internal b32 expect_runtime_types(SpecializerContext *ctx, IIrBuilder *builder) {
+  for (InstructionOffset i = 0; i < builder->kinds.len; i++) {
+    TypeKey type = iir_builder_get_type(builder, i);
+    if (key_is_nil(type) || !is_type_comptime(ctx->types, type)) {
+      continue;
+    }
+
+    AstAndSourceKey src = sourcelist_at_unchecked(&builder->ast_source, i);
+    Message_error(
+      ctx->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ast_index,
+        .source_idx = src.source_idx,
+        .data.ast_index = src.ast_idx,
+      },
+      string_lit("A value of comptime-only type %type cannot be used at runtime"),
+      type
+    );
+
+    return False;
+  }
+
+  return True;
+}
+
 internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *state) {
   IIrBuilder *builder = &state->function.builder;
   Frame *f = &state->frame;
@@ -346,6 +371,10 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
     } break;
 
     case Scope_function: {
+      if (!expect_runtime_types(ctx, builder)) {
+        return (StepResult){ .kind = Step_error };
+      }
+
       ResidualFunction *func;
       ResidualFunctionKey key = compiler_add_function(ctx->compiler, &func);
 
@@ -545,7 +574,7 @@ internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
   TypeKey type_ptr = types_add_pointer(sp->types, values_get(sp->values, idx)->type);
 
   ValuePointer data = {
-    .val = idx,
+    .base = vref_from_value(idx),
     .offset = 0,
   };
 
@@ -740,6 +769,34 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       switch (Cast(ResolveStatus, stub->resolve_status)) {
       case RESOLVE_STATUS_FULLY_RESOLVED: {
+        if (decl->data.decl.is_mut) {
+          if (frame_is_comptime(f)) {
+            Message_error(
+              ctx->msg_sink,
+              (MessageLocation){
+                .kind = MessageLocation_ir_instruction,
+                .decl_idx = state->frame.decl,
+                .data.offset = pc,
+              },
+              string_lit("A mutable declaration cannot be used at comptime")
+            );
+
+            return (StepResult){ .kind = Step_error };
+          }
+
+          TypeKey ptr_type = types_add_pointer(ctx->types, type_of_val(ctx, stub->val));
+
+          InstructionOffset inst = iir_builder_add(builder, IIR_global, f->chunk->sources[pc]);
+          iir_builder_set_data(builder, inst, decl_idx.x);
+          iir_builder_set_type(builder, inst, ptr_type);
+
+          store_inst_value(f, pc, iref_from_instruction(inst));
+          store_inst_type(f, pc, ptr_type);
+
+          s->pc += 1;
+          break;
+        }
+
         ValueKey ptr = create_value_pointer(ctx, stub->val);
         store_inst_value(f, pc, iref_from_value(ptr));
         s->pc += 1;
@@ -1332,7 +1389,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       ValuePointer *p = Cast(ValuePointer *, v->data);
       Assert(p->offset == 0);
 
-      store_inst_value(f, pc, iref_from_value(p->val));
+      store_inst_value(f, pc, iref_from_value(vref_to_value(p->base)));
 
       TypeKey type_idx = type_of_val(ctx, iref_to_value(val));
       Type *t = types_get(ctx->types, type_idx);
@@ -1830,7 +1887,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         len = t->data.array.size;
       } else {
         ValueSlice *slice = Cast(ValueSlice *, v_indexable->data);
-        base = Cast(u8 *, values_get(ctx->values, slice->ptr.val)->data) + slice->ptr.offset;
+        base = Cast(u8 *, values_get(ctx->values, vref_to_value(slice->ptr.base))->data) + slice->ptr.offset;
         len = slice->len;
       }
 

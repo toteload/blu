@@ -1,0 +1,3 @@
+[error] test/snippet/error/comptime_type_at_runtime_if.blu:4:10: A value of comptime-only type comptime_int cannot be used at runtime
+    4 |   #debug(if yes() do 1 else 2)
+      |          ^^

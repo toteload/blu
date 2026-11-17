@@ -1,4 +1,5 @@
 #include "types.h"
+#include "value_interner.h"
 
 #define XXH_INLINE_ALL
 #include "xxhash.h"
@@ -197,8 +198,6 @@ u32 type_intern_byte_size(Type *type) {
 }
 
 TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
-  // ASSUME: pointers are 8 bytes.
-
   switch (Cast(TypeKind, type->kind)) {
   case Type_comptime_int: Unreachable();
   case Type_stub: Unreachable();
@@ -211,16 +210,14 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   case Type_type:
     return (TypeSizeInfo){.size = 4, .align = 4, .stride = 4};
   case Type_pointer:
-    return (TypeSizeInfo){.size = 8, .align = 8, .stride = 8};
+    return (TypeSizeInfo){.size = sizeof(ValuePointer), .align = Align_of(ValuePointer), .stride = sizeof(ValuePointer)};
   case Type_integer: {
     // ASSUME: the bitwidth of integers is always a multiple of 8.
     u32 size = type->data.integer.bitwidth / 8;
     return (TypeSizeInfo){.size = size, .align = size, .stride = size};
   }
-  case Type_slice: {
-    // A slice is stored as an 8-byte pointer and an 8-byte length.
-    return (TypeSizeInfo){.size = 16, .align = 8, .stride = 16};
-  }
+  case Type_slice:
+    return (TypeSizeInfo){.size = sizeof(ValueSlice), .align = Align_of(ValueSlice), .stride = sizeof(ValueSlice)};
   case Type_array: {
     TypeSizeInfo size_info = types_size_info_by_key(types, type->data.array.base_type);
     u32 size = size_info.stride * type->data.array.size;
@@ -253,12 +250,10 @@ u32 classify_comptime_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
   Type *type_to = types_get(types, to);
   Type *type_from = types_get(types, from);
 
-  if (type_from->kind == Type_comptime_int) {
-    if (type_to->kind == Type_integer) {
-      return Coercion_comptime;
-    }
-
-    return Coercion_invalid;
+  switch (Cast(TypeKind, type_from->kind)) {
+  case Type_comptime_int: return (type_to->kind == Type_integer) ? Coercion_comptime : Coercion_invalid;
+  case Type_type: return Coercion_invalid;
+  default: break;
   }
 
   if (classify_type_coercion(types, to, from) == Coercion_invalid) {
@@ -378,7 +373,9 @@ b32 check_type_for_op_negate(TypeKey t) {
 b8 is_type_comptime(TypeInterner *types, TypeKey t) {
   Type *p = types_get(types, t);
   switch (Cast(TypeKind, p->kind)) {
-  case Type_comptime_int: return True;
+  case Type_comptime_int:
+  case Type_type:
+    return True;
   case Type_array: return is_type_comptime(types, p->data.array.base_type);
   case Type_slice: return is_type_comptime(types, p->data.slice.base_type);
   default: return False;
