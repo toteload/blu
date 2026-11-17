@@ -1,0 +1,8 @@
+mod main
+
+X : u8 = 200
+
+main: () i32 = || {
+  #debug(X + 56)
+  0
+}

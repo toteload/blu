@@ -145,13 +145,13 @@ void test_eval_int_div_safe(TestResult *test, void *user) {
   Unused(user);
   DivCase cases[] = {
     // name                                type                    lhs           rhs  err                          expected
-    { "signed_basic",                      int_type(Signed, 32),    10,           3,  IntDivSafe_ok,                3 },
-    { "signed_truncates_toward_zero",      int_type(Signed, 32),    -7,           2,  IntDivSafe_ok,               -3 },
-    { "unsigned_basic",                    int_type(Unsigned, 32),  20,           4,  IntDivSafe_ok,                5 },
-    { "signed_by_zero",                    int_type(Signed, 32),    10,           0,  IntDivSafe_zero_division,     0 },
-    { "unsigned_by_zero",                  int_type(Unsigned, 32),  10,           0,  IntDivSafe_zero_division,     0 },
-    { "signed_int_min_by_minus_one",       int_type(Signed, 32),    INT32_MIN,   -1,  IntDivSafe_overflow,          0 },
-    { "signed_64bit_int_min_by_minus_one", int_type(Signed, 64),    INT64_MIN,   -1,  IntDivSafe_overflow,          0 },
+    { "signed_basic",                      int_type(Signed, 32),    10,           3,  IntOp_ok,                3 },
+    { "signed_truncates_toward_zero",      int_type(Signed, 32),    -7,           2,  IntOp_ok,               -3 },
+    { "unsigned_basic",                    int_type(Unsigned, 32),  20,           4,  IntOp_ok,                5 },
+    { "signed_by_zero",                    int_type(Signed, 32),    10,           0,  IntOp_zero_division,     0 },
+    { "unsigned_by_zero",                  int_type(Unsigned, 32),  10,           0,  IntOp_zero_division,     0 },
+    { "signed_int_min_by_minus_one",       int_type(Signed, 32),    INT32_MIN,   -1,  IntOp_overflow,          0 },
+    { "signed_64bit_int_min_by_minus_one", int_type(Signed, 64),    INT64_MIN,   -1,  IntOp_overflow,          0 },
   };
 
   for (usize i = 0; i < Count_of(cases); i++) {
@@ -161,7 +161,7 @@ void test_eval_int_div_safe(TestResult *test, void *user) {
     write_int(c.type, c.rhs, &rhs);
     u32 err = eval_int_div_safe(c.type, &lhs, &rhs, &res);
     Test_assert_eq(err, c.err);
-    if (c.err == IntDivSafe_ok) { Test_assert_eq(read_int(c.type, &res), c.expected); }
+    if (c.err == IntOp_ok) { Test_assert_eq(read_int(c.type, &res), c.expected); }
   }
 }
 

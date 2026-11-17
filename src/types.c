@@ -319,6 +319,16 @@ b32 is_type_int_like(TypeKey t) {
   return (t.x >= TYPE_COMPTIME_INT.x) && (t.x <= TYPE_ISIZE.x);
 }
 
+TypeInteger type_int_repr(TypeInterner *types, TypeKey t) {
+  Type *p = types_get(types, t);
+  switch (Cast(TypeKind, p->kind)) {
+  case Type_comptime_int: return (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 };
+  case Type_integer: return p->data.integer;
+  case Type_bool: return (TypeInteger){ .signedness = Unsigned, .bitwidth = 8 };
+  default: Unreachable();
+  }
+}
+
 u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from) {
   if (is_type_comptime(types, to)) {
     return CAST_INVALID;

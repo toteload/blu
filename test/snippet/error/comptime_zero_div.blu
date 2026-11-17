@@ -1,0 +1,6 @@
+mod main
+
+main: () i32 = || {
+  #debug(12 / 0)
+  0
+}

@@ -1,0 +1,27 @@
+mod main
+
+A : i32 = 1 + 2 * 3
+B : i32 = 10 - 20
+C : i32 = -7 / 2
+D : i32 = -7 % 2
+E : i32 = 12 & 10
+F : i32 = 12 | 10
+G : i32 = 12 ~ 10
+X : u8 = 200
+H : u8 = X + 55
+I : i64 = 9000000000 * 2
+J : bool = 2 + 2 == 4
+
+main: () i32 = || {
+  #debug(A)
+  #debug(B)
+  #debug(C)
+  #debug(D)
+  #debug(E)
+  #debug(F)
+  #debug(G)
+  #debug(H)
+  #debug(I)
+  #debug(J)
+  0
+}

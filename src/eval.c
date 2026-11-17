@@ -1,6 +1,7 @@
 #include "types.h"
 #include "value_interner.h"
 #include "eval.h"
+#include "iir.h"
 
 i64 read_int_sign_extend(u16 bitwidth, void *payload) {
   i64 res;
@@ -288,10 +289,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
   }
   case Coercion_comptime: {
     if (type_dst->kind == Type_integer && key_eq(v->type, TYPE_COMPTIME_INT)) {
-      TypeInteger comptime_int = {
-        .signedness = Signed,
-        .bitwidth   = sizeof(ComptimeInt) * 8,
-      };
+      TypeInteger comptime_int = type_int_repr(types, TYPE_COMPTIME_INT);
 
       TypeSizeInfo size_info = types_size_info_by_key(types, dst);
       u64 data = 0;
@@ -329,26 +327,26 @@ u32 eval_int_mod_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {
   if (int_type.signedness == Signed) {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { if (*Cast(i8*,rhs)  == 0) return IntDivSafe_zero_division; if (*Cast(i8*,rhs)  == -1) { *Cast(i8*,res)  = 0; break; } *Cast(i8*,res)  = *Cast(i8*,lhs)  % *Cast(i8*,rhs);  } break;
-    case 16: { if (*Cast(i16*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i16*,rhs) == -1) { *Cast(i16*,res) = 0; break; } *Cast(i16*,res) = *Cast(i16*,lhs) % *Cast(i16*,rhs); } break;
-    case 32: { if (*Cast(i32*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i32*,rhs) == -1) { *Cast(i32*,res) = 0; break; } *Cast(i32*,res) = *Cast(i32*,lhs) % *Cast(i32*,rhs); } break;
-    case 64: { if (*Cast(i64*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i64*,rhs) == -1) { *Cast(i64*,res) = 0; break; } *Cast(i64*,res) = *Cast(i64*,lhs) % *Cast(i64*,rhs); } break;
+    case 8:  { if (*Cast(i8*,rhs)  == 0) return IntOp_zero_division; if (*Cast(i8*,rhs)  == -1) { *Cast(i8*,res)  = 0; break; } *Cast(i8*,res)  = *Cast(i8*,lhs)  % *Cast(i8*,rhs);  } break;
+    case 16: { if (*Cast(i16*,rhs) == 0) return IntOp_zero_division; if (*Cast(i16*,rhs) == -1) { *Cast(i16*,res) = 0; break; } *Cast(i16*,res) = *Cast(i16*,lhs) % *Cast(i16*,rhs); } break;
+    case 32: { if (*Cast(i32*,rhs) == 0) return IntOp_zero_division; if (*Cast(i32*,rhs) == -1) { *Cast(i32*,res) = 0; break; } *Cast(i32*,res) = *Cast(i32*,lhs) % *Cast(i32*,rhs); } break;
+    case 64: { if (*Cast(i64*,rhs) == 0) return IntOp_zero_division; if (*Cast(i64*,rhs) == -1) { *Cast(i64*,res) = 0; break; } *Cast(i64*,res) = *Cast(i64*,lhs) % *Cast(i64*,rhs); } break;
     default: Unreachable();
     }
     // clang-format on
   } else {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { if (*Cast(u8*,rhs)  == 0) return IntDivSafe_zero_division; *Cast(u8*,res)  = *Cast(u8*,lhs)  % *Cast(u8*,rhs);  } break;
-    case 16: { if (*Cast(u16*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u16*,res) = *Cast(u16*,lhs) % *Cast(u16*,rhs); } break;
-    case 32: { if (*Cast(u32*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u32*,res) = *Cast(u32*,lhs) % *Cast(u32*,rhs); } break;
-    case 64: { if (*Cast(u64*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u64*,res) = *Cast(u64*,lhs) % *Cast(u64*,rhs); } break;
+    case 8:  { if (*Cast(u8*,rhs)  == 0) return IntOp_zero_division; *Cast(u8*,res)  = *Cast(u8*,lhs)  % *Cast(u8*,rhs);  } break;
+    case 16: { if (*Cast(u16*,rhs) == 0) return IntOp_zero_division; *Cast(u16*,res) = *Cast(u16*,lhs) % *Cast(u16*,rhs); } break;
+    case 32: { if (*Cast(u32*,rhs) == 0) return IntOp_zero_division; *Cast(u32*,res) = *Cast(u32*,lhs) % *Cast(u32*,rhs); } break;
+    case 64: { if (*Cast(u64*,rhs) == 0) return IntOp_zero_division; *Cast(u64*,res) = *Cast(u64*,lhs) % *Cast(u64*,rhs); } break;
     default: Unreachable();
     }
     // clang-format on
   }
 
-  return IntDivSafe_ok;
+  return IntOp_ok;
 }
 
 b32 eval_int_add_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {
@@ -447,24 +445,75 @@ u32 eval_int_div_safe(TypeInteger int_type, void *lhs, void *rhs, void *res) {
   if (int_type.signedness == Signed) {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { if (*Cast(i8*,rhs)  == 0) return IntDivSafe_zero_division; if (*Cast(i8*,rhs)  == -1 && *Cast(i8*,lhs)  == INT8_MIN)  return IntDivSafe_overflow; *Cast(i8*,res)  = *Cast(i8*,lhs)  / *Cast(i8*,rhs);  } break;
-    case 16: { if (*Cast(i16*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i16*,rhs) == -1 && *Cast(i16*,lhs) == INT16_MIN) return IntDivSafe_overflow; *Cast(i16*,res) = *Cast(i16*,lhs) / *Cast(i16*,rhs); } break;
-    case 32: { if (*Cast(i32*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i32*,rhs) == -1 && *Cast(i32*,lhs) == INT32_MIN) return IntDivSafe_overflow; *Cast(i32*,res) = *Cast(i32*,lhs) / *Cast(i32*,rhs); } break;
-    case 64: { if (*Cast(i64*,rhs) == 0) return IntDivSafe_zero_division; if (*Cast(i64*,rhs) == -1 && *Cast(i64*,lhs) == INT64_MIN) return IntDivSafe_overflow; *Cast(i64*,res) = *Cast(i64*,lhs) / *Cast(i64*,rhs); } break;
+    case 8:  { if (*Cast(i8*,rhs)  == 0) return IntOp_zero_division; if (*Cast(i8*,rhs)  == -1 && *Cast(i8*,lhs)  == INT8_MIN)  return IntOp_overflow; *Cast(i8*,res)  = *Cast(i8*,lhs)  / *Cast(i8*,rhs);  } break;
+    case 16: { if (*Cast(i16*,rhs) == 0) return IntOp_zero_division; if (*Cast(i16*,rhs) == -1 && *Cast(i16*,lhs) == INT16_MIN) return IntOp_overflow; *Cast(i16*,res) = *Cast(i16*,lhs) / *Cast(i16*,rhs); } break;
+    case 32: { if (*Cast(i32*,rhs) == 0) return IntOp_zero_division; if (*Cast(i32*,rhs) == -1 && *Cast(i32*,lhs) == INT32_MIN) return IntOp_overflow; *Cast(i32*,res) = *Cast(i32*,lhs) / *Cast(i32*,rhs); } break;
+    case 64: { if (*Cast(i64*,rhs) == 0) return IntOp_zero_division; if (*Cast(i64*,rhs) == -1 && *Cast(i64*,lhs) == INT64_MIN) return IntOp_overflow; *Cast(i64*,res) = *Cast(i64*,lhs) / *Cast(i64*,rhs); } break;
     default: Unreachable();
     }
     // clang-format on
   } else {
     // clang-format off
     switch (int_type.bitwidth) {
-    case 8:  { if (*Cast(u8*,rhs)  == 0) return IntDivSafe_zero_division; *Cast(u8*,res)  = *Cast(u8*,lhs)  / *Cast(u8*,rhs);  } break;
-    case 16: { if (*Cast(u16*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u16*,res) = *Cast(u16*,lhs) / *Cast(u16*,rhs); } break;
-    case 32: { if (*Cast(u32*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u32*,res) = *Cast(u32*,lhs) / *Cast(u32*,rhs); } break;
-    case 64: { if (*Cast(u64*,rhs) == 0) return IntDivSafe_zero_division; *Cast(u64*,res) = *Cast(u64*,lhs) / *Cast(u64*,rhs); } break;
+    case 8:  { if (*Cast(u8*,rhs)  == 0) return IntOp_zero_division; *Cast(u8*,res)  = *Cast(u8*,lhs)  / *Cast(u8*,rhs);  } break;
+    case 16: { if (*Cast(u16*,rhs) == 0) return IntOp_zero_division; *Cast(u16*,res) = *Cast(u16*,lhs) / *Cast(u16*,rhs); } break;
+    case 32: { if (*Cast(u32*,rhs) == 0) return IntOp_zero_division; *Cast(u32*,res) = *Cast(u32*,lhs) / *Cast(u32*,rhs); } break;
+    case 64: { if (*Cast(u64*,rhs) == 0) return IntOp_zero_division; *Cast(u64*,res) = *Cast(u64*,lhs) / *Cast(u64*,rhs); } break;
     default: Unreachable();
     }
     // clang-format on
   }
 
-  return IntDivSafe_ok;
+  return IntOp_ok;
+}
+
+b32 eval_int_cmp(u8 op, TypeInteger int_type, void *lhs, void *rhs) {
+  i32 ord;
+  if (int_type.signedness == Signed) {
+    i64 l = read_int_sign_extend(int_type.bitwidth, lhs);
+    i64 r = read_int_sign_extend(int_type.bitwidth, rhs);
+    ord = (l > r) - (l < r);
+  } else {
+    u64 l = read_int_zero_extend(int_type.bitwidth, lhs);
+    u64 r = read_int_zero_extend(int_type.bitwidth, rhs);
+    ord = (l > r) - (l < r);
+  }
+
+  // clang-format off
+  switch (op) {
+  case IIR_int_cmp_eq: return ord == 0;
+  case IIR_int_cmp_ne: return ord != 0;
+  case IIR_int_cmp_gt: return ord >  0;
+  case IIR_int_cmp_ge: return ord >= 0;
+  case IIR_int_cmp_lt: return ord <  0;
+  case IIR_int_cmp_le: return ord <= 0;
+  default: Unreachable();
+  }
+  // clang-format on
+}
+
+u32 eval_int_binary(u8 op, TypeInteger int_type, void *lhs, void *rhs, void *res) {
+  switch (op) {
+  case IIR_int_add: return eval_int_add_safe(int_type, lhs, rhs, res) ? IntOp_ok : IntOp_overflow;
+  case IIR_int_sub: return eval_int_sub_safe(int_type, lhs, rhs, res) ? IntOp_ok : IntOp_overflow;
+  case IIR_int_mul: return eval_int_mul_safe(int_type, lhs, rhs, res) ? IntOp_ok : IntOp_overflow;
+  case IIR_int_div: return eval_int_div_safe(int_type, lhs, rhs, res);
+  case IIR_int_mod: return eval_int_mod_safe(int_type, lhs, rhs, res);
+  case IIR_bit_and:
+  case IIR_bit_or:
+  case IIR_bit_xor: {
+    u64 l = read_int_zero_extend(int_type.bitwidth, lhs);
+    u64 r = read_int_zero_extend(int_type.bitwidth, rhs);
+    u64 x;
+    switch (op) {
+    case IIR_bit_and: x = l & r; break;
+    case IIR_bit_or:  x = l | r; break;
+    case IIR_bit_xor: x = l ^ r; break;
+    default: Unreachable();
+    }
+    memcpy(res, &x, int_type.bitwidth / 8);
+    return IntOp_ok;
+  }
+  default: Unreachable();
+  }
 }

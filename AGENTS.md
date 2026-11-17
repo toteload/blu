@@ -11,3 +11,5 @@ It is written in C.
 3. Strongly prefer generalization over duplicating code.
 4. Less code is better than more code.
 5. Do not add state if changing control flow can achieve the same thing.
+6. No nested ternary operators.
+7. Prefer switch statements so that exhaustiveness can be checked and future case additions result in compile errors if they are not handled.

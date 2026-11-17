@@ -1617,11 +1617,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-      break;
-    }
-
     u8 iir_op;
     // clang-format off
     switch (op) {
@@ -1636,6 +1631,47 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     default: Unreachable();
     }
     // clang-format on
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      TypeInteger int_type = type_int_repr(ctx->types, type_unified);
+
+      u64 data = 0;
+      u32 err = eval_int_binary(
+        iir_op,
+        int_type,
+        values_get(ctx->values, iref_to_value(lhs))->data,
+        values_get(ctx->values, iref_to_value(rhs))->data,
+        &data
+      );
+
+      if (err != IntOp_ok) {
+        String msg;
+        switch (Cast(IntOpResult, err)) {
+        case IntOp_zero_division: msg = string_lit("Division by zero"); break;
+        case IntOp_overflow: msg = string_lit("Result of this operation overflows its type %type"); break;
+        case IntOp_ok: Unreachable();
+        }
+
+        Message_error(
+          ctx->msg_sink,
+          (MessageLocation){
+            .kind = MessageLocation_ir_instruction,
+            .decl_idx = state->frame.decl,
+            .data.offset = s->pc,
+          },
+          msg,
+          type_unified
+        );
+
+        return (StepResult){ .kind = Step_error };
+      }
+
+      ValueKey res = values_intern_data(ctx->values, type_unified, &data, int_type.bitwidth / 8);
+      store_inst_value(f, pc, iref_from_value(res));
+
+      s->pc += 1;
+      break;
+    }
 
     InstructionOffset inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
@@ -1707,11 +1743,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
-      Todo();
-      break;
-    }
-
     u8 iir_op;
     // clang-format off
     switch (op) {
@@ -1724,6 +1755,19 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     default: Unreachable();
     }
     // clang-format on
+
+    if (iref_is_some_value(lhs) && iref_is_some_value(rhs)) {
+      b32 res = eval_int_cmp(
+        iir_op,
+        type_int_repr(ctx->types, type_unified),
+        values_get(ctx->values, iref_to_value(lhs))->data,
+        values_get(ctx->values, iref_to_value(rhs))->data
+      );
+
+      store_inst_value(f, pc, iref_from_value(res ? VAL_BOOL_TRUE : VAL_BOOL_FALSE));
+      s->pc += 1;
+      break;
+    }
 
     InstructionOffset inst = iir_builder_add(builder, iir_op, f->chunk->sources[pc]);
     IIrBinary *data = iir_builder_push_data(builder, inst, IIrBinary);
@@ -1843,11 +1887,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       return (StepResult){ .kind = Step_error };
     }
 
-    Type *t = types_get(ctx->types, type);
-    // A comptime_int carries no TypeInteger of its own; it is stored as a ComptimeInt.
-    TypeInteger int_type = (t->kind == Type_comptime_int)
-      ? (TypeInteger){ .signedness = Signed, .bitwidth = sizeof(ComptimeInt) * 8 }
-      : t->data.integer;
+    TypeInteger int_type = type_int_repr(ctx->types, type);
 
     u32 size = int_type.bitwidth / 8;
 

@@ -1,0 +1,28 @@
+mod main
+
+A : bool = 1 < 2
+B : bool = 2 <= 1
+C : bool = 3 == 3
+D : bool = 3 != 3
+E : bool = -1 > -2
+F : i32 = if 5 >= 5 do 10 else 20
+G : bool = true == true
+H : bool = false != true
+U : u8 = 200
+I : bool = U > 100
+N : i8 = -1
+J : bool = N < 1
+
+main: () i32 = || {
+  #debug(A)
+  #debug(B)
+  #debug(C)
+  #debug(D)
+  #debug(E)
+  #debug(F)
+  #debug(G)
+  #debug(H)
+  #debug(I)
+  #debug(J)
+  0
+}

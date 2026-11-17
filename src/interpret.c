@@ -474,7 +474,7 @@ internal u32 step(Interpreter *in) {
     Type *t = types_get(&in->compiler->types, type);
     u32 err = eval_int_div_safe(t->data.integer, lhs, rhs, local);
     if (err) {
-      if (err == IntDivSafe_zero_division) {
+      if (err == IntOp_zero_division) {
         Message_error(
           in->msg_sink,
           inst_location(f, pc),
@@ -484,7 +484,7 @@ internal u32 step(Interpreter *in) {
         return Step_zero_division;
       }
 
-      if (err == IntDivSafe_overflow) {
+      if (err == IntOp_overflow) {
         Message_error(
           in->msg_sink,
           inst_location(f, pc),
@@ -508,7 +508,7 @@ internal u32 step(Interpreter *in) {
     Type *t = types_get(&in->compiler->types, type);
     u32 err = eval_int_mod_safe(t->data.integer, lhs, rhs, local);
     if (err) {
-      if (err == IntDivSafe_zero_division) {
+      if (err == IntOp_zero_division) {
         Message_error(
           in->msg_sink,
           inst_location(f, pc),
@@ -560,33 +560,9 @@ internal u32 step(Interpreter *in) {
     void *lhs = resolve(in, f, bin->lhs);
     void *rhs = resolve(in, f, bin->rhs);
 
-    Type *t = types_get(&in->compiler->types, ref_type(in, f, bin->lhs));
+    TypeInteger int_type = type_int_repr(&in->compiler->types, ref_type(in, f, bin->lhs));
 
-    i32 ord;
-    if (t->data.integer.signedness == Signed) {
-      i64 l = read_int_sign_extend(t->data.integer.bitwidth, lhs);
-      i64 r = read_int_sign_extend(t->data.integer.bitwidth, rhs);
-      ord = (l > r) - (l < r);
-    } else {
-      u64 l = read_int_zero_extend(t->data.integer.bitwidth, lhs);
-      u64 r = read_int_zero_extend(t->data.integer.bitwidth, rhs);
-      ord = (l > r) - (l < r);
-    }
-
-    b32 res;
-    // clang-format off
-    switch (op) {
-    case IIR_int_cmp_eq: res = ord == 0; break;
-    case IIR_int_cmp_ne: res = ord != 0; break;
-    case IIR_int_cmp_gt: res = ord >  0; break;
-    case IIR_int_cmp_ge: res = ord >= 0; break;
-    case IIR_int_cmp_lt: res = ord <  0; break;
-    case IIR_int_cmp_le: res = ord <= 0; break;
-    default: Unreachable();
-    }
-    // clang-format on
-
-    *Cast(u8 *, local) = res != 0;
+    *Cast(u8 *, local) = eval_int_cmp(op, int_type, lhs, rhs) != 0;
 
     f->pc += 1;
   } break;

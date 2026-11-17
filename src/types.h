@@ -148,6 +148,7 @@ u32 classify_type_cast(TypeInterner *types, TypeKey to, TypeKey from);
 
 b8 is_type_comptime(TypeInterner *types, TypeKey t);
 b32 is_type_int_like(TypeKey t);
+TypeInteger type_int_repr(TypeInterner *types, TypeKey t);
 
 // An add is always between two values of the same type.
 b32 check_type_for_op_bitshift(TypeKey lhs, TypeKey rhs);

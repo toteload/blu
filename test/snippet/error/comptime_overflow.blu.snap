@@ -1,0 +1,3 @@
+[error] test/snippet/error/comptime_overflow.blu:6:12: Result of this operation overflows its type u8
+    6 |   #debug(X + 56)
+      |            ^

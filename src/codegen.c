@@ -729,7 +729,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     
     InstructionOffset x = gen_code_for_binary_op(&gen->builder, binary->op_kind, lhs, rhs, source_idx, idx_ast);
 
-    return sref_from_instruction(x);
+    return sir_builder_add_as(builder, type_destination, sref_from_instruction(x), source_idx, idx_ast);
   } break;
 
   case Ast_while: { 
