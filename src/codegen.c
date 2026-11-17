@@ -20,8 +20,8 @@ typedef struct {
   DeclarationKey parent_mod;
 } CodeGen;
 
-internal StringKey intern_ast_label_string(CodeGenContext *ctx, Source *source, AstIndex idx) {
-  if (!idx) {
+internal StringKey intern_ast_label_string(CodeGenContext *ctx, Source *source, AstKey idx) {
+  if (key_is_nil(idx)) {
     return (StringKey){0};
   }
 
@@ -106,9 +106,9 @@ b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
   }
 }
 
-SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast) {
+SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
   AstNodes *ast = &gen->source->ast;
-  AstKind kind = ast->kinds[idx_ast];
+  AstKind kind = ast_kind(ast, idx_ast);
 
   switch (kind) {
   case Ast_identifier: {
@@ -152,7 +152,7 @@ internal b32 binary_op_is_cmp(BinaryOpKind op) {
   }
 }
 
-internal InstructionOffset gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKind op, SRef lhs, SRef rhs, SourceKey source_idx, AstIndex ast_idx) {
+internal InstructionOffset gen_code_for_binary_op(SIrBuilder *builder, BinaryOpKind op, SRef lhs, SRef rhs, SourceKey source_idx, AstKey ast_idx) {
   // clang-format on
   u8 sir_op;
   switch (op) {
@@ -188,9 +188,9 @@ internal InstructionOffset gen_code_for_binary_op(SIrBuilder *builder, BinaryOpK
   return inst;
 }
 
-SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination);
+SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_destination);
 
-SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
+SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_destination) {
   SIrBuilder *builder = &gen->builder;
   SourceKey source_idx = gen->source->idx;
   InstructionOffset inst_block = sir_builder_add(builder, SIR_comptime_block, source_idx, idx_ast);
@@ -199,7 +199,7 @@ SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef
   return sref_from_instruction(inst_block);
 }
 
-internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, AstIndex cond, AstIndex then, SRef then_fallback, AstIndex otherwise, SRef otherwise_fallback, SRef type_destination) {
+internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, AstKey cond, AstKey then, SRef then_fallback, AstKey otherwise, SRef otherwise_fallback, SRef type_destination) {
   SIrBuilder *builder = &gen->builder;
   SourceKey source_idx = gen->source->idx;
 
@@ -210,7 +210,7 @@ internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, A
   InstructionOffset condbr = sir_builder_add(builder, SIR_condbr, source_idx, cond);
   SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
 
-  SRef then_val = then ? gen_code(gen, ctx, then, type_destination) : then_fallback;
+  SRef then_val = key_is_some(then) ? gen_code(gen, ctx, then, type_destination) : then_fallback;
   InstructionOffset then_br = sir_builder_add(builder, SIR_br, source_idx, then);
   SIrBr *then_data = sir_builder_push_data(builder, then_br, SIrBr);
   *then_data = (SIrBr){
@@ -218,7 +218,7 @@ internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, A
     .value = then_val,
   };
 
-  SRef else_val = otherwise ? gen_code(gen, ctx, otherwise, type_destination) : otherwise_fallback;
+  SRef else_val = key_is_some(otherwise) ? gen_code(gen, ctx, otherwise, type_destination) : otherwise_fallback;
   sir_builder_end_block_with(builder, block, block, else_val, source_idx, otherwise);
 
   *condbr_data = (SIrCondbr){
@@ -245,7 +245,7 @@ internal BinaryOpKind compound_assign_kind_to_binary_op_kind(AssignKind kind) {
   }
 }
 
-SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_destination) {
+SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_destination) {
   String text = gen->source->text;
   Tokens *tokens = &gen->source->tokens;
   AstNodes *ast = &gen->source->ast;
@@ -254,7 +254,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   SymbolMap *syms = &gen->syms;
   Source *source = gen->source;
 
-  AstKind kind = ast->kinds[idx_ast];
+  AstKind kind = ast_kind(ast, idx_ast);
   switch (kind) {
   case Ast_source:      { PanicMsg("Encountered 'Ast_source' in gen_code, which should never happen."); } break;
   case Ast_mod_section: { PanicMsg("Encountered 'Ast_mod_section' in gen_code, which should never happen."); } break;
@@ -400,7 +400,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       {
         InstructionOffset return_type_inst = sir_builder_add(builder, SIR_comptime_block, source_idx, func->return_type);
         SRef return_type_ref = SREF_NIL;
-        if (func->return_type) {
+        if (key_is_some(func->return_type)) {
           return_type_ref = gen_code(gen, ctx, func->return_type, SREF_NIL);
         }
 
@@ -412,7 +412,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
         InstructionOffset param_inst = sir_builder_add(builder, SIR_comptime_block, source_idx, func->params[i]);
         SRef param_type_ref = SREF_NIL;
-        if (ast_param->type) {
+        if (key_is_some(ast_param->type)) {
           param_type_ref = gen_code(gen, ctx, ast_param->type, SREF_NIL);
         }
 
@@ -460,7 +460,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
 
-    Assert(decl->type);
+    Assert(key_is_some(decl->type));
 
     StringKey str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, decl->name));
 
@@ -575,7 +575,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     AstBuiltin *builtin = ast_data(ast, idx_ast);
     switch (Cast(BuiltinKind, builtin->kind)) {
     case Builtin_debug: {
-      AstIndex e = builtin->args[0];
+      AstKey e = builtin->args[0];
       SRef val = gen_code(gen, ctx, e, type_destination);
 
       InstructionOffset inst_debug = sir_builder_add(builder, SIR_builtin_debug, source_idx, idx_ast);
@@ -717,11 +717,11 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
     AstBinaryOp *binary = ast_data(ast, idx_ast);
 
     if (binary->op_kind == Logical_and) {
-      return gen_if_else(gen, ctx, idx_ast, binary->lhs, binary->rhs, SREF_NIL, 0, sref_from_value(VAL_BOOL_FALSE), sref_from_value(VAL_TYPE_BOOL));
+      return gen_if_else(gen, ctx, idx_ast, binary->lhs, binary->rhs, SREF_NIL, (AstKey){0}, sref_from_value(VAL_BOOL_FALSE), sref_from_value(VAL_TYPE_BOOL));
     }
 
     if (binary->op_kind == Logical_or) {
-      return gen_if_else(gen, ctx, idx_ast, binary->lhs, 0, sref_from_value(VAL_BOOL_TRUE), binary->rhs, SREF_NIL, sref_from_value(VAL_TYPE_BOOL));
+      return gen_if_else(gen, ctx, idx_ast, binary->lhs, (AstKey){0}, sref_from_value(VAL_BOOL_TRUE), binary->rhs, SREF_NIL, sref_from_value(VAL_TYPE_BOOL));
     }
 
     SRef lhs = gen_code(gen, ctx, binary->lhs, SREF_NIL);
@@ -783,7 +783,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
 
     InstructionOffset target;
 
-    if (b->label) {
+    if (key_is_some(b->label)) {
       StringKey label = intern_ast_label_string(ctx, source, b->label);
       ScopeEntry *entry = symbols_find(syms, label);
       if (!entry) {
@@ -800,7 +800,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstIndex idx_ast, SRef type_des
       target = entry->inst;
     }
 
-    SRef value = b->value ? gen_code(gen, ctx, b->value, SREF_NIL) : SREF_NIL;
+    SRef value = key_is_some(b->value) ? gen_code(gen, ctx, b->value, SREF_NIL) : SREF_NIL;
 
     InstructionOffset br = sir_builder_add(builder, SIR_br, source_idx, idx_ast);
     SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
@@ -825,10 +825,10 @@ b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
     Todo();
   }
 
-  AstIndex ast_idx_decl = source->decls[decl->data.decl.tree_idx].node;
+  AstKey ast_idx_decl = source->decls[decl->data.decl.tree_idx].node;
   AstDeclaration *ast_decl = ast_data(&source->ast, ast_idx_decl);
 
-  Assert(gen.source->ast.kinds[ast_idx_decl] == Ast_declaration);
+  Assert(ast_kind(&gen.source->ast, ast_idx_decl) == Ast_declaration);
 
   SIrBuilder *builder = &gen.builder;
   InstructionOffset block_decl = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_idx_decl);
@@ -838,7 +838,7 @@ b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
     InstructionOffset block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_decl->type);
 
     SRef ref_decl_type = SREF_NIL;
-    if (ast_decl->type) {
+    if (key_is_some(ast_decl->type)) {
       ref_decl_type = gen_code(&gen, ctx, ast_decl->type, sref_from_value(VAL_TYPE_TYPE));
     }
 

@@ -129,17 +129,17 @@ internal char const* typekind_string(u8 kind) {
   return "<invalid>";
 }
 
-internal void print_inst_source(FILE *out, Compiler *compiler, AstAndSourceIndex src) {
+internal void print_inst_source(FILE *out, Compiler *compiler, AstAndSourceKey src) {
   fputs(" ; ", out);
 
-  if (key_is_nil(src.source_idx) || src.ast_idx == 0) {
+  if (key_is_nil(src.source_idx) || key_is_nil(src.ast_idx)) {
     fputs("_\n", out);
     return;
   }
 
   Source *source = compiler_get_source(compiler, src.source_idx);
 
-  SpanToken span = source->ast.spans[src.ast_idx];
+  SpanToken span = ast_span(&source->ast, src.ast_idx);
 
   u32 start = source->tokens.spans[span.start].start;
   u32 end   = source->tokens.spans[span.end - 1].end;

@@ -8,10 +8,6 @@
 typedef u32 TokenOffset;
 typedef u32 InstructionOffset;
 
-typedef u32 AstIndex;
-
-#define AST_INDEX_SOURCE 1
-
 #define KEY_NAME TypeKey
 #define KEY_FUNCTION_PREFIX type_key
 #include "key.h"
@@ -40,13 +36,20 @@ typedef u32 AstIndex;
 #define KEY_FUNCTION_PREFIX stub_key
 #include "key.h"
 
+#define KEY_NAME AstKey
+#define KEY_FUNCTION_PREFIX ast_key
+#include "key.h"
+
+#define AST_KEY_SOURCE ((AstKey){1})
+
 #define key_is_nil(K) _Generic((K), \
   TypeKey : type_key_is_nil, \
   SourceKey : source_key_is_nil, \
   ResidualFunctionKey : residual_function_key_is_nil, \
   StringKey : string_key_is_nil, \
   ValueKey : value_key_is_nil, \
-  DeclarationKey : declaration_key_is_nil)(K)
+  DeclarationKey : declaration_key_is_nil, \
+  AstKey : ast_key_is_nil)(K)
 
 #define key_is_some(K) _Generic((K), \
   TypeKey : type_key_is_some, \
@@ -54,7 +57,8 @@ typedef u32 AstIndex;
   ResidualFunctionKey : residual_function_key_is_some, \
   StringKey : string_key_is_some, \
   ValueKey : value_key_is_some, \
-  DeclarationKey : declaration_key_is_some)(K)
+  DeclarationKey : declaration_key_is_some, \
+  AstKey : ast_key_is_some)(K)
 
 #define key_eq(K,M) _Generic((K), \
   TypeKey : type_key_eq, \
@@ -62,7 +66,8 @@ typedef u32 AstIndex;
   ResidualFunctionKey : residual_function_key_eq, \
   StringKey : string_key_eq, \
   ValueKey : value_key_eq, \
-  DeclarationKey : declaration_key_eq)(K,M)
+  DeclarationKey : declaration_key_eq, \
+  AstKey : ast_key_eq)(K,M)
 
 typedef struct ValueInterner ValueInterner;
 typedef struct SourceAllocator SourceAllocator;

@@ -140,7 +140,7 @@ typedef struct {
   u32 opcode_count;
   u8 *opcodes;
   u32 *data;
-  AstAndSourceIndex *sources;
+  AstAndSourceKey *sources;
   void *extra;
 } SIrChunk;
 
@@ -174,8 +174,8 @@ typedef struct {
   InstDataList data;
 } SIrBuilder;
 
-InstructionOffset sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx);
-SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstIndex ast_idx);
+InstructionOffset sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstKey ast_idx);
+SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstKey ast_idx);
 
 void *sir_builder_push_data_raw(SIrBuilder *builder, InstructionOffset idx, u32 size, u32 align);
 
@@ -186,11 +186,11 @@ void sir_builder_set_data(SIrBuilder *builder, InstructionOffset idx, u32 data);
 
 u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionOffset idx);
 
-InstructionOffset sir_builder_add_block(SIrBuilder *builder, SRef result_type, SourceKey source_idx, AstIndex ast_idx);
+InstructionOffset sir_builder_add_block(SIrBuilder *builder, SRef result_type, SourceKey source_idx, AstKey ast_idx);
 
 void sir_builder_end_block(SIrBuilder *builder, InstructionOffset block);
 
-InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOffset block, InstructionOffset target, SRef ref, SourceKey source_idx, AstIndex ast_idx);
+InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOffset block, InstructionOffset target, SRef ref, SourceKey source_idx, AstKey ast_idx);
 
 u32 sir_builder_offset(SIrBuilder *builder, InstructionOffset idx);
 void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk);

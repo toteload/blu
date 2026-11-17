@@ -69,107 +69,107 @@ typedef enum {
 typedef struct {
   u8 kind;
   u32 count;
-  AstIndex args[];
+  AstKey args[];
 } AstBuiltin;
 
 typedef struct {
-  AstIndex return_type;
+  AstKey return_type;
   u32 count;
-  AstIndex param_types[];
+  AstKey param_types[];
 } AstTypeFunction;
 
 typedef struct {
-  AstIndex base;
+  AstKey base;
 } AstTypeSlice;
 
 typedef struct {
-  AstIndex size;
-  AstIndex base;
+  AstKey size;
+  AstKey base;
 } AstTypeArray;
 
 typedef struct {
   TokenOffset name;
-  AstIndex  type;
-  AstIndex  value;
+  AstKey  type;
+  AstKey  value;
 } AstDeclaration;
 
 typedef struct {
   u32 count;
-  AstIndex items[];
+  AstKey items[];
 } AstSource;
 
 typedef struct {
   TokenOffset name;
   u32 count;
-  AstIndex items[];
+  AstKey items[];
 } AstModSection;
 
 typedef struct {
-  AstIndex label;
+  AstKey label;
   u32 count;
-  AstIndex items[];
+  AstKey items[];
 } AstBlock;
 
 typedef struct {
   TokenOffset name;
-  AstIndex    type;
+  AstKey    type;
 } AstParam;
 
 typedef struct {
-  AstIndex return_type;
-  AstIndex body;
+  AstKey return_type;
+  AstKey body;
   u32      count;
-  AstIndex params[];
+  AstKey params[];
 } AstFunction;
 
 typedef struct {
-  AstIndex cond;
-  AstIndex then;
-  AstIndex otherwise;
+  AstKey cond;
+  AstKey then;
+  AstKey otherwise;
 } AstIfElse;
 
 typedef struct {
-  AstIndex label;
-  AstIndex cond;
-  AstIndex body;
+  AstKey label;
+  AstKey cond;
+  AstKey body;
 } AstWhile;
 
 typedef struct {
   u8 op_kind;
-  AstIndex value;
+  AstKey value;
 } AstUnaryOp;
 
 typedef struct {
   u8 op_kind;
-  AstIndex    lhs;
-  AstIndex    rhs;
+  AstKey    lhs;
+  AstKey    rhs;
 } AstBinaryOp;
 
 typedef struct {
-  AstIndex callee;
+  AstKey callee;
   u32 count;
-  AstIndex args[];
+  AstKey args[];
 } AstCall;
 
 typedef struct {
-  AstIndex indexable;
-  AstIndex index_at;
+  AstKey indexable;
+  AstKey index_at;
 } AstIndexData;
 
 typedef struct {
   u8 kind;
-  AstIndex lhs;
-  AstIndex value;
+  AstKey lhs;
+  AstKey value;
 } AstAssign;
 
 typedef struct {
-  AstIndex label;
-  AstIndex value;
+  AstKey label;
+  AstKey value;
 } AstBreak;
 
 typedef struct {
-  AstIndex type;
-  AstIndex value;
+  AstKey type;
+  AstKey value;
 } AstCast;
 
 typedef union {
@@ -211,7 +211,9 @@ typedef struct {
   void      *extra;
 } AstNodes;
 
-void *ast_data(AstNodes *ast, AstIndex idx);
+void *ast_data(AstNodes *ast, AstKey idx);
+AstKind ast_kind(AstNodes *ast, AstKey idx);
+SpanToken ast_span(AstNodes *ast, AstKey idx);
 
 String ast_kind_string(AstKind kind);
 

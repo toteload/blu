@@ -5,8 +5,8 @@
 
 typedef struct {
   SourceKey source_idx;
-  AstIndex    ast_idx;
-} AstAndSourceIndex;
+  AstKey    ast_idx;
+} AstAndSourceKey;
 
 #define OPCODE_LIST_MIN_SIZE_LOG_2 8
 #define OPCODE_LIST_SEGMENT_COUNT 24
@@ -42,7 +42,7 @@ typedef union {
 #define AST_SOURCE_LIST_MIN_SIZE_LOG2 8
 #define AST_SOURCE_LIST_SEGMENT_COUNT 24
 #define AST_SOURCE_LIST_NAME AstSourceList
-#define AST_SOURCE_LIST_TYPE AstAndSourceIndex
+#define AST_SOURCE_LIST_TYPE AstAndSourceKey
 #define SEGMENTLIST_NAME AST_SOURCE_LIST_NAME
 #define SEGMENTLIST_TYPE AST_SOURCE_LIST_TYPE
 #define SEGMENTLIST_MIN_SIZE_LOG2 AST_SOURCE_LIST_MIN_SIZE_LOG2

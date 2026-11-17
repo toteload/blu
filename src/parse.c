@@ -3,8 +3,8 @@
 #include "tokens.h"
 #include "source_file.h"
 
-#define SEGMENTLIST_NAME            AstIndexList
-#define SEGMENTLIST_TYPE            AstIndex
+#define SEGMENTLIST_NAME            AstKeyList
+#define SEGMENTLIST_TYPE            AstKey
 #define SEGMENTLIST_FUNCTION_PREFIX list
 #define SEGMENTLIST_MIN_SIZE_LOG2   3
 #define SEGMENTLIST_SEGMENT_COUNT   24
@@ -49,37 +49,37 @@ typedef void *VoidPtr;
 #pragma clang diagnostic ignored "-Wflexible-array-extensions"
 
 typedef struct {
-  AstIndexList items;
+  AstKeyList items;
   AstSource    base;
 } AstSourceTmp;
 
 typedef struct {
-  AstIndexList  items;
+  AstKeyList  items;
   AstModSection base;
 } AstModSectionTmp;
 
 typedef struct {
-  AstIndexList items;
+  AstKeyList items;
   AstBlock     base;
 } AstBlockTmp;
 
 typedef struct {
-  AstIndexList args;
+  AstKeyList args;
   AstBuiltin   base;
 } AstBuiltinTmp;
 
 typedef struct {
-  AstIndexList    param_types;
+  AstKeyList    param_types;
   AstTypeFunction base;
 } AstTypeFunctionTmp;
 
 typedef struct {
-  AstIndexList params;
+  AstKeyList params;
   AstFunction  base;
 } AstFunctionTmp;
 
 typedef struct {
-  AstIndexList args;
+  AstKeyList args;
   AstCall      base;
 } AstCallTmp;
 
@@ -93,7 +93,7 @@ _Static_assert(Offsetof(AstTypeFunctionTmp, param_types) == 0, "List must be at 
 _Static_assert(Offsetof(AstFunctionTmp, params)          == 0, "List must be at offset 0.");
 _Static_assert(Offsetof(AstCallTmp, args)                == 0, "List must be at offset 0.");
 
-#define Tmp_base_offset sizeof(AstIndexList)
+#define Tmp_base_offset sizeof(AstKeyList)
 
 _Static_assert(Offsetof(AstSourceTmp, base)       == Tmp_base_offset, "Base must be at a common offset.");
 _Static_assert(Offsetof(AstModSectionTmp, base)   == Tmp_base_offset, "Base must be at a common offset.");
@@ -121,47 +121,47 @@ typedef struct {
   Arena *scratch;
 } Parser;
 
-internal AstIndex node_alloc(Parser *parser) {
-  AstIndex idx = parser->kinds.len;
+internal AstKey node_alloc(Parser *parser) {
+  AstKey idx = { Cast(u32, parser->kinds.len) };
   kindlist_append(&parser->kinds, parser->scratch, 0);
   spanlist_append(&parser->spans, parser->scratch, (SpanToken){0});
   tmplist_append(&parser->tmp, parser->scratch, Null);
   return idx;
 }
 
-internal u8 *node_kind(Parser *parser, AstIndex idx) {
-  return kindlist_ptr_at_unchecked(&parser->kinds, idx);
+internal u8 *node_kind(Parser *parser, AstKey idx) {
+  return kindlist_ptr_at_unchecked(&parser->kinds, idx.x);
 }
 
-internal SpanToken *node_span(Parser *parser, AstIndex idx) {
-  return spanlist_ptr_at_unchecked(&parser->spans, idx);
+internal SpanToken *node_span(Parser *parser, AstKey idx) {
+  return spanlist_ptr_at_unchecked(&parser->spans, idx.x);
 }
 
-internal void *node_push_data_raw(Parser *parser, AstIndex idx, usize size, u32 align) {
+internal void *node_push_data_raw(Parser *parser, AstKey idx, usize size, u32 align) {
   void *p = arena_push(parser->scratch, size, align);
-  *tmplist_ptr_at_unchecked(&parser->tmp, idx) = p;
+  *tmplist_ptr_at_unchecked(&parser->tmp, idx.x) = p;
   return p;
 }
 
 #define node_push_data(parser, type, idx) node_push_data_raw(parser, idx, sizeof(type), Align_of(type))
 
-internal b32 parse_source(Parser *parser, AstIndex *out);
-internal b32 parse_mod_section(Parser *parser, AstIndex *out);
-internal b32 parse_declaration(Parser *parser, AstIndex *out);
-internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out);
-internal b32 parse_type(Parser *parser, AstIndex *out);
-internal b32 parse_function(Parser *parser, AstIndex *out);
-internal b32 parse_break(Parser *parser, AstIndex *out);
-internal b32 parse_label(Parser *parser, AstIndex *out);
-internal b32 parse_if_else(Parser *parser, AstIndex *out);
-internal b32 parse_base_expression(Parser *parser, AstIndex *out);
-internal b32 parse_expression(Parser *parser, AstIndex *out);
-internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind);
-internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out);
-internal b32 parse_identifier(Parser *parser, AstIndex *out);
-internal b32 parse_param(Parser *parser, AstIndex *out);
+internal b32 parse_source(Parser *parser, AstKey *out);
+internal b32 parse_mod_section(Parser *parser, AstKey *out);
+internal b32 parse_declaration(Parser *parser, AstKey *out);
+internal b32 parse_block(Parser *parser, AstKey label, AstKey *out);
+internal b32 parse_type(Parser *parser, AstKey *out);
+internal b32 parse_function(Parser *parser, AstKey *out);
+internal b32 parse_break(Parser *parser, AstKey *out);
+internal b32 parse_label(Parser *parser, AstKey *out);
+internal b32 parse_if_else(Parser *parser, AstKey *out);
+internal b32 parse_base_expression(Parser *parser, AstKey *out);
+internal b32 parse_expression(Parser *parser, AstKey *out);
+internal b32 parse_literal(Parser *parser, AstKey *out, AstKind kind);
+internal b32 parse_while(Parser *parser, AstKey label, AstKey *out);
+internal b32 parse_identifier(Parser *parser, AstKey *out);
+internal b32 parse_param(Parser *parser, AstKey *out);
 
-internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op);
+internal b32 parse_expression_impl(Parser *parser, AstKey *out, u32 prev_op);
 
 internal b32 is_token_index_past_end(Tokens *tokens, TokenOffset idx) {
   return idx >= tokens->tok_count;
@@ -263,11 +263,11 @@ internal b32 consume_if_match(Parser *parser, u8 token_kind_match) {
   return False;
 }
 
-typedef b32 (*ParseItemFn)(Parser *parser, AstIndex *out);
+typedef b32 (*ParseItemFn)(Parser *parser, AstKey *out);
 
 // Allows for an optional trailing comma
 internal b32 parse_comma_separated_items_until(
-  Parser *parser, AstIndexList *items, ParseItemFn parse, u8 terminator
+  Parser *parser, AstKeyList *items, ParseItemFn parse, u8 terminator
 ) {
   u8 tok;
   Try(peek_or_error(parser, &tok));
@@ -278,7 +278,7 @@ internal b32 parse_comma_separated_items_until(
   }
 
   while (True) {
-    AstIndex *item = list_push(items, parser->scratch);
+    AstKey *item = list_push(items, parser->scratch);
     Try(parse(parser, item));
 
     b32 has_comma = consume_if_match(parser, Tok_comma);
@@ -297,15 +297,15 @@ internal b32 parse_comma_separated_items_until(
   }
 }
 
-internal b32 parse_source(Parser *parser, AstIndex *out) {
-  AstIndex idx = node_alloc(parser);
+internal b32 parse_source(Parser *parser, AstKey *out) {
+  AstKey idx = node_alloc(parser);
   TokenOffset start = parser->at;
 
   AstSourceTmp *source = node_push_data(parser, AstSourceTmp, idx);
   zero_struct(AstSourceTmp, source);
 
   while (!is_parser_past_end(parser)) {
-    AstIndex *section = list_push(&source->items, parser->scratch);
+    AstKey *section = list_push(&source->items, parser->scratch);
     Try(parse_mod_section(parser, section));
   }
 
@@ -317,8 +317,8 @@ internal b32 parse_source(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
-  AstIndex idx = node_alloc(parser);
+internal b32 parse_mod_section(Parser *parser, AstKey *out) {
+  AstKey idx = node_alloc(parser);
   TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_mod));
@@ -339,7 +339,7 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
       break;
     }
 
-    AstIndex *decl = list_push(&section->items, parser->scratch);
+    AstKey *decl = list_push(&section->items, parser->scratch);
     Try(parse_declaration(parser, decl));
   }
 
@@ -351,8 +351,8 @@ internal b32 parse_mod_section(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   Try(expect_token(parser, tok));
@@ -362,7 +362,7 @@ internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
   builtin->base.kind = kind;
 
   Try(expect_token(parser, Tok_paren_open));
-  AstIndex *e = list_push(&builtin->args, parser->scratch);
+  AstKey *e = list_push(&builtin->args, parser->scratch);
   Try(parse_expression(parser, e));
   Try(expect_token(parser, Tok_paren_close));
 
@@ -374,8 +374,8 @@ internal b32 parse_builtin(Parser *parser, u8 tok, u8 kind, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_block(Parser *parser, AstKey label, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   AstBlockTmp *block = node_push_data(parser, AstBlockTmp, idx);
@@ -391,7 +391,7 @@ internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
       break;
     }
 
-    AstIndex *e = list_push(&block->items, parser->scratch);
+    AstKey *e = list_push(&block->items, parser->scratch);
     Try(parse_expression(parser, e));
   }
 
@@ -405,7 +405,7 @@ internal b32 parse_block(Parser *parser, AstIndex label, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_type(Parser *parser, AstIndex *out) {
+internal b32 parse_type(Parser *parser, AstKey *out) {
   u8 tok;
   Try(peek_or_error(parser, &tok));
 
@@ -420,7 +420,7 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
     return True;
   }
 
-  AstIndex    idx   = node_alloc(parser);
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   switch (tok) {
@@ -489,8 +489,8 @@ internal b32 parse_type(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_declaration(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_declaration(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   AstDeclaration *declaration = node_push_data(parser, AstDeclaration, idx);
@@ -507,7 +507,7 @@ internal b32 parse_declaration(Parser *parser, AstIndex *out) {
   if (tok != Tok_equals) {
     Try(parse_type(parser, &declaration->type));
   } else {
-    declaration->type = 0;
+    declaration->type = (AstKey){0};
   }
 
   Try(expect_token(parser, Tok_equals));
@@ -522,8 +522,8 @@ internal b32 parse_declaration(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_literal(Parser *parser, AstKey *out, AstKind kind) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   TokenOffset literal = parser->at;
@@ -542,8 +542,8 @@ internal b32 parse_literal(Parser *parser, AstIndex *out, AstKind kind) {
   return True;
 }
 
-internal b32 parse_param(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_param(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   AstParam *param = node_push_data(parser, AstParam, idx);
@@ -564,8 +564,8 @@ internal b32 parse_param(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_function(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_function(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   AstFunctionTmp *function = node_push_data(parser, AstFunctionTmp, idx);
@@ -588,8 +588,8 @@ internal b32 parse_function(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_while(Parser *parser, AstKey label, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_while));
@@ -600,7 +600,7 @@ internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
 
   Try(parse_expression(parser, &data->cond));
 
-  Try(parse_block(parser, 0, &data->body));
+  Try(parse_block(parser, (AstKey){0}, &data->body));
 
   *node_kind(parser, idx) = Ast_while;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -610,8 +610,8 @@ internal b32 parse_while(Parser *parser, AstIndex label, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_if_else(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_if_else(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_if));
@@ -625,7 +625,7 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   if (has_do) {
     Try(parse_expression(parser, &if_else->then));
   } else {
-    Try(parse_block(parser, 0, &if_else->then));
+    Try(parse_block(parser, (AstKey){0}, &if_else->then));
   }
 
   u8 tok;
@@ -643,7 +643,7 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
       return False;
     }
 
-    if_else->otherwise = (AstIndex){0};
+    if_else->otherwise = (AstKey){0};
 
     *node_kind(parser, idx) = Ast_if_else;
     *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
@@ -659,7 +659,7 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   if (has_do) {
     Try(parse_expression(parser, &if_else->otherwise));
   } else {
-    Try(parse_block(parser, 0, &if_else->otherwise));
+    Try(parse_block(parser, (AstKey){0}, &if_else->otherwise));
   }
 
   *node_kind(parser, idx) = Ast_if_else;
@@ -670,8 +670,8 @@ internal b32 parse_if_else(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_break(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_break(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   Try(expect_token(parser, Tok_keyword_break));
@@ -698,8 +698,8 @@ internal b32 parse_break(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_label(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_label(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   TokenOffset label = parser->at;
@@ -717,8 +717,8 @@ internal b32 parse_label(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_identifier(Parser *parser, AstIndex *out) {
-  AstIndex    idx   = node_alloc(parser);
+internal b32 parse_identifier(Parser *parser, AstKey *out) {
+  AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
   TokenOffset identifier = parser->at;
@@ -736,14 +736,14 @@ internal b32 parse_identifier(Parser *parser, AstIndex *out) {
   return True;
 }
 
-internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
+internal b32 parse_base_expression(Parser *parser, AstKey *out) {
   u8  tok;
   Try(peek_or_error(parser, &tok));
 
-  AstIndex base;
+  AstKey base;
   switch (tok) {
     // clang-format off
-  case Tok_keyword_while:  Try(parse_while(parser, 0, &base));       break;
+  case Tok_keyword_while:  Try(parse_while(parser, (AstKey){0}, &base));       break;
   case Tok_keyword_if:     Try(parse_if_else(parser, &base));        break;
   case Tok_literal_int:    Try(parse_literal(parser, &base, Ast_literal_int));    break;
   case Tok_literal_string: Try(parse_literal(parser, &base, Ast_literal_string)); break;
@@ -752,11 +752,11 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
   case Tok_builtin_debug:  Try(parse_builtin(parser, Tok_builtin_debug, Builtin_debug, &base));  break;
   case Tok_builtin_len:    Try(parse_builtin(parser, Tok_builtin_len, Builtin_len, &base));  break;
   case Tok_keyword_break:  Try(parse_break(parser, &base));          break;
-  case Tok_brace_open:     Try(parse_block(parser, 0, &base));       break;
+  case Tok_brace_open:     Try(parse_block(parser, (AstKey){0}, &base));       break;
     // clang-format on
 
   case Tok_label: {
-    AstIndex label;
+    AstKey label;
     Try(parse_label(parser, &label));
 
     Try(peek_or_error(parser, &tok));
@@ -811,7 +811,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     u8 ignored;
     next(parser, &ignored);
 
-    AstIndex    ast_index = node_alloc(parser);
+    AstKey    ast_index = node_alloc(parser);
     TokenOffset start     = parser->at;
     AstCast   *cast      = node_push_data(parser, AstCast, ast_index);
 
@@ -831,7 +831,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
   case Tok_exclamation:
   case Tok_minus: {
-    AstIndex    ast_index = node_alloc(parser);
+    AstKey    ast_index = node_alloc(parser);
     TokenOffset start     = parser->at;
 
     u8 ignored;
@@ -871,7 +871,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     _peek(parser, &tok);
 
     if (tok == Tok_bracket_open) {
-      AstIndex    ast_index = node_alloc(parser);
+      AstKey    ast_index = node_alloc(parser);
       TokenOffset start     = parser->at;
 
       u8 ignored;
@@ -892,7 +892,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
     }
 
     if (tok == Tok_paren_open) {
-      AstIndex    ast_index = node_alloc(parser);
+      AstKey    ast_index = node_alloc(parser);
       TokenOffset start     = parser->at;
 
       u8 ignored;
@@ -900,7 +900,7 @@ internal b32 parse_base_expression(Parser *parser, AstIndex *out) {
 
       AstCallTmp *call = node_push_data(parser, AstCallTmp, ast_index);
       call->base.callee = base;
-      call->args        = (AstIndexList){0};
+      call->args        = (AstKeyList){0};
       Try(parse_comma_separated_items_until(parser, &call->args, parse_expression, Tok_paren_close));
 
       *node_kind(parser, ast_index) = Ast_call;
@@ -982,8 +982,8 @@ internal enum Precedence determine_precedence(u32 op_lhs, u32 op_rhs) {
 
 #define BINARY_OP_INVALID UINT32_MAX
 
-internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
-  AstIndex lhs;
+internal b32 parse_expression_impl(Parser *parser, AstKey *out, u32 prev_op) {
+  AstKey lhs;
   Try(parse_base_expression(parser, &lhs));
 
   while (True) {
@@ -1037,13 +1037,13 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
       return True;
     }
 
-    AstIndex    ast_index = node_alloc(parser);
+    AstKey    ast_index = node_alloc(parser);
     TokenOffset start     = parser->at;
 
     u8 ignored;
     next(parser, &ignored);
 
-    AstIndex rhs;
+    AstKey rhs;
     Try(parse_expression_impl(parser, &rhs, op));
 
     if (op >= BINARY_OP_KIND_COUNT) {
@@ -1074,12 +1074,20 @@ internal b32 parse_expression_impl(Parser *parser, AstIndex *out, u32 prev_op) {
   return True;
 }
 
-internal b32 parse_expression(Parser *parser, AstIndex *out) {
+internal b32 parse_expression(Parser *parser, AstKey *out) {
   return parse_expression_impl(parser, out, BINARY_OP_INVALID);
 }
 
-void *ast_data(AstNodes *ast, AstIndex idx) {
-  return ptr_offset(ast->extra, ast->datas[idx]);
+void *ast_data(AstNodes *ast, AstKey idx) {
+  return ptr_offset(ast->extra, ast->datas[idx.x]);
+}
+
+AstKind ast_kind(AstNodes *ast, AstKey idx) {
+  return ast->kinds[idx.x];
+}
+
+SpanToken ast_span(AstNodes *ast, AstKey idx) {
+  return ast->spans[idx.x];
 }
 
 internal b32 has_variable_length_payload(u8 kind) {
@@ -1117,7 +1125,7 @@ internal u32 payload_align(u8 kind) {
   Unreachable();
 }
 
-internal void *push_data(void *base, Arena *extra, u32 *datas, AstIndex i, u32 size, u32 align) {
+internal void *push_data(void *base, Arena *extra, u32 *datas, u32 i, u32 size, u32 align) {
   void *p = arena_push(extra, size, align);
   u32 offset = ptr_diff(p, base);
   datas[i] = offset;
@@ -1138,7 +1146,7 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
   // Reserve the zero index
   node_alloc(&parser);
 
-  AstIndex root;
+  AstKey root;
   b32 ok = parse_source(&parser, &root);
 
   if (!ok) {
@@ -1157,7 +1165,7 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
 
   void *extra = context->arena->at;
 
-  for (AstIndex i = 1; i < count; i++) {
+  for (u32 i = 1; i < count; i++) {
     u8 kind = kinds[i];
     u32 size = base_payload_size(kind);
     u32 align = payload_align(kind);
@@ -1167,9 +1175,9 @@ b32 parse(ParseContext *context, Tokens *tokens, AstNodes *ast) {
       void *mem = push_data(extra, context->arena, datas, i, size, align);
       memcpy(mem, payload, size);
     } else {
-      AstIndexList *list = payload;
+      AstKeyList *list = payload;
       u32 n = list->len;
-      void *mem = push_data(extra, context->arena, datas, i, size + n * sizeof(AstIndex), align);
+      void *mem = push_data(extra, context->arena, datas, i, size + n * sizeof(AstKey), align);
       void *base = ptr_offset(payload, Tmp_base_offset);
       memcpy(mem, base, size);
       // TODO: change the way the count pointer is computed, because this feels a bit fragile.

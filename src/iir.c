@@ -11,7 +11,7 @@
 // Interpreter IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionOffset iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source) {
+InstructionOffset iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceKey source) {
   InstructionOffset idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
   typelist_append(&builder->types, builder->scratch, (TypeKey){0});
@@ -86,7 +86,7 @@ void iir_builder_flatten(IIrBuilder *builder, Arena *arena, IIrChunk *chunk) {
   u32 count = Cast(u32, builder->kinds.len);
 
   u8  *opcodes = arena_push_array(u8,  arena, count);
-  AstAndSourceIndex *sources = arena_push_array(AstAndSourceIndex, arena, count);
+  AstAndSourceKey *sources = arena_push_array(AstAndSourceKey, arena, count);
   u32 *data    = arena_push_array(u32, arena, count);
   TypeKey *type_keys = arena_push_array(TypeKey, arena, count);
 

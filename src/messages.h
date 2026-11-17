@@ -31,7 +31,7 @@ typedef struct {
 
   union {
     TokenOffset token_index;
-    AstIndex ast_index;
+    AstKey ast_index;
     u32 offset;
   } data;
 } MessageLocation;

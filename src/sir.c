@@ -3,15 +3,15 @@
 // Specializer IR Builder
 // -------------------------------------------------------------------------------------------------
 
-InstructionOffset sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstIndex ast_idx) {
+InstructionOffset sir_builder_add(SIrBuilder *builder, u8 op, SourceKey source_idx, AstKey ast_idx) {
   InstructionOffset idx = builder->kinds.len;
   opcodelist_append(&builder->kinds, builder->scratch, op);
-  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceIndex){ .source_idx = source_idx, .ast_idx = ast_idx });
+  sourcelist_append(&builder->ast_source, builder->scratch, (AstAndSourceKey){ .source_idx = source_idx, .ast_idx = ast_idx });
   datalist_append(&builder->data, builder->scratch, (InstData){ .ptr = Null });
   return idx;
 }
 
-SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstIndex ast_idx) {
+SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, SourceKey source_idx, AstKey ast_idx) {
   if (sref_is_nil(type_destination)) {
     return val;
   }
@@ -41,7 +41,7 @@ u8 sir_builder_get_opcode(SIrBuilder *builder, InstructionOffset idx) {
   return opcodelist_at_unchecked(&builder->kinds, idx);
 }
 
-InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOffset block, InstructionOffset target, SRef ref, SourceKey source_idx, AstIndex ast_idx) {
+InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOffset block, InstructionOffset target, SRef ref, SourceKey source_idx, AstKey ast_idx) {
   InstructionOffset br = sir_builder_add(builder, SIR_br, source_idx, ast_idx);
 
   SIrBr *data = sir_builder_push_data(builder, br, SIrBr);
@@ -55,7 +55,7 @@ InstructionOffset sir_builder_end_block_with(SIrBuilder *builder, InstructionOff
   return br;
 }
 
-InstructionOffset sir_builder_add_block(SIrBuilder *builder, SRef result_type, SourceKey source_idx, AstIndex ast_idx) {
+InstructionOffset sir_builder_add_block(SIrBuilder *builder, SRef result_type, SourceKey source_idx, AstKey ast_idx) {
   InstructionOffset block = sir_builder_add(builder, SIR_block, source_idx, ast_idx);
 
   SIrBlock *data = sir_builder_push_data(builder, block, SIrBlock);
@@ -116,7 +116,7 @@ void sir_builder_flatten(SIrBuilder *builder, Arena *arena, SIrChunk *chunk) {
   u32 count = Cast(u32, builder->kinds.len);
 
   u8  *opcodes = arena_push_array(u8,  arena, count);
-  AstAndSourceIndex *sources = arena_push_array(AstAndSourceIndex, arena, count);
+  AstAndSourceKey *sources = arena_push_array(AstAndSourceKey, arena, count);
   u32 *data    = arena_push_array(u32, arena, count);
 
   opcodelist_copy_to_array(&builder->kinds, opcodes);

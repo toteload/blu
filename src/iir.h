@@ -98,7 +98,7 @@ typedef struct {
   u32 *data;
   void *extra;
   TypeKey *types;
-  AstAndSourceIndex *sources;
+  AstAndSourceKey *sources;
 } IIrChunk;
 
 always_inline u8 iir_chunk_op(IIrChunk *chunk, InstructionOffset idx) {
@@ -132,7 +132,7 @@ typedef struct {
   InstDataList data;
 } IIrBuilder;
 
-InstructionOffset iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceIndex source);
+InstructionOffset iir_builder_add(IIrBuilder *builder, u8 op, AstAndSourceKey source);
 
 void *iir_builder_push_data_raw(IIrBuilder *builder, InstructionOffset idx, u32 size, u32 align);
 

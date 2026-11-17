@@ -207,8 +207,8 @@ typedef enum {
 } StepResult;
 
 internal MessageLocation inst_location(CallFrame2 *f, InstructionOffset pc) {
-  AstAndSourceIndex src = f->chunk->sources[pc];
-  if (!src.ast_idx) {
+  AstAndSourceKey src = f->chunk->sources[pc];
+  if (key_is_nil(src.ast_idx)) {
     return (MessageLocation){ .kind = MessageLocation_unspecified, };
   }
 

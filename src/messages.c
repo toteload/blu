@@ -234,16 +234,16 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
     len = span_offset.end - span_offset.start;
   } break;
   case MessageLocation_ast_index: {
-    SpanToken span_token = source->ast.spans[loc.data.ast_index];
+    SpanToken span_token = ast_span(&source->ast, loc.data.ast_index);
     SpanU32 span_offset = source->tokens.spans[span_token.start];
     offset = span_offset.start;
     len = span_offset.end - span_offset.start;
   } break;
   case MessageLocation_ir_instruction: {
     SIrChunk *chunk = &decl->data.decl.chunk;
-    AstIndex ast_idx = chunk->sources[loc.data.offset].ast_idx;
-    if (ast_idx) {
-      SpanToken span_token = source->ast.spans[ast_idx];
+    AstKey ast_idx = chunk->sources[loc.data.offset].ast_idx;
+    if (key_is_some(ast_idx)) {
+      SpanToken span_token = ast_span(&source->ast, ast_idx);
       SpanU32 span_offset = source->tokens.spans[span_token.start];
       offset = span_offset.start;
       len = span_offset.end - span_offset.start;
@@ -259,8 +259,8 @@ internal PositionInfo get_position_info(Source *source, Declaration *decl, Messa
   case MessageLocation_unspecified: {
     if (decl) {
       Source *s = decl->data.decl.source;
-      AstIndex ast_idx = s->decls[decl->data.decl.tree_idx].node;
-      SpanToken span_token = source->ast.spans[ast_idx];
+      AstKey ast_idx = s->decls[decl->data.decl.tree_idx].node;
+      SpanToken span_token = ast_span(&source->ast, ast_idx);
       SpanU32 span_offset = source->tokens.spans[span_token.start];
       offset = span_offset.start;
       len = span_offset.end - span_offset.start;

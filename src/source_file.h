@@ -15,7 +15,7 @@ enum SourceDeclarationKind {
 
 typedef struct {
   u8        kind;
-  AstIndex  node;
+  AstKey  node;
   u32       child_count;
   u32       parent;
   StringKey name;

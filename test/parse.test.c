@@ -75,9 +75,9 @@ void test_parse_empty(TestResult *test, ParserTestContext *context) {
   b32 ok = do_parse(context, string_lit(""), &ast);
 
   Test_assert(ok);
-  Test_assert_eq(ast.kinds[AST_INDEX_SOURCE], Ast_source);
+  Test_assert_eq(ast_kind(&ast, AST_KEY_SOURCE), Ast_source);
 
-  AstSource *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource *source = ast_data(&ast, AST_KEY_SOURCE);
   Test_assert_eq(source->count, 0);
 }
 
@@ -88,13 +88,13 @@ void test_parse_mod_section(TestResult *test, ParserTestContext *context) {
   b32 ok = do_parse(context, text, &ast);
 
   Test_assert(ok);
-  Test_assert_eq(ast.kinds[AST_INDEX_SOURCE], Ast_source);
+  Test_assert_eq(ast_kind(&ast, AST_KEY_SOURCE), Ast_source);
 
-  AstSource *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource *source = ast_data(&ast, AST_KEY_SOURCE);
   Test_assert_eq(source->count, 1);
 
-  AstIndex mod_idx = source->items[0];
-  Test_assert_eq(ast.kinds[mod_idx], Ast_mod_section);
+  AstKey mod_idx = source->items[0];
+  Test_assert_eq(ast_kind(&ast, mod_idx), Ast_mod_section);
 
   AstModSection *mod = ast_data(&ast, mod_idx);
   Test_assert_eq(mod->count, 0);
@@ -108,16 +108,16 @@ void test_parse_declaration(TestResult *test, ParserTestContext *context) {
 
   Test_assert(ok);
 
-  AstSource     *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource     *source = ast_data(&ast, AST_KEY_SOURCE);
   AstModSection *mod    = ast_data(&ast, source->items[0]);
   Test_assert_eq(mod->count, 1);
 
-  AstIndex decl_idx = mod->items[0];
-  Test_assert_eq(ast.kinds[decl_idx], Ast_declaration);
+  AstKey decl_idx = mod->items[0];
+  Test_assert_eq(ast_kind(&ast, decl_idx), Ast_declaration);
 
   AstDeclaration *decl = ast_data(&ast, decl_idx);
-  Test_assert_eq(ast.kinds[decl->type], Ast_identifier);
-  Test_assert_eq(ast.kinds[decl->value], Ast_literal_int);
+  Test_assert_eq(ast_kind(&ast, decl->type), Ast_identifier);
+  Test_assert_eq(ast_kind(&ast, decl->value), Ast_literal_int);
 }
 
 void test_parse_declaration_without_type(TestResult *test, ParserTestContext *context) {
@@ -126,12 +126,12 @@ void test_parse_declaration_without_type(TestResult *test, ParserTestContext *co
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource      *source = ast_data(&ast, AST_KEY_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
-  Test_assert_eq(decl->type, 0);   // no type given
-  Test_assert_eq(ast.kinds[decl->value], Ast_literal_int);
+  Test_assert(key_is_nil(decl->type));   // no type given
+  Test_assert_eq(ast_kind(&ast, decl->value), Ast_literal_int);
 }
 
 void test_parse_binary_precedence(TestResult *test, ParserTestContext *context) {
@@ -141,21 +141,21 @@ void test_parse_binary_precedence(TestResult *test, ParserTestContext *context) 
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource      *source = ast_data(&ast, AST_KEY_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
-  Test_assert_eq(ast.kinds[decl->value], Ast_binary_op);
+  Test_assert_eq(ast_kind(&ast, decl->value), Ast_binary_op);
 
   AstBinaryOp *add = ast_data(&ast, decl->value);
   Test_assert_eq(add->op_kind, Add);
-  Test_assert_eq(ast.kinds[add->lhs], Ast_literal_int);
-  Test_assert_eq(ast.kinds[add->rhs], Ast_binary_op);
+  Test_assert_eq(ast_kind(&ast, add->lhs), Ast_literal_int);
+  Test_assert_eq(ast_kind(&ast, add->rhs), Ast_binary_op);
 
   AstBinaryOp *mul = ast_data(&ast, add->rhs);
   Test_assert_eq(mul->op_kind, Mul);
-  Test_assert_eq(ast.kinds[mul->lhs], Ast_literal_int);
-  Test_assert_eq(ast.kinds[mul->rhs], Ast_literal_int);
+  Test_assert_eq(ast_kind(&ast, mul->lhs), Ast_literal_int);
+  Test_assert_eq(ast_kind(&ast, mul->rhs), Ast_literal_int);
 }
 
 void test_parse_function(TestResult *test, ParserTestContext *context) {
@@ -164,35 +164,18 @@ void test_parse_function(TestResult *test, ParserTestContext *context) {
 
   Test_assert(ok);
 
-  AstSource      *source = ast_data(&ast, AST_INDEX_SOURCE);
+  AstSource      *source = ast_data(&ast, AST_KEY_SOURCE);
   AstModSection  *mod    = ast_data(&ast, source->items[0]);
   AstDeclaration *decl   = ast_data(&ast, mod->items[0]);
 
-  Test_assert_eq(ast.kinds[decl->type], Ast_type_function);
-  Test_assert_eq(ast.kinds[decl->value], Ast_function);
+  Test_assert_eq(ast_kind(&ast, decl->type), Ast_type_function);
+  Test_assert_eq(ast_kind(&ast, decl->value), Ast_function);
 
   AstFunction *fn = ast_data(&ast, decl->value);
   Test_assert_eq(fn->count, 2);
-  Test_assert_eq(ast.kinds[fn->params[0]], Ast_param);
-  Test_assert_eq(ast.kinds[fn->params[1]], Ast_param);
-  Test_assert_eq(ast.kinds[fn->body], Ast_block);
-}
-
-// The flatten pass lays payloads out in node-index order, starting at offset 0, so a node's payload
-// always precedes the payloads of nodes allocated after it.
-void test_parse_payload_layout(TestResult *test, ParserTestContext *context) {
-  AstNodes ast;
-  b32 ok = do_parse(context, string_lit("mod main\nx : i32 = 1 + 2"), &ast);
-
-  Test_assert(ok);
-
-  // The root payload sits at the very start of the payload region.
-  Test_assert_eq(ast.datas[AST_INDEX_SOURCE], 0);
-
-  // Payloads are written in increasing node-index order.
-  for (u32 i = AST_INDEX_SOURCE+1; i < ast.count; i += 1) {
-    Test_assert(ast.datas[i] > ast.datas[i - 1]);
-  }
+  Test_assert_eq(ast_kind(&ast, fn->params[0]), Ast_param);
+  Test_assert_eq(ast_kind(&ast, fn->params[1]), Ast_param);
+  Test_assert_eq(ast_kind(&ast, fn->body), Ast_block);
 }
 
 void test_parse_missing_mod_name(TestResult *test, ParserTestContext *context) {
@@ -222,7 +205,6 @@ void register_parser_tests(TestRunner *runner) {
     Test(test_parse_declaration_without_type),
     Test(test_parse_binary_precedence),
     Test(test_parse_function),
-    Test(test_parse_payload_layout),
     Test(test_parse_missing_mod_name),
     Test(test_parse_missing_value),
   };

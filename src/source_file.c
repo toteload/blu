@@ -138,9 +138,9 @@ void source_index_declarations(Source *source, StringInterner *strings) {
   Tokens *tokens = &source->tokens;
   String text = source->text;
 
-  Assert(ast->kinds[AST_INDEX_SOURCE] == Ast_source);
+  Assert(ast_kind(ast, AST_KEY_SOURCE) == Ast_source);
 
-  AstSource *s = ast_data(ast, AST_INDEX_SOURCE);
+  AstSource *s = ast_data(ast, AST_KEY_SOURCE);
 
   SourceDeclaration *decls = arena_push_one(SourceDeclaration, &source->arena);
   *decls = (SourceDeclaration){
@@ -148,15 +148,15 @@ void source_index_declarations(Source *source, StringInterner *strings) {
     .name = {0},
     .child_count = s->count,
     .parent = 0,
-    .node = 0,
+    .node = {0},
   };
 
   u32 count = 1;
 
   for (u32 i = 0; i < s->count; i++) {
-    AstIndex item = s->items[i];
+    AstKey item = s->items[i];
 
-    Assert(ast->kinds[item] == Ast_mod_section);
+    Assert(ast_kind(ast, item) == Ast_mod_section);
 
     AstModSection *mod_section = ast_data(ast, item);
 
@@ -177,9 +177,9 @@ void source_index_declarations(Source *source, StringInterner *strings) {
     count += 1 + mod_section->count;
 
     for (u32 j = 0; j < mod_section->count; j++) {
-      AstIndex decl_idx = mod_section->items[j];
+      AstKey decl_idx = mod_section->items[j];
 
-      Assert(ast->kinds[decl_idx] == Ast_declaration);
+      Assert(ast_kind(ast, decl_idx) == Ast_declaration);
 
       AstDeclaration *ast_decl = ast_data(ast, decl_idx);
 
