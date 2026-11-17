@@ -42,7 +42,7 @@ internal b32 finalize_function_signature(SpecializerContext *ctx, Specializer *s
 
 void specializer_init_function(SpecializerContext *ctx, Specializer *state, StubKey stub_key);
 
-internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref);
+internal IRef resolve(Frame *f, SRef ref);
 
 internal InstructionOffset expect_residual_at_instruction_index(Frame *f, InstructionOffset inst);
 internal b32 expect_comptime_value_or_nil(SpecializerContext *ctx, Specializer *state, SRef ref, ValueKey *out);
@@ -294,7 +294,7 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
 // for that instruction in the current frame.
 // The returned IrRef can be either a value or an instruction index that maps to a residual
 // instruction.
-internal IRef resolve(SpecializerContext *ctx, Frame *f, SRef ref) {
+internal IRef resolve(Frame *f, SRef ref) {
   if (sref_is_value(ref)) {
     return iref_from_value(sref_to_value(ref));
   }
@@ -371,7 +371,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
 
       IIrCondbr *data = iir_builder_push_data(builder, expect_residual_at_instruction_index(f, span->start), IIrCondbr);
       *data = (IIrCondbr){
-        .cond = resolve(ctx, f, condbr->cond),
+        .cond = resolve(f, condbr->cond),
         .otherwise = builder->kinds.len,
       };
 
@@ -398,7 +398,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
 internal b32 expect_comptime_value_or_nil(SpecializerContext *ctx, Specializer *state, SRef ref, ValueKey *out) {
   Frame *f = &state->frame;
 
-  IRef x = resolve(ctx, f, ref);
+  IRef x = resolve(f, ref);
 
   if (iref_is_value(x)) {
     *out = iref_to_value(x);
@@ -763,8 +763,8 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_as: {
     SIrCast *as = sir_chunk_extra(f->chunk, pc);
-    IRef ref = resolve(ctx, f, as->val);
-    IRef ref_type_to = resolve(ctx, f, as->type_dst);
+    IRef ref = resolve(f, as->val);
+    IRef ref_type_to = resolve(f, as->type_dst);
 
     Assert(!iref_is_nil(ref));
 
@@ -828,7 +828,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, type_dst);
 
-    IRef ref = resolve(ctx, f, cast->val);
+    IRef ref = resolve(f, cast->val);
     Assert(!iref_is_nil(ref));
 
     switch (kind) {
@@ -964,7 +964,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     Assert(target->scope_kind == Scope_block);
     TypeKey result_type = target->data.block.result_type;
 
-    IRef ref = resolve(ctx, f, br->value);
+    IRef ref = resolve(f, br->value);
     TypeKey type_br = iref_is_nil(ref) ? (TypeKey){0} : get_sref_type(ctx, f, br->value);
 
     if (key_is_some(result_type)) {
@@ -1131,7 +1131,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_ret: {
     SRef ref_val = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(ctx, f, ref_val);
+    IRef val = resolve(f, ref_val);
 
     Scope *func_scope = frame_get_func_scope(f);
     TypeKey return_type = func_scope->data.function.return_type;
@@ -1169,7 +1169,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_condbr: {
     SIrCondbr *condbr = sir_chunk_extra(f->chunk, pc);
 
-    IRef cond = resolve(ctx, f, condbr->cond);
+    IRef cond = resolve(f, condbr->cond);
 
     if (iref_is_some_value(cond)) {
       if (key_eq(iref_to_value(cond), VAL_BOOL_TRUE)) {
@@ -1190,7 +1190,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_call: {
     SIrCall *call = sir_chunk_extra(f->chunk, pc);
 
-    IRef func = resolve(ctx, f, call->func);
+    IRef func = resolve(f, call->func);
 
     if (!iref_is_some_value(func)) {
       Todo();
@@ -1209,7 +1209,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     IRef *args = arena_push_array(IRef, ctx->scratch, call->arg_count);
 
     for (u32 i = 0; i < call->arg_count; i++) {
-      IRef arg = resolve(ctx, f, call->args[i]);
+      IRef arg = resolve(f, call->args[i]);
       TypeKey type_param = types_get(ctx->types, type_func)->data.function.param_types[i];
 
       if (key_is_nil(type_param)) {
@@ -1280,7 +1280,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       return (StepResult){ .kind = Step_error };
     }
 
-    IRef val = resolve(ctx, f, ref);
+    IRef val = resolve(f, ref);
 
     if (iref_is_some_value(val)) {
       Value *v = values_get(ctx->values, iref_to_value(val));
@@ -1310,7 +1310,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     f->inst_types[pc] = type;
 
-    IRef val = resolve(ctx, f, ref);
+    IRef val = resolve(f, ref);
 
     InstructionOffset inst = iir_builder_add(builder, IIR_builtin_debug, f->chunk->sources[pc]);
     iir_builder_set_type(builder, inst, type);
@@ -1323,7 +1323,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_load: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(ctx, f, ref);
+    IRef val = resolve(f, ref);
 
     // TODO make sure it is a pionter
 
@@ -1359,12 +1359,12 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_store: {
     SIrStore *store = sir_chunk_extra(f->chunk, pc);
 
-    IRef dst = resolve(ctx, f, store->dst);
+    IRef dst = resolve(f, store->dst);
 
     if (iref_is_some_value(dst)) {
       Todo();
     } else {
-      IRef val = resolve(ctx, f, store->value);
+      IRef val = resolve(f, store->value);
 
       TypeKey type_dst;
       {
@@ -1481,7 +1481,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_typeof: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(ctx, f, ref);
+    IRef val = resolve(f, ref);
 
     if (iref_is_some_value(val)) {
       TypeKey t = type_of_val(ctx, iref_to_value(val));
@@ -1606,7 +1606,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, type_unified);
 
-    IRef lhs = resolve(ctx, f, bin->lhs);
+    IRef lhs = resolve(f, bin->lhs);
     if (!key_eq(type_lhs, type_unified)) {
       ok = coerce(ctx, state, lhs, type_unified, pc, &lhs);
       if (!ok) {
@@ -1614,7 +1614,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    IRef rhs = resolve(ctx, f, bin->rhs);
+    IRef rhs = resolve(f, bin->rhs);
     if (!key_eq(type_rhs, type_unified)) {
       ok = coerce(ctx, state, rhs, type_unified, pc, &rhs);
       if (!ok) {
@@ -1732,7 +1732,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, TYPE_BOOL);
 
-    IRef lhs = resolve(ctx, f, bin->lhs);
+    IRef lhs = resolve(f, bin->lhs);
     if (!key_eq(type_lhs, type_unified)) {
       ok = coerce(ctx, state, lhs, type_unified, pc, &lhs);
       if (!ok) {
@@ -1740,7 +1740,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     }
 
-    IRef rhs = resolve(ctx, f, bin->rhs);
+    IRef rhs = resolve(f, bin->rhs);
     if (!key_eq(type_rhs, type_unified)) {
       ok = coerce(ctx, state, rhs, type_unified, pc, &rhs);
       if (!ok) {
@@ -1814,9 +1814,9 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, base_type);
 
-    IRef indexable = resolve(ctx, f, bin->lhs);
+    IRef indexable = resolve(f, bin->lhs);
     IRef index;
-    if (!coerce(ctx, state, resolve(ctx, f, bin->rhs), TYPE_USIZE, pc, &index)) {
+    if (!coerce(ctx, state, resolve(f, bin->rhs), TYPE_USIZE, pc, &index)) {
       return (StepResult){ .kind = Step_error };
     }
 
@@ -1900,7 +1900,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, type);
 
-    IRef val = resolve(ctx, f, ref);
+    IRef val = resolve(f, ref);
 
     // Negation is 0 - x, which gets subtraction's overflow checking for free. Negating the
     // most negative value of a signed type overflows, as does negating any non-zero unsigned.
@@ -1967,7 +1967,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     store_inst_type(f, pc, type);
 
-    IRef res = resolve(ctx, f, val);
+    IRef res = resolve(f, val);
 
     if (iref_is_some_value(res)) {
       b32 b = *Cast(u8 *, values_get(ctx->values, iref_to_value(res))->data);

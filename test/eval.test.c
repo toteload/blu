@@ -197,9 +197,6 @@ void test_eval_unify(TestResult *test, void *user) {
   TypeKey t_slice_comptime   = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = t_comptime_int } });
   TypeKey t_slice_incomplete = types_intern(&types, &(Type){ .kind = Type_slice, .data.slice = { .base_type = 0 } });
 
-  TypeKey t_ptr_i32      = types_add_pointer(&types, t_i32);
-  TypeKey t_ptr_comptime = types_add_pointer(&types, t_comptime_int);
-
   TypeKey unified;
   u32 err;
 

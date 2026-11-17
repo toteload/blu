@@ -5,7 +5,7 @@
 #include "xxhash.h"
 
 internal b8 cmp_value(void *context, Value *a, Value *b) {
-  ValueInternerContext *ctx = context;
+  Unused(context);
 
   if (a->size != b->size) {
     return False;
@@ -15,6 +15,7 @@ internal b8 cmp_value(void *context, Value *a, Value *b) {
 }
 
 internal u32 hash_value(void *context, Value *x) {
+  Unused(context);
   return XXH32(x, x->size, 0);
 }
 
