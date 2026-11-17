@@ -32,6 +32,7 @@ internal IRef load_inst_value(Frame *f, InstructionOffset inst) {
   return f->inst_map[inst];
 }
 
+internal TypeKey get_value_type(SpecializerContext *ctx, ValueKey key);
 internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref);
 internal TypeKey get_iref_type(SpecializerContext *ctx, Specializer *sp, IRef ref);
 
@@ -70,7 +71,11 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
   }
 
   if (iref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, iref_to_value(ref));
+    TypeKey from = get_value_type(ctx, iref_to_value(ref));
+    if (key_eq(from, dst)) {
+      *res = ref;
+      return True;
+    }
 
     ValueKey val_res;
     u32 err = eval_coerce(ctx->types, ctx->values, dst, iref_to_value(ref), &val_res);
@@ -80,7 +85,7 @@ internal b32 coerce(SpecializerContext *ctx, Specializer *sp, IRef ref, TypeKey 
     }
 
     if (err == CoerceResult_invalid_coercion_types) {
-      Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), v->type, dst);
+      Message_error(ctx->msg_sink, loc, string_lit("Cannot coerce value of type %type to type %type"), from, dst);
       return False;
     }
 
@@ -740,7 +745,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         s->pc += 1;
       } break;
 
-      case RESOLVE_STATUS_ERROR: Panic();
+      case RESOLVE_STATUS_ERROR: return (StepResult){ .kind = Step_error };
 
       case RESOLVE_STATUS_UNRESOLVED:
       case RESOLVE_STATUS_RESOLVING: {
@@ -757,7 +762,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   } break;
 
   case SIR_as: {
-    SIrAs *as = sir_chunk_extra(f->chunk, pc);
+    SIrCast *as = sir_chunk_extra(f->chunk, pc);
     IRef ref = resolve(ctx, f, as->val);
     IRef ref_type_to = resolve(ctx, f, as->type_dst);
 
@@ -793,7 +798,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   } break;
 
   case SIR_cast: {
-    SIrAs *cast = sir_chunk_extra(f->chunk, pc);
+    SIrCast *cast = sir_chunk_extra(f->chunk, pc);
 
     TypeKey type_dst;
     b32 ok = expect_some_type_value(ctx, state, cast->type_dst, &type_dst);
@@ -1810,7 +1815,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     store_inst_type(f, pc, base_type);
 
     IRef indexable = resolve(ctx, f, bin->lhs);
-    IRef index = resolve(ctx, f, bin->rhs);
+    IRef index;
+    if (!coerce(ctx, state, resolve(ctx, f, bin->rhs), TYPE_USIZE, pc, &index)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     if (iref_is_some_value(indexable) && iref_is_some_value(index)) {
       Value *v_indexable = values_get(ctx->values, iref_to_value(indexable));
@@ -1826,7 +1834,6 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
         len = slice->len;
       }
 
-      // The index is coerced to a usize by codegen, so it is always 8 bytes wide here.
       u64 at = read_int_zero_extend(64, values_get(ctx->values, iref_to_value(index))->data);
 
       if (at >= len) {

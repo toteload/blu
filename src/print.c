@@ -328,10 +328,10 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
 
     case SIR_as:
     case SIR_cast: {
-      SIrAs *as = extra;
-      print_sref(out, compiler, as->type_dst);
+      SIrCast *cast = extra;
+      print_sref(out, compiler, cast->type_dst);
       fputs(" ", out);
-      print_sref(out, compiler, as->val);
+      print_sref(out, compiler, cast->val);
     } break;
 
     case SIR_unify: {

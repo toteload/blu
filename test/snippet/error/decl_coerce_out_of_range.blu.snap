@@ -1,0 +1,3 @@
+[error] test/snippet/error/decl_coerce_out_of_range.blu:3:1: Value of comptime_int does not fit in the destination type u8
+    3 | Y : u8 = 300 - 1
+      | ^

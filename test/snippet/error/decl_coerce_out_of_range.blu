@@ -1,0 +1,9 @@
+mod main
+
+Y : u8 = 300 - 1
+Z : u8 = Y
+
+main: () i32 = || {
+  #debug(Z)
+  0
+}

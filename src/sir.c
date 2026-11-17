@@ -18,8 +18,8 @@ SRef sir_builder_add_as(SIrBuilder *builder, SRef type_destination, SRef val, So
 
   InstructionOffset idx = sir_builder_add(builder, SIR_as, source_idx, ast_idx);
 
-  SIrAs *data = sir_builder_push_data(builder, idx, SIrAs);
-  *data = (SIrAs){
+  SIrCast *data = sir_builder_push_data(builder, idx, SIrCast);
+  *data = (SIrCast){
     .type_dst = type_destination,
     .val = val,
   };

@@ -1,0 +1,10 @@
+mod main
+N : i32 = 4
+A : i64 = as(i64) N
+B : u8 = as(u8) 200
+main: () i32 = || {
+  #debug(A)
+  #debug(B)
+  #debug(as(i64) N)
+  0
+}

@@ -1,0 +1,3 @@
+[error] test/snippet/error/as_narrowing.blu:6:12: Cannot coerce value of type i32 to type u8
+    6 |   #debug(as(u8) N)
+      |            ^

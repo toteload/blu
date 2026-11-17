@@ -807,6 +807,7 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
     Try(parse_type(parser, &base));
   } break;
 
+  case Tok_keyword_as:
   case Tok_keyword_cast: {
     u8 ignored;
     next(parser, &ignored);
@@ -823,7 +824,7 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
 
     Try(parse_expression(parser, &cast->value));
 
-    *node_kind(parser, ast_index) = Ast_cast;
+    *node_kind(parser, ast_index) = (tok == Tok_keyword_as) ? Ast_as : Ast_cast;
     *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
 
     base = ast_index;

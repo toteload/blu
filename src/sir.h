@@ -55,7 +55,7 @@ typedef enum {
   SIR_comptime_block,    // contains instruction count of block
   SIR_get_decl_value,    // contains DeclarationKey
   SIR_comptime_alloc,    // contains SRef to a type
-  SIR_as,                // references SIrAs
+  SIR_as,                // references SIrCast
   SIR_cast,              // references SIrCast
   SIR_unify,             // references SIrUnify
   SIR_type,              // references SIrType
@@ -106,11 +106,6 @@ typedef struct {
   SRef type_lhs;
   SRef type_rhs;
 } SIrUnify;
-
-typedef struct {
-  SRef type_dst;
-  SRef val;
-} SIrAs;
 
 typedef struct {
   SRef type_dst;

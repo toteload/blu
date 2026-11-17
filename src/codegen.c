@@ -261,20 +261,21 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
   case Ast_param:       { PanicMsg("Encountered 'Ast_param' in gen_code, which should never happen."); } break;
   case Ast_label:       { PanicMsg("Encountered 'Ast_label' in gen_code, which should never happen."); } break;
 
+  case Ast_as:
   case Ast_cast: {
     AstCast *cast = ast_data(ast, idx_ast);
 
     SRef ref_type = gen_code(gen, ctx, cast->type, sref_from_value(VAL_TYPE_TYPE));
     SRef ref_val = gen_code(gen, ctx, cast->value, SREF_NIL);
 
-    InstructionOffset inst = sir_builder_add(builder, SIR_cast, source_idx, idx_ast);
+    InstructionOffset inst = sir_builder_add(builder, (kind == Ast_as) ? SIR_as : SIR_cast, source_idx, idx_ast);
     SIrCast *data = sir_builder_push_data(builder, inst, SIrCast);
     *data = (SIrCast){
       .type_dst = ref_type,
       .val = ref_val,
     };
 
-    return sir_builder_add_as(builder, type_destination, sref_from_instruction(inst), source_idx, idx_ast);
+    return sref_from_instruction(inst);
   } break;
 
   case Ast_identifier: {
@@ -537,7 +538,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     ComptimeInt data = Cast(ComptimeInt, value);
     ValueKey idx = values_intern_data(ctx->values, TYPE_COMPTIME_INT, &data, sizeof(data));
 
-    return sir_builder_add_as(builder, type_destination, sref_from_value(idx), source_idx, idx_ast);
+    return sref_from_value(idx);
   } break;
 
   case Ast_call: {
@@ -576,7 +577,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     switch (Cast(BuiltinKind, builtin->kind)) {
     case Builtin_debug: {
       AstKey e = builtin->args[0];
-      SRef val = gen_code(gen, ctx, e, type_destination);
+      SRef val = sir_builder_add_as(builder, type_destination, gen_code(gen, ctx, e, type_destination), source_idx, e);
 
       InstructionOffset inst_debug = sir_builder_add(builder, SIR_builtin_debug, source_idx, idx_ast);
       sir_builder_set_data(builder, inst_debug, sref_to_u32(val));
@@ -729,7 +730,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     
     InstructionOffset x = gen_code_for_binary_op(&gen->builder, binary->op_kind, lhs, rhs, source_idx, idx_ast);
 
-    return sir_builder_add_as(builder, type_destination, sref_from_instruction(x), source_idx, idx_ast);
+    return sref_from_instruction(x);
   } break;
 
   case Ast_while: { 
@@ -848,7 +849,7 @@ b32 generate_code(CodeGenContext *ctx, Declaration *decl) {
   
   SRef decl_val;
   {
-    InstructionOffset block = sir_builder_add(builder, SIR_comptime_block, source->idx, ast_decl->value);
+    InstructionOffset block = sir_builder_add_block(builder, decl_type, source->idx, ast_decl->value);
 
     SRef ref_decl_val = gen_code(&gen, ctx, ast_decl->value, decl_type);
 
