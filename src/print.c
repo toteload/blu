@@ -295,8 +295,7 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     case SIR_load:
     case SIR_typeof:
     case SIR_base_type:
-    case SIR_alloc:
-    case SIR_comptime_alloc: {
+    case SIR_alloc: {
       print_sref(out, compiler, (SRef){data});
     } break;
 

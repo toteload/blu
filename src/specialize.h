@@ -34,6 +34,7 @@ typedef struct {
   union {
     struct {
       TypeKey result_type;
+      ArenaSnapshot memory_snapshot;
     } comptime;
 
     struct {
@@ -74,11 +75,12 @@ typedef struct {
   IRef *inst_map;
   TypeKey *inst_types;
 
-  u32 comptime_depth;
+  Arena *memory;
+
   ScopeStack scopes;
 } Frame;
 
-void   frame_init(Frame *frame, Arena *arena, Declaration *decl);
+void   frame_init(Frame *frame, Arena *arena, Arena *memory, Declaration *decl);
 b32    frame_is_comptime(Frame *frame);
 Scope *frame_push_scope(Frame *frame, Arena *arena, ScopeKind kind, InstructionOffset start, u32 count);
 Scope  frame_pop_scope(Frame *frame);

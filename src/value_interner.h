@@ -29,8 +29,6 @@ typedef struct {
   _Alignas(8) u8 data[];
 } Value;
 
-typedef u32 ValueOffset;
-
 typedef struct { u32 x; } ValueRef;
 
 always_inline b32 vref_is_value(ValueRef r) {
@@ -109,7 +107,7 @@ void values_init(ValueInterner *values, ValueInternerInitOptions *options);
 void values_deinit(ValueInterner *values);
 
 ValueKey values_intern(ValueInterner *values, Value *v);
-ValueKey values_intern_data(ValueInterner *values, TypeKey type, void const *data, u32 data_size);
+ValueKey values_intern_data(ValueInterner *values, TypeKey type, void const *data);
 Value *values_get(ValueInterner *values, ValueKey key);
 
 #endif // VALUE_INTERNER_H

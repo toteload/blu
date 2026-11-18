@@ -192,6 +192,7 @@ void compiler_init(Compiler *compiler, CLIOptions *options) {
   add_primitive(compiler, string_lit("nil"), VAL_TYPE_NIL);
   add_primitive(compiler, string_lit("bool"), VAL_TYPE_BOOL);
   add_primitive(compiler, string_lit("never"), VAL_TYPE_NEVER);
+  add_primitive(compiler, string_lit("comptime_int"), VAL_TYPE_COMPTIME_INT);
   add_primitive(compiler, string_lit("i8"), VAL_TYPE_I8);
   add_primitive(compiler, string_lit("i16"), VAL_TYPE_I16);
   add_primitive(compiler, string_lit("i32"), VAL_TYPE_I32);
@@ -674,8 +675,8 @@ internal void place_mut_globals(Compiler *compiler) {
       Assert(ok);
 
       Value *v = values_get(&compiler->values, key);
-      TypeSizeInfo info = types_size_info_by_key(&compiler->types, v->type);
-      void *p = arena_push(&compiler->memory, info.size, Max(info.align, 1));
+      TypeSizeInfo info = types_value_layout_by_key(&compiler->types, v->type);
+      void *p = arena_push(&compiler->memory, info.size, info.align);
       memcpy(p, v->data, info.size);
 
       ref = vref_from_offset(Cast(ValueOffset, ptr_diff(p, compiler->memory.base)));

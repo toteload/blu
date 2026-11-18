@@ -69,7 +69,7 @@ u32 eval_cast_int(
   TypeInteger type_dst, void *payload_dst
 ) {
   if (type_src.signedness == type_dst.signedness && type_src.bitwidth == type_dst.bitwidth) {
-    memcpy(payload_dst, payload_src, type_dst.bitwidth / 8);
+    memcpy(payload_dst, payload_src, int_byte_size(type_dst));
     return CastResult_ok;
   }
 
@@ -83,7 +83,7 @@ u32 eval_cast_int(
       return CastResult_integer_value_out_of_range;
     }
 
-    memcpy(payload_dst, &i, type_dst.bitwidth / 8);
+    memcpy(payload_dst, &i, int_byte_size(type_dst));
 
     return CastResult_ok;
   }
@@ -105,7 +105,7 @@ u32 eval_cast_int(
       }
     }
 
-    memcpy(payload_dst, &i, type_dst.bitwidth / 8);
+    memcpy(payload_dst, &i, int_byte_size(type_dst));
 
     return CastResult_ok;
   }
@@ -119,7 +119,7 @@ u32 eval_cast_int(
       return CastResult_integer_value_out_of_range;
     }
 
-    memcpy(payload_dst, &i, type_dst.bitwidth / 8);
+    memcpy(payload_dst, &i, int_byte_size(type_dst));
 
     return CastResult_ok;
   }
@@ -133,7 +133,7 @@ u32 eval_cast_int(
       return CastResult_integer_value_out_of_range;
     }
 
-    memcpy(payload_dst, &i, type_dst.bitwidth / 8);
+    memcpy(payload_dst, &i, int_byte_size(type_dst));
 
     return CastResult_ok;
   }
@@ -272,18 +272,16 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     return CoerceResult_ok;
   }
   case Coercion_int_widen: {
-    TypeSizeInfo size_info = types_size_info_by_key(types, dst);
-    u64 data = 0;
-    // not a very nice solution, because what if we get integers larger than u64, but it will do for now
-    Assert(size_info.size <= sizeof(data));
-
     TypeInteger int_src = type_val->data.integer;
     TypeInteger int_dst = type_dst->data.integer;
+
+    u64 data = 0;
+    Assert(int_byte_size(int_dst) <= sizeof(data));
 
     u32 err = eval_cast_int(int_src, v->data, int_dst, &data);
     Assert(err == CastResult_ok);
 
-    *res = values_intern_data(values, dst, &data, size_info.size);
+    *res = values_intern_data(values, dst, &data);
 
     return CoerceResult_ok;
   }
@@ -291,16 +289,15 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
     if (type_dst->kind == Type_integer && key_eq(v->type, TYPE_COMPTIME_INT)) {
       TypeInteger comptime_int = type_int_repr(types, TYPE_COMPTIME_INT);
 
-      TypeSizeInfo size_info = types_size_info_by_key(types, dst);
       u64 data = 0;
-      Assert(size_info.size <= sizeof(data));
+      Assert(int_byte_size(type_dst->data.integer) <= sizeof(data));
 
       u32 err = eval_cast_int(comptime_int, v->data, type_dst->data.integer, &data);
       if (err) {
         return CoerceResult_comptime_int_value_out_of_range;
       }
 
-      *res = values_intern_data(values, dst, &data, size_info.size);
+      *res = values_intern_data(values, dst, &data);
 
       return CoerceResult_ok;
     }
@@ -313,7 +310,7 @@ u32 eval_coerce(TypeInterner *types, ValueInterner *values, TypeKey dst, ValueKe
       .ptr = { .base = vref_from_value(val), .offset = 0 },
     };
 
-    *res = values_intern_data(values, dst, &slice, sizeof(slice));
+    *res = values_intern_data(values, dst, &slice);
     return CoerceResult_ok;
   }
   }
@@ -511,7 +508,7 @@ u32 eval_int_binary(u8 op, TypeInteger int_type, void *lhs, void *rhs, void *res
     case IIR_bit_xor: x = l ^ r; break;
     default: Unreachable();
     }
-    memcpy(res, &x, int_type.bitwidth / 8);
+    memcpy(res, &x, int_byte_size(int_type));
     return IntOp_ok;
   }
   default: Unreachable();

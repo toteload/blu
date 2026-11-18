@@ -9,9 +9,7 @@ internal TypeSizeInfo layout_of(Interpreter *in, TypeKey type) {
     return (TypeSizeInfo){ .size = 0, .stride = 0, .align = 1 };
   }
 
-  TypeSizeInfo info = types_size_info_by_key(&in->compiler->types, type);
-  info.align = Max(info.align, 1);
-  return info;
+  return types_value_layout_by_key(&in->compiler->types, type);
 }
 
 internal ValueKey follow_stubs(Compiler *compiler, ValueKey key) {
@@ -282,7 +280,7 @@ internal u32 step(Interpreter *in) {
       return Step_index_out_of_bounds;
     }
 
-    u32 stride = types_size_info_by_key(&in->compiler->types, type).stride;
+    u32 stride = types_value_layout_by_key(&in->compiler->types, type).stride;
     copy_value(local, ptr_offset(base, at * stride), size_info.size);
 
     f->pc += 1;

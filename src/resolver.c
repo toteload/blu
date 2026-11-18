@@ -44,7 +44,7 @@ internal void push_resolve_decl_entry(ResolveContext *ctx, ResolveStack *stack, 
     .stub = d->data.decl.stub,
   };
 
-  frame_init(&entry->state.frame, ctx->scratch, d);
+  frame_init(&entry->state.frame, ctx->scratch, &ctx->compiler->memory, d);
   frame_push_scope(&entry->state.frame, ctx->scratch, Scope_comptime, 0, d->data.decl.chunk.opcode_count);
 }
 

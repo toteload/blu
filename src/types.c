@@ -197,29 +197,25 @@ u32 type_intern_byte_size(Type *type) {
   return 0;
 }
 
-TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
+#define Layout_of(T) ((TypeSizeInfo){ .size = sizeof(T), .align = Align_of(T), .stride = sizeof(T) })
+
+TypeSizeInfo types_value_layout(TypeInterner *types, Type *type) {
   switch (Cast(TypeKind, type->kind)) {
-  case Type_comptime_int: Unreachable();
-  case Type_stub: Unreachable();
-  case Type_bool:
-    return (TypeSizeInfo){.size = 1, .align = 1, .stride = 1};
+  case Type_comptime_int: return Layout_of(ComptimeInt);
+  case Type_stub: return Layout_of(ValueStubRef);
+  case Type_bool: return Layout_of(b8);
   case Type_nil:
-    return (TypeSizeInfo){.size = 0, .align = 0, .stride = 0};
   case Type_never:
-    return (TypeSizeInfo){.size = 0, .align = 0, .stride = 0};
-  case Type_type:
-    return (TypeSizeInfo){.size = 4, .align = 4, .stride = 4};
-  case Type_pointer:
-    return (TypeSizeInfo){.size = sizeof(ValuePointer), .align = Align_of(ValuePointer), .stride = sizeof(ValuePointer)};
+    return (TypeSizeInfo){.size = 0, .align = 1, .stride = 0};
+  case Type_type: return Layout_of(TypeKey);
+  case Type_pointer: return Layout_of(ValuePointer);
   case Type_integer: {
-    // ASSUME: the bitwidth of integers is always a multiple of 8.
-    u32 size = type->data.integer.bitwidth / 8;
+    u32 size = int_byte_size(type->data.integer);
     return (TypeSizeInfo){.size = size, .align = size, .stride = size};
   }
-  case Type_slice:
-    return (TypeSizeInfo){.size = sizeof(ValueSlice), .align = Align_of(ValueSlice), .stride = sizeof(ValueSlice)};
+  case Type_slice: return Layout_of(ValueSlice);
   case Type_array: {
-    TypeSizeInfo size_info = types_size_info_by_key(types, type->data.array.base_type);
+    TypeSizeInfo size_info = types_value_layout_by_key(types, type->data.array.base_type);
     u32 size = size_info.stride * type->data.array.size;
     return (TypeSizeInfo){
       .size = size,
@@ -227,10 +223,7 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
       .stride = size,
     };
   }
-  case Type_function: {
-    // A variable holding a function is stored as the ResidualFunctionKey of the function.
-    return (TypeSizeInfo){.size = 4, .align = 4, .stride = 4};
-  }
+  case Type_function: return Layout_of(ValueResidualFunction);
   }
 
   Unreachable();
@@ -238,9 +231,9 @@ TypeSizeInfo types_size_info(TypeInterner *types, Type *type) {
   return (TypeSizeInfo){0};
 }
 
-TypeSizeInfo types_size_info_by_key(TypeInterner *types, TypeKey idx) {
+TypeSizeInfo types_value_layout_by_key(TypeInterner *types, TypeKey idx) {
   Type *type = types_get(types, idx);
-  return types_size_info(types, type);
+  return types_value_layout(types, type);
 }
 
 // assumes that

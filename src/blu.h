@@ -7,6 +7,7 @@
 
 typedef u32 TokenOffset;
 typedef u32 InstructionOffset;
+typedef u32 ValueOffset;
 
 #define REF_TAG_MASK        (Cast(u32, 3) << 30)
 #define REF_TAG_VALUE       (Cast(u32, 0) << 30)

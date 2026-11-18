@@ -312,7 +312,7 @@ void test_eval_coerce(TestResult *test, void *user) {
 
   // Widening a signed int sign-extends and yields a fully initialized value of the destination type.
   i8 neg = -5;
-  u32 err = eval_coerce(&types, &values, t_i64, values_intern_data(&values, t_i8, &neg, sizeof(neg)), &res);
+  u32 err = eval_coerce(&types, &values, t_i64, values_intern_data(&values, t_i8, &neg), &res);
   Test_assert_eq(err, CoerceResult_ok);
   v = values_get(&values, res);
   Test_assert(key_eq(v->type, t_i64));
@@ -320,7 +320,7 @@ void test_eval_coerce(TestResult *test, void *user) {
   Test_assert_eq(*Cast(i64 *, v->data), -5);
 
   u8 yes = 1;
-  err = eval_coerce(&types, &values, t_u32, values_intern_data(&values, t_bool, &yes, sizeof(yes)), &res);
+  err = eval_coerce(&types, &values, t_u32, values_intern_data(&values, t_bool, &yes), &res);
   Test_assert_eq(err, CoerceResult_invalid_coercion_types);
 
   values_deinit(&values);

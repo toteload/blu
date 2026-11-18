@@ -37,6 +37,10 @@ typedef struct {
   u16 bitwidth;
 } TypeInteger;
 
+always_inline u32 int_byte_size(TypeInteger t) {
+  return t.bitwidth / 8;
+}
+
 typedef struct {
   TypeKey base_type;
 } TypeSlice;
@@ -115,8 +119,8 @@ TypeKey types_add_pointer(TypeInterner *types, TypeKey base_type);
 // return a constant size, since all you need to store for the type of an array is the base type and its size.
 u32 type_intern_byte_size(Type *type);
 
-TypeSizeInfo types_size_info(TypeInterner *types, Type *type);
-TypeSizeInfo types_size_info_by_key(TypeInterner *types, TypeKey idx);
+TypeSizeInfo types_value_layout(TypeInterner *types, Type *type);
+TypeSizeInfo types_value_layout_by_key(TypeInterner *types, TypeKey idx);
 
 typedef enum {
   Coercion_invalid,

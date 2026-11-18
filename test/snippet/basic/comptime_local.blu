@@ -1,0 +1,19 @@
+mod main
+SUM : i64 = {
+  a: i64 = BASE
+  b: i64 = 1
+  a = a + b
+  b = a * 2
+  if b > 40 { a = 0 } else { a = 1 }
+  a + b
+}
+BASE : i64 = {
+  b: i64 = 10
+  b = b * 2
+  b
+}
+main := ||: i32 {
+  #debug(SUM)
+  #debug(BASE)
+  0
+}
