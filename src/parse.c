@@ -151,7 +151,7 @@ internal b32 parse_declaration(Parser *parser, AstKey *out);
 internal b32 parse_block(Parser *parser, AstKey label, AstKey *out);
 internal b32 parse_type(Parser *parser, AstKey *out);
 internal b32 parse_function(Parser *parser, AstKey *out);
-internal b32 parse_break(Parser *parser, AstKey *out);
+internal b32 parse_break_or_continue(Parser *parser, u8 keyword, AstKind kind, AstKey *out);
 internal b32 parse_label(Parser *parser, AstKey *out);
 internal b32 parse_if_else(Parser *parser, AstKey *out);
 internal b32 parse_base_expression(Parser *parser, AstKey *out);
@@ -671,11 +671,11 @@ internal b32 parse_if_else(Parser *parser, AstKey *out) {
   return True;
 }
 
-internal b32 parse_break(Parser *parser, AstKey *out) {
+internal b32 parse_break_or_continue(Parser *parser, u8 keyword, AstKind kind, AstKey *out) {
   AstKey    idx   = node_alloc(parser);
   TokenOffset start = parser->at;
 
-  Try(expect_token(parser, Tok_keyword_break));
+  Try(expect_token(parser, keyword));
 
   AstBreak *data = node_push_data(parser, AstBreak, idx);
   *data = (AstBreak){ 0 };
@@ -687,11 +687,11 @@ internal b32 parse_break(Parser *parser, AstKey *out) {
   }
 
   Try(peek_or_error(parser, &tok));
-  if (tok != Tok_brace_close && tok != Tok_keyword_else) {
+  if (kind == Ast_break && tok != Tok_brace_close && tok != Tok_keyword_else) {
     Try(parse_expression(parser, &data->value));
   }
 
-  *node_kind(parser, idx) = Ast_break;
+  *node_kind(parser, idx) = kind;
   *node_span(parser, idx) = (SpanToken){ .start = start, .end = parser->at, };
 
   *out = idx;
@@ -752,7 +752,8 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
   case Tok_bar:            Try(parse_function(parser, &base));       break;
   case Tok_builtin_debug:  Try(parse_builtin(parser, Tok_builtin_debug, Builtin_debug, &base));  break;
   case Tok_builtin_len:    Try(parse_builtin(parser, Tok_builtin_len, Builtin_len, &base));  break;
-  case Tok_keyword_break:  Try(parse_break(parser, &base));          break;
+  case Tok_keyword_break:  Try(parse_break_or_continue(parser, Tok_keyword_break, Ast_break, &base));          break;
+  case Tok_keyword_continue: Try(parse_break_or_continue(parser, Tok_keyword_continue, Ast_continue, &base));    break;
   case Tok_brace_open:     Try(parse_block(parser, (AstKey){0}, &base));       break;
     // clang-format on
 

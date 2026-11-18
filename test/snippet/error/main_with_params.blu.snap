@@ -1,0 +1,3 @@
+[error] test/snippet/error/main_with_params.blu:3:1: 'main' must have type () i32, but it has type (i32) i32
+    3 | main := |x: i32|: i32 { x }
+      | ^^^^

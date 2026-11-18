@@ -1,8 +1,3 @@
-- [ ] Typecheck main.main before running it (`run_main` in `compiler.c:678`)
-  - `main := 5` segfaults: `vfunc->data` is cast to `ValueResidualFunction*` without checking the type.
-  - `main := |x: i32|: i32 { x }` segfaults: arguments are never passed (`interpreter_call` hits `Todo()` for any argument).
-  - The return value is written to a fixed `u8 buf[16]`, so a larger return type overflows the stack.
-  - Require no parameters and a return type that fits, and report a normal error otherwise.
 - [ ] SIR code generation can be moved to `Source`.
 
 
@@ -33,7 +28,6 @@
 
 ## Control flow
 
-- [ ] `break`/`continue`
 - [ ] Add `return` expression.
 - [ ] `for` loop
 

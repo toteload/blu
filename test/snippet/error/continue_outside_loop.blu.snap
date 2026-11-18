@@ -1,0 +1,3 @@
+[error] test/snippet/error/continue_outside_loop.blu:4:3: 'continue' outside of a loop
+    4 |   continue
+      |   ^^^^^^^^

@@ -1,0 +1,31 @@
+mod main
+
+main := ||: i32 {
+  mut i: i32 = 0
+  mut odd: i32 = 0
+  while i < 10 {
+    i += 1
+    if i % 2 == 0 { continue }
+    odd += 1
+  }
+  #debug(odd)
+  mut n: i32 = 0
+  mut j: i32 = 0
+  ::outer while j < 3 {
+    j += 1
+    mut k: i32 = 0
+    while k < 3 {
+      k += 1
+      if k == 2 { continue ::outer }
+      n += 1
+    }
+  }
+  #debug(n)
+  mut m: i32 = 0
+  while m < 4 {
+    m += 1
+    continue
+  }
+  #debug(m)
+  0
+}

@@ -121,6 +121,45 @@ b32 sref_is_terminator_instruction(SIrBuilder *builder, SRef ref) {
   }
 }
 
+internal b32 find_jump_target(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, InstructionOffset *out) {
+  AstNodes *ast = &gen->source->ast;
+  AstBreak *b = ast_data(ast, idx_ast);
+  b32 is_continue = ast_kind(ast, idx_ast) == Ast_continue;
+
+  MessageLocation loc = {
+    .kind = MessageLocation_ast_index,
+    .source_idx = gen->source->idx,
+    .data.ast_index = idx_ast,
+  };
+
+  ScopeEntry *entry;
+  if (key_is_some(b->label)) {
+    entry = symbols_find(&gen->syms, intern_ast_label_string(ctx, gen->source, b->label));
+    if (!entry) {
+      gen->has_error = True;
+      TokenOffset *label = ast_data(ast, b->label);
+      Message_error(ctx->msg_sink, loc, string_lit("Undeclared label '%string'"), token_string(&gen->source->tokens, gen->source->text, *label));
+      return False;
+    }
+
+    if (is_continue && entry->kind != ScopeEntry_loop) {
+      gen->has_error = True;
+      Message_error(ctx->msg_sink, loc, string_lit("Cannot continue a block that is not a loop"));
+      return False;
+    }
+  } else {
+    entry = symbols_get_enclosing_loop(&gen->syms);
+    if (!entry) {
+      gen->has_error = True;
+      Message_error(ctx->msg_sink, loc, string_lit("'%string' outside of a loop"), token_string(&gen->source->tokens, gen->source->text, ast_span(ast, idx_ast).start));
+      return False;
+    }
+  }
+
+  *out = sref_to_instruction(entry->ref);
+  return True;
+}
+
 SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
   AstNodes *ast = &gen->source->ast;
   AstKind kind = ast_kind(ast, idx_ast);
@@ -294,7 +333,6 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
   SIrBuilder *builder = &gen->builder;
   SourceKey source_idx = gen->source->idx;
   SymbolMap *syms = &gen->syms;
-  Source *source = gen->source;
 
   AstKind kind = ast_kind(ast, idx_ast);
   switch (kind) {
@@ -825,26 +863,19 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     return sref_from_instruction(loop);
   } break;
 
-  case Ast_break: {
+  case Ast_break:
+  case Ast_continue: {
     AstBreak *b = ast_data(ast, idx_ast);
 
     InstructionOffset target;
+    if (!find_jump_target(gen, ctx, idx_ast, &target)) {
+      return sref_from_value(VAL_TYPE_NIL);
+    }
 
-    if (key_is_some(b->label)) {
-      StringKey label = intern_ast_label_string(ctx, source, b->label);
-      ScopeEntry *entry = symbols_find(syms, label);
-      if (!entry) {
-        Todo();
-      }
-
-      target = sref_to_instruction(entry->ref);
-    } else {
-      ScopeEntry *entry = symbols_get_enclosing_loop(syms);
-      if (!entry) {
-        Todo();
-      }
-
-      target = sref_to_instruction(entry->ref);
+    if (kind == Ast_continue) {
+      InstructionOffset repeat = sir_builder_add(builder, SIR_repeat, source_idx, idx_ast);
+      sir_builder_set_data(builder, repeat, target);
+      return sref_from_instruction(repeat);
     }
 
     SRef value = key_is_some(b->value) ? gen_code(gen, ctx, b->value, SREF_NIL) : SREF_NIL;

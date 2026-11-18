@@ -1,0 +1,19 @@
+mod main
+
+main := ||: i32 {
+  x: i32 = ::b { if yes() { break ::b 1 } 2 }
+  #debug(x)
+  mut i: i32 = 0
+  ::outer while i < 10 {
+    mut j: i32 = 0
+    while j < 10 {
+      if j == 3 { break ::outer }
+      j += 1
+    }
+    i += 1
+  }
+  #debug(i)
+  0
+}
+
+yes := ||: bool true

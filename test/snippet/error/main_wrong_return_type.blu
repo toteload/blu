@@ -1,0 +1,3 @@
+mod main
+
+main := ||: i64 { 0 }

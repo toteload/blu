@@ -1,0 +1,3 @@
+[error] test/snippet/error/break_undeclared_label.blu:4:16: Undeclared label '::nope'
+    4 |   while true { break ::nope }
+      |                ^^^^^

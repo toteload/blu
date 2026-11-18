@@ -702,10 +702,26 @@ b32 run_main(Compiler *compiler) {
   }
 
   Value *vfunc = values_get(&compiler->values, v);
+
+  Type *t = types_get(&compiler->types, vfunc->type);
+  if (t->kind != Type_function || t->data.function.param_count != 0 || !key_eq(t->data.function.return_type, TYPE_I32)) {
+    Declaration *decl = decls_extra_get_ptr(&compiler->decls, fn_main);
+    Source *source = decl->data.decl.source;
+    Message_error(
+      &compiler->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ast_index,
+        .source_idx = source->idx,
+        .data.ast_index = source->decls[decl->data.decl.tree_idx].node,
+      },
+      string_lit("'main' must have type () i32, but it has type %type"),
+      vfunc->type
+    );
+    return False;
+  }
+
   ResidualFunctionKey func_key = Cast(ValueResidualFunction*, vfunc->data)->key;
   ResidualFunction *f = compiler_get_function(compiler, func_key);
-
-  // TODO: make sure main has the correct type
 
   Interpreter in = {
     .memory = &compiler->memory,
@@ -715,8 +731,8 @@ b32 run_main(Compiler *compiler) {
 
   stack_init(&in.call_stack, arena_push_array(CallFrame2, &compiler->scratch, 64), 64);
 
-  u8 buf[16];
-  u32 err = interpreter_call(&in, &f->chunk, Null, 0, &buf);
+  i32 result;
+  u32 err = interpreter_call(&in, &f->chunk, Null, 0, &result);
   if (err) {
     return False;
   }
