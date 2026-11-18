@@ -354,7 +354,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
       b32 ok = finalize_function_signature(ctx, state, &type_signature);
 
       if (!ok) {
-        Todo();
+        return (StepResult){ .kind = Step_error };
       }
 
       Stub *stub = compiler_get_stub(ctx->compiler, span->data.signature_of_function.stub);
@@ -619,6 +619,22 @@ internal b32 finalize_function_signature(SpecializerContext *ctx, Specializer *s
 
   u32 err = eval_unify(ctx->scratch, ctx->types, type_func, type_hint, type_signature);
   if (err != UnifyResult_ok) {
+    String text;
+    switch (Cast(UnifyResult, err)) {
+    case UnifyResult_type_is_incomplete: text = string_lit("Cannot infer the type of this function. Give it a return type (`|...|: T`) or give the declaration a type"); break;
+    default: text = string_lit("The signature of this function does not match its type hint"); break;
+    }
+
+    Message_error(
+      ctx->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ir_instruction,
+        .decl_idx = state->frame.decl,
+        .data.offset = pc,
+      },
+      text
+    );
+
     arena_scope_end(ctx->scratch, snapshot);
     return False;
   }

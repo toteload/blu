@@ -66,8 +66,12 @@ typedef struct {
 } LookupResult;
 
 // - Assumes that `name` is not a label
-internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, StringKey name, LookupResult *res) {
-  ScopeEntry *entry = symbols_find(&gen->syms, name); 
+internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, LookupResult *res) {
+  TokenOffset *tok = ast_data(&gen->source->ast, idx_ast);
+  String s = token_string(&gen->source->tokens, gen->source->text, *tok);
+  StringKey name = strings_add(ctx->strings, s);
+
+  ScopeEntry *entry = symbols_find(&gen->syms, name);
   if (entry) {
     *res = (LookupResult){
       .kind = (entry->kind == ScopeEntry_param) ? LOOKUP_PARAM : LOOKUP_LOCAL,
@@ -80,6 +84,17 @@ internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, StringKey name, LookupRes
   DeclarationKey decl = {0};
   b32 found = lookup_identifier(ctx->decls, gen->parent_mod, name, &decl);
   if (!found) {
+    gen->has_error = True;
+    Message_error(
+      ctx->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ast_index,
+        .source_idx = gen->source->idx,
+        .data.ast_index = idx_ast,
+      },
+      string_lit("Undeclared name '%string'"),
+      s
+    );
     return False;
   }
 
@@ -112,13 +127,10 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
 
   switch (kind) {
   case Ast_identifier: {
-    TokenOffset *name = ast_data(ast, idx_ast);
-    StringKey str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, *name));
-
     LookupResult res;
-    b32 ok = lookup(gen, ctx, str, &res);
+    b32 ok = lookup(gen, ctx, idx_ast, &res);
     if (!ok) {
-      Todo();
+      return SREF_NIL;
     }
 
     InstructionOffset inst;
@@ -309,16 +321,10 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
   } break;
 
   case Ast_identifier: {
-    TokenOffset *name = ast_data(ast, idx_ast);
-    String s = token_string(&gen->source->tokens, gen->source->text, *name);
-    StringKey str = strings_add(ctx->strings, s);
-
     LookupResult res;
-    b32 ok = lookup(gen, ctx, str, &res);
+    b32 ok = lookup(gen, ctx, idx_ast, &res);
     if (!ok) {
-      printf("%.*s\n", Cast(int, s.len), s.str);
-      symbols_debug_print(&gen->syms, ctx->strings);
-      Todo();
+      return sref_from_value(VAL_TYPE_NIL);
     }
 
     InstructionOffset inst;

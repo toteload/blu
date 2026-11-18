@@ -1,0 +1,3 @@
+[error] test/snippet/error/assign_undeclared.blu:4:3: Undeclared name 'x'
+    4 |   x = 1
+      |   ^

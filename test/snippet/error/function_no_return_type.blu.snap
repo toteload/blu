@@ -1,0 +1,3 @@
+[error] test/snippet/error/function_no_return_type.blu:3:6: Cannot infer the type of this function. Give it a return type (`|...|: T`) or give the declaration a type
+    3 | f := || { }
+      |      ^
