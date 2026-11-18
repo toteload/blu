@@ -52,7 +52,7 @@ void codegen_deinit(CodeGen *gen, CodeGenContext *ctx) {
 }
 
 typedef enum {
-  LOOKUP_PARAM,
+  LOOKUP_BINDING,
   LOOKUP_LOCAL,
   LOOKUP_DECL,
 } LookupResultKind;
@@ -60,7 +60,7 @@ typedef enum {
 typedef struct {
   u32 kind;
   union {
-    InstructionOffset inst;
+    SRef ref;
     DeclarationKey decl_idx;
   } data;
 } LookupResult;
@@ -74,8 +74,8 @@ internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, LookupRes
   ScopeEntry *entry = symbols_find(&gen->syms, name);
   if (entry) {
     *res = (LookupResult){
-      .kind = (entry->kind == ScopeEntry_param) ? LOOKUP_PARAM : LOOKUP_LOCAL,
-      .data.inst = entry->inst,
+      .kind = (entry->kind == ScopeEntry_binding) ? LOOKUP_BINDING : LOOKUP_LOCAL,
+      .data.ref = entry->ref,
     };
 
     return True;
@@ -133,9 +133,8 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
       return SREF_NIL;
     }
 
-    InstructionOffset inst;
     switch (Cast(LookupResultKind, res.kind)) {
-    case LOOKUP_PARAM: {
+    case LOOKUP_BINDING: {
       gen->has_error = True;
       Message_error(
         ctx->msg_sink,
@@ -144,7 +143,7 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
           .source_idx = gen->source->idx,
           .data.ast_index = idx_ast,
         },
-        string_lit("Cannot assign to a parameter")
+        string_lit("Cannot assign to an immutable variable")
       );
       return SREF_NIL;
     }
@@ -164,13 +163,14 @@ SRef gen_code_for_ptr(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast) {
         return SREF_NIL;
       }
 
-      inst = sir_builder_add(&gen->builder, SIR_get_decl_value, gen->source->idx, idx_ast);
+      InstructionOffset inst = sir_builder_add(&gen->builder, SIR_get_decl_value, gen->source->idx, idx_ast);
       sir_builder_set_data(&gen->builder, inst, res.data.decl_idx.x);
-    } break;
-    case LOOKUP_LOCAL: inst = res.data.inst; break;
+      return sref_from_instruction(inst);
+    }
+    case LOOKUP_LOCAL: return res.data.ref;
     }
 
-    return sref_from_instruction(inst);
+    Unreachable();
   } break;
   default: Panic();
   }
@@ -327,27 +327,22 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
       return sref_from_value(VAL_TYPE_NIL);
     }
 
-    InstructionOffset inst;
+    SRef ptr;
     switch (Cast(LookupResultKind, res.kind)) {
+    case LOOKUP_BINDING: return res.data.ref;
     case LOOKUP_DECL: {
       InstructionOffset inst_lookup_decl = sir_builder_add(builder, SIR_get_decl_value, source_idx, idx_ast);
       sir_builder_set_data(builder, inst_lookup_decl, res.data.decl_idx.x);
 
-      InstructionOffset inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
-      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(inst_lookup_decl)));
-
-      inst = inst_load;
+      ptr = sref_from_instruction(inst_lookup_decl);
     } break;
-    case LOOKUP_LOCAL: {
-      InstructionOffset inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
-      sir_builder_set_data(builder, inst_load, sref_to_u32(sref_from_instruction(res.data.inst)));
-
-      inst = inst_load;
-    } break;
-    case LOOKUP_PARAM: { inst = res.data.inst; } break;
+    case LOOKUP_LOCAL: ptr = res.data.ref; break;
     }
 
-    return sref_from_instruction(inst);
+    InstructionOffset inst_load = sir_builder_add(builder, SIR_load, source_idx, idx_ast);
+    sir_builder_set_data(builder, inst_load, sref_to_u32(ptr));
+
+    return sref_from_instruction(inst_load);
   } break;
 
   case Ast_block: {
@@ -465,7 +460,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
       InstructionOffset param_inst = sir_builder_add(builder, SIR_param, source_idx, func->params[i]);
 
       StringKey str = strings_add(ctx->strings, token_string(tokens, text, ast_param->name));
-      SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_param, str, param_inst);
+      SymbolsPushLocalResult res = symbols_push_local(&gen->syms, ScopeEntry_binding, str, sref_from_instruction(param_inst));
       if (res.err != SYMBOLS_OK) {
         Todo();
       }
@@ -497,18 +492,42 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
   case Ast_declaration: {
     AstDeclaration *decl = ast_data(ast, idx_ast);
 
-    Assert(key_is_some(decl->type));
-
     StringKey str = strings_add(ctx->strings, token_string(&gen->source->tokens, gen->source->text, decl->name));
 
-    SRef ref_type = sref_from_value(VAL_TYPE_TYPE);
+    SRef ref_decl_type = SREF_NIL;
+    if (key_is_some(decl->type)) {
+      ref_decl_type = gen_code(gen, ctx, decl->type, sref_from_value(VAL_TYPE_TYPE));
+    }
 
-    SRef ref_decl_type = gen_code(gen, ctx, decl->type, ref_type);
+    SRef ref_decl_val = gen_code(gen, ctx, decl->value, ref_decl_type);
 
-    InstructionOffset inst_var = sir_builder_add(builder, SIR_alloc, source_idx, idx_ast);
-    sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
+    ScopeEntryKind entry_kind;
+    SRef ref_entry;
+    if (decl->is_mut) {
+      if (key_is_nil(decl->type)) {
+        InstructionOffset inst_typeof = sir_builder_add(builder, SIR_typeof, source_idx, decl->value);
+        sir_builder_set_data(builder, inst_typeof, sref_to_u32(ref_decl_val));
+        ref_decl_type = sref_from_instruction(inst_typeof);
+      }
 
-    SymbolsPushLocalResult res = symbols_push_local(syms, ScopeEntry_local, str, inst_var);
+      InstructionOffset inst_var = sir_builder_add(builder, SIR_alloc, source_idx, idx_ast);
+      sir_builder_set_data(builder, inst_var, sref_to_u32(ref_decl_type));
+
+      InstructionOffset inst_store = sir_builder_add(builder, SIR_store, source_idx, decl->value);
+      SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
+      *store = (SIrStore){
+        .dst = sref_from_instruction(inst_var),
+        .value = ref_decl_val,
+      };
+
+      entry_kind = ScopeEntry_local;
+      ref_entry = sref_from_instruction(inst_var);
+    } else {
+      entry_kind = ScopeEntry_binding;
+      ref_entry = sir_builder_add_as(builder, ref_decl_type, ref_decl_val, source_idx, decl->value);
+    }
+
+    SymbolsPushLocalResult res = symbols_push_local(syms, entry_kind, str, ref_entry);
     if (res.err != SYMBOLS_OK) {
       gen->has_error = True;
       Message_error(
@@ -521,15 +540,6 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
         string_lit("Variable has already been declared")
       );
     }
-
-    SRef ref_decl_val = gen_code(gen, ctx, decl->value, ref_decl_type);
-
-    InstructionOffset inst_store = sir_builder_add(builder, SIR_store, source_idx, decl->value);
-    SIrStore *store = sir_builder_push_data(builder, inst_store, SIrStore);
-    *store = (SIrStore){
-      .dst = sref_from_instruction(inst_var),
-      .value = ref_decl_val,
-    };
 
     return sref_from_value(VAL_TYPE_NIL);
   } break;
@@ -827,14 +837,14 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
         Todo();
       }
 
-      target = entry->inst;
+      target = sref_to_instruction(entry->ref);
     } else {
       ScopeEntry *entry = symbols_get_enclosing_loop(syms);
       if (!entry) {
         Todo();
       }
 
-      target = entry->inst;
+      target = sref_to_instruction(entry->ref);
     }
 
     SRef value = key_is_some(b->value) ? gen_code(gen, ctx, b->value, SREF_NIL) : SREF_NIL;

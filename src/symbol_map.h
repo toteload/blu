@@ -3,6 +3,7 @@
 
 #include "blu.h"
 #include "string_interner.h"
+#include "sir.h"
 
 typedef enum {
   ScopeEntry_root,
@@ -10,7 +11,7 @@ typedef enum {
   ScopeEntry_loop,
   ScopeEntry_function,
   ScopeEntry_local,
-  ScopeEntry_param,
+  ScopeEntry_binding,
 } ScopeEntryKind;
 
 typedef struct {
@@ -18,7 +19,7 @@ typedef struct {
   u32 parent_loop_idx;
   u32 parent_block_idx;
   StringKey name;
-  InstructionOffset inst;
+  SRef ref;
 } ScopeEntry;
 
 #define SCOPE_ENTRY_STACK_NAME ScopeEntryStack
@@ -65,7 +66,7 @@ typedef struct {
   u32 err;
   union {
     ScopeKey scope_key;
-    InstructionOffset inst;
+    SRef ref;
   } data;
 } SymbolsPushScopeResult;
 
@@ -75,12 +76,12 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
 
 typedef struct {
   u32 err;
-  InstructionOffset inst;
+  SRef ref;
 } SymbolsPushLocalResult;
 
 // - Fails if you add a name that is already in the symbol table.
-// - kind should be param or local
-SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, InstructionOffset inst);
+// - kind should be binding or local
+SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, SRef ref);
 
 void symbols_pop_scope(SymbolMap *syms, ScopeKey key);
 

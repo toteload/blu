@@ -1,0 +1,3 @@
+[error] test/snippet/error/binding_self_reference.blu:4:8: Undeclared name 'x'
+    4 |   x := x
+      |        ^

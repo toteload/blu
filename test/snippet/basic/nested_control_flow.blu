@@ -5,8 +5,8 @@ B : bool = false or true
 C : i32 = ::o { if true { break ::o if true and true do 3 else 4 }  20 }
 
 main: () i32 = || {
-  i: i32 = 0
-  n: i32 = 0
+  mut i: i32 = 0
+  mut n: i32 = 0
   while i < 10 {
     i += 1
     if yes() and i > 3 {

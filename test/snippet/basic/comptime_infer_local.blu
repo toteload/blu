@@ -1,0 +1,14 @@
+mod main
+
+SUM : i64 = {
+  mut a := 1
+  a = a + 2
+  T := i64
+  b: T = a
+  b * 2
+}
+
+main := ||: i32 {
+  #debug(SUM)
+  0
+}

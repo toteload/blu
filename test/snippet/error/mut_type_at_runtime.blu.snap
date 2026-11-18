@@ -1,0 +1,3 @@
+[error] test/snippet/error/mut_type_at_runtime.blu:4:3: A mutable variable at runtime cannot have comptime-only type type
+    4 |   mut T := i32
+      |   ^^^

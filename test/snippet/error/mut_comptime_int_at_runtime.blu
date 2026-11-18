@@ -1,0 +1,6 @@
+mod main
+
+main := ||: i32 {
+  mut x := 5
+  0
+}

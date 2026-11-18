@@ -1,0 +1,26 @@
+mod main
+
+main := ||: i32 {
+  x := 5
+  a: i32 = x + 1
+  #debug(a)
+
+  T := i32
+  b: T = 3
+  #debug(b)
+
+  s := add(a, b)
+  #debug(s)
+
+  mut m := s
+  m += 1
+  #debug(m)
+
+  c := if yes() do s else b
+  #debug(c)
+
+  0
+}
+
+add := |p: i32, q: i32|: i32 { p + q }
+yes := ||: bool true

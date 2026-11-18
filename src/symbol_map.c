@@ -82,7 +82,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
     ScopeEntry *existing = scopes_ptr_at_unchecked(&syms->stack, occupied_idx);
     return (SymbolsPushScopeResult){
       .err = SYMBOLS_ERR_FOUND_EXISTING_SYMBOL,
-      .data.inst = existing->inst,
+      .data.ref = existing->ref,
     };
   }
 
@@ -91,7 +91,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
     .parent_loop_idx = syms->parent_loop_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = label,
-    .inst = inst,
+    .ref = sref_from_instruction(inst),
   });
 
   syms->parent_block_idx = offset;
@@ -106,7 +106,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
   };
 }
 
-SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, InstructionOffset inst) {
+SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, StringKey name, SRef ref) {
   u32 offset = syms->stack.len;
 
   u32 occupied_idx;
@@ -114,7 +114,7 @@ SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, 
     ScopeEntry *existing = scopes_ptr_at_unchecked(&syms->stack, occupied_idx);
     return (SymbolsPushLocalResult){
       .err = SYMBOLS_ERR_FOUND_EXISTING_SYMBOL,
-      .inst = existing->inst,
+      .ref = existing->ref,
     };
   }
 
@@ -123,7 +123,7 @@ SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, 
     .parent_loop_idx = syms->parent_loop_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = name,
-    .inst = inst,
+    .ref = ref,
   });
 
   return (SymbolsPushLocalResult){
@@ -136,7 +136,7 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
     ScopeEntry entry = scopes_pop(&syms->stack);
 
     switch (Cast(ScopeEntryKind, entry.kind)) {
-      case ScopeEntry_param:
+      case ScopeEntry_binding:
       case ScopeEntry_local: {
         locals_remove(&syms->locals, entry.name);
       } break;
@@ -186,14 +186,14 @@ void symbols_debug_print(SymbolMap *syms, StringInterner *strings) {
     [ScopeEntry_loop] = "loop",
     [ScopeEntry_function] = "function",
     [ScopeEntry_local] = "local",
-    [ScopeEntry_param] = "param",
+    [ScopeEntry_binding] = "binding",
   };
 
   for (u32 i = 0; i < syms->stack.len; i++) {
     ScopeEntry *e = scopes_ptr_at_unchecked(&syms->stack, i);
     String name = key_is_some(e->name) ? strings_get(strings, e->name) : string_lit("_");
-    printf("%4u %-8s name=%.*s inst=%%%u parent_block=%u parent_loop=%u\n",
-           i, kind_names[e->kind], Cast(int, name.len), name.str, e->inst, e->parent_block_idx, e->parent_loop_idx);
+    printf("%4u %-8s name=%.*s ref=%u parent_block=%u parent_loop=%u\n",
+           i, kind_names[e->kind], Cast(int, name.len), name.str, e->ref.x, e->parent_block_idx, e->parent_loop_idx);
   }
 }
 

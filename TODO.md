@@ -1,4 +1,3 @@
-- [ ] Add type inference on declarations (`x := 5`). The type part of a declaration is optional. `case Ast_declaration` in codegen.c
 - [ ] Typecheck main.main before running it (`run_main` in `compiler.c:678`)
   - `main := 5` segfaults: `vfunc->data` is cast to `ValueResidualFunction*` without checking the type.
   - `main := |x: i32|: i32 { x }` segfaults: arguments are never passed (`interpreter_call` hits `Todo()` for any argument).

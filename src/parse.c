@@ -794,6 +794,10 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
     }
   } break;
 
+  case Tok_keyword_mut: {
+    Try(parse_declaration(parser, &base));
+  } break;
+
   case Tok_identifier: {
     u8 tok2;
     if (peek2(parser, &tok2) && tok2 == Tok_colon) {

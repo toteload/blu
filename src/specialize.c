@@ -1491,7 +1491,19 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       Todo();
     }
 
-    // TODO type may not be comptime
+    if (!frame_is_comptime(f) && is_type_comptime(ctx->types, type)) {
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = s->pc,
+        },
+        string_lit("A mutable variable at runtime cannot have comptime-only type %type"),
+        type
+      );
+      return (StepResult){ .kind = Step_error };
+    }
 
     TypeKey ptr_type = types_add_pointer(ctx->types, type);
 

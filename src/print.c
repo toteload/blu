@@ -17,23 +17,6 @@ void print_type(FILE *out, Compiler *compiler, TypeKey idx) {
   arena_scope_end(&compiler->scratch, snap);
 }
 
-internal i64 read_signed(u16 bitwidth, void *data) {
-  i64 res = 0;
-  switch (bitwidth) {
-  case  8: { i8  x = *Cast(i8*,data);  res = x; } break;
-  case 16: { i16 x = *Cast(i16*,data); res = x; } break;
-  case 32: { i32 x = *Cast(i32*,data); res = x; } break;
-  case 64: { i64 x = *Cast(i64*,data); res = x; } break;
-  }
-  return res;
-}
-
-internal u64 read_unsigned(u16 bitwidth, void *data) {
-  u64 res = 0;
-  memcpy(&res, data, bitwidth / 8);
-  return res;
-}
-
 internal char const *resolve_status_string(ResolveStatus status) {
   switch (status) {
   case RESOLVE_STATUS_UNRESOLVED: return "unresolved";
@@ -56,13 +39,13 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
     print_value_raw(out, compiler, flags, v->type, v->data);
   } break;
   case Type_comptime_int: {
-    fprintf(out, "%lld", Cast(long long, read_signed(64, data)));
+    fprintf(out, "%lld", Cast(long long, read_int_sign_extend(64, data)));
   } break;
   case Type_integer: {
     if (t->data.integer.signedness == Signed) {
-      fprintf(out, "%" PRId64, Cast(i64, read_signed(t->data.integer.bitwidth, data)));
+      fprintf(out, "%" PRId64, Cast(i64, read_int_sign_extend(t->data.integer.bitwidth, data)));
     } else {
-      fprintf(out, "%" PRIu64, Cast(u64, read_unsigned(t->data.integer.bitwidth, data)));
+      fprintf(out, "%" PRIu64, Cast(u64, read_int_zero_extend(t->data.integer.bitwidth, data)));
     }
   } break;
   case Type_bool: {

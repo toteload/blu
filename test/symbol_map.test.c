@@ -34,63 +34,63 @@ internal void test_symbol_map(TestResult *test, void *user) {
   // Function with a parameter.
   SymbolsPushScopeResult fn = symbols_push_scope(&syms, ScopeEntry_function, 10, (StringKey){0});
   Test_assert_eq(fn.err, SYMBOLS_OK);
-  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_param, X, 11).err, SYMBOLS_OK);
+  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_binding, X, sref_from_instruction(11)).err, SYMBOLS_OK);
 
   ScopeEntry *e = symbols_find(&syms, X);
   Test_assert(!is_null(e));
-  Test_assert_eq(e->kind, ScopeEntry_param);
-  Test_assert_eq(e->inst, 11);
+  Test_assert_eq(e->kind, ScopeEntry_binding);
+  Test_assert_eq(e->ref.x, sref_from_instruction(11).x);
 
   // Outer block: a local, then shadow it at the same level.
   SymbolsPushScopeResult outer = symbols_push_scope(&syms, ScopeEntry_block, 20, (StringKey){0});
   Test_assert_eq(outer.err, SYMBOLS_OK);
-  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, 21).err, SYMBOLS_OK);
-  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, 22).err, SYMBOLS_OK);
-  Test_assert_eq(symbols_find(&syms, Y)->inst, 22);
+  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, sref_from_instruction(21)).err, SYMBOLS_OK);
+  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, sref_from_instruction(22)).err, SYMBOLS_OK);
+  Test_assert_eq(symbols_find(&syms, Y)->ref.x, sref_from_instruction(22).x);
 
   // Shadowing a symbol from an enclosing scope is not allowed.
-  SymbolsPushLocalResult dup = symbols_push_local(&syms, ScopeEntry_local, X, 23);
+  SymbolsPushLocalResult dup = symbols_push_local(&syms, ScopeEntry_local, X, sref_from_instruction(23));
   Test_assert_eq(dup.err, SYMBOLS_ERR_FOUND_EXISTING_SYMBOL);
-  Test_assert_eq(dup.inst, 11);
+  Test_assert_eq(dup.ref.x, sref_from_instruction(11).x);
 
   // Labeled loop.
   SymbolsPushScopeResult loop = symbols_push_scope(&syms, ScopeEntry_loop, 30, LABEL);
   Test_assert_eq(loop.err, SYMBOLS_OK);
   e = symbols_get_enclosing_loop(&syms);
   Test_assert(!is_null(e));
-  Test_assert_eq(e->inst, 30);
-  Test_assert_eq(symbols_find(&syms, LABEL)->inst, 30);
-  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Z, 31).err, SYMBOLS_OK);
+  Test_assert_eq(e->ref.x, sref_from_instruction(30).x);
+  Test_assert_eq(symbols_find(&syms, LABEL)->ref.x, sref_from_instruction(30).x);
+  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Z, sref_from_instruction(31)).err, SYMBOLS_OK);
 
   // The loop stays the enclosing loop inside a nested block.
   SymbolsPushScopeResult inner = symbols_push_scope(&syms, ScopeEntry_block, 40, (StringKey){0});
   Test_assert_eq(inner.err, SYMBOLS_OK);
-  Test_assert_eq(symbols_get_enclosing_loop(&syms)->inst, 30);
+  Test_assert_eq(symbols_get_enclosing_loop(&syms)->ref.x, sref_from_instruction(30).x);
 
   // Reusing a label from an enclosing scope fails.
   SymbolsPushScopeResult dup_label = symbols_push_scope(&syms, ScopeEntry_block, 41, LABEL);
   Test_assert_eq(dup_label.err, SYMBOLS_ERR_FOUND_EXISTING_SYMBOL);
-  Test_assert_eq(dup_label.data.inst, 30);
+  Test_assert_eq(dup_label.data.ref.x, sref_from_instruction(30).x);
 
   symbols_pop_scope(&syms, inner.data.scope_key);
-  Test_assert_eq(symbols_get_enclosing_loop(&syms)->inst, 30);
+  Test_assert_eq(symbols_get_enclosing_loop(&syms)->ref.x, sref_from_instruction(30).x);
 
   // Popping the loop removes its label and locals.
   symbols_pop_scope(&syms, loop.data.scope_key);
   Test_assert(is_null(symbols_get_enclosing_loop(&syms)));
   Test_assert(is_null(symbols_find(&syms, LABEL)));
   Test_assert(is_null(symbols_find(&syms, Z)));
-  Test_assert_eq(symbols_find(&syms, Y)->inst, 22);
+  Test_assert_eq(symbols_find(&syms, Y)->ref.x, sref_from_instruction(22).x);
 
   // Popping the block removes both shadowed locals.
   symbols_pop_scope(&syms, outer.data.scope_key);
   Test_assert(is_null(symbols_find(&syms, Y)));
-  Test_assert_eq(symbols_find(&syms, X)->inst, 11);
+  Test_assert_eq(symbols_find(&syms, X)->ref.x, sref_from_instruction(11).x);
 
   // A name freed by popping can be reused.
   SymbolsPushScopeResult again = symbols_push_scope(&syms, ScopeEntry_block, 50, (StringKey){0});
-  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, 51).err, SYMBOLS_OK);
-  Test_assert_eq(symbols_find(&syms, Y)->inst, 51);
+  Test_assert_eq(symbols_push_local(&syms, ScopeEntry_local, Y, sref_from_instruction(51)).err, SYMBOLS_OK);
+  Test_assert_eq(symbols_find(&syms, Y)->ref.x, sref_from_instruction(51).x);
   symbols_pop_scope(&syms, again.data.scope_key);
 
   // Popping the function removes its parameters.

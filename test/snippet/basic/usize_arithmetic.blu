@@ -1,7 +1,7 @@
 mod main
 
 main := ||: i32 {
-  i: usize = 0
+  mut i: usize = 0
   i += 11
   #debug(i)
 
@@ -14,7 +14,7 @@ main := ||: i32 {
 
   // A usize counter walking a slice.
   s: []u8 = "abc"
-  j: usize = 0
+  mut j: usize = 0
   while j < #len(s) {
     #debug(s[j])
     j += 1
