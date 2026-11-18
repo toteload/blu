@@ -1,0 +1,10 @@
+mod main
+
+X : i32 = get()
+
+main := ||: i32 {
+  #debug(X)
+  0
+}
+
+get := ||: i32 1

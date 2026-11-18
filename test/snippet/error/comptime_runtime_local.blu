@@ -1,0 +1,7 @@
+mod main
+
+main := ||: i32 {
+  mut x: i32 = 1
+  y: i32 = comptime x
+  0
+}

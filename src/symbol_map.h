@@ -9,6 +9,7 @@ typedef enum {
   ScopeEntry_root,
   ScopeEntry_block,
   ScopeEntry_loop,
+  ScopeEntry_comptime,
   ScopeEntry_function,
   ScopeEntry_local,
   ScopeEntry_binding,
@@ -17,6 +18,7 @@ typedef enum {
 typedef struct {
   u8 kind;
   u32 parent_loop_idx;
+  u32 parent_comptime_idx;
   u32 parent_block_idx;
   StringKey name;
   SRef ref;
@@ -44,6 +46,7 @@ typedef struct {
   LocalsMap locals;
 
   u32 parent_loop_idx;
+  u32 parent_comptime_idx;
   u32 parent_block_idx;
 
   Arena *scratch;
@@ -87,6 +90,7 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key);
 
 ScopeEntry *symbols_find(SymbolMap *syms, StringKey name);
 ScopeEntry *symbols_get_enclosing_loop(SymbolMap *syms);
+b32 symbols_is_outside_comptime(SymbolMap *syms, ScopeEntry *entry);
 
 void symbols_debug_print(SymbolMap *syms, StringInterner *strings);
 

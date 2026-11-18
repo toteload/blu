@@ -1,0 +1,3 @@
+[error] test/snippet/error/comptime_call.blu:4:24: Function calls are not supported at comptime yet
+    4 |   y: i32 = comptime get()
+      |                        ^

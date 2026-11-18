@@ -3,12 +3,11 @@
 
 ## Comptime
 
+- [ ] Add something like a comptime instruction counter. If the number of comptime instructions executed
+      exceeds some threshold it results in a compile error. This way infinite loops do not hang the compiler.
 - [ ] comptime function calls
 - [ ] comptime parameters and caching function specializations
 - [ ] comptime mut variables
-- [ ] comptime loops
-- [ ] comptime expressions
-- [ ] Add `comptime` keyword to evaluate expressions at compile time.
 - [ ] Add `comptime` qualifier to function parameters.
 - [ ] Add `comptime` qualifier to declarations.
   - This means that the declaration only exists at compile time.

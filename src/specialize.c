@@ -1006,7 +1006,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       ValueKey val;
       b32 ok = expect_comptime_value_or_nil(ctx, state, br->value, &val);
       if (!ok) {
-        Todo();
+        return (StepResult){ .kind = Step_error };
       }
 
       if (key_is_some(result_type)) {
@@ -1262,6 +1262,19 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   } break;
 
   case SIR_call: {
+    if (frame_is_comptime(f)) {
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = pc,
+        },
+        string_lit("Function calls are not supported at comptime yet")
+      );
+      return (StepResult){ .kind = Step_error };
+    }
+
     SIrCall *call = sir_chunk_extra(f->chunk, pc);
 
     IRef func = resolve(f, call->func);
@@ -1372,7 +1385,55 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     s->pc += 1;
   } break;
 
+  case SIR_comptime_capture: {
+    SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
+    IRef val = resolve(f, ref);
+
+    if (iref_is_instruction(val)) {
+      String reason;
+      switch (sir_chunk_op(f->chunk, sref_to_instruction(ref))) {
+      case SIR_param: reason = string_lit("Parameter '%string' is not known at comptime"); break;
+      case SIR_alloc: reason = string_lit("Runtime variable '%string' cannot be used at comptime"); break;
+      default: reason = string_lit("'%string' is computed at runtime and cannot be used at comptime"); break;
+      }
+
+      AstAndSourceKey src = f->chunk->sources[pc];
+      Source *source = compiler_get_source(ctx->compiler, src.source_idx);
+      TokenOffset *name = ast_data(&source->ast, src.ast_idx);
+
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = pc,
+        },
+        reason,
+        token_string(&source->tokens, source->text, *name)
+      );
+      return (StepResult){ .kind = Step_error };
+    }
+
+    store_inst_value(f, pc, val);
+    store_inst_type(f, pc, get_sref_type(ctx, f, ref));
+
+    s->pc += 1;
+  } break;
+
   case SIR_builtin_debug: {
+    if (frame_is_comptime(f)) {
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ir_instruction,
+          .decl_idx = state->frame.decl,
+          .data.offset = pc,
+        },
+        string_lit("#debug cannot be used at comptime")
+      );
+      return (StepResult){ .kind = Step_error };
+    }
+
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
     TypeKey type;
@@ -1780,7 +1841,13 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     InstructionOffset loop = sir_chunk_data(f->chunk, pc);
 
     if (frame_is_comptime(f)) {
-      Todo();
+      while (scopes_peek_ptr_unchecked(&f->scopes)->start != loop) {
+        Assert(scopes_peek_ptr_unchecked(&f->scopes)->scope_kind == Scope_comptime);
+        frame_pop_scope(f);
+      }
+
+      scopes_peek_ptr_unchecked(&f->scopes)->pc = loop + 1;
+      break;
     }
 
     InstructionOffset inst = iir_builder_add(builder, IIR_repeat, f->chunk->sources[pc]);

@@ -64,6 +64,7 @@ typedef enum {
   Tok_keyword_as,
   Tok_keyword_mod,
   Tok_keyword_mut,
+  Tok_keyword_comptime,
 
   Tok_keyword_inline,
 

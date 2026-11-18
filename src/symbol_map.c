@@ -89,6 +89,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
   scopes_append(&syms->stack, syms->scratch, (ScopeEntry){
     .kind = kind,
     .parent_loop_idx = syms->parent_loop_idx,
+    .parent_comptime_idx = syms->parent_comptime_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = label,
     .ref = sref_from_instruction(inst),
@@ -98,6 +99,10 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
 
   if (kind == ScopeEntry_loop) {
     syms->parent_loop_idx = offset;
+  }
+
+  if (kind == ScopeEntry_comptime) {
+    syms->parent_comptime_idx = offset;
   }
 
   return (SymbolsPushScopeResult){
@@ -121,6 +126,7 @@ SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, 
   scopes_append(&syms->stack, syms->scratch, (ScopeEntry){
     .kind = kind,
     .parent_loop_idx = syms->parent_loop_idx,
+    .parent_comptime_idx = syms->parent_comptime_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = name,
     .ref = ref,
@@ -141,7 +147,8 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
         locals_remove(&syms->locals, entry.name);
       } break;
       case ScopeEntry_block:
-      case ScopeEntry_loop: {
+      case ScopeEntry_loop:
+      case ScopeEntry_comptime: {
         if (key_is_some(entry.name)) {
           locals_remove(&syms->locals, entry.name);
         }
@@ -155,6 +162,7 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
   ScopeEntry entry = scopes_pop(&syms->stack);
 
   syms->parent_loop_idx = entry.parent_loop_idx;
+  syms->parent_comptime_idx = entry.parent_comptime_idx;
   syms->parent_block_idx = entry.parent_block_idx;
 
   if (key_is_some(entry.name)) {
@@ -179,11 +187,16 @@ ScopeEntry *symbols_get_enclosing_loop(SymbolMap *syms) {
   return scopes_ptr_at_unchecked(&syms->stack, syms->parent_loop_idx);
 }
 
+b32 symbols_is_outside_comptime(SymbolMap *syms, ScopeEntry *entry) {
+  return entry->parent_comptime_idx != syms->parent_comptime_idx;
+}
+
 void symbols_debug_print(SymbolMap *syms, StringInterner *strings) {
   static char const *kind_names[] = {
     [ScopeEntry_root] = "root",
     [ScopeEntry_block] = "block",
     [ScopeEntry_loop] = "loop",
+    [ScopeEntry_comptime] = "comptime",
     [ScopeEntry_function] = "function",
     [ScopeEntry_local] = "local",
     [ScopeEntry_binding] = "binding",

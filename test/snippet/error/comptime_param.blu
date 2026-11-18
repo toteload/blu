@@ -1,0 +1,8 @@
+mod main
+
+add := |p: i32|: i32 {
+  comptime { #debug(p) 0 }
+  p
+}
+
+main := ||: i32 { add(1) }

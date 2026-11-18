@@ -1,0 +1,3 @@
+[error] test/snippet/error/comptime_runtime_binding.blu:5:21: 'x' is computed at runtime and cannot be used at comptime
+    5 |   y: i32 = comptime x + 1
+      |                     ^

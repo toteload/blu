@@ -1,0 +1,26 @@
+mod main
+
+X : i64 = {
+  mut a: i64 = 1
+  comptime { a += 2 }
+  b := comptime a * 10
+  b
+}
+
+main := ||: i32 {
+  x := 5
+  T := i32
+  y: T = comptime x + 1
+  #debug(y)
+  #debug(X)
+  z: i32 = comptime ::b {
+    mut i: i32 = 0
+    while true {
+      i += 1
+      if i == 4 { break ::b i }
+    }
+    0
+  }
+  #debug(z)
+  0
+}

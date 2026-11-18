@@ -1,0 +1,6 @@
+mod main
+
+main := ||: i32 {
+  comptime { #debug(1) 0 }
+  0
+}

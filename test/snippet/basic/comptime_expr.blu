@@ -1,0 +1,14 @@
+mod main
+
+main := ||: i32 {
+  n := comptime {
+    mut i: i64 = 0
+    mut s: i64 = 0
+    while i < 5 { i += 1  s += i }
+    s
+  }
+  #debug(n)
+  a: i32 = comptime 6 * 7
+  #debug(a)
+  0
+}

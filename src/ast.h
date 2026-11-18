@@ -31,11 +31,12 @@ typedef enum {
   Ast_cast,
   Ast_as,
   Ast_continue,
+  Ast_comptime,
 
   // Make sure to update Ast_kind_max when you update this enum!
 } AstKind;
 
-#define Ast_kind_max (Ast_continue + 1)
+#define Ast_kind_max (Ast_comptime + 1)
 
 typedef enum {
   Builtin_debug,

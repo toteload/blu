@@ -365,6 +365,7 @@ internal u32 next(Tokenizer *tokenizer, u8 *kind, SpanU32 *span) {
     Return_if_match("as",       Tok_keyword_as);
     Return_if_match("mod",      Tok_keyword_mod);
     Return_if_match("mut",      Tok_keyword_mut);
+    Return_if_match("comptime", Tok_keyword_comptime);
     Return_if_match("inline",   Tok_keyword_inline);
     // clang-format on
 
@@ -540,6 +541,7 @@ char const *token_kind_string_literals[Tok_kind_max] = {
   "as",
   "mod",
   "mut",
+  "comptime",
   "inline",
   "identifier",
   "label",

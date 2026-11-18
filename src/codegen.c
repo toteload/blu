@@ -73,9 +73,16 @@ internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, LookupRes
 
   ScopeEntry *entry = symbols_find(&gen->syms, name);
   if (entry) {
+    SRef ref = entry->ref;
+    if (symbols_is_outside_comptime(&gen->syms, entry)) {
+      InstructionOffset capture = sir_builder_add(&gen->builder, SIR_comptime_capture, gen->source->idx, idx_ast);
+      sir_builder_set_data(&gen->builder, capture, sref_to_u32(ref));
+      ref = sref_from_instruction(capture);
+    }
+
     *res = (LookupResult){
       .kind = (entry->kind == ScopeEntry_binding) ? LOOKUP_BINDING : LOOKUP_LOCAL,
-      .data.ref = entry->ref,
+      .data.ref = ref,
     };
 
     return True;
@@ -132,6 +139,8 @@ internal b32 find_jump_target(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast,
     .data.ast_index = idx_ast,
   };
 
+  String keyword = token_string(&gen->source->tokens, gen->source->text, ast_span(ast, idx_ast).start);
+
   ScopeEntry *entry;
   if (key_is_some(b->label)) {
     entry = symbols_find(&gen->syms, intern_ast_label_string(ctx, gen->source, b->label));
@@ -151,9 +160,15 @@ internal b32 find_jump_target(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast,
     entry = symbols_get_enclosing_loop(&gen->syms);
     if (!entry) {
       gen->has_error = True;
-      Message_error(ctx->msg_sink, loc, string_lit("'%string' outside of a loop"), token_string(&gen->source->tokens, gen->source->text, ast_span(ast, idx_ast).start));
+      Message_error(ctx->msg_sink, loc, string_lit("'%string' outside of a loop"), keyword);
       return False;
     }
+  }
+
+  if (symbols_is_outside_comptime(&gen->syms, entry)) {
+    gen->has_error = True;
+    Message_error(ctx->msg_sink, loc, string_lit("Cannot '%string' out of a comptime expression"), keyword);
+    return False;
   }
 
   *out = sref_to_instruction(entry->ref);
@@ -275,7 +290,9 @@ SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef t
   SIrBuilder *builder = &gen->builder;
   SourceKey source_idx = gen->source->idx;
   InstructionOffset inst_block = sir_builder_add(builder, SIR_comptime_block, source_idx, idx_ast);
+  ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_comptime, inst_block, (StringKey){0}).data.scope_key;
   SRef ref = gen_code(gen, ctx, idx_ast, type_destination);
+  symbols_pop_scope(&gen->syms, scope);
   sir_builder_end_block_with(builder, inst_block, inst_block, ref, source_idx, idx_ast);
   return sref_from_instruction(inst_block);
 }
@@ -340,6 +357,11 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
   case Ast_mod_section: { PanicMsg("Encountered 'Ast_mod_section' in gen_code, which should never happen."); } break;
   case Ast_param:       { PanicMsg("Encountered 'Ast_param' in gen_code, which should never happen."); } break;
   case Ast_label:       { PanicMsg("Encountered 'Ast_label' in gen_code, which should never happen."); } break;
+
+  case Ast_comptime: {
+    AstKey *value = ast_data(ast, idx_ast);
+    return gen_comptime_code(gen, ctx, *value, type_destination);
+  } break;
 
   case Ast_as:
   case Ast_cast: {

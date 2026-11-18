@@ -813,6 +813,22 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
     Try(parse_type(parser, &base));
   } break;
 
+  case Tok_keyword_comptime: {
+    AstKey ast_index = node_alloc(parser);
+    TokenOffset start = parser->at;
+    AstKey *value = node_push_data(parser, AstKey, ast_index);
+
+    u8 ignored;
+    next(parser, &ignored);
+
+    Try(parse_expression(parser, value));
+
+    *node_kind(parser, ast_index) = Ast_comptime;
+    *node_span(parser, ast_index) = (SpanToken){ .start = start, .end = parser->at, };
+
+    base = ast_index;
+  } break;
+
   case Tok_keyword_as:
   case Tok_keyword_cast: {
     u8 ignored;

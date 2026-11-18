@@ -1,0 +1,3 @@
+[error] test/snippet/error/global_call.blu:3:14: Function calls are not supported at comptime yet
+    3 | X : i32 = get()
+      |              ^

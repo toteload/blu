@@ -53,6 +53,7 @@ typedef enum {
   SIR_builtin_debug,     // contains SRef
   SIR_builtin_len,       // contains SRef to an array or slice
   SIR_comptime_block,    // contains instruction count of block
+  SIR_comptime_capture,
   SIR_get_decl_value,    // contains DeclarationKey
   SIR_as,                // references SIrCast
   SIR_cast,              // references SIrCast

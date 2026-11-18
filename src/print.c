@@ -238,7 +238,8 @@ void print_sir_chunk(FILE *out, Compiler *compiler, SIrChunk *chunk) {
     } break;
 
     case SIR_negate:
-    case SIR_not: {
+    case SIR_not:
+    case SIR_comptime_capture: {
       print_sref(out, compiler, (SRef){data});
     } break;
 

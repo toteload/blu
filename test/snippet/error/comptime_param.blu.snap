@@ -1,0 +1,3 @@
+[error] test/snippet/error/comptime_param.blu:4:21: Parameter 'p' is not known at comptime
+    4 |   comptime { #debug(p) 0 }
+      |                     ^
