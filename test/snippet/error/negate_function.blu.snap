@@ -1,0 +1,3 @@
+[error] test/snippet/error/negate_function.blu:4:10: Type () i32 does not support negation
+    4 |   #debug(-||: i32 { 0 })
+      |          ^

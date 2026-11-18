@@ -22,6 +22,7 @@
 #define VAL_BOOL_TRUE         ((ValueKey){16})
 #define VAL_BOOL_FALSE        ((ValueKey){17})
 #define VAL_COMPTIME_INT_1    ((ValueKey){18})
+#define VAL_NIL_NIL           ((ValueKey){19})
 
 typedef struct {
   TypeKey type;

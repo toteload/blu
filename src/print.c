@@ -61,9 +61,10 @@ void print_value_raw(FILE *out, Compiler *compiler, u32 flags, TypeKey type, voi
       print_iir_chunk(out, compiler, &compiler_get_function(compiler, func->key)->chunk);
     }
   } break;
-  case Type_pointer:
   case Type_nil:
   case Type_never:
+    break;
+  case Type_pointer:
   case Type_slice:
   case Type_array: {
     fprintf(out, "0x%p", data);

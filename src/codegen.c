@@ -297,6 +297,18 @@ SRef gen_comptime_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef t
   return sref_from_instruction(inst_block);
 }
 
+internal SRef gen_branch(CodeGen *gen, CodeGenContext *ctx, AstKey branch, SRef fallback, SRef type_destination) {
+  if (sref_is_nil(fallback)) {
+    return gen_code(gen, ctx, branch, type_destination);
+  }
+
+  if (key_is_some(branch)) {
+    gen_code(gen, ctx, branch, SREF_NIL);
+  }
+
+  return fallback;
+}
+
 internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, AstKey cond, AstKey then, SRef then_fallback, AstKey otherwise, SRef otherwise_fallback, SRef type_destination) {
   SIrBuilder *builder = &gen->builder;
   SourceKey source_idx = gen->source->idx;
@@ -308,7 +320,7 @@ internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, Ast
   InstructionOffset condbr = sir_builder_add(builder, SIR_condbr, source_idx, cond);
   SIrCondbr *condbr_data = sir_builder_push_data(builder, condbr, SIrCondbr);
 
-  SRef then_val = key_is_some(then) ? gen_code(gen, ctx, then, type_destination) : then_fallback;
+  SRef then_val = gen_branch(gen, ctx, then, then_fallback, type_destination);
   InstructionOffset then_br = sir_builder_add(builder, SIR_br, source_idx, then);
   SIrBr *then_data = sir_builder_push_data(builder, then_br, SIrBr);
   *then_data = (SIrBr){
@@ -316,7 +328,7 @@ internal SRef gen_if_else(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, Ast
     .value = then_val,
   };
 
-  SRef else_val = key_is_some(otherwise) ? gen_code(gen, ctx, otherwise, type_destination) : otherwise_fallback;
+  SRef else_val = gen_branch(gen, ctx, otherwise, otherwise_fallback, type_destination);
   sir_builder_end_block_with(builder, block, block, else_val, source_idx, otherwise);
 
   *condbr_data = (SIrCondbr){
@@ -384,7 +396,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     LookupResult res;
     b32 ok = lookup(gen, ctx, idx_ast, &res);
     if (!ok) {
-      return sref_from_value(VAL_TYPE_NIL);
+      return sref_from_value(VAL_NIL_NIL);
     }
 
     SRef ptr;
@@ -409,7 +421,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     AstBlock *block = ast_data(ast, idx_ast);
     u32 count = block->count;
     if (count == 0) {
-      return sref_from_value(VAL_TYPE_NIL);
+      return sref_from_value(VAL_NIL_NIL);
     }
 
     InstructionOffset inst_block = sir_builder_add_block(builder, type_destination, source_idx, idx_ast);
@@ -445,7 +457,13 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
 
   case Ast_if_else: {
     AstIfElse *if_else = ast_data(ast, idx_ast);
-    return gen_if_else(gen, ctx, idx_ast, if_else->cond, if_else->then, SREF_NIL, if_else->otherwise, SREF_NIL, type_destination);
+
+    SRef fallback = SREF_NIL;
+    if (key_is_nil(if_else->otherwise)) {
+      fallback = sref_from_value(VAL_NIL_NIL);
+    }
+
+    return gen_if_else(gen, ctx, idx_ast, if_else->cond, if_else->then, fallback, if_else->otherwise, fallback, type_destination);
   } break;
 
   case Ast_type_function: {
@@ -601,7 +619,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
       );
     }
 
-    return sref_from_value(VAL_TYPE_NIL);
+    return sref_from_value(VAL_NIL_NIL);
   } break;
 
   case Ast_literal_u8_string: {
@@ -634,7 +652,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
         },
         string_lit("Integer literal does not fit in u64."));
       gen->has_error = True;
-      return sref_from_value(VAL_TYPE_NIL);
+      return sref_from_value(VAL_NIL_NIL);
     }
 
     if (value > INT64_MAX) {
@@ -870,7 +888,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
     SIrBr *exit_br_data = sir_builder_push_data(builder, exit_br_inst, SIrBr);
     *exit_br_data = (SIrBr){
       .block = loop,
-      .value = SREF_NIL,
+      .value = sref_from_value(VAL_NIL_NIL),
     };
 
     sir_builder_end_block(builder, loop);
@@ -891,7 +909,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
 
     InstructionOffset target;
     if (!find_jump_target(gen, ctx, idx_ast, &target)) {
-      return sref_from_value(VAL_TYPE_NIL);
+      return sref_from_value(VAL_NIL_NIL);
     }
 
     if (kind == Ast_continue) {
@@ -900,7 +918,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
       return sref_from_instruction(repeat);
     }
 
-    SRef value = key_is_some(b->value) ? gen_code(gen, ctx, b->value, SREF_NIL) : SREF_NIL;
+    SRef value = key_is_some(b->value) ? gen_code(gen, ctx, b->value, SREF_NIL) : sref_from_value(VAL_NIL_NIL);
 
     InstructionOffset br = sir_builder_add(builder, SIR_br, source_idx, idx_ast);
     SIrBr *data = sir_builder_push_data(builder, br, SIrBr);

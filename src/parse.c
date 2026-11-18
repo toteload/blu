@@ -773,7 +773,7 @@ internal b32 parse_base_expression(Parser *parser, AstKey *out) {
           .kind = MessageLocation_token_index,
           .data.token_index = parser->at,
         },
-        string_lit("Unexpected token '%tokenkind' encountered after label."));
+        string_lit("Unexpected token '%tokenkind' encountered after label."), tok);
       return False;
     }
     }

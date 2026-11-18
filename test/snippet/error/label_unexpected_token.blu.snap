@@ -1,0 +1,3 @@
+[error] test/snippet/error/label_unexpected_token.blu:4:7: Unexpected token 'integer literal' encountered after label.
+    4 |   ::a 22
+      |       ^^

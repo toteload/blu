@@ -74,6 +74,7 @@ void values_init(ValueInterner *values, ValueInternerInitOptions *options) {
   values_intern_data(values, TYPE_BOOL, &(b8){1});
   values_intern_data(values, TYPE_BOOL, &(b8){0});
   values_intern_data(values, TYPE_COMPTIME_INT, &(ComptimeInt){1});
+  values_intern_data(values, TYPE_NIL, Null);
 }
 
 void values_deinit(ValueInterner *values) {

@@ -53,7 +53,7 @@ internal b32 expect_type_value_or_nil(SpecializerContext *sp, Specializer *state
 internal TypeKey type_of_val(SpecializerContext *ctx, ValueKey v);
 internal ValueKey val_from_type(SpecializerContext *ctx, TypeKey t);
 internal ValueKey val_from_usize(SpecializerContext *ctx, usize x);
-internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref);
+internal b32 expect_some_sref_type(SpecializerContext *ctx, Specializer *state, SRef ref, TypeKey *out);
 internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx);
 
 // ---
@@ -223,6 +223,11 @@ internal TypeKey get_value_type(SpecializerContext *ctx, ValueKey key) {
   return v->type;
 }
 
+internal void store_inst_comptime(SpecializerContext *ctx, Frame *f, InstructionOffset idx, ValueKey val) {
+  store_inst_value(f, idx, iref_from_value(val));
+  store_inst_type(f, idx, type_of_val(ctx, val));
+}
+
 internal TypeKey get_sref_type(SpecializerContext *ctx, Frame *f, SRef ref) {
   if (sref_is_some_value(ref)) {
     Value *v = values_get(ctx->values, sref_to_value(ref));
@@ -255,15 +260,10 @@ internal b32 finalize_residual_block(SpecializerContext *ctx, IIrBuilder *builde
     return True;
   }
 
-  if (breaks->len == 0) {
-    return True;
-  }
-
-  TypeKey base_type = f->inst_types[breaks_at_unchecked(breaks, 0)];
-  TypeKey type_unified = base_type;
+  TypeKey type_unified = TYPE_NEVER;
   u32 err = UnifyResult_ok;
 
-  for (u32 i = 1; i < breaks->len; i++) {
+  for (u32 i = 0; i < breaks->len; i++) {
     TypeKey t = f->inst_types[breaks_at_unchecked(breaks, i)];
 
     err = eval_unify(ctx->scratch, ctx->types, type_unified, t, &type_unified);
@@ -362,6 +362,7 @@ internal StepResult pop_finished_scopes(SpecializerContext *ctx, Specializer *st
 
       Stub *stub = compiler_get_stub(ctx->compiler, span->data.signature_of_function.stub);
       stub->type_hint = type_signature;
+      store_inst_type(f, span->start, type_signature);
 
       frame_pop_scope(f);
 
@@ -558,19 +559,27 @@ internal ValueKey val_from_usize(SpecializerContext *ctx, usize x) {
   return values_intern_data(ctx->values, TYPE_USIZE, &x);
 }
 
-internal TypeKey ref_typeof(SpecializerContext *ctx, Frame *f, SRef ref) {
-  if (sref_is_some_value(ref)) {
-    Value *v = values_get(ctx->values, sref_to_value(ref));
-    return v->type;
+internal b32 expect_some_sref_type(SpecializerContext *ctx, Specializer *state, SRef ref, TypeKey *out) {
+  TypeKey type = get_sref_type(ctx, &state->frame, ref);
+
+  if (key_is_nil(type)) {
+    Scope *s = scopes_peek_ptr_unchecked(&state->frame.scopes);
+    Message_error(
+      ctx->msg_sink,
+      (MessageLocation){
+        .kind = MessageLocation_ir_instruction,
+        .decl_idx = state->frame.decl,
+        .data.offset = s->pc,
+      },
+      string_lit("Expected a value")
+    );
+
+    return False;
   }
 
-  InstructionOffset i = sref_to_instruction(ref);
+  *out = type;
 
-  TypeKey type = f->inst_types[i];
-
-  Assert(key_is_some(type));
-
-  return type;
+  return True;
 }
 
 internal ValueKey create_value_pointer(SpecializerContext *sp, ValueKey idx) {
@@ -669,6 +678,7 @@ void specializer_init_function(SpecializerContext *ctx, Specializer *state, Stub
   TypeFunction *type = &types_get(ctx->types, stub->type_hint)->data.function;
 
   scope->data.function.function_type = stub->type_hint;
+  Assert(key_is_some(type->return_type));
   scope->data.function.return_type = type->return_type;
 
   InstructionOffset pc = ir_func->body;
@@ -717,8 +727,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   } break;
 
   case SIR_return_type: {
-    TypeKey type = frame_get_func_scope(f)->data.function.return_type;
-    store_inst_value(f, pc, key_is_nil(type) ? IREF_NIL : iref_from_value(val_from_type(ctx, type)));
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, frame_get_func_scope(f)->data.function.return_type));
     s->pc += 1;
   } break;
 
@@ -779,8 +788,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     case Declaration_root: Panic(); break;
     case Declaration_mod: { Todo(); } break;
     case Declaration_primitive: {
-      ValueKey ptr = create_value_pointer(ctx, decl->data.primitive);
-      store_inst_value(f, pc, iref_from_value(ptr));
+      store_inst_comptime(ctx, f, pc, create_value_pointer(ctx, decl->data.primitive));
       s->pc += 1;
     } break;
     case Declaration_decl: {
@@ -816,8 +824,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
           break;
         }
 
-        ValueKey ptr = create_value_pointer(ctx, stub->val);
-        store_inst_value(f, pc, iref_from_value(ptr));
+        store_inst_comptime(ctx, f, pc, create_value_pointer(ctx, stub->val));
         s->pc += 1;
       } break;
 
@@ -846,7 +853,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
     if (iref_is_nil(ref_type_to)) {
       if (iref_is_some_value(ref)) {
-        store_inst_value(f, pc, ref);
+        store_inst_comptime(ctx, f, pc, iref_to_value(ref));
       } else {
         Todo();
       }
@@ -882,7 +889,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       return (StepResult){ .kind = Step_error };
     }
 
-    TypeKey type_src = ref_typeof(ctx, f, cast->val);
+    TypeKey type_src;
+    if (!expect_some_sref_type(ctx, state, cast->val, &type_src)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     CastClassification kind = classify_type_cast(ctx->types, type_dst, type_src);
 
@@ -1162,8 +1172,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       Panic();
     }
 
-    ValueKey v = val_from_type(ctx, t);
-    store_inst_value(f, pc, iref_from_value(v));
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, t));
     s->pc += 1;
   } break;
 
@@ -1198,8 +1207,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       return (StepResult){ .kind = Step_error };
     }
 
-    ValueKey v = val_from_type(ctx, type_unified);
-    store_inst_value(f, pc, iref_from_value(v));
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, type_unified));
     s->pc += 1;
   } break;
 
@@ -1207,35 +1215,18 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     SRef ref_val = (SRef){sir_chunk_data(f->chunk, pc)};
     IRef val = resolve(f, ref_val);
 
-    Scope *func_scope = frame_get_func_scope(f);
-    TypeKey return_type = func_scope->data.function.return_type;
+    TypeKey return_type = frame_get_func_scope(f)->data.function.return_type;
 
-    if (key_is_some(return_type)) {
-      b32 ok = coerce(ctx, state, val, return_type, pc, &val);
-      if (!ok) {
-        return (StepResult){ .kind = Step_error };
-      }
+    b32 ok = coerce(ctx, state, val, return_type, pc, &val);
+    if (!ok) {
+      return (StepResult){ .kind = Step_error };
     }
 
-    InstructionOffset inst = iir_builder_add(builder, iref_is_nil(val) ? IIR_ret_void : IIR_ret, f->chunk->sources[pc]);
+    InstructionOffset inst = iir_builder_add(builder, IIR_ret, f->chunk->sources[pc]);
+    iir_builder_set_data(builder, inst, iref_to_u32(val));
+    iir_builder_set_type(builder, inst, return_type);
 
-    TypeKey type_ret;
-    if (key_is_some(return_type)) {
-      type_ret = return_type;
-    } else if (iref_is_some_value(val)) {
-      type_ret = type_of_val(ctx, iref_to_value(val));
-    } else if (iref_is_nil(val)) {
-      type_ret = (TypeKey){0};
-    } else {
-      type_ret = f->inst_types[sref_to_instruction(ref_val)];
-    }
-
-    f->inst_types[pc] = type_ret;
-
-    if (!iref_is_nil(val)) {
-      iir_builder_set_data(builder, inst, iref_to_u32(val));
-    }
-    iir_builder_set_type(builder, inst, type_ret);
+    store_inst_type(f, pc, return_type);
 
     s->pc += 1;
   } break;
@@ -1340,7 +1331,12 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_builtin_len: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    Type *t = types_get(ctx->types, ref_typeof(ctx, f, ref));
+    TypeKey type;
+    if (!expect_some_sref_type(ctx, state, ref, &type)) {
+      return (StepResult){ .kind = Step_error };
+    }
+
+    Type *t = types_get(ctx->types, type);
 
     store_inst_type(f, pc, TYPE_USIZE);
 
@@ -1361,7 +1357,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
           .data.offset = s->pc,
         },
         string_lit("#len expects an array or a slice, but got a value of type %type"),
-        ref_typeof(ctx, f, ref)
+        type
       );
 
       return (StepResult){ .kind = Step_error };
@@ -1437,10 +1433,8 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
     TypeKey type;
-    if (sref_is_some_value(ref)) {
-      type = type_of_val(ctx, sref_to_value(ref));
-    } else {
-      type = f->inst_types[sref_to_instruction(ref)];
+    if (!expect_some_sref_type(ctx, state, ref, &type)) {
+      return (StepResult){ .kind = Step_error };
     }
 
     f->inst_types[pc] = type;
@@ -1475,7 +1469,11 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
       f->inst_types[pc] = t->data.pointer.base_type;
     } else {
-      TypeKey type_idx = ref_typeof(ctx, f, ref);
+      TypeKey type_idx;
+      if (!expect_some_sref_type(ctx, state, ref, &type_idx)) {
+        return (StepResult){ .kind = Step_error };
+      }
+
       Type *t = types_get(ctx->types, type_idx);
       Assert(t->kind == Type_pointer);
 
@@ -1619,28 +1617,14 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
     }
     // clang-format on
 
-    ValueKey v = val_from_type(ctx, base_type);
-
-    store_inst_value(f, pc, iref_from_value(v));
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, base_type));
 
     s->pc += 1;
   } break;
 
   case SIR_typeof: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
-    IRef val = resolve(f, ref);
-
-    if (iref_is_some_value(val)) {
-      TypeKey t = type_of_val(ctx, iref_to_value(val));
-      ValueKey v = val_from_type(ctx, t);
-      store_inst_value(f, pc, iref_from_value(v));
-    } else {
-      InstructionOffset i = sref_to_instruction(ref);
-      TypeKey t = f->inst_types[i];
-      ValueKey v = val_from_type(ctx, t);
-      store_inst_value(f, pc, iref_from_value(v));
-    }
-
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, get_sref_type(ctx, f, ref)));
     s->pc += 1;
   } break;
 
@@ -1685,8 +1669,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       return (StepResult){ .kind = Step_error };
     }
 
-    ValueKey v = val_from_type(ctx, t->data.function.param_types[typeof_param->param_index]);
-    store_inst_value(f, pc, iref_from_value(v));
+    store_inst_comptime(ctx, f, pc, val_from_type(ctx, t->data.function.param_types[typeof_param->param_index]));
 
     s->pc += 1;
   } break;
@@ -1706,11 +1689,11 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_add: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeKey type_lhs = get_sref_type(ctx, f, bin->lhs);
-    TypeKey type_rhs = get_sref_type(ctx, f, bin->rhs);
-
-    Assert(!key_is_nil(type_lhs));
-    Assert(!key_is_nil(type_rhs));
+    TypeKey type_lhs;
+    TypeKey type_rhs;
+    if (!expect_some_sref_type(ctx, state, bin->lhs, &type_lhs) || !expect_some_sref_type(ctx, state, bin->rhs, &type_rhs)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     TypeKey type_unified;
     u32 err = eval_unify(ctx->scratch, ctx->types, type_lhs, type_rhs, &type_unified);
@@ -1866,11 +1849,11 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_cmp_le: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeKey type_lhs = get_sref_type(ctx, f, bin->lhs);
-    TypeKey type_rhs = get_sref_type(ctx, f, bin->rhs);
-
-    Assert(!key_is_nil(type_lhs));
-    Assert(!key_is_nil(type_rhs));
+    TypeKey type_lhs;
+    TypeKey type_rhs;
+    if (!expect_some_sref_type(ctx, state, bin->lhs, &type_lhs) || !expect_some_sref_type(ctx, state, bin->rhs, &type_rhs)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     TypeKey type_unified;
     u32 err = eval_unify(ctx->scratch, ctx->types, type_lhs, type_rhs, &type_unified);
@@ -1944,7 +1927,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_index: {
     SIrBinary *bin = sir_chunk_extra(f->chunk, pc);
 
-    TypeKey type_indexable = ref_typeof(ctx, f, bin->lhs);
+    TypeKey type_indexable;
+    if (!expect_some_sref_type(ctx, state, bin->lhs, &type_indexable)) {
+      return (StepResult){ .kind = Step_error };
+    }
     Type *t = types_get(ctx->types, type_indexable);
 
     if (t->kind != Type_array && t->kind != Type_slice) {
@@ -2030,7 +2016,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
   case SIR_negate: {
     SRef ref = (SRef){sir_chunk_data(f->chunk, pc)};
 
-    TypeKey type = ref_typeof(ctx, f, ref);
+    TypeKey type;
+    if (!expect_some_sref_type(ctx, state, ref, &type)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     if (!check_type_for_op_negate(type)) {
       Message_error(
@@ -2110,7 +2099,10 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
 
   case SIR_not: {
     SRef val = (SRef){sir_chunk_data(f->chunk, pc)};
-    TypeKey type = get_sref_type(ctx, f, val);
+    TypeKey type;
+    if (!expect_some_sref_type(ctx, state, val, &type)) {
+      return (StepResult){ .kind = Step_error };
+    }
 
     if (!key_eq(type, TYPE_BOOL)) {
       Todo();

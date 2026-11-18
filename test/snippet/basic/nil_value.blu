@@ -1,0 +1,15 @@
+mod main
+
+nothing := ||: nil { mut x: i32 = 1 }
+
+main := ||: i32 {
+  #debug({})
+  #debug({ mut y: i32 = 1 })
+  #debug(while false {})
+  a: i32 = 5
+  #debug(if true { a })
+  #debug(nothing())
+  #debug(::b { break ::b })
+  #debug(comptime { mut i: i64 = 0 while i < 5 { i += 1 } })
+  0
+}

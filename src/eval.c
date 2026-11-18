@@ -202,6 +202,16 @@ u32 eval_unify(Arena *scratch, TypeInterner *types, TypeKey a, TypeKey b, TypeKe
     return UnifyResult_ok;
   }
 
+  if (key_eq(a, TYPE_NEVER)) {
+    *unified = b;
+    return UnifyResult_ok;
+  }
+
+  if (key_eq(b, TYPE_NEVER)) {
+    *unified = a;
+    return UnifyResult_ok;
+  }
+
   Type *type_a = types_get(types, a);
   Type *type_b = types_get(types, b);
 

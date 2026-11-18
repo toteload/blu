@@ -1,4 +1,8 @@
-- [ ] SIR code generation can be moved to `Source`.
+- [ ] Array literals. Decide on syntax.
+- [ ] Add `[]mut T` slices.
+- [ ] Add pointers and mut pointers
+- [ ] Add writing through slices
+- [ ] Add writing through pointers
 
 
 ## Comptime
