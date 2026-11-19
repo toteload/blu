@@ -3,7 +3,7 @@
 This audit read the code by hand and mutation-fuzzed the snippet corpus against the ASan/UBSan build. TODO paths were ignored. The following were fixed in the same pass:
 
 - A format-argument mismatch in the parser.
-- Nil types from instructions that fold to values. Every handler now records `inst_types`, and value consumers use `expect_some_sref_type`, which reports a nil type as "Expected a value".
+- Nil types from instructions that fold to values. Every handler now records `inst_types`, and `get_sref_type` asserts that the type is set.
 - Nil values reaching `#debug`.
 - An uninitialized read from `if` without `else`. Its type unified to the `then` type, so the false path left the result slot unwritten. It now has type `nil`; see "Nil, never and unknown" in `notes/MEMORY.md`.
 

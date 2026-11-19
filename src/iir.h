@@ -35,10 +35,8 @@ typedef enum {
   IIR_loop, // contains instruction count
   IIR_condbr, // references `ICondbr`
   IIR_br, // contains IRef
-  IIR_br_void,
   IIR_repeat, // contains `InstructionOffset` for the loop
   IIR_ret, // contains IRef
-  IIR_ret_void,
   IIR_call, // references `ICall`
 
   IIR_int_extend, // contains IRef

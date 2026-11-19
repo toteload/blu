@@ -405,8 +405,7 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
     } break;
 
     case IIR_param:
-    case IIR_alloc:
-    case IIR_ret_void: break;
+    case IIR_alloc: break;
 
     case IIR_global: {
       fprintf(out, " offset=%u", vref_to_offset((ValueRef){data}));
@@ -464,10 +463,6 @@ void print_iir_chunk(FILE *out, Compiler *compiler, IIrChunk *chunk) {
       IIrBr *br = iir_chunk_extra(chunk, i);
       fprintf(out, " block=%%%u ", br->block);
       print_iref(out, compiler, br->value);
-    } break;
-
-    case IIR_br_void: {
-      fprintf(out, " block=%%%u", data);
     } break;
 
     case IIR_repeat: {

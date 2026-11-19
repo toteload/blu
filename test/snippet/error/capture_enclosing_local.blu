@@ -1,0 +1,8 @@
+mod main
+
+main := ||: i32 {
+  mut a: i32 = 3
+  f := ||: i32 { a }
+  #debug(f())
+  0
+}

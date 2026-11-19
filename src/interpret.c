@@ -209,13 +209,6 @@ internal u32 step(Interpreter *in) {
     f->pc = br->block + inst_count;
   } break;
 
-  case IIR_br_void: {
-    InstructionOffset block = iir_chunk_data(f->chunk, pc);
-    scopes_pop_to(in, f, block);
-    u32 inst_count = iir_chunk_data(f->chunk, block);
-    f->pc = block + inst_count;
-  } break;
-
   case IIR_condbr: {
     IIrCondbr *condbr = iir_chunk_extra(f->chunk, pc);
     u8* v = resolve(in, f, condbr->cond);
@@ -243,11 +236,6 @@ internal u32 step(Interpreter *in) {
   case IIR_ret: {
     void *src = resolve(in, f, iir_chunk_ref(f->chunk, pc));
     copy_value(f->ret, src, size_info.size);
-    frame_pop(in);
-    return Step_return;
-  } break;
-
-  case IIR_ret_void: {
     frame_pop(in);
     return Step_return;
   } break;

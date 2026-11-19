@@ -73,6 +73,21 @@ internal b32 lookup(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, LookupRes
 
   ScopeEntry *entry = symbols_find(&gen->syms, name);
   if (entry) {
+    if (symbols_is_outside_function(&gen->syms, entry)) {
+      gen->has_error = True;
+      Message_error(
+        ctx->msg_sink,
+        (MessageLocation){
+          .kind = MessageLocation_ast_index,
+          .source_idx = gen->source->idx,
+          .data.ast_index = idx_ast,
+        },
+        string_lit("Cannot capture '%string' from an enclosing function"),
+        s
+      );
+      return False;
+    }
+
     SRef ref = entry->ref;
     if (symbols_is_outside_comptime(&gen->syms, entry)) {
       InstructionOffset capture = sir_builder_add(&gen->builder, SIR_comptime_capture, gen->source->idx, idx_ast);
@@ -163,6 +178,12 @@ internal b32 find_jump_target(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast,
       Message_error(ctx->msg_sink, loc, string_lit("'%string' outside of a loop"), keyword);
       return False;
     }
+  }
+
+  if (symbols_is_outside_function(&gen->syms, entry)) {
+    gen->has_error = True;
+    Message_error(ctx->msg_sink, loc, string_lit("Cannot '%string' out of a function"), keyword);
+    return False;
   }
 
   if (symbols_is_outside_comptime(&gen->syms, entry)) {
@@ -532,6 +553,8 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
 
     InstructionOffset param_start = sir_builder_offset(builder, 0);
 
+    ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_function, inst_func, (StringKey){0}).data.scope_key;
+
     for (u32 i = 0; i < func->count; i++) {
       AstParam *ast_param = ast_data(ast, func->params[i]);
 
@@ -543,8 +566,6 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
         Todo();
       }
     }
-
-    ScopeKey scope = symbols_push_scope(&gen->syms, ScopeEntry_function, inst_func, (StringKey){0}).data.scope_key;
 
     InstructionOffset inst_return_type = sir_builder_add(builder, SIR_return_type, source_idx, idx_ast);
 
@@ -801,7 +822,7 @@ SRef gen_code(CodeGen *gen, CodeGenContext *ctx, AstKey idx_ast, SRef type_desti
       .value = value,
     };
 
-    return sref_from_instruction(inst_store);
+    return sref_from_value(VAL_NIL_NIL);
   } break;
 
   case Ast_index: {

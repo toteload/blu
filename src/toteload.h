@@ -158,9 +158,9 @@ TTLD_NORETURN void ttld_panic_handler(char const *func, char const *file, i32 li
 #define PanicMsg(msg) do { fprintf(stderr, "%s", msg); Panic(); } while (0)
 
 #ifdef TTLD_SAFE
-  #define ASSERT_SAFE(e) Assert(e)
+  #define ttld_assert_safe(e) Assert(e)
 #else
-  #define ASSERT_SAFE(e) ((void)(e))
+  #define ttld_assert_safe(e) ((void)(e))
 #endif
 
 typedef struct String {

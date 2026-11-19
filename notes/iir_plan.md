@@ -16,7 +16,7 @@ SIR -> specializer -> IIR -> interpreter
   - It has no size information.
   - An IIR ref (`IRef`) is either an instruction or a `ValueKey`. A chunk has no constants array, and constants are never copied into the IIR.
   - Comptime-only types (`type`, `comptime_int`) must not appear in IIR. This is not enforced yet.
-  - `br`/`br_void` and `ret`/`ret_void` are separate opcodes, so an IIR ref is never nil.
+  - An IIR ref is never nil. `br` and `ret` with no value carry the zero-size `VAL_NIL_NIL`; there are no void variants.
   - `int_cast` is split into `int_extend`, a sign or zero extension that cannot fail, and `int_cast_check`, which checks that the value fits.
 - **The interpreter runs IIR.** No IIR -> bytecode lowering.
   - It gets sizes from instruction types.

@@ -37,9 +37,10 @@ Design decisions and preferences that the code does not show on its own.
 - `TypeKey` 0 means "unknown, still to be inferred" (omitted annotations, unification). It never means "nothing".
 - "Nothing" is the type `TYPE_NIL`, and its only value is `VAL_NIL_NIL`. `VAL_TYPE_NIL` is the type `nil` as a value of type `type`; do not use it to mean "no value".
 - A function's return type is always a real type after its signature is finalized. A function that returns nothing has return type `nil`.
-- A block with no breaks never falls through, so its type is `never`. `never` unifies with any type.
+- A block with no breaks never falls through, so its type is `never`. `never` coerces to any type, so it also unifies with any type.
+- `br` and `repeat` have type `never`. An assignment expression has the value `VAL_NIL_NIL`.
 - An `if` without `else` has type `nil`; the `then` value is discarded.
-- Every executed SIR instruction records its type in `inst_types`.
+- Every executed SIR instruction records its type in `inst_types`. `get_sref_type` asserts on a missing type.
 
 ## Naming
 

@@ -257,7 +257,7 @@ u32 classify_comptime_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
 }
 
 u32 classify_type_coercion(TypeInterner *types, TypeKey to, TypeKey from) {
-  if (key_eq(to, from)) {
+  if (key_eq(to, from) || key_eq(from, TYPE_NEVER)) {
     return Coercion_identical_types;
   }
 

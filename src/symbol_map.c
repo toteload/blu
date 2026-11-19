@@ -90,6 +90,7 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
     .kind = kind,
     .parent_loop_idx = syms->parent_loop_idx,
     .parent_comptime_idx = syms->parent_comptime_idx,
+    .parent_function_idx = syms->parent_function_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = label,
     .ref = sref_from_instruction(inst),
@@ -103,6 +104,11 @@ SymbolsPushScopeResult symbols_push_scope(SymbolMap *syms, ScopeEntryKind kind, 
 
   if (kind == ScopeEntry_comptime) {
     syms->parent_comptime_idx = offset;
+  }
+
+  if (kind == ScopeEntry_function) {
+    syms->parent_loop_idx = 0;
+    syms->parent_function_idx = offset;
   }
 
   return (SymbolsPushScopeResult){
@@ -127,6 +133,7 @@ SymbolsPushLocalResult symbols_push_local(SymbolMap *syms, ScopeEntryKind kind, 
     .kind = kind,
     .parent_loop_idx = syms->parent_loop_idx,
     .parent_comptime_idx = syms->parent_comptime_idx,
+    .parent_function_idx = syms->parent_function_idx,
     .parent_block_idx = syms->parent_block_idx,
     .name = name,
     .ref = ref,
@@ -163,6 +170,7 @@ void symbols_pop_scope(SymbolMap *syms, ScopeKey key) {
 
   syms->parent_loop_idx = entry.parent_loop_idx;
   syms->parent_comptime_idx = entry.parent_comptime_idx;
+  syms->parent_function_idx = entry.parent_function_idx;
   syms->parent_block_idx = entry.parent_block_idx;
 
   if (key_is_some(entry.name)) {
@@ -189,6 +197,10 @@ ScopeEntry *symbols_get_enclosing_loop(SymbolMap *syms) {
 
 b32 symbols_is_outside_comptime(SymbolMap *syms, ScopeEntry *entry) {
   return entry->parent_comptime_idx != syms->parent_comptime_idx;
+}
+
+b32 symbols_is_outside_function(SymbolMap *syms, ScopeEntry *entry) {
+  return entry->parent_function_idx != syms->parent_function_idx;
 }
 
 void symbols_debug_print(SymbolMap *syms, StringInterner *strings) {

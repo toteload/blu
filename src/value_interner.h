@@ -41,22 +41,22 @@ always_inline b32 vref_is_offset(ValueRef r) {
 }
 
 always_inline ValueKey vref_to_value(ValueRef r) {
-  ASSERT_SAFE(vref_is_value(r));
+  ttld_assert_safe(vref_is_value(r));
   return (ValueKey){r.x};
 }
 
 always_inline ValueOffset vref_to_offset(ValueRef r) {
-  ASSERT_SAFE(vref_is_offset(r));
+  ttld_assert_safe(vref_is_offset(r));
   return r.x & ~REF_TAG_MASK;
 }
 
 always_inline ValueRef vref_from_value(ValueKey key) {
-  ASSERT_SAFE((key.x & REF_TAG_MASK) == 0);
+  ttld_assert_safe((key.x & REF_TAG_MASK) == 0);
   return (ValueRef){key.x};
 }
 
 always_inline ValueRef vref_from_offset(ValueOffset offset) {
-  ASSERT_SAFE((offset & REF_TAG_MASK) == 0);
+  ttld_assert_safe((offset & REF_TAG_MASK) == 0);
   return (ValueRef){offset | REF_TAG_OFFSET};
 }
 
