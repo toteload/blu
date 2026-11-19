@@ -9,16 +9,9 @@ This audit read the code by hand and mutation-fuzzed the snippet corpus against 
 
 The open findings follow.
 
-## Logic bugs that corrupt compiler state
-
-- `compile()` in `compiler.c` has two problems in its duplicate-declaration paths:
-  - The duplicate-`decl` path calls `continue` without `offset += 1`. The same declaration is re-read for every remaining sibling, so later siblings are never registered and their `source->decl_keys` entries stay unwritten. Repro: `a := 1; a := 2; b := 3; main := ...` reports the duplicate 3 times, and `b` and `main` are never registered.
-  - The path for a mod that collides with a non-mod (e.g. `mod i32`) adds `child_count` without the +1 for the mod itself. It also pops the parent frame instead of skipping the mod's children.
-
 ## Latent memory-safety holes (not reachable yet)
 
 - **Array layout truncation.** In `types.c`, `types_value_layout` computes `u32 size = stride * array.size`, which silently truncates a `u64`. `Value.size` is also `u32`. `[4294967296]u8` gets size 0, while the bounds checks in `interpret.c` (`IIR_index`) and `specialize.c` (`SIR_index`) compare against the full `u64` length. This becomes an out-of-bounds read/write as soon as a value of such a type can be built. Reject sizes that don't fit, or use checked multiplication.
-- **`write_type` format string.** `write_type` in `types.c` prints the `u64` array size with `"[%u]"`, which is UB; `[4294967296]u8` prints as `[0]u8`. The slice and pointer cases also pass an unused `array.size` argument.
 - **Fixed-size interpreter stacks guarded only by `Assert`.**
   - The call stack has 64 frames (`run_main` in `compiler.c`), so recursion deeper than 64 aborts.
   - The per-function scope stack is `MAX_SCOPE_DEPTH` 64 (`interpret.c`), so more than 64 nested blocks abort.

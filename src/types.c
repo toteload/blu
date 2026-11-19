@@ -424,7 +424,7 @@ String write_type(Arena *arena, TypeInterner *types, TypeKey type) {
       t->data.integer.bitwidth);
   } break;
   case Type_array: {
-    String s = arena_printf(arena, "[%u]", t->data.array.size);
+    String s = arena_printf(arena, "[%llu]", t->data.array.size);
     String a = write_type(arena, types, t->data.array.base_type);
     return (String){.str = s.str, .len = s.len + a.len};
   } break;
@@ -442,12 +442,12 @@ String write_type(Arena *arena, TypeInterner *types, TypeKey type) {
     return (String){.str = s.str, .len = len};
   } break;
   case Type_slice: {
-    String s = arena_printf(arena, "[]", t->data.array.size);
+    String s = arena_printf(arena, "[]");
     String a = write_type(arena, types, t->data.array.base_type);
     return (String){.str = s.str, .len = s.len + a.len};
   } break;
   case Type_pointer: {
-    String s = arena_printf(arena, "*", t->data.array.size);
+    String s = arena_printf(arena, "*");
     String a = write_type(arena, types, t->data.array.base_type);
     return (String){.str = s.str, .len = s.len + a.len};
   } break;

@@ -28,11 +28,6 @@ struct Declaration {
     struct {
       Source *source;
       u32 tree_idx;
-    } mod;
-
-    struct {
-      Source *source;
-      u32 tree_idx;
       SIrChunk chunk;
       StubKey stub;
       b8 is_mut;

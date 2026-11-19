@@ -401,12 +401,12 @@ b32 compile(Compiler *compiler) {
               string_lit("Declaration already exists.")
             );
 
-            offset += decl->child_count;
-
-            stack_pop_unchecked(&stack);
+            Todo();
 
             continue;
           }
+
+          Todo();
         }
 
         stack_push(&stack, ((DeclFrame){.mod = idx, .n = decl->child_count}));
@@ -419,7 +419,6 @@ b32 compile(Compiler *compiler) {
           (Declaration){
             .idx = idx,
             .kind = Declaration_mod,
-            .data.mod = {.source = source, .tree_idx = offset},
           });
 
         offset += 1;
@@ -443,6 +442,8 @@ b32 compile(Compiler *compiler) {
             },
             string_lit("Declaration already exists.")
           );
+
+          offset += 1;
 
           continue;
         }

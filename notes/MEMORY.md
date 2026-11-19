@@ -1,6 +1,7 @@
 # Project memory
 
 Design decisions and preferences that the code does not show on its own.
+Anything not implemented yet is marked as planned. Never describe planned work as if it already exists.
 
 ## IR design
 
@@ -12,19 +13,27 @@ Design decisions and preferences that the code does not show on its own.
 ## Interpreter
 
 - The interpreter runs IIR directly. The separate bytecode layer was dropped on purpose; being slower than a bytecode interpreter is accepted. Do not reintroduce a bytecode layer.
+- The interpreter is runtime-only. It never runs comptime code.
 - Memory should be reclaimed at scope boundaries, not held in compiler-lifetime arenas.
+- Planned, not implemented yet:
+  - Runtime memory uses 8-byte host addresses instead of `ValuePointer`, so its layout matches C exactly. Runtime memory regions must never move once addresses into them exist.
+  - Calling C functions through libffi (`dlopen`/`dlsym`, `LoadLibraryW`/`GetProcAddress` on Windows). The goal is to call any C function, including structs by value, so do not restrict the signatures that can cross the boundary.
 - See `notes/iir_plan.md`.
 
 ## Values and refs
 
 - Refs share a 2-bit tag in the top bits: ValueKey, ValueOffset or InstructionOffset. IRef, SRef and ValueRef can be combined.
-- A runtime pointer is `ValuePointer { base, offset }`. Runtime memory uses the same byte representation as interned values. Do not reintroduce per-key constant buffers or `void *` pointers.
-- Interned values hold canonical bytes, so a pointer inside an interned value is always a ValueKey, never an offset.
+- A pointer is `ValuePointer { base, offset }`, in comptime, interned and (for now) runtime memory. Comptime and interned memory keep it permanently, which keeps comptime target-independent and safe; do not use `void *` pointers there. Runtime memory is planned to switch to host addresses (see Interpreter).
+- Interned values hold canonical bytes, so a pointer inside an interned value is always a ValueKey, never an offset or an address.
+- Planned, not implemented yet: once runtime memory uses host addresses, an interned value without pointers is used in place at runtime, and one with pointers is materialized once into runtime memory with its pointers relocated to addresses, like a linker does for static data. These will be the only per-key copies.
 - `mut` globals live in a preallocated region. The specializer records emitted `IIR_global` instructions, and after specialization `compiler.c` allocates only the referenced `mut` globals and patches the offsets.
 - Writing through a slice requires `[]mut T`. A literal copied into a `[]mut` local gets fresh memory, so it is valid.
 
 ## Comptime
 
+- The specializer is the comptime engine. Comptime code is never specialized to IIR and then interpreted.
+- Comptime code never calls C. Comptime access to the outside world will go through explicit compiler builtins; none exist yet.
+- Comptime function calls are not implemented yet (they report an error). When added, they run in the specializer and push onto its explicit frame stack, never C recursion, so deep comptime recursion cannot crash the compiler.
 - Comptime locals live in `compiler->memory` as offset refs. Each comptime scope snapshots and restores that memory.
 - Values are interned only when they escape, and escaping memory is frozen (deep-interned). Escape detection does not exist yet because there is no address-of syntax.
 - There are no top-level comptime mutable variables.

@@ -4,6 +4,9 @@
 - [ ] Add writing through slices
 - [ ] Add writing through pointers
 
+- [ ] Different mod sections referring to the same mod are currently TODO.
+  - Previously only one source location was recorded for the mod.
+    Functionally, fine but not good for error reporting later.
 
 ## Comptime
 
