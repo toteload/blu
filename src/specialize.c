@@ -1210,6 +1210,7 @@ internal StepResult step(SpecializerContext *ctx, Specializer *state) {
       }
     } else {
       InstructionOffset inst_condbr = iir_builder_add(builder, IIR_condbr, f->chunk->sources[pc]);
+      iir_builder_set_type(builder, inst_condbr, TYPE_NEVER);
 
       store_inst_value(f, pc, iref_from_instruction(inst_condbr));
 

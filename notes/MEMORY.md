@@ -41,6 +41,7 @@ Design decisions and preferences that the code does not show on its own.
 - `br` and `repeat` have type `never`. An assignment expression has the value `VAL_NIL_NIL`.
 - An `if` without `else` has type `nil`; the `then` value is discarded.
 - Every executed SIR instruction records its type in `inst_types`. `get_sref_type` asserts on a missing type.
+- Every emitted IIR instruction has a type. `condbr`, `br` and `repeat` have type `never`. The interpreter's `layout_of` asserts on a missing type.
 
 ## Naming
 

@@ -5,10 +5,7 @@
 #define MAX_SCOPE_DEPTH 64
 
 internal TypeSizeInfo layout_of(Interpreter *in, TypeKey type) {
-  if (key_is_nil(type)) {
-    return (TypeSizeInfo){ .size = 0, .stride = 0, .align = 1 };
-  }
-
+  ttld_assert_safe(key_is_some(type));
   return types_value_layout_by_key(&in->compiler->types, type);
 }
 
